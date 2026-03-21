@@ -432,17 +432,28 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
   const renderProfileTab = () => (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
       {/* Callsign - full width */}
-      <div style={{ gridColumn: '1 / -1' }}>
+      <div style={{ gridColumn: '1 / -1', marginBottom: '8px' }}>
         <div
           style={{
-            fontFamily: 'Share Tech Mono, monospace',
-            fontSize: '24px',
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '20px',
+            fontWeight: 900,
             color: '#00ff41',
             marginBottom: '4px',
             textTransform: 'uppercase',
+            letterSpacing: '4px',
+            textShadow: '0 0 8px rgba(0,255,65,0.3)',
           }}
         >
           {operator.callsign}
+        </div>
+        <div style={{
+          fontFamily: 'Share Tech Mono, monospace',
+          fontSize: '9px',
+          color: '#333',
+          letterSpacing: '1px',
+        }}>
+          {operator.name} // {operator.role.toUpperCase()}
         </div>
       </div>
 
@@ -2453,6 +2464,14 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
     }
   };
 
+  const tabIcons: Record<SubTab, string> = {
+    PROFILE: '◆',
+    NUTRITION: '◈',
+    PR_BOARD: '▶',
+    INJURIES: '▦',
+    PREFERENCES: '◇',
+  };
+
   return (
     <div
       style={{
@@ -2461,55 +2480,79 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         backgroundColor: '#030303',
         color: '#ccc',
         fontFamily: 'Chakra Petch, sans-serif',
+        position: 'relative',
       }}
     >
       {/* Sidebar */}
       <div
         style={{
-          width: '200px',
-          borderRight: '1px solid rgba(0,255,65,0.15)',
+          width: '180px',
+          borderRight: '1px solid rgba(0,255,65,0.06)',
           display: 'flex',
           flexDirection: 'column',
-          paddingTop: '16px',
+          paddingTop: '20px',
+          background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
         }}
       >
+        {/* Sidebar header */}
+        <div style={{
+          padding: '0 16px 16px 16px',
+          borderBottom: '1px solid rgba(0,255,65,0.05)',
+          marginBottom: '8px',
+        }}>
+          <div style={{
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '8px',
+            fontWeight: 700,
+            color: '#444',
+            letterSpacing: '2px',
+          }}>
+            INTEL CENTER
+          </div>
+        </div>
+
         {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES'] as const).map(
-          (tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                padding: '12px 16px',
-                backgroundColor:
-                  activeTab === tab ? 'rgba(0,255,65,0.15)' : 'transparent',
-                border: 'none',
-                borderLeft:
-                  activeTab === tab
-                    ? '2px solid #00ff41'
-                    : '2px solid transparent',
-                color: activeTab === tab ? '#ccc' : '#555',
-                cursor: 'pointer',
-                fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '9px',
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-                textAlign: 'left',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== tab) {
-                  e.currentTarget.style.borderLeftColor = 'rgba(0,255,65,0.5)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== tab) {
-                  e.currentTarget.style.borderLeftColor = 'transparent';
-                }
-              }}
-            >
-              {tab.replace('_', ' ')}
-            </button>
-          )
+          (tab) => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: '10px 16px',
+                  backgroundColor: isActive ? 'rgba(0,255,65,0.04)' : 'transparent',
+                  border: 'none',
+                  borderLeft: isActive ? '2px solid #00ff41' : '2px solid transparent',
+                  color: isActive ? '#ccc' : '#444',
+                  cursor: 'pointer',
+                  fontFamily: 'Orbitron, sans-serif',
+                  fontSize: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1.5px',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.borderLeftColor = 'rgba(0,255,65,0.3)';
+                    e.currentTarget.style.color = '#888';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.borderLeftColor = 'transparent';
+                    e.currentTarget.style.color = '#444';
+                  }
+                }}
+              >
+                <span style={{ fontSize: '6px', opacity: isActive ? 1 : 0.4 }}>{tabIcons[tab]}</span>
+                {tab.replace('_', ' ')}
+              </button>
+            );
+          }
         )}
       </div>
 
@@ -2526,36 +2569,46 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <div
           style={{
             display: 'flex',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '16px',
-            borderBottom: '1px solid rgba(0,255,65,0.15)',
-            backgroundColor: 'rgba(3,3,3,0.5)',
+            padding: '12px 24px',
+            borderBottom: '1px solid rgba(0,255,65,0.06)',
+            background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
           }}
         >
+          <div style={{
+            fontFamily: 'Share Tech Mono, monospace',
+            fontSize: '9px',
+            color: '#333',
+            letterSpacing: '1px',
+          }}>
+            {operator.callsign} // {activeTab.replace('_', ' ')}
+          </div>
           <button
             onClick={handleSave}
             style={{
-              padding: '10px 20px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              padding: '8px 18px',
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '9px',
               backgroundColor: '#00ff41',
               border: 'none',
               color: '#030303',
               cursor: 'pointer',
               textTransform: 'uppercase',
-              letterSpacing: '1px',
-              fontWeight: 'bold',
-              transition: 'all 0.2s',
+              letterSpacing: '2px',
+              fontWeight: 800,
+              transition: 'all 0.2s ease',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#00dd33';
+              e.currentTarget.style.backgroundColor = '#33ff77';
+              e.currentTarget.style.boxShadow = '0 0 16px rgba(0,255,65,0.3)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = '#00ff41';
+              e.currentTarget.style.boxShadow = 'none';
             }}
           >
-            SAVE INTEL
+            SAVE
           </button>
         </div>
 

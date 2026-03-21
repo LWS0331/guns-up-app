@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Operator } from '@/lib/types';
 
 interface COCDashboardProps {
@@ -8,7 +8,93 @@ interface COCDashboardProps {
   allOperators: Operator[];
 }
 
-// Helper: Get current week's Monday date
+// Animated counter hook
+function useCountUp(target: number, duration: number = 1200, delay: number = 0): number {
+  const [count, setCount] = useState(0);
+  const startRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const step = (timestamp: number) => {
+        if (!startRef.current) startRef.current = timestamp;
+        const progress = Math.min((timestamp - startRef.current) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+        setCount(Math.floor(eased * target));
+        if (progress < 1) requestAnimationFrame(step);
+      };
+      startRef.current = null;
+      requestAnimationFrame(step);
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [target, duration, delay]);
+
+  return count;
+}
+
+// Progress Ring SVG component
+function ProgressRing({ value, max, size = 80, color = '#00ff41', label }: {
+  value: number; max: number; size?: number; color?: string; label: string;
+}) {
+  const strokeWidth = 4;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const percent = Math.min(value / max, 1);
+  const [offset, setOffset] = useState(circumference);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setOffset(circumference - percent * circumference);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [percent, circumference]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          {/* Background ring */}
+          <circle cx={size / 2} cy={size / 2} r={radius}
+            fill="none" stroke="rgba(0,255,65,0.06)" strokeWidth={strokeWidth} />
+          {/* Progress ring */}
+          <circle cx={size / 2} cy={size / 2} r={radius}
+            fill="none" stroke={color} strokeWidth={strokeWidth}
+            strokeDasharray={circumference} strokeDashoffset={offset}
+            strokeLinecap="round"
+            style={{
+              transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              filter: `drop-shadow(0 0 4px ${color}40)`,
+            }}
+          />
+        </svg>
+        {/* Center value */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: 'Share Tech Mono, monospace',
+          fontSize: '16px',
+          color: color,
+          textShadow: `0 0 8px ${color}60`,
+        }}>
+          {value}
+        </div>
+      </div>
+      <div style={{
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '7px',
+        letterSpacing: '1.5px',
+        color: '#555',
+        textTransform: 'uppercase',
+        fontWeight: 700,
+      }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
 function getWeekStart(date: Date = new Date()): Date {
   const d = new Date(date);
   const day = d.getDay();
@@ -16,7 +102,6 @@ function getWeekStart(date: Date = new Date()): Date {
   return new Date(d.setDate(diff));
 }
 
-// Helper: Format date as YYYY-MM-DD
 function formatDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -24,511 +109,502 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Helper: Get all dates in current week (Mon-Sun)
 function getWeekDates(): { date: Date; key: string; dayName: string }[] {
   const weekStart = getWeekStart();
   const dates = [];
   const dayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-
   for (let i = 0; i < 7; i++) {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + i);
-    dates.push({
-      date,
-      key: formatDateKey(date),
-      dayName: dayNames[i],
-    });
+    dates.push({ date, key: formatDateKey(date), dayName: dayNames[i] });
   }
-
   return dates;
 }
 
-// Helper: Count workouts in current week
 function countWorkoutsThisWeek(operator: Operator): number {
-  const weekDates = getWeekDates();
-  return weekDates.filter((d) => operator.workouts[d.key]).length;
+  return getWeekDates().filter((d) => operator.workouts[d.key]).length;
 }
 
-// Helper: Calculate streak (consecutive days with workouts ending at today)
 function calculateStreak(operator: Operator): number {
   const today = new Date();
   let streak = 0;
-  let currentDate = new Date(today);
-
+  const currentDate = new Date(today);
   while (true) {
     const key = formatDateKey(currentDate);
     if (operator.workouts[key]) {
       streak++;
       currentDate.setDate(currentDate.getDate() - 1);
-    } else {
-      break;
-    }
+    } else break;
   }
-
   return streak;
 }
 
-// Helper: Parse prescription to extract reps
 function parseReps(prescription: string): number {
-  // Prescription format examples: "5 x 5", "3 x 8-10", "AMRAP 10 min", etc.
   const match = prescription.match(/(\d+)\s*x\s*(\d+)/);
-  if (match) {
-    return parseInt(match[2], 10);
-  }
-  return 0;
+  return match ? parseInt(match[2], 10) : 0;
 }
 
-// Helper: Calculate total volume for the week
 function calculateWeeklyVolume(operator: Operator): number {
-  const weekDates = getWeekDates();
   let totalVolume = 0;
-
-  weekDates.forEach((d) => {
+  getWeekDates().forEach((d) => {
     const workout = operator.workouts[d.key];
     if (workout) {
       workout.blocks.forEach((block) => {
-        if (block.type === 'exercise') {
-          const reps = parseReps(block.prescription);
-          // In a real app, we'd look up weight from history/form data
-          // For now, we estimate from a standard baseline or use a default
-          // This is a simplified calculation
-          totalVolume += reps * 135; // Assuming 135 lbs baseline per exercise
-        }
+        if (block.type === 'exercise') totalVolume += parseReps(block.prescription) * 135;
       });
     }
   });
-
   return totalVolume;
 }
 
-// Helper: Count PRs
-function countPRs(operator: Operator): number {
-  return operator.prs.length;
-}
-
-// Helper: Get last 5 PRs sorted by date descending
 function getRecentPRs(operator: Operator, limit: number = 5) {
-  return operator.prs
+  return [...operator.prs]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, limit);
 }
 
-// Helper: Format date for display
 function formatPRDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// Helper: Check if date is today
 function isToday(date: Date): boolean {
   const today = new Date();
-  return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
-  );
+  return date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
 }
 
-export const COCDashboard: React.FC<COCDashboardProps> = ({
-  operator,
-  allOperators,
-}) => {
+export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
   const workoutsThisWeek = countWorkoutsThisWeek(operator);
   const streak = calculateStreak(operator);
   const volume = calculateWeeklyVolume(operator);
-  const prCount = countPRs(operator);
+  const prCount = operator.prs.length;
   const recentPRs = getRecentPRs(operator);
   const weekDates = getWeekDates();
+  const [mounted, setMounted] = useState(false);
 
-  const containerStyle: React.CSSProperties = {
-    backgroundColor: '#030303',
-    color: '#ccc',
-    fontFamily: 'Chakra Petch, sans-serif',
-    padding: '24px',
-    minHeight: '100vh',
-  };
+  useEffect(() => { setMounted(true); }, []);
 
-  const heroRowStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '16px',
-    marginBottom: '24px',
-    justifyContent: 'space-between',
-  };
+  // Animated counters
+  const animWorkouts = useCountUp(workoutsThisWeek, 800, 200);
+  const animStreak = useCountUp(streak, 800, 400);
+  const animVolume = useCountUp(volume, 1200, 600);
+  const animPRs = useCountUp(prCount, 800, 800);
 
-  const statCardStyle: React.CSSProperties = {
-    flex: '1 1 0',
-    border: '1px solid rgba(0, 255, 65, 0.06)',
-    borderRadius: '0px',
-    padding: '16px 24px',
-    backgroundColor: 'transparent',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-  };
-
-  const statLabelStyle: React.CSSProperties = {
-    fontFamily: 'Orbitron, sans-serif',
-    fontSize: '8px',
-    letterSpacing: '1px',
-    color: '#555',
-    textTransform: 'uppercase',
-    marginBottom: '8px',
-    fontWeight: 'bold',
-  };
-
-  const statNumberStyle: React.CSSProperties = {
-    fontFamily: 'Share Tech Mono, monospace',
-    fontSize: '48px',
-    color: '#00ff41',
-    lineHeight: '1',
-    marginBottom: '8px',
-    textShadow: '0 0 8px #00ff41, 0 0 16px rgba(0, 255, 65, 0.5)',
-    fontWeight: 'bold',
-  };
-
-  const statSubtextStyle: React.CSSProperties = {
-    fontFamily: 'Chakra Petch, sans-serif',
-    fontSize: '9px',
-    color: '#555',
-    textTransform: 'uppercase',
-  };
-
-  const scanlineDividerStyle: React.CSSProperties = {
-    height: '1px',
-    background: 'linear-gradient(90deg, transparent, #00ff41, transparent)',
-    marginBottom: '24px',
-  };
-
-  const twoColumnLayoutStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '24px',
-    marginBottom: '24px',
-  };
-
-  const leftColumnStyle: React.CSSProperties = {
-    flex: '0 0 60%',
-  };
-
-  const rightColumnStyle: React.CSSProperties = {
-    flex: '0 0 40%',
-  };
-
-  const sectionHeaderStyle: React.CSSProperties = {
-    fontFamily: 'Orbitron, sans-serif',
-    fontSize: '8px',
-    letterSpacing: '1px',
-    color: '#555',
-    textTransform: 'uppercase',
-    marginBottom: '16px',
-    fontWeight: 'bold',
-  };
-
-  const weeklyRowStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    paddingTop: '8px',
-    paddingBottom: '8px',
-    borderBottom: '1px solid rgba(0, 255, 65, 0.02)',
-  };
-
-  const weeklyRowHighlightStyle: React.CSSProperties = {
-    ...weeklyRowStyle,
-    backgroundColor: 'rgba(0, 255, 65, 0.04)',
-  };
-
-  const dayNameStyle: React.CSSProperties = {
-    fontFamily: 'Chakra Petch, sans-serif',
-    fontSize: '9px',
-    color: '#555',
-    textTransform: 'uppercase',
-    width: '60px',
-    fontWeight: 'bold',
-  };
-
-  const workoutCellStyle: React.CSSProperties = {
-    flex: '1',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    paddingLeft: '8px',
-    borderLeft: '3px solid #00ff41',
-  };
-
-  const workoutTitleStyle: React.CSSProperties = {
-    fontFamily: 'Chakra Petch, sans-serif',
-    fontSize: '9px',
-    color: '#ccc',
-    flex: '1',
-  };
-
-  const blockCountBadgeStyle: React.CSSProperties = {
-    fontFamily: 'Share Tech Mono, monospace',
-    fontSize: '8px',
-    color: '#00ff41',
-    border: '1px solid rgba(0, 255, 65, 0.3)',
-    padding: '2px 6px',
-    clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)',
-  };
-
-  const emptyDayStyle: React.CSSProperties = {
-    flex: '1',
-    color: '#333',
-    fontFamily: 'Chakra Petch, sans-serif',
-    fontSize: '9px',
-  };
-
-  const prListStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  };
-
-  const prRowStyle: React.CSSProperties = {
-    borderLeft: '2px solid #00ff41',
-    paddingLeft: '12px',
-    paddingTop: '8px',
-    paddingBottom: '8px',
-    borderBottom: '1px solid rgba(0, 255, 65, 0.02)',
-  };
-
-  const prExerciseStyle: React.CSSProperties = {
-    fontFamily: 'Chakra Petch, sans-serif',
-    fontSize: '11px',
-    color: '#ccc',
-    marginBottom: '4px',
-  };
-
-  const prStatsStyle: React.CSSProperties = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  };
-
-  const prWeightRepsStyle: React.CSSProperties = {
-    fontFamily: 'Share Tech Mono, monospace',
-    fontSize: '11px',
-    color: '#00ff41',
-  };
-
-  const prDateStyle: React.CSSProperties = {
-    fontFamily: 'Chakra Petch, sans-serif',
-    fontSize: '9px',
-    color: '#555',
-  };
-
-  const readinessPanelStyle: React.CSSProperties = {
-    border: '1px solid rgba(0, 255, 65, 0.06)',
-    borderRadius: '0px',
-    padding: '16px 24px',
-    backgroundColor: 'transparent',
-  };
-
-  const readinessTitleStyle: React.CSSProperties = {
-    fontFamily: 'Orbitron, sans-serif',
-    fontSize: '8px',
-    letterSpacing: '1px',
-    color: '#555',
-    textTransform: 'uppercase',
-    marginBottom: '16px',
-    fontWeight: 'bold',
-  };
-
-  const readinessBarContainerStyle: React.CSSProperties = {
-    marginBottom: '16px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  };
-
-  const readinessLabelStyle: React.CSSProperties = {
-    fontFamily: 'Chakra Petch, sans-serif',
-    fontSize: '9px',
-    color: '#888',
-    textTransform: 'uppercase',
-    width: '80px',
-  };
-
-  const readinessTrackStyle: React.CSSProperties = {
-    flex: '1',
-    height: '6px',
-    backgroundColor: 'rgba(0, 255, 65, 0.04)',
-    borderRadius: '0px',
-    overflow: 'hidden',
-    border: '1px solid rgba(0, 255, 65, 0.1)',
-  };
-
-  const readinessValueStyle: React.CSSProperties = {
-    fontFamily: 'Share Tech Mono, monospace',
-    fontSize: '11px',
-    color: '#00ff41',
-    width: '40px',
-    textAlign: 'right',
-  };
-
-  const readinessBarFillGreenStyle: (percent: number) => React.CSSProperties = (
-    percent
-  ) => ({
-    height: '100%',
-    backgroundColor: '#00ff41',
-    width: `${Math.min(percent, 100)}%`,
-    transition: 'width 0.3s ease',
-  });
-
-  const readinessBarFillCyanStyle: (percent: number) => React.CSSProperties = (
-    percent
-  ) => ({
-    height: '100%',
-    backgroundColor: '#00d4ff',
-    width: `${Math.min(percent, 100)}%`,
-    transition: 'width 0.3s ease',
-  });
-
-  const readinessBarFillAmberStyle: (percent: number) => React.CSSProperties = (
-    percent
-  ) => ({
-    height: '100%',
-    backgroundColor: '#ffaa00',
-    width: `${Math.min(percent, 100)}%`,
-    transition: 'width 0.3s ease',
-  });
-
-  // Readiness metrics
-  const readinessValue = operator.profile.readiness;
-  const sleepPercent = (operator.profile.sleep / 10) * 100;
-  const stressPercent = (operator.profile.stress / 10) * 100;
+  const stats = [
+    { label: 'WORKOUTS', value: animWorkouts, suffix: '', sub: 'THIS WEEK', color: '#00ff41', delay: 0 },
+    { label: 'STREAK', value: animStreak, suffix: 'D', sub: 'CONSECUTIVE', color: '#00ff41', delay: 1 },
+    { label: 'VOLUME', value: animVolume, suffix: '', sub: 'LBS MOVED', color: '#ffb800', delay: 2 },
+    { label: 'PR COUNT', value: animPRs, suffix: '', sub: 'LIFETIME', color: '#00bcd4', delay: 3 },
+  ];
 
   return (
-    <div style={containerStyle}>
+    <div style={{
+      backgroundColor: '#030303',
+      color: '#ccc',
+      fontFamily: 'Chakra Petch, sans-serif',
+      padding: '24px',
+      minHeight: '100vh',
+      position: 'relative',
+    }}>
+
+      {/* Ambient grid */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        backgroundImage:
+          'linear-gradient(rgba(0,255,65,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,65,0.015) 1px, transparent 1px)',
+        backgroundSize: '50px 50px',
+        pointerEvents: 'none',
+      }} />
+
+      {/* Operator banner */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '24px',
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-10px)',
+        transition: 'all 0.5s ease',
+        position: 'relative',
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '18px',
+            fontWeight: 900,
+            color: '#00ff41',
+            letterSpacing: '4px',
+            textShadow: '0 0 12px rgba(0,255,65,0.3)',
+          }}>
+            {operator.callsign}
+          </div>
+          <div style={{
+            fontFamily: 'Share Tech Mono, monospace',
+            fontSize: '9px',
+            color: '#444',
+            letterSpacing: '1px',
+            marginTop: '4px',
+          }}>
+            {operator.name} // {operator.role.toUpperCase()} // {operator.profile.goals.join(' + ').toUpperCase()}
+          </div>
+        </div>
+        <div style={{
+          fontFamily: 'Share Tech Mono, monospace',
+          fontSize: '9px',
+          color: '#333',
+          textAlign: 'right',
+        }}>
+          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}
+        </div>
+      </div>
+
       {/* Hero Stats Row */}
-      <div style={heroRowStyle}>
-        {/* Workouts This Week */}
-        <div style={statCardStyle}>
-          <div style={statLabelStyle}>WORKOUTS THIS WEEK</div>
-          <div style={statNumberStyle}>{workoutsThisWeek}</div>
-          <div style={statSubtextStyle}>// THIS WEEK'S SESSIONS</div>
-        </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '12px',
+        marginBottom: '24px',
+        position: 'relative',
+      }}>
+        {stats.map((stat, i) => (
+          <div key={stat.label} style={{
+            border: '1px solid rgba(0,255,65,0.06)',
+            padding: '20px',
+            position: 'relative',
+            overflow: 'hidden',
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(15px)',
+            transition: `all 0.5s ease ${i * 0.1}s`,
+            background: 'linear-gradient(135deg, rgba(10,10,10,0.8) 0%, rgba(5,5,5,0.95) 100%)',
+          }}>
+            {/* Top-left corner accent */}
+            <div style={{
+              position: 'absolute', top: 0, left: 0,
+              width: '12px', height: '12px',
+              borderTop: `2px solid ${stat.color}30`,
+              borderLeft: `2px solid ${stat.color}30`,
+            }} />
+            {/* Bottom-right corner accent */}
+            <div style={{
+              position: 'absolute', bottom: 0, right: 0,
+              width: '12px', height: '12px',
+              borderBottom: `2px solid ${stat.color}30`,
+              borderRight: `2px solid ${stat.color}30`,
+            }} />
 
-        {/* Streak */}
-        <div style={statCardStyle}>
-          <div style={statLabelStyle}>STREAK</div>
-          <div style={statNumberStyle}>{streak}</div>
-          <div style={statSubtextStyle}>// CONSECUTIVE DAYS</div>
-        </div>
+            <div style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '7px',
+              letterSpacing: '2px',
+              color: '#555',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              marginBottom: '12px',
+            }}>
+              {stat.label}
+            </div>
+            <div style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: stat.label === 'VOLUME' ? '32px' : '42px',
+              color: stat.color,
+              lineHeight: '1',
+              marginBottom: '8px',
+              textShadow: `0 0 8px ${stat.color}60, 0 0 20px ${stat.color}25`,
+              fontWeight: 'bold',
+            }}>
+              {stat.label === 'VOLUME' ? stat.value.toLocaleString() : stat.value}{stat.suffix}
+            </div>
+            <div style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: '8px',
+              color: '#3a3a3a',
+              letterSpacing: '1px',
+            }}>
+              // {stat.sub}
+            </div>
 
-        {/* Volume */}
-        <div style={statCardStyle}>
-          <div style={statLabelStyle}>VOLUME</div>
-          <div style={statNumberStyle}>{volume.toLocaleString()}</div>
-          <div style={statSubtextStyle}>// LBS MOVED THIS WEEK</div>
-        </div>
-
-        {/* Personal Records */}
-        <div style={statCardStyle}>
-          <div style={statLabelStyle}>PERSONAL RECORDS</div>
-          <div style={statNumberStyle}>{prCount}</div>
-          <div style={statSubtextStyle}>// LIFETIME RECORDS</div>
-        </div>
+            {/* Subtle shimmer line at bottom */}
+            <div style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: '1px',
+              background: `linear-gradient(90deg, transparent, ${stat.color}20, transparent)`,
+            }} />
+          </div>
+        ))}
       </div>
 
       {/* Scanline Divider */}
-      <div style={scanlineDividerStyle}></div>
+      <div style={{
+        height: '1px',
+        background: 'linear-gradient(90deg, transparent, rgba(0,255,65,0.3), transparent)',
+        marginBottom: '24px',
+      }} />
 
       {/* Two-Column Layout */}
-      <div style={twoColumnLayoutStyle}>
+      <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', position: 'relative' }}>
+
         {/* Left Column: Weekly Overview */}
-        <div style={leftColumnStyle}>
-          <div style={sectionHeaderStyle}>WEEKLY OPERATIONS</div>
+        <div style={{ flex: '0 0 58%' }}>
+          <div style={{
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '8px',
+            letterSpacing: '2px',
+            color: '#555',
+            textTransform: 'uppercase',
+            fontWeight: 700,
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <span style={{ color: '#00ff41', fontSize: '6px' }}>▶</span>
+            WEEKLY OPERATIONS
+          </div>
 
-          {weekDates.map((dayInfo) => {
-            const workout = operator.workouts[dayInfo.key];
-            const isTodayFlag = isToday(dayInfo.date);
-            const rowStyle = isTodayFlag ? weeklyRowHighlightStyle : weeklyRowStyle;
+          <div style={{
+            border: '1px solid rgba(0,255,65,0.05)',
+            overflow: 'hidden',
+            background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
+          }}>
+            {weekDates.map((dayInfo, i) => {
+              const workout = operator.workouts[dayInfo.key];
+              const today = isToday(dayInfo.date);
 
-            return (
-              <div key={dayInfo.key} style={rowStyle}>
-                <div style={dayNameStyle}>{dayInfo.dayName}</div>
-                {workout ? (
-                  <div style={workoutCellStyle}>
-                    <div style={workoutTitleStyle}>{workout.title}</div>
-                    <div style={blockCountBadgeStyle}>
-                      {workout.blocks.length}
-                    </div>
+              return (
+                <div key={dayInfo.key} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '10px 16px',
+                  borderBottom: i < 6 ? '1px solid rgba(0,255,65,0.03)' : 'none',
+                  backgroundColor: today ? 'rgba(0,255,65,0.03)' : 'transparent',
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateX(0)' : 'translateX(-10px)',
+                  transition: `all 0.4s ease ${0.3 + i * 0.05}s`,
+                  position: 'relative',
+                }}>
+                  {/* Today indicator */}
+                  {today && (
+                    <div style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: '2px',
+                      backgroundColor: '#00ff41',
+                      boxShadow: '0 0 6px rgba(0,255,65,0.4)',
+                    }} />
+                  )}
+
+                  <div style={{
+                    fontFamily: 'Orbitron, sans-serif',
+                    fontSize: '8px',
+                    color: today ? '#00ff41' : '#444',
+                    width: '40px',
+                    fontWeight: today ? 800 : 600,
+                    letterSpacing: '1px',
+                  }}>
+                    {dayInfo.dayName}
                   </div>
-                ) : (
-                  <div style={emptyDayStyle}>—</div>
-                )}
-              </div>
-            );
-          })}
+
+                  <div style={{
+                    fontFamily: 'Share Tech Mono, monospace',
+                    fontSize: '8px',
+                    color: '#333',
+                    width: '30px',
+                  }}>
+                    {dayInfo.date.getDate()}
+                  </div>
+
+                  {workout ? (
+                    <div style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      paddingLeft: '10px',
+                      borderLeft: '2px solid rgba(0,255,65,0.3)',
+                    }}>
+                      <div style={{
+                        fontFamily: 'Chakra Petch, sans-serif',
+                        fontSize: '10px',
+                        color: '#bbb',
+                        flex: 1,
+                      }}>
+                        {workout.title}
+                      </div>
+                      <div style={{
+                        fontFamily: 'Share Tech Mono, monospace',
+                        fontSize: '8px',
+                        color: '#00bcd4',
+                        padding: '2px 8px',
+                        border: '1px solid rgba(0,188,212,0.2)',
+                        backgroundColor: 'rgba(0,188,212,0.04)',
+                      }}>
+                        {workout.blocks.length} BLOCKS
+                      </div>
+                      {workout.completed && (
+                        <div style={{
+                          fontFamily: 'Share Tech Mono, monospace',
+                          fontSize: '7px',
+                          color: '#00ff41',
+                          padding: '2px 6px',
+                          border: '1px solid rgba(0,255,65,0.2)',
+                          backgroundColor: 'rgba(0,255,65,0.04)',
+                        }}>
+                          ✓
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{
+                      flex: 1,
+                      fontFamily: 'Chakra Petch, sans-serif',
+                      fontSize: '9px',
+                      color: '#222',
+                      paddingLeft: '10px',
+                      borderLeft: '2px solid rgba(0,255,65,0.05)',
+                    }}>
+                      {today ? 'NO SESSION LOGGED' : '—'}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Right Column: Recent PRs */}
-        <div style={rightColumnStyle}>
-          <div style={sectionHeaderStyle}>RECENT PR BOARD</div>
+        {/* Right Column: PRs + Readiness */}
+        <div style={{ flex: '1', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-          {recentPRs.length > 0 ? (
-            <div style={prListStyle}>
-              {recentPRs.map((pr) => (
-                <div key={pr.id} style={prRowStyle}>
-                  <div style={prExerciseStyle}>{pr.exercise}</div>
-                  <div style={prStatsStyle}>
-                    <div style={prWeightRepsStyle}>
-                      {pr.weight}lbs x {pr.reps}
+          {/* PR Board */}
+          <div>
+            <div style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '8px',
+              letterSpacing: '2px',
+              color: '#555',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}>
+              <span style={{ color: '#ffb800', fontSize: '6px' }}>◆</span>
+              RECENT PR BOARD
+            </div>
+
+            <div style={{
+              border: '1px solid rgba(0,255,65,0.05)',
+              overflow: 'hidden',
+              background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
+            }}>
+              {recentPRs.length > 0 ? recentPRs.map((pr, i) => (
+                <div key={pr.id} style={{
+                  padding: '12px 16px',
+                  borderBottom: i < recentPRs.length - 1 ? '1px solid rgba(0,255,65,0.03)' : 'none',
+                  borderLeft: '2px solid #ffb800',
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateX(0)' : 'translateX(10px)',
+                  transition: `all 0.4s ease ${0.5 + i * 0.08}s`,
+                }}>
+                  <div style={{
+                    fontFamily: 'Chakra Petch, sans-serif',
+                    fontSize: '10px',
+                    color: '#bbb',
+                    marginBottom: '4px',
+                  }}>
+                    {pr.exercise}
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}>
+                    <div style={{
+                      fontFamily: 'Share Tech Mono, monospace',
+                      fontSize: '13px',
+                      color: '#ffb800',
+                      textShadow: '0 0 6px rgba(255,184,0,0.3)',
+                    }}>
+                      {pr.weight}lbs × {pr.reps}
                     </div>
-                    <div style={prDateStyle}>{formatPRDate(pr.date)}</div>
+                    <div style={{
+                      fontFamily: 'Share Tech Mono, monospace',
+                      fontSize: '8px',
+                      color: '#444',
+                    }}>
+                      {formatPRDate(pr.date)}
+                    </div>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div style={{
+                  padding: '24px 16px',
+                  fontFamily: 'Share Tech Mono, monospace',
+                  fontSize: '9px',
+                  color: '#333',
+                  textAlign: 'center',
+                }}>
+                  NO RECORDS LOGGED
+                </div>
+              )}
             </div>
-          ) : (
-            <div
-              style={{
-                fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '9px',
-                color: '#555',
-                textAlign: 'center',
-                padding: '32px 16px',
-              }}
-            >
-              NO RECORDS LOGGED YET
+          </div>
+
+          {/* Readiness Panel with Rings */}
+          <div style={{
+            border: '1px solid rgba(0,255,65,0.05)',
+            padding: '20px',
+            background: 'linear-gradient(135deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
+          }}>
+            <div style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '8px',
+              letterSpacing: '2px',
+              color: '#555',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}>
+              <span style={{ color: '#00bcd4', fontSize: '6px' }}>◈</span>
+              OPERATOR READINESS
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Readiness Panel */}
-      <div style={readinessPanelStyle}>
-        <div style={readinessTitleStyle}>OPERATOR READINESS</div>
-
-        {/* Readiness Bar */}
-        <div style={readinessBarContainerStyle}>
-          <div style={readinessLabelStyle}>READINESS</div>
-          <div style={readinessTrackStyle}>
-            <div style={readinessBarFillGreenStyle(readinessValue)}></div>
-          </div>
-          <div style={readinessValueStyle}>{readinessValue}%</div>
-        </div>
-
-        {/* Sleep Bar */}
-        <div style={readinessBarContainerStyle}>
-          <div style={readinessLabelStyle}>SLEEP</div>
-          <div style={readinessTrackStyle}>
-            <div style={readinessBarFillCyanStyle(sleepPercent)}></div>
-          </div>
-          <div style={readinessValueStyle}>
-            {operator.profile.sleep}/10
-          </div>
-        </div>
-
-        {/* Stress Bar */}
-        <div style={readinessBarContainerStyle}>
-          <div style={readinessLabelStyle}>STRESS</div>
-          <div style={readinessTrackStyle}>
-            <div style={readinessBarFillAmberStyle(stressPercent)}></div>
-          </div>
-          <div style={readinessValueStyle}>
-            {operator.profile.stress}/10
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-around',
+              alignItems: 'center',
+            }}>
+              <ProgressRing
+                value={operator.profile.readiness}
+                max={100}
+                size={72}
+                color="#00ff41"
+                label="READINESS"
+              />
+              <ProgressRing
+                value={operator.profile.sleep}
+                max={10}
+                size={72}
+                color="#00bcd4"
+                label="SLEEP"
+              />
+              <ProgressRing
+                value={operator.profile.stress}
+                max={10}
+                size={72}
+                color="#ffb800"
+                label="STRESS"
+              />
+            </div>
           </div>
         </div>
       </div>

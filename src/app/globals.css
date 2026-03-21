@@ -3,9 +3,11 @@
   --bg-base: #030303;
   --bg-surface: #080808;
   --bg-elevated: #0e0e0e;
+  --bg-card: #0a0a0a;
   --green-primary: #00ff41;
   --green-bright: #00e639;
   --green-muted: #00cc33;
+  --green-dark: #003d10;
   --text-primary: #cccccc;
   --text-secondary: #888888;
   --text-tertiary: #555555;
@@ -52,10 +54,204 @@ body::after {
   z-index: 9999;
 }
 
-/* Scrollbar styling */
+/* ============================================
+   ANIMATION KEYFRAMES
+   ============================================ */
+
+/* Fade in from bottom */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Fade in from left */
+@keyframes fadeInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Fade in scale */
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Slide down */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Count up glow pulse */
+@keyframes glowPulse {
+  0%, 100% { text-shadow: 0 0 8px rgba(0, 255, 65, 0.3), 0 0 16px rgba(0, 255, 65, 0.15); }
+  50% { text-shadow: 0 0 12px rgba(0, 255, 65, 0.6), 0 0 24px rgba(0, 255, 65, 0.3), 0 0 40px rgba(0, 255, 65, 0.1); }
+}
+
+/* Pulse ring */
+@keyframes pulseRing {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Shimmer sweep */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Matrix rain character */
+@keyframes matrixFall {
+  0% { transform: translateY(-100vh); opacity: 1; }
+  90% { opacity: 0.3; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+/* Breathing glow for borders */
+@keyframes borderGlow {
+  0%, 100% { border-color: rgba(0, 255, 65, 0.15); box-shadow: 0 0 0 rgba(0, 255, 65, 0); }
+  50% { border-color: rgba(0, 255, 65, 0.35); box-shadow: 0 0 8px rgba(0, 255, 65, 0.1); }
+}
+
+/* Typing cursor blink */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Scan line moving */
+@keyframes scanLine {
+  0% { top: -2px; }
+  100% { top: 100%; }
+}
+
+/* Login specific */
+@keyframes redFlash {
+  0% { border-color: #ff4444; box-shadow: 0 0 12px rgba(255, 68, 68, 0.5); }
+  100% { border-color: rgba(0, 255, 65, 0.15); box-shadow: none; }
+}
+
+@keyframes greenPulse {
+  0% { box-shadow: 0 0 0 rgba(0, 255, 65, 0); }
+  50% { box-shadow: 0 0 20px rgba(0, 255, 65, 0.4), 0 0 40px rgba(0, 255, 65, 0.2); }
+  100% { box-shadow: 0 0 0 rgba(0, 255, 65, 0); }
+}
+
+@keyframes logoEntrance {
+  0% { opacity: 0; transform: scale(0.5); filter: brightness(0); }
+  60% { opacity: 1; transform: scale(1.05); filter: brightness(1.5); }
+  100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes titleReveal {
+  0% { opacity: 0; letter-spacing: 12px; }
+  100% { opacity: 1; letter-spacing: 4px; }
+}
+
+@keyframes operatorReveal {
+  0% { opacity: 0; transform: translateY(10px) scale(0.95); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* Tab underline slide */
+@keyframes tabSlide {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Progress ring fill */
+@keyframes progressFill {
+  from { stroke-dashoffset: 283; }
+}
+
+/* Card hover lift */
+@keyframes cardLift {
+  from { transform: translateY(0); }
+  to { transform: translateY(-2px); }
+}
+
+/* Pulse dot (status indicator) */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Message slide in */
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Number count spin */
+@keyframes numberTick {
+  0% { transform: translateY(100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+/* Grid line */
+@keyframes gridPulse {
+  0%, 100% { opacity: 0.03; }
+  50% { opacity: 0.08; }
+}
+
+/* Horizontal scan */
+@keyframes horizontalScan {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* ============================================
+   GLASSMORPHISM UTILITIES
+   ============================================ */
+
+.glass {
+  background: rgba(10, 10, 10, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 255, 65, 0.08);
+}
+
+.glass-elevated {
+  background: rgba(14, 14, 14, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 255, 65, 0.12);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(10, 10, 10, 0.9) 0%, rgba(5, 5, 5, 0.95) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 255, 65, 0.06);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.glass-card:hover {
+  border-color: rgba(0, 255, 65, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 255, 65, 0.05), inset 0 1px 0 rgba(0, 255, 65, 0.05);
+  transform: translateY(-1px);
+}
+
+/* ============================================
+   SCROLLBAR STYLING
+   ============================================ */
+
 ::-webkit-scrollbar {
-  width: 0px;
-  height: 0px;
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 65, 0.12);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 65, 0.25);
 }
 
 .horizontal-scroll::-webkit-scrollbar {
@@ -73,6 +269,10 @@ body::after {
   border-radius: 4px;
 }
 
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
 /* Scanline divider */
 .scanline-divider {
   height: 1px;
@@ -83,4 +283,97 @@ body::after {
 /* Green glow utility */
 .glow-green {
   text-shadow: 0 0 8px rgba(0, 255, 65, 0.3);
+}
+
+/* Ambient grid background */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 255, 65, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Corner accents for cards */
+.corner-accents {
+  position: relative;
+}
+.corner-accents::before,
+.corner-accents::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: rgba(0, 255, 65, 0.3);
+  border-style: solid;
+  pointer-events: none;
+}
+.corner-accents::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+.corner-accents::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
+}
+
+/* Stagger animation delays */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+
+/* Hover glow effect */
+.hover-glow {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.hover-glow:hover {
+  box-shadow: 0 0 16px rgba(0, 255, 65, 0.1), 0 0 4px rgba(0, 255, 65, 0.05);
+  border-color: rgba(0, 255, 65, 0.25);
+}
+
+/* Animated gradient border */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #00ff41, transparent);
+  opacity: 0.3;
+}
+
+/* Stat number style */
+.stat-number {
+  font-family: 'Share Tech Mono', monospace;
+  color: #00ff41;
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.4), 0 0 16px rgba(0, 255, 65, 0.2);
+}
+
+/* Label style */
+.label-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Input field base style */
+input, textarea, select {
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* Selection color */
+::selection {
+  background: rgba(0, 255, 65, 0.2);
+  color: #fff;
 }

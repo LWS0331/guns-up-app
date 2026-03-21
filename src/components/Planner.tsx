@@ -403,31 +403,29 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
     return (
       <div>
-        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 20px 0', fontSize: '24px' }}>
-            {monthName}
+        <div style={{ marginBottom: '16px', textAlign: 'center' }}>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: 0, fontSize: '18px', fontWeight: 900, letterSpacing: '4px', textShadow: '0 0 8px rgba(0,255,65,0.2)' }}>
+            {monthName.toUpperCase()}
           </h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', marginBottom: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '4px' }}>
           {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
-            <div
-              key={day}
-              style={{
-                textAlign: 'center',
-                fontFamily: 'Chakra Petch',
-                color: '#00ff41',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                padding: '8px',
-              }}
-            >
+            <div key={day} style={{
+              textAlign: 'center',
+              fontFamily: 'Orbitron',
+              color: '#333',
+              fontSize: '7px',
+              fontWeight: 700,
+              padding: '8px',
+              letterSpacing: '2px',
+            }}>
               {day}
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
           {monthDates.map(week =>
             week.map(date => {
               const dateStr = formatDate(date);
@@ -435,77 +433,74 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               const tag = getDayTag(dateStr);
               const isCurrentDay = isToday(date);
               const isInMonth = isCurrentMonth(date);
-              const bgColor = isCurrentDay ? 'rgba(0, 255, 65, 0.1)' : isInMonth ? '#030303' : '#0a0a0a';
 
               return (
                 <div
                   key={dateStr}
-                  onClick={() => {
-                    setSelectedDate(dateStr);
-                    setViewMode('day');
-                  }}
-                  onContextMenu={e => {
-                    e.preventDefault();
-                    setShowDayMenu(dateStr);
-                  }}
+                  onClick={() => { setSelectedDate(dateStr); setViewMode('day'); }}
+                  onContextMenu={e => { e.preventDefault(); setShowDayMenu(dateStr); }}
                   style={{
-                    minHeight: '100px',
-                    padding: '12px',
-                    backgroundColor: bgColor,
-                    border: isCurrentDay ? '2px solid #00ff41' : '1px solid rgba(0, 255, 65, 0.2)',
+                    minHeight: '90px',
+                    padding: '8px',
+                    backgroundColor: isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)',
+                    border: isCurrentDay ? '1px solid rgba(0,255,65,0.3)' : '1px solid rgba(0,255,65,0.04)',
                     cursor: 'pointer',
                     position: 'relative',
                     transition: 'all 0.2s ease',
+                    overflow: 'hidden',
                   }}
                   onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0, 255, 65, 0.05)';
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,255,65,0.2)';
+                    (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0,255,65,0.03)';
                   }}
                   onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = bgColor;
+                    (e.currentTarget as HTMLElement).style.borderColor = isCurrentDay ? 'rgba(0,255,65,0.3)' : 'rgba(0,255,65,0.04)';
+                    (e.currentTarget as HTMLElement).style.backgroundColor = isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)';
                   }}
                 >
-                  <div
-                    style={{
-                      fontFamily: 'Chakra Petch',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      color: isInMonth ? '#00ff41' : '#666',
-                      marginBottom: '6px',
-                    }}
-                  >
+                  {/* Today left accent */}
+                  {isCurrentDay && (
+                    <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '2px', backgroundColor: '#00ff41', boxShadow: '0 0 6px rgba(0,255,65,0.4)' }} />
+                  )}
+
+                  <div style={{
+                    fontFamily: 'Share Tech Mono',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: isCurrentDay ? '#00ff41' : isInMonth ? '#555' : '#222',
+                    marginBottom: '6px',
+                  }}>
                     {date.getDate()}
                   </div>
 
                   {workout && (
-                    <div
-                      style={{
-                        fontFamily: 'Share Tech Mono',
-                        fontSize: '10px',
-                        color: '#00bcd4',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        marginBottom: '4px',
-                      }}
-                    >
+                    <div style={{
+                      fontFamily: 'Chakra Petch',
+                      fontSize: '9px',
+                      color: '#00bcd4',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      marginBottom: '4px',
+                      paddingLeft: '6px',
+                      borderLeft: '1px solid rgba(0,188,212,0.3)',
+                    }}>
                       {workout.title}
                     </div>
                   )}
 
                   {tag && (
-                    <div
-                      style={{
-                        display: 'inline-block',
-                        padding: '2px 6px',
-                        backgroundColor: `${getTagColor(tag.color)}22`,
-                        border: `1px solid ${getTagColor(tag.color)}`,
-                        borderRadius: '3px',
-                        fontFamily: 'Share Tech Mono',
-                        fontSize: '9px',
-                        color: getTagColor(tag.color),
-                      }}
-                    >
-                      {tag.note.substring(0, 8)}
+                    <div style={{
+                      display: 'inline-block',
+                      padding: '1px 5px',
+                      backgroundColor: `${getTagColor(tag.color)}10`,
+                      border: `1px solid ${getTagColor(tag.color)}40`,
+                      fontFamily: 'Share Tech Mono',
+                      fontSize: '7px',
+                      color: getTagColor(tag.color),
+                      letterSpacing: '0.5px',
+                    }}>
+                      {tag.note.substring(0, 10)}
                     </div>
                   )}
 
@@ -757,15 +752,23 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
       <div
         style={{
           padding: '24px',
-          backgroundColor: '#030303',
-          border: '1px solid rgba(0, 188, 212, 0.4)',
-          borderRadius: '4px',
+          backgroundColor: 'rgba(5,5,5,0.8)',
+          border: '1px solid rgba(0,188,212,0.15)',
           maxWidth: '900px',
+          position: 'relative',
         }}
       >
-        <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', margin: '0 0 20px 0', fontSize: '18px' }}>
-          Workout Builder - {selectedDate}
-        </h3>
+        {/* Top accent */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, rgba(0,188,212,0.4), transparent)' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ fontFamily: 'Orbitron', color: '#00ff41', fontSize: '14px', fontWeight: 900, letterSpacing: '2px' }}>
+            WORKOUT BUILDER
+          </div>
+          <div style={{ fontFamily: 'Share Tech Mono', color: '#333', fontSize: '9px' }}>
+            // {selectedDate}
+          </div>
+        </div>
 
         {/* TITLE */}
         <div style={{ marginBottom: '16px' }}>
@@ -1282,104 +1285,129 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
         fontFamily: 'Chakra Petch',
         padding: '24px',
         minHeight: '100vh',
+        position: 'relative',
       }}
     >
+      {/* Ambient grid */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        backgroundImage:
+          'linear-gradient(rgba(0,255,65,0.012) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,65,0.012) 1px, transparent 1px)',
+        backgroundSize: '50px 50px',
+        pointerEvents: 'none',
+      }} />
+
       {/* HEADER */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgba(0, 255, 65, 0.2)' }}>
-        <h1 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: 0, fontSize: '32px' }}>
-          {operator.callsign} - PLANNER
-        </h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '16px', borderBottom: '1px solid rgba(0,255,65,0.06)', position: 'relative' }}>
+        <div>
+          <div style={{ fontFamily: 'Orbitron', color: '#00ff41', fontSize: '16px', fontWeight: 900, letterSpacing: '3px', textShadow: '0 0 8px rgba(0,255,65,0.3)' }}>
+            {operator.callsign}
+          </div>
+          <div style={{ fontFamily: 'Share Tech Mono', color: '#333', fontSize: '8px', letterSpacing: '1px', marginTop: '4px' }}>
+            TRAINING PLANNER // ACTIVE
+          </div>
+        </div>
         <button
           onClick={handleExportJson}
           style={{
-            padding: '8px 16px',
-            backgroundColor: '#00bcd4',
-            color: '#000',
-            border: 'none',
-            fontFamily: 'Chakra Petch',
+            padding: '6px 14px',
+            backgroundColor: 'transparent',
+            color: '#00bcd4',
+            border: '1px solid rgba(0,188,212,0.2)',
+            fontFamily: 'Share Tech Mono',
             cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: 'bold',
+            fontSize: '9px',
+            fontWeight: 700,
+            letterSpacing: '1px',
+            transition: 'all 0.2s ease',
           }}
         >
-          Export JSON
+          EXPORT
         </button>
       </div>
 
-      {/* VIEW MODE CONTROLS */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', justifyContent: 'center' }}>
-        {(['month', 'week', 'day'] as ViewMode[]).map(mode => (
-          <button
-            key={mode}
-            onClick={() => handleViewModeChange(mode)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: viewMode === mode ? '#00ff41' : '#0a0a0a',
-              color: viewMode === mode ? '#000' : '#00ff41',
-              border: `2px solid ${viewMode === mode ? '#00ff41' : 'rgba(0, 255, 65, 0.3)'}`,
-              fontFamily: 'Chakra Petch',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-            }}
-          >
-            {mode}
-          </button>
-        ))}
-      </div>
-
-      {/* NAVIGATION */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      {/* VIEW MODE + NAVIGATION */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', position: 'relative' }}>
         <button
           onClick={handleNavigatePrevious}
           style={{
-            padding: '8px 16px',
-            backgroundColor: '#0a0a0a',
-            color: '#00ff41',
-            border: '1px solid rgba(0, 255, 65, 0.3)',
-            fontFamily: 'Chakra Petch',
+            padding: '6px 14px',
+            backgroundColor: 'transparent',
+            color: '#555',
+            border: '1px solid rgba(0,255,65,0.08)',
+            fontFamily: 'Orbitron',
             cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: 'bold',
+            fontSize: '9px',
+            fontWeight: 700,
+            transition: 'all 0.2s ease',
           }}
         >
-          ← Previous
+          ◀
         </button>
 
-        <button
-          onClick={() => {
-            setCurrentDate(new Date());
-            setSelectedDate(null);
-          }}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#0a0a0a',
-            color: '#00ff41',
-            border: '1px solid rgba(0, 255, 65, 0.3)',
-            fontFamily: 'Chakra Petch',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: 'bold',
-          }}
-        >
-          Today
-        </button>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {(['month', 'week', 'day'] as ViewMode[]).map(mode => (
+            <button
+              key={mode}
+              onClick={() => handleViewModeChange(mode)}
+              style={{
+                padding: '6px 16px',
+                backgroundColor: viewMode === mode ? 'rgba(0,255,65,0.06)' : 'transparent',
+                color: viewMode === mode ? '#00ff41' : '#3a3a3a',
+                border: viewMode === mode ? '1px solid rgba(0,255,65,0.2)' : '1px solid transparent',
+                fontFamily: 'Orbitron',
+                fontSize: '8px',
+                fontWeight: viewMode === mode ? 800 : 500,
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                letterSpacing: '2px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {mode}
+            </button>
+          ))}
+
+          <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(0,255,65,0.1)', margin: '0 8px' }} />
+
+          <button
+            onClick={() => {
+              setCurrentDate(new Date());
+              setSelectedDate(null);
+            }}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: 'transparent',
+              color: '#00ff41',
+              border: '1px solid rgba(0,255,65,0.15)',
+              fontFamily: 'Share Tech Mono',
+              cursor: 'pointer',
+              fontSize: '8px',
+              fontWeight: 700,
+              letterSpacing: '1px',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            TODAY
+          </button>
+        </div>
 
         <button
           onClick={handleNavigateNext}
           style={{
-            padding: '8px 16px',
-            backgroundColor: '#0a0a0a',
-            color: '#00ff41',
-            border: '1px solid rgba(0, 255, 65, 0.3)',
-            fontFamily: 'Chakra Petch',
+            padding: '6px 14px',
+            backgroundColor: 'transparent',
+            color: '#555',
+            border: '1px solid rgba(0,255,65,0.08)',
+            fontFamily: 'Orbitron',
             cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: 'bold',
+            fontSize: '9px',
+            fontWeight: 700,
+            transition: 'all 0.2s ease',
           }}
         >
-          Next →
+          ▶
         </button>
       </div>
 
