@@ -56,6 +56,84 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   const [autocompleteFor, setAutocompleteFor] = useState<number | null>(null);
   const autocompleteRef = useRef<HTMLDivElement>(null);
 
+  // Gunny AI assistant in Planner
+  const [showGunny, setShowGunny] = useState(false);
+  const [gunnyInput, setGunnyInput] = useState('');
+  const [gunnyMessages, setGunnyMessages] = useState<{ role: 'user' | 'gunny'; text: string }[]>([]);
+  const [gunnyLoading, setGunnyLoading] = useState(false);
+  const gunnyScrollRef = useRef<HTMLDivElement>(null);
+  const gunnyWorkoutRef = useRef<Record<string, unknown> | null>(null);
+
+  const askGunny = async () => {
+    const msg = gunnyInput.trim();
+    if (!msg || gunnyLoading) return;
+    const newMsgs = [...gunnyMessages, { role: 'user' as const, text: msg }];
+    setGunnyMessages(newMsgs);
+    setGunnyInput('');
+    setGunnyLoading(true);
+    try {
+      const res = await fetch('/api/gunny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: msg,
+          operator: {
+            callsign: operator.callsign,
+            weight: operator.profile?.weight,
+            goals: operator.profile?.goals,
+            injuries: operator.injuries,
+          },
+          tier: operator.tier || 'haiku',
+          context: `User is currently building a workout in the Planner for ${selectedDate}. Current workout title: "${builderData.title}". Blocks so far: ${builderData.blocks.length}. Help them build this workout. If you suggest exercises, format them clearly so the user can add them.`,
+        }),
+      });
+      const data = await res.json();
+      // If Gunny returned workout data, offer to load it
+      if (data.workoutData) {
+        const wd = data.workoutData;
+        setGunnyMessages([...newMsgs, { role: 'gunny', text: data.response + '\n\n[WORKOUT DATA DETECTED — tap "LOAD INTO BUILDER" below to auto-fill]' }]);
+        // Store workout data for loading
+        gunnyWorkoutRef.current = wd;
+      } else {
+        setGunnyMessages([...newMsgs, { role: 'gunny', text: data.response || data.error || 'No response.' }]);
+      }
+    } catch {
+      setGunnyMessages([...newMsgs, { role: 'gunny', text: 'Comms down. Check connection.' }]);
+    }
+    setGunnyLoading(false);
+    setTimeout(() => gunnyScrollRef.current?.scrollTo({ top: gunnyScrollRef.current.scrollHeight, behavior: 'smooth' }), 100);
+  };
+
+  const loadGunnyWorkout = () => {
+    const wd = gunnyWorkoutRef.current;
+    if (!wd) return;
+    const blocks: WorkoutBlock[] = [];
+    const phases = (wd.phases || wd.blocks || []) as Record<string, unknown>[];
+    for (const phase of phases) {
+      const exercises = (phase.exercises || []) as Record<string, unknown>[];
+      for (const ex of exercises) {
+        blocks.push({
+          type: 'exercise',
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          sortOrder: blocks.length,
+          exerciseName: String(ex.name || ex.exerciseName || ''),
+          prescription: String(ex.prescription || ex.sets || ''),
+          isLinkedToNext: false,
+          videoUrl: ex.videoUrl ? String(ex.videoUrl) : undefined,
+        } as ExerciseBlock);
+      }
+    }
+    setBuilderData({
+      ...builderData,
+      title: builderData.title || String(wd.title || 'AI Workout'),
+      warmup: builderData.warmup || String(wd.warmup || ''),
+      cooldown: builderData.cooldown || String(wd.cooldown || ''),
+      blocks: [...builderData.blocks, ...blocks],
+    });
+    gunnyWorkoutRef.current = null;
+    setGunnyMessages(prev => [...prev, { role: 'gunny', text: '✓ Workout loaded into builder. Review and save when ready.' }]);
+  };
+
   // ============================================================================
   // UTILITY FUNCTIONS
   // ============================================================================
@@ -1157,6 +1235,103 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               boxSizing: 'border-box',
             }}
           />
+        </div>
+
+        {/* ═══ GUNNY AI ASSISTANT ═══ */}
+        <div style={{ marginBottom: '20px', border: '1px solid rgba(255,184,0,0.2)', background: 'rgba(255,184,0,0.02)' }}>
+          <button
+            onClick={() => setShowGunny(!showGunny)}
+            style={{
+              width: '100%',
+              padding: '10px 16px',
+              background: showGunny ? 'rgba(255,184,0,0.08)' : 'transparent',
+              border: 'none',
+              color: '#ffb800',
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '2px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: '16px' }}>▶</span>
+            ASK GUNNY AI
+            <span style={{ fontSize: '9px', color: '#888', fontFamily: "'Share Tech Mono'", letterSpacing: '0' }}>
+              — workout builder assistant
+            </span>
+          </button>
+          {showGunny && (
+            <div style={{ padding: '12px' }}>
+              {/* Chat messages */}
+              <div ref={gunnyScrollRef} style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '8px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,184,0,0.3) transparent' }}>
+                {gunnyMessages.length === 0 && (
+                  <div style={{ color: '#555', fontFamily: "'Share Tech Mono'", fontSize: '12px', padding: '8px', textAlign: 'center' }}>
+                    Ask Gunny to help build your workout. Try: &quot;Give me a chest day&quot; or &quot;Add 3 compound lifts for legs&quot;
+                  </div>
+                )}
+                {gunnyMessages.map((m, i) => (
+                  <div key={i} style={{ marginBottom: '8px', padding: '6px 10px', background: m.role === 'user' ? 'rgba(0,255,65,0.04)' : 'rgba(255,184,0,0.04)', borderLeft: `2px solid ${m.role === 'user' ? '#00ff41' : '#ffb800'}` }}>
+                    <div style={{ fontSize: '9px', color: m.role === 'user' ? '#00ff41' : '#ffb800', fontFamily: "'Orbitron'", letterSpacing: '1px', marginBottom: '4px' }}>
+                      {m.role === 'user' ? operator.callsign : 'GUNNY AI'}
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#ccc', fontFamily: "'Chakra Petch'", whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                      {m.text}
+                    </div>
+                    {m.role === 'gunny' && m.text.includes('LOAD INTO BUILDER') && (
+                      <button onClick={loadGunnyWorkout} style={{ marginTop: '8px', padding: '6px 14px', background: '#ffb800', color: '#000', border: 'none', fontFamily: "'Orbitron'", fontSize: '10px', fontWeight: 700, letterSpacing: '1px', cursor: 'pointer' }}>
+                        LOAD INTO BUILDER
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {gunnyLoading && (
+                  <div style={{ padding: '6px 10px', color: '#ffb800', fontFamily: "'Share Tech Mono'", fontSize: '12px' }}>
+                    Gunny is thinking...
+                  </div>
+                )}
+              </div>
+              {/* Input */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={gunnyInput}
+                  onChange={e => setGunnyInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') askGunny(); }}
+                  placeholder="Ask Gunny for workout help..."
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    backgroundColor: '#0a0a0a',
+                    border: '1px solid rgba(255,184,0,0.3)',
+                    color: '#ffb800',
+                    fontFamily: "'Chakra Petch'",
+                    fontSize: '16px',
+                  }}
+                />
+                <button
+                  onClick={askGunny}
+                  disabled={gunnyLoading || !gunnyInput.trim()}
+                  style={{
+                    padding: '8px 16px',
+                    background: gunnyLoading ? '#333' : '#ffb800',
+                    color: '#000',
+                    border: 'none',
+                    fontFamily: "'Orbitron'",
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    letterSpacing: '1px',
+                    cursor: gunnyLoading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  SEND
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ACTION BUTTONS */}
