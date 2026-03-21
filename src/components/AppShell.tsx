@@ -32,7 +32,7 @@ const AppShell: React.FC<AppShellProps> = ({
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const lastWidthRef = useRef(0);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const bottomNavRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -46,21 +46,20 @@ const AppShell: React.FC<AppShellProps> = ({
     check();
     window.addEventListener('resize', check);
 
-    // Detect keyboard via focus/blur on input elements — stable, no bounce
+    // Keyboard detection via direct DOM manipulation — NO React state, NO re-renders
     const handleFocusIn = (e: FocusEvent) => {
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        setKeyboardOpen(true);
+        bottomNavRef.current?.classList.add('keyboard-open');
       }
     };
     const handleFocusOut = () => {
-      // Small delay to avoid flicker when tapping between inputs
       setTimeout(() => {
         const active = document.activeElement?.tagName?.toLowerCase();
         if (active !== 'input' && active !== 'textarea' && active !== 'select') {
-          setKeyboardOpen(false);
+          bottomNavRef.current?.classList.remove('keyboard-open');
         }
-      }, 100);
+      }, 150);
     };
 
     document.addEventListener('focusin', handleFocusIn);
@@ -294,7 +293,7 @@ const AppShell: React.FC<AppShellProps> = ({
       </main>
 
       {/* Mobile Bottom Tab Bar — hidden when keyboard is open */}
-      <nav className={`bottom-nav${keyboardOpen ? ' keyboard-open' : ''}`} style={{
+      <nav ref={bottomNavRef} className="bottom-nav" style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
