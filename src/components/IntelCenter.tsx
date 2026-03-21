@@ -14,6 +14,7 @@ interface PersonalRecord extends PRRecord {}
 
 interface IntelCenterProps {
   operator: Operator;
+  currentUser?: Operator;
   onUpdateOperator: (updated: Operator) => void;
 }
 
@@ -62,7 +63,8 @@ interface LocalState {
   newMovementToAvoid: string;
 }
 
-const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator }) => {
+const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpdateOperator }) => {
+  const isAdmin = currentUser?.role === 'admin';
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<SubTab>('PROFILE');
 
@@ -441,11 +443,36 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
       {/* Callsign - full width */}
       <div style={{ gridColumn: '1 / -1', marginBottom: '8px' }}>
-        <input
-          type="text"
-          value={state.profile.callsign}
-          onChange={(e) => handleProfileChange('callsign', e.target.value)}
-          style={{
+        {isAdmin ? (
+          <input
+            type="text"
+            value={state.profile.callsign}
+            onChange={(e) => handleProfileChange('callsign', e.target.value)}
+            style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '26px',
+              fontWeight: 900,
+              color: '#00ff41',
+              marginBottom: '4px',
+              textTransform: 'uppercase',
+              letterSpacing: '4px',
+              textShadow: '0 0 8px rgba(0,255,65,0.3)',
+              backgroundColor: 'rgba(0,255,65,0.02)',
+              border: '1px solid rgba(0,255,65,0.06)',
+              padding: '8px',
+              boxSizing: 'border-box',
+              width: '100%',
+              transition: 'border-color 0.2s',
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
+            }}
+          />
+        ) : (
+          <div style={{
             fontFamily: 'Orbitron, sans-serif',
             fontSize: '26px',
             fontWeight: 900,
@@ -454,20 +481,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             textTransform: 'uppercase',
             letterSpacing: '4px',
             textShadow: '0 0 8px rgba(0,255,65,0.3)',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            padding: '8px',
-            boxSizing: 'border-box',
-            width: '100%',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
+          }}>
+            {operator.callsign}
+          </div>
+        )}
         <div style={{
           fontFamily: 'Share Tech Mono, monospace',
           fontSize: '15px',
@@ -512,47 +529,49 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         />
       </div>
 
-      {/* Access PIN */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Access PIN
-        </label>
-        <input
-          type="text"
-          maxLength={4}
-          pattern="[0-9]*"
-          inputMode="numeric"
-          value={state.profile.pin}
-          onChange={(e) => handleProfileChange('pin', e.target.value)}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
-      </div>
+      {/* Access PIN - admin only */}
+      {isAdmin && (
+        <div>
+          <label
+            style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '15px',
+              color: '#888',
+              display: 'block',
+              marginBottom: '4px',
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+            }}
+          >
+            Access PIN
+          </label>
+          <input
+            type="text"
+            maxLength={4}
+            pattern="[0-9]*"
+            inputMode="numeric"
+            value={state.profile.pin}
+            onChange={(e) => handleProfileChange('pin', e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              fontFamily: 'Chakra Petch, sans-serif',
+              fontSize: '15px',
+              backgroundColor: 'rgba(0,255,65,0.02)',
+              border: '1px solid rgba(0,255,65,0.06)',
+              color: '#ddd',
+              boxSizing: 'border-box',
+              transition: 'border-color 0.2s',
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
+            }}
+          />
+        </div>
+      )}
 
       {/* Age */}
       <div>
