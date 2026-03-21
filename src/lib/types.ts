@@ -2,6 +2,16 @@
 export type UserRole = 'trainer' | 'client';
 export type AiTier = 'haiku' | 'sonnet' | 'opus' | 'white_glove';
 
+export interface TierConfig {
+  name: string;
+  model: string; // haiku, sonnet, opus
+  monthlyPrice: number; // what the client pays
+  trainerShare: number; // what the trainer gets per client
+  platformShare: number; // what GUNS UP keeps
+  apiCostEstimate: number; // estimated API cost per user/month
+  features: string[];
+}
+
 export interface Operator {
   id: string;
   name: string;
@@ -13,6 +23,8 @@ export interface Operator {
   trainerId?: string; // ID of trainer (for clients)
   clientIds?: string[]; // IDs of clients (for trainers)
   trainerNotes?: string; // Custom directives from trainer for this client's Gunny
+  betaUser?: boolean; // true = in beta trial, no charge
+  betaFeedback?: string[]; // collected feedback during beta
   profile: OperatorProfile;
   nutrition: NutritionData;
   prs: PRRecord[];
@@ -139,3 +151,43 @@ export interface Goal {
   id: string;
   name: string;
 }
+
+// Tier configuration with pricing and features
+export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
+  haiku: {
+    name: 'RECON',
+    model: 'claude-haiku-4-5',
+    monthlyPrice: 2.00,
+    trainerShare: 0.50,
+    platformShare: 0.90,
+    apiCostEstimate: 0.60,
+    features: ['Basic AI coaching', 'Workout tracking', 'Macro estimation', 'Exercise library'],
+  },
+  sonnet: {
+    name: 'OPERATOR',
+    model: 'claude-sonnet-4-6',
+    monthlyPrice: 5.00,
+    trainerShare: 1.50,
+    platformShare: 1.70,
+    apiCostEstimate: 1.80,
+    features: ['Smart AI coaching', 'Workout tracking', 'Macro estimation', 'Exercise library', 'Personalized recommendations', 'Trainer workout feed'],
+  },
+  opus: {
+    name: 'COMMANDER',
+    model: 'claude-opus-4-6',
+    monthlyPrice: 15.00,
+    trainerShare: 3.00,
+    platformShare: 3.00,
+    apiCostEstimate: 9.00,
+    features: ['Elite AI coaching', 'Workout tracking', 'Macro estimation', 'Exercise library', 'Personalized recommendations', 'Trainer workout feed', 'Deep periodization', 'Injury-aware programming'],
+  },
+  white_glove: {
+    name: 'WARFIGHTER',
+    model: 'claude-opus-4-6',
+    monthlyPrice: 49.99,
+    trainerShare: 20.00,
+    platformShare: 20.99,
+    apiCostEstimate: 9.00,
+    features: ['Elite AI coaching', 'All Commander features', 'Direct trainer programming', 'Priority support', 'Custom directives', 'Weekly check-ins'],
+  },
+};

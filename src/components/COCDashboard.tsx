@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator } from '@/lib/types';
+import { Operator, TIER_CONFIGS } from '@/lib/types';
 
 interface COCDashboardProps {
   operator: Operator;
@@ -173,6 +173,16 @@ function isToday(date: Date): boolean {
   return date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
 }
 
+function getTierBadgeColor(tier: string): string {
+  switch (tier) {
+    case 'haiku': return '#00bcd4'; // cyan
+    case 'sonnet': return '#ffb800'; // amber
+    case 'opus': return '#ff4444'; // red
+    case 'white_glove': return '#ffaa00'; // bright amber
+    default: return '#888';
+  }
+}
+
 export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
   const { t } = useLanguage();
   const workoutsThisWeek = countWorkoutsThisWeek(operator);
@@ -243,25 +253,63 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
         transition: 'all 0.5s ease',
         position: 'relative',
       }}>
-        <div>
-          <div style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '26px',
-            fontWeight: 900,
-            color: '#00ff41',
-            letterSpacing: '4px',
-            textShadow: '0 0 12px rgba(0,255,65,0.3)',
-          }}>
-            {operator.callsign}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+          <div>
+            <div style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '26px',
+              fontWeight: 900,
+              color: '#00ff41',
+              letterSpacing: '4px',
+              textShadow: '0 0 12px rgba(0,255,65,0.3)',
+            }}>
+              {operator.callsign}
+            </div>
+            <div style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: '15px',
+              color: '#777',
+              letterSpacing: '1px',
+              marginTop: '4px',
+            }}>
+              {operator.name} // {operator.role.toUpperCase()} // {operator.profile.goals.join(' + ').toUpperCase()}
+            </div>
           </div>
+          {/* Tier/Beta Badge */}
           <div style={{
-            fontFamily: 'Share Tech Mono, monospace',
-            fontSize: '15px',
-            color: '#777',
-            letterSpacing: '1px',
-            marginTop: '4px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+            alignItems: 'flex-start',
           }}>
-            {operator.name} // {operator.role.toUpperCase()} // {operator.profile.goals.join(' + ').toUpperCase()}
+            <div style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '1.5px',
+              color: getTierBadgeColor(operator.tier),
+              padding: '4px 8px',
+              border: `1px solid ${getTierBadgeColor(operator.tier)}60`,
+              backgroundColor: `${getTierBadgeColor(operator.tier)}08`,
+              textShadow: `0 0 4px ${getTierBadgeColor(operator.tier)}40`,
+            }}>
+              {TIER_CONFIGS[operator.tier].name}
+            </div>
+            {operator.betaUser && (
+              <div style={{
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: '11px',
+                fontWeight: 700,
+                letterSpacing: '1.5px',
+                color: '#ffb800',
+                padding: '3px 6px',
+                border: '1px solid rgba(255,184,0,0.4)',
+                backgroundColor: 'rgba(255,184,0,0.06)',
+                textShadow: '0 0 3px rgba(255,184,0,0.3)',
+              }}>
+                BETA TESTER
+              </div>
+            )}
           </div>
         </div>
         <div style={{

@@ -10,6 +10,7 @@ export const OPERATORS: Operator[] = [
     tier: 'opus',
     coupleWith: 'op-britney',
     clientIds: ['op-efrain', 'op-erika'],
+    betaUser: true,
     profile: {
       age: 31,
       height: "5'10\"",
@@ -292,6 +293,7 @@ export const OPERATORS: Operator[] = [
     tier: 'opus',
     coupleWith: 'op-ruben',
     clientIds: ['op-efrain', 'op-erika'],
+    betaUser: true,
     profile: {
       age: 29,
       height: "5'5\"",
@@ -566,6 +568,7 @@ export const OPERATORS: Operator[] = [
     tier: 'sonnet',
     coupleWith: 'op-erika',
     trainerId: 'op-ruben',
+    betaUser: true,
     profile: {
       age: 33,
       height: "5'9\"",
@@ -848,6 +851,7 @@ export const OPERATORS: Operator[] = [
     tier: 'haiku',
     coupleWith: 'op-efrain',
     trainerId: 'op-ruben',
+    betaUser: true,
     profile: {
       age: 30,
       height: "5'4\"",

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator, Meal, Workout, WorkoutBlock } from '@/lib/types';
+import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 
 interface GunnyChatProps {
@@ -729,6 +729,78 @@ ${mealSuggestion}`;
         return { response: `RECENT PRs:\n${prList}\n\nChase those numbers, champ. Build on the foundation.` };
       }
       return { response: "No PRs logged yet. Establish your baseline on main lifts. First attempt counts." };
+    }
+
+    // BETA FEEDBACK HANDLER
+    if (lower.includes('feedback') || lower.includes('bug report') || lower.includes('bug:') || lower.includes('feedback:') ||
+        lower.includes('suggestion') || lower.includes('report issue')) {
+      // Extract feedback text
+      let feedbackText = userMessage;
+      const feedbackKeywords = ['feedback:', 'bug:', 'bug report:', 'suggestion:', 'report issue:'];
+      for (const keyword of feedbackKeywords) {
+        const keywordIndex = lower.indexOf(keyword);
+        if (keywordIndex !== -1) {
+          feedbackText = userMessage.substring(keywordIndex + keyword.length).trim();
+          break;
+        }
+      }
+
+      // If no keyword found, use entire message
+      if (feedbackText === userMessage) {
+        feedbackText = userMessage;
+      }
+
+      if (feedbackText && onUpdateOperator) {
+        const updatedOp = { ...operator };
+        if (!updatedOp.betaFeedback) {
+          updatedOp.betaFeedback = [];
+        }
+        updatedOp.betaFeedback.push(feedbackText);
+        onUpdateOperator(updatedOp);
+
+        return { response: `FEEDBACK LOGGED — Thanks for helping us improve, ${operator.callsign}. Your input shapes the mission. Keep it coming.` };
+      }
+
+      return { response: `Ready to log feedback, ${operator.callsign}. What's on your mind?` };
+    }
+
+    // TRAINER FEATURE: REVENUE SHARE
+    if (operator.role === 'trainer' && (lower.includes('revenue') || lower.includes('earnings') || lower.includes('my share') || lower.includes('trainer revenue'))) {
+      const clients = getTrainerClients(operator.id, allOperators);
+
+      // Count clients by tier
+      const tierCounts: Record<string, number> = {
+        haiku: 0,
+        sonnet: 0,
+        opus: 0,
+        white_glove: 0,
+      };
+
+      for (const client of clients) {
+        tierCounts[client.tier]++;
+      }
+
+      // Calculate revenue
+      let response = `TRAINER REVENUE REPORT — ${operator.callsign}\n━━━━━━━━━━━━━━━━━━\nCLIENT BREAKDOWN:\n`;
+      let totalMonthly = 0;
+
+      for (const client of clients) {
+        const tierConfig = TIER_CONFIGS[client.tier];
+        response += `${client.callsign} — ${tierConfig.name} (${tierConfig.model}) → $${tierConfig.trainerShare.toFixed(2)}/mo\n`;
+        totalMonthly += tierConfig.trainerShare;
+      }
+
+      const totalAnnual = totalMonthly * 12;
+
+      response += `\nMONTHLY SHARE: $${totalMonthly.toFixed(2)}/mo\nPROJECTED ANNUAL: $${totalAnnual.toFixed(2)}/yr\n\n`;
+
+      if (clients.length < 10) {
+        const avgShare = clients.length > 0 ? totalMonthly / clients.length : 0;
+        response += `Scale to 10 clients avg $${avgShare.toFixed(2)} share = $${(avgShare * 10).toFixed(2)}/mo\n`;
+        response += `Scale to 50 clients avg $${avgShare.toFixed(2)} share = $${(avgShare * 50).toFixed(2)}/mo`;
+      }
+
+      return { response };
     }
 
     return { response: "Stay in the fight, champ. What's the mission? BUILD A WORKOUT, check READINESS, review GOAL PATHS, or plan your WEEK?" };
