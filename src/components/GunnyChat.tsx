@@ -944,13 +944,15 @@ ${mealSuggestion}`;
         .chat-input {
           flex: 1;
           padding: 12px 16px;
-          font-size: 15px;
+          font-size: 16px;
           font-family: 'Chakra Petch', sans-serif;
           background: rgba(0,255,65,0.02);
           border: 1px solid rgba(0,255,65,0.08);
           color: #ddd;
           outline: none;
           transition: all 0.2s ease;
+          -webkit-appearance: none;
+          border-radius: 0;
         }
         .chat-input:focus {
           border-color: rgba(0,255,65,0.25);

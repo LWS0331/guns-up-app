@@ -32,6 +32,8 @@ const AppShell: React.FC<AppShellProps> = ({
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const lastWidthRef = useRef(0);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -44,6 +46,26 @@ const AppShell: React.FC<AppShellProps> = ({
     };
     check();
     window.addEventListener('resize', check);
+
+    // Use visualViewport API to detect keyboard open/close on iOS/Android
+    const vv = window.visualViewport;
+    if (vv) {
+      const initialHeight = vv.height;
+      const handleViewportResize = () => {
+        const currentHeight = vv.height;
+        const heightDiff = initialHeight - currentHeight;
+        // If viewport shrunk by more than 150px, keyboard is likely open
+        const isKeyboard = heightDiff > 150;
+        setKeyboardOpen(isKeyboard);
+        setViewportHeight(currentHeight);
+      };
+      vv.addEventListener('resize', handleViewportResize);
+      return () => {
+        window.removeEventListener('resize', check);
+        vv.removeEventListener('resize', handleViewportResize);
+      };
+    }
+
     return () => window.removeEventListener('resize', check);
   }, []);
 
@@ -126,6 +148,9 @@ const AppShell: React.FC<AppShellProps> = ({
         @media (max-width: 768px) {
           .bottom-nav {
             display: flex !important;
+          }
+          .bottom-nav.keyboard-open {
+            display: none !important;
           }
           .desktop-nav {
             display: none !important;
@@ -259,13 +284,14 @@ const AppShell: React.FC<AppShellProps> = ({
         overflow: 'auto',
         backgroundColor: '#030303',
         position: 'relative',
-        paddingBottom: isMobile ? '56px' : '0',
+        paddingBottom: isMobile && !keyboardOpen ? '56px' : '0',
+        ...(viewportHeight && keyboardOpen ? { height: `${viewportHeight - (isMobile ? 44 : 52) - 1}px` } : {}),
       }}>
         {renderTabContent()}
       </main>
 
-      {/* Mobile Bottom Tab Bar */}
-      <nav className="bottom-nav" style={{
+      {/* Mobile Bottom Tab Bar — hidden when keyboard is open */}
+      <nav className={`bottom-nav${keyboardOpen ? ' keyboard-open' : ''}`} style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
