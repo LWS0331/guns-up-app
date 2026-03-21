@@ -1,11 +1,18 @@
 // User / Operator types
+export type UserRole = 'trainer' | 'client';
+export type AiTier = 'haiku' | 'sonnet' | 'opus' | 'white_glove';
+
 export interface Operator {
   id: string;
   name: string;
   callsign: string;
   pin: string;
-  role: 'admin' | 'user';
+  role: UserRole;
+  tier: AiTier;
   coupleWith: string | null; // ID of partner operator
+  trainerId?: string; // ID of trainer (for clients)
+  clientIds?: string[]; // IDs of clients (for trainers)
+  trainerNotes?: string; // Custom directives from trainer for this client's Gunny
   profile: OperatorProfile;
   nutrition: NutritionData;
   prs: PRRecord[];

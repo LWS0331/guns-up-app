@@ -64,7 +64,7 @@ interface LocalState {
 }
 
 const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpdateOperator }) => {
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'trainer';
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<SubTab>('PROFILE');
 

@@ -6,8 +6,10 @@ export const OPERATORS: Operator[] = [
     name: 'Ruben Rodriguez',
     callsign: 'RAMPAGE',
     pin: '1234',
-    role: 'admin',
+    role: 'trainer',
+    tier: 'opus',
     coupleWith: 'op-britney',
+    clientIds: ['op-efrain', 'op-erika'],
     profile: {
       age: 31,
       height: "5'10\"",
@@ -286,8 +288,10 @@ export const OPERATORS: Operator[] = [
     name: 'Britney Rodriguez',
     callsign: 'VALKYRIE',
     pin: '5678',
-    role: 'user',
+    role: 'trainer',
+    tier: 'opus',
     coupleWith: 'op-ruben',
+    clientIds: ['op-efrain', 'op-erika'],
     profile: {
       age: 29,
       height: "5'5\"",
@@ -558,8 +562,10 @@ export const OPERATORS: Operator[] = [
     name: 'Efrain Cruz',
     callsign: 'WARDOG',
     pin: '1111',
-    role: 'user',
+    role: 'client',
+    tier: 'sonnet',
     coupleWith: 'op-erika',
+    trainerId: 'op-ruben',
     profile: {
       age: 33,
       height: "5'9\"",
@@ -838,8 +844,10 @@ export const OPERATORS: Operator[] = [
     name: 'Erika Cruz',
     callsign: 'PHOENIX',
     pin: '2222',
-    role: 'user',
+    role: 'client',
+    tier: 'haiku',
     coupleWith: 'op-efrain',
+    trainerId: 'op-ruben',
     profile: {
       age: 30,
       height: "5'4\"",
@@ -1072,10 +1080,12 @@ export function getAccessibleOperators(userId: string, ops?: Operator[]): Operat
   const user = source.find((op) => op.id === userId);
   if (!user) return [];
 
-  if (user.role === 'admin') {
+  // Trainers see themselves + all operators (full admin access)
+  if (user.role === 'trainer') {
     return source;
   }
 
+  // Clients see themselves + their couple partner
   const accessibleUsers = [user];
   if (user.coupleWith) {
     const partner = source.find((op) => op.id === user.coupleWith);
@@ -1085,4 +1095,18 @@ export function getAccessibleOperators(userId: string, ops?: Operator[]): Operat
   }
 
   return accessibleUsers;
+}
+
+// Get a trainer's clients
+export function getTrainerClients(trainerId: string, ops?: Operator[]): Operator[] {
+  const source = ops || OPERATORS;
+  return source.filter((op) => op.trainerId === trainerId);
+}
+
+// Get a client's trainer
+export function getClientTrainer(clientId: string, ops?: Operator[]): Operator | undefined {
+  const source = ops || OPERATORS;
+  const client = source.find((op) => op.id === clientId);
+  if (!client?.trainerId) return undefined;
+  return source.find((op) => op.id === client.trainerId);
 }

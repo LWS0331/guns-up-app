@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator, Meal } from '@/lib/types';
+import { Operator, Meal, Workout, WorkoutBlock } from '@/lib/types';
+import { getTrainerClients, getClientTrainer } from '@/data/operators';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -188,6 +189,174 @@ const getTimeOfDay = (): string => {
   return 'evening';
 };
 
+const getTierColor = (tier: string): string => {
+  switch (tier) {
+    case 'haiku': return '#00bcd4';
+    case 'sonnet': return '#ffb800';
+    case 'opus': return '#ff4444';
+    case 'white_glove': return '#ff00ff';
+    default: return '#888';
+  }
+};
+
+const calculateStreak = (operator: Operator): number => {
+  const today = new Date();
+  let streak = 0;
+  let currentDate = new Date(today);
+
+  while (true) {
+    const dateStr = currentDate.toISOString().split('T')[0];
+    if (operator.workouts[dateStr]?.completed) {
+      streak++;
+      currentDate.setDate(currentDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+};
+
+// Common exercise substitutions for injuries
+const getExerciseSubstitute = (exerciseName: string, restrictions: string[]): string | null => {
+  const nameLower = exerciseName.toLowerCase();
+
+  for (const restriction of restrictions) {
+    const restrictionLower = restriction.toLowerCase();
+
+    if (restrictionLower.includes('overhead')) {
+      if (nameLower.includes('overhead press') || nameLower.includes('osp') || nameLower.includes('shoulder press')) {
+        return 'Landmine Press';
+      }
+    }
+
+    if (restrictionLower.includes('deadlift')) {
+      if (nameLower.includes('deadlift') && !nameLower.includes('rdl')) {
+        return 'Trap Bar Deadlift';
+      }
+    }
+
+    if (restrictionLower.includes('row') && restrictionLower.includes('bent')) {
+      if (nameLower.includes('bent') && nameLower.includes('row')) {
+        return 'Seal Row';
+      }
+    }
+
+    if (restrictionLower.includes('wide grip')) {
+      if (nameLower.includes('wide')) {
+        return 'Neutral Grip ' + exerciseName.replace(/wide/i, 'neutral').trim();
+      }
+    }
+
+    if (restrictionLower.includes('squat') && (restrictionLower.includes('back') || restrictionLower.includes('back issue'))) {
+      if (nameLower.includes('back squat')) {
+        return 'Leg Press';
+      }
+    }
+  }
+
+  return null;
+};
+
+// Scale weights proportionally for clients based on trainer's workout
+const scaleWeight = (
+  originalWeight: number,
+  exerciseName: string,
+  clientWeight: number,
+  trainerWeight: number,
+  clientPRs: Array<{ exercise: string; weight: number }>
+): number => {
+  const ratio = clientWeight / trainerWeight;
+
+  // Identify exercise category
+  const nameLower = exerciseName.toLowerCase();
+  const isCompound = ['squat', 'deadlift', 'bench', 'row', 'press'].some(e => nameLower.includes(e));
+  const scaleFactor = isCompound ? 0.7 : 0.8;
+
+  let scaled = Math.round((originalWeight * ratio * scaleFactor) / 5) * 5;
+
+  // Check against client's PR
+  const clientPR = clientPRs.find(pr => pr.exercise.toLowerCase() === exerciseName.toLowerCase());
+  if (clientPR && scaled > clientPR.weight) {
+    scaled = Math.max(Math.round(clientPR.weight * 0.85 / 5) * 5, scaled);
+  }
+
+  return Math.max(45, scaled); // Minimum 45 lbs
+};
+
+// Format a workout with personalization
+const formatPersonalizedWorkout = (
+  trainerWorkout: Workout,
+  trainerCallsign: string,
+  clientCallsign: string,
+  clientWeight: number,
+  trainerWeight: number,
+  clientPRs: Array<{ exercise: string; weight: number }>,
+  clientInjuries: Array<{ restrictions: string[] }>,
+  trainerNotes?: string
+): string => {
+  const workoutDate = new Date(trainerWorkout.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  let output = `YOUR TRAINER'S WORKOUT — ${workoutDate}
+━━━━━━━━━━━━━━━━━━
+${trainerCallsign} logged: ${trainerWorkout.title}
+
+PERSONALIZED FOR YOU, ${clientCallsign}:
+━━━━━━━━━━━━━━━━━━
+Warmup: ${trainerWorkout.warmup}
+
+`;
+
+  let hasSubstitutions = false;
+
+  for (const block of trainerWorkout.blocks) {
+    if (block.type === 'exercise') {
+      const exerciseBlock = block as any;
+      let exercise = exerciseBlock.exerciseName;
+      let prescription = exerciseBlock.prescription;
+
+      // Check for injury restrictions
+      for (const injury of clientInjuries) {
+        const substitute = getExerciseSubstitute(exercise, injury.restrictions);
+        if (substitute) {
+          exercise = substitute;
+          hasSubstitutions = true;
+          break;
+        }
+      }
+
+      // Scale weights in prescription
+      const prescriptionMatch = prescription.match(/(@|x)\s*(\d+)/);
+      if (prescriptionMatch) {
+        const originalWeight = parseInt(prescriptionMatch[2]);
+        const scaledWeight = scaleWeight(originalWeight, exerciseBlock.exerciseName, clientWeight, trainerWeight, clientPRs);
+        prescription = prescription.replace(/@\s*\d+/g, `@ ${scaledWeight}`);
+      }
+
+      output += `${exercise}\n${prescription}\n`;
+    } else {
+      const condBlock = block as any;
+      output += `${condBlock.description} (${condBlock.format})\n`;
+    }
+  }
+
+  output += `\nCooldown: ${trainerWorkout.cooldown}
+
+━━━━━━━━━━━━━━━━━━`;
+
+  if (hasSubstitutions) {
+    output += `\n⚠ Some exercises modified around your restrictions. No workarounds, champ — get the work in safely.`;
+  } else {
+    output += `\n⚠ Weights scaled to your level.`;
+  }
+
+  if (trainerNotes) {
+    output += `\n\nTRAINER DIRECTIVE: ${trainerNotes}`;
+  }
+
+  return output;
+};
+
 export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, onUpdateOperator }) => {
   const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -197,15 +366,26 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let greetingText = '';
+
+    if (operator.role === 'trainer') {
+      const clientCount = getTrainerClients(operator.id, allOperators).length;
+      greetingText = `Gunny reporting for duty, Coach. You have ${clientCount} active clients. Ready to BUILD YOUR WORKOUT, check MY CLIENTS, or review GOAL PATHS.`;
+    } else {
+      const trainer = getClientTrainer(operator.id, allOperators);
+      const trainerName = trainer ? trainer.callsign : 'your trainer';
+      greetingText = `Gunny reporting for duty, champ. Your trainer is ${trainerName}. Ask me to show TRAINER WOD, BUILD A WORKOUT, or check your READINESS.`;
+    }
+
     const greeting: Message = {
       id: 'greeting-' + Date.now(),
       role: 'gunny',
-      text: "Gunny reporting for duty. Full intel loaded — ready to build you a training plan that works, champ. What's the mission? Ask me to BUILD A WORKOUT, check your READINESS, review GOAL PATHS, or just talk training.",
+      text: greetingText,
       timestamp: new Date(),
     };
     setMessages([greeting]);
     inputRef.current?.focus();
-  }, []);
+  }, [operator, allOperators]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -289,6 +469,99 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
 
   const generateGunnyResponse = (userMessage: string): { response: string; updatedOperator?: Operator } => {
     const lower = userMessage.toLowerCase();
+
+    // TRAINER FEATURE: MY CLIENTS
+    if (operator.role === 'trainer' && (lower.includes('my clients') || lower.includes('client list') || lower.includes('client check') || lower.includes('roster') || lower.includes('check clients'))) {
+      const clients = getTrainerClients(operator.id, allOperators);
+      if (clients.length === 0) {
+        return { response: `No clients on the roster yet, Coach. Ready when they are.` };
+      }
+
+      let response = `CLIENT ROSTER — ${operator.callsign}
+━━━━━━━━━━━━━━━━━━\n`;
+
+      for (const client of clients) {
+        const streak = calculateStreak(client);
+        const lastWorkoutDate = Object.keys(client.workouts)
+          .filter(date => client.workouts[date]?.completed)
+          .sort()
+          .reverse()[0];
+
+        response += `${client.callsign} — ${client.name}
+  Tier: ${client.tier.toUpperCase()} | Last Workout: ${lastWorkoutDate ? new Date(lastWorkoutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'None'}
+  Goals: ${client.profile.goals?.join(', ') || 'TBD'}
+  Readiness: ${client.profile.readiness}% | Streak: ${streak} days
+  Notes: ${client.trainerNotes || 'No custom directives set'}
+
+`;
+      }
+
+      response += `━━━━━━━━━━━━━━━━━━
+Total: ${clients.length} active clients`;
+
+      return { response };
+    }
+
+    // TRAINER FEATURE: CLIENT NOTES
+    if (operator.role === 'trainer' && (lower.includes('client notes') || lower.includes('set notes') || lower.includes('directives') || lower.includes('customize'))) {
+      const clients = getTrainerClients(operator.id, allOperators);
+      if (clients.length === 0) {
+        return { response: `No clients to set notes for yet, Coach.` };
+      }
+
+      let response = `CURRENT CLIENT DIRECTIVES:
+━━━━━━━━━━━━━━━━━━\n`;
+
+      for (const client of clients) {
+        response += `${client.callsign}: ${client.trainerNotes || '(none set)'}
+`;
+      }
+
+      response += `\nTo update notes, log in to INTEL CENTER and edit each client's profile. I can't modify notes from chat.`;
+
+      return { response };
+    }
+
+    // CLIENT FEATURE: TRAINER'S WORKOUT
+    if (operator.role === 'client' && (lower.includes('what did my trainer') || lower.includes('trainer workout') || lower.includes('coach workout') || lower.includes('trainer\'s workout') || lower.includes('what did coach') || lower.includes('show me trainer'))) {
+      const trainer = getClientTrainer(operator.id, allOperators);
+      if (!trainer) {
+        return { response: `No trainer assigned yet, champ. Get one set up and we can sync workouts.` };
+      }
+
+      // Look for today's workout, then yesterday, then day before
+      const today = new Date().toISOString().split('T')[0];
+      let workoutDate = today;
+      let workout: Workout | null = null;
+
+      for (let i = 0; i < 3; i++) {
+        const dateToCheck = new Date();
+        dateToCheck.setDate(dateToCheck.getDate() - i);
+        const dateStr = dateToCheck.toISOString().split('T')[0];
+        if (trainer.workouts[dateStr]?.completed) {
+          workoutDate = dateStr;
+          workout = trainer.workouts[dateStr];
+          break;
+        }
+      }
+
+      if (!workout) {
+        return { response: `Your trainer hasn't logged a workout recently. Check back later or ask Gunny to BUILD you a workout.` };
+      }
+
+      const response = formatPersonalizedWorkout(
+        workout,
+        trainer.callsign,
+        operator.callsign,
+        operator.profile.weight,
+        trainer.profile.weight,
+        operator.prs,
+        operator.injuries,
+        operator.trainerNotes
+      );
+
+      return { response };
+    }
 
     if (lower.includes('build') || lower.includes('workout') || lower.includes('wod') || lower.includes('program')) {
       const muscleGroup = getMuscleGroup(userMessage);
@@ -509,13 +782,20 @@ ${mealSuggestion}`;
     }
   };
 
-  const quickActions = [
-    { id: 'build_wod', label: t('gunny.build_wod'), icon: '▶' },
-    { id: 'goal_paths', label: t('gunny.goal_paths'), icon: '◆' },
-    { id: 'check_readiness', label: t('gunny.check_readiness'), icon: '◈' },
-    { id: 'weekly_plan', label: t('gunny.weekly_plan'), icon: '▦' },
-    { id: 'macro_check', label: t('gunny.macro_check'), icon: '◉' },
-  ];
+  const quickActions = operator.role === 'trainer'
+    ? [
+        { id: 'build_wod', label: t('gunny.build_wod'), icon: '▶' },
+        { id: 'my_clients', label: 'MY CLIENTS', icon: '◈' },
+        { id: 'goal_paths', label: t('gunny.goal_paths'), icon: '◆' },
+        { id: 'weekly_plan', label: t('gunny.weekly_plan'), icon: '▦' },
+      ]
+    : [
+        { id: 'build_wod', label: t('gunny.build_wod'), icon: '▶' },
+        { id: 'trainer_wod', label: 'TRAINER WOD', icon: '★' },
+        { id: 'check_readiness', label: t('gunny.check_readiness'), icon: '◈' },
+        { id: 'goal_paths', label: t('gunny.goal_paths'), icon: '◆' },
+        { id: 'macro_check', label: t('gunny.macro_check'), icon: '◉' },
+      ];
 
   const handleQuickActionById = (actionId: string) => {
     let actionText = 'BUILD A WORKOUT';
@@ -523,6 +803,8 @@ ${mealSuggestion}`;
     if (actionId === 'check_readiness') actionText = 'CHECK MY READINESS';
     if (actionId === 'weekly_plan') actionText = 'PLAN MY WEEK';
     if (actionId === 'macro_check') actionText = 'CHECK MACROS';
+    if (actionId === 'my_clients') actionText = 'SHOW MY CLIENTS';
+    if (actionId === 'trainer_wod') actionText = 'WHAT DID MY TRAINER DO TODAY';
     handleQuickAction(actionText);
   };
 
@@ -657,32 +939,53 @@ ${mealSuggestion}`;
           </div>
         </div>
 
-        {/* Status */}
+        {/* Tier Badge */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '6px',
-          padding: '4px 10px',
-          border: '1px solid rgba(0,255,65,0.15)',
-          backgroundColor: 'rgba(0,255,65,0.03)',
+          gap: '8px',
         }}>
           <div style={{
-            width: '6px',
-            height: '6px',
-            borderRadius: '50%',
-            backgroundColor: '#00ff41',
-            boxShadow: '0 0 8px #00ff41',
-            animation: 'pulse 2s infinite',
-          }} />
-          <span style={{
-            fontSize: '15px',
+            padding: '4px 10px',
+            fontSize: '14px',
             fontWeight: 700,
-            color: '#00ff41',
             letterSpacing: '1.5px',
             fontFamily: '"Share Tech Mono", monospace',
+            border: `1px solid ${getTierColor(operator.tier)}`,
+            backgroundColor: `${getTierColor(operator.tier)}1a`,
+            color: getTierColor(operator.tier),
+            borderRadius: '2px',
           }}>
-            {t('gunny.online')}
-          </span>
+            {operator.tier.toUpperCase()}
+          </div>
+
+          {/* Status */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            border: '1px solid rgba(0,255,65,0.15)',
+            backgroundColor: 'rgba(0,255,65,0.03)',
+          }}>
+            <div style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              backgroundColor: '#00ff41',
+              boxShadow: '0 0 8px #00ff41',
+              animation: 'pulse 2s infinite',
+            }} />
+            <span style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              color: '#00ff41',
+              letterSpacing: '1.5px',
+              fontFamily: '"Share Tech Mono", monospace',
+            }}>
+              {t('gunny.online')}
+            </span>
+          </div>
         </div>
       </div>
 
