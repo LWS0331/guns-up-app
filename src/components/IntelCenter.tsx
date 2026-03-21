@@ -2591,13 +2591,15 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     >
       {/* Sidebar (desktop) / Top tabs (mobile) */}
       {isMobile ? (
-        <div style={{
+        <div className="horizontal-scroll" style={{
           display: 'flex',
           overflowX: 'auto',
           borderBottom: '1px solid rgba(0,255,65,0.06)',
           background: 'rgba(8,8,8,0.5)',
           flexShrink: 0,
           WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          gap: '0px',
         }}>
           {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES'] as const).map((tab) => {
             const isActive = activeTab === tab;
@@ -2606,18 +2608,19 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 style={{
-                  padding: '10px 14px',
+                  padding: '8px 10px',
                   backgroundColor: 'transparent',
                   border: 'none',
                   borderBottom: isActive ? '2px solid #00ff41' : '2px solid transparent',
                   color: isActive ? '#00ff41' : '#777',
                   cursor: 'pointer',
-                  fontFamily: 'Orbitron, sans-serif',
-                  fontSize: '15px',
+                  fontFamily: 'Share Tech Mono, monospace',
+                  fontSize: '11px',
                   textTransform: 'uppercase',
-                  letterSpacing: '1px',
+                  letterSpacing: '0.5px',
                   whiteSpace: 'nowrap',
-                  minHeight: '40px',
+                  minHeight: '36px',
+                  flexShrink: 0,
                   transition: 'all 0.2s ease',
                 }}
               >

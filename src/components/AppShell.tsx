@@ -477,32 +477,28 @@ const AppShell: React.FC<AppShellProps> = ({
 
         .gunny-toggle-btn {
           position: fixed;
-          left: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          padding: 16px 10px;
+          left: 8px;
+          bottom: 70px;
+          padding: 6px 12px;
           background: linear-gradient(135deg, rgba(255,184,0,0.2), rgba(255,184,0,0.1));
-          border: 2px solid #ffb800;
-          border-left: none;
-          border-radius: 0 8px 8px 0;
+          border: 1px solid rgba(255,184,0,0.5);
+          border-radius: 6px;
           color: #ffb800;
           cursor: pointer;
           font-family: 'Orbitron', sans-serif;
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 700;
-          letter-spacing: 2px;
-          writing-mode: vertical-rl;
-          text-orientation: mixed;
+          letter-spacing: 1.5px;
+          writing-mode: horizontal-tb;
           z-index: 9997;
           transition: all 0.3s ease;
-          box-shadow: 4px 0 20px rgba(255,184,0,0.15);
+          box-shadow: 0 2px 12px rgba(255,184,0,0.15);
           animation: togglePulse 3s ease-in-out infinite;
         }
 
         .gunny-toggle-btn:hover {
           background: linear-gradient(135deg, rgba(255,184,0,0.35), rgba(255,184,0,0.2));
-          box-shadow: 6px 0 30px rgba(255,184,0,0.3);
-          padding-right: 14px;
+          box-shadow: 0 2px 20px rgba(255,184,0,0.3);
         }
 
         @keyframes togglePulse {
@@ -547,10 +543,10 @@ const AppShell: React.FC<AppShellProps> = ({
           }
 
           .gunny-toggle-btn {
-            top: 50%;
-            transform: translateY(-50%);
-            padding: 14px 8px;
-            font-size: 10px;
+            bottom: 64px;
+            left: 6px;
+            padding: 5px 10px;
+            font-size: 9px;
           }
 
           .classification-bar {
@@ -780,7 +776,7 @@ const AppShell: React.FC<AppShellProps> = ({
           onClick={() => setShowGunnyPanel(true)}
           title="Open Gunny AI"
         >
-          GUNNY
+          ⚡ GUNNY
         </button>
       )}
 
