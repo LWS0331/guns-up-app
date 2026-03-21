@@ -1,0 +1,86 @@
+/* Core colors as CSS variables */
+:root {
+  --bg-base: #030303;
+  --bg-surface: #080808;
+  --bg-elevated: #0e0e0e;
+  --green-primary: #00ff41;
+  --green-bright: #00e639;
+  --green-muted: #00cc33;
+  --text-primary: #cccccc;
+  --text-secondary: #888888;
+  --text-tertiary: #555555;
+  --text-dim: #3a3a3a;
+  --text-bright: #ffffff;
+  --color-warning: #ffb800;
+  --color-danger: #ff4444;
+  --color-info: #0096ff;
+  --color-cyan: #00bcd4;
+}
+
+/* Reset + base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 12px;
+  overflow-x: hidden;
+}
+
+/* CRT scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.03) 2px, rgba(0, 0, 0, 0.03) 4px);
+  z-index: 9998;
+}
+
+/* Edge vignette */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(40, 5, 5, 0.4) 100%);
+  z-index: 9999;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+}
+
+.horizontal-scroll::-webkit-scrollbar {
+  height: 8px !important;
+  display: block !important;
+}
+
+.horizontal-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 255, 65, 0.04) !important;
+  border-radius: 4px !important;
+}
+
+.horizontal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 65, 0.15);
+  border-radius: 4px;
+}
+
+/* Scanline divider */
+.scanline-divider {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.35) 20%, #00ff41 50%, rgba(0, 255, 65, 0.35) 80%, transparent);
+}
+
+/* Green glow utility */
+.glow-green {
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.3);
+}
