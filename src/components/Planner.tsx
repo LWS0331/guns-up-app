@@ -180,6 +180,75 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     return labels;
   };
 
+  // ═══ Smart Prescription Parser ═══
+  // Parses strings like "4x8-10 @ RPE 7, Tempo 2-1-1-1, Rest 2:00" into structured tags
+  const parsePrescription = (rx: string): Array<{ icon: string; label: string; color: string; bg: string; border: string }> => {
+    if (!rx || !rx.trim()) return [];
+    const tags: Array<{ icon: string; label: string; color: string; bg: string; border: string }> = [];
+    const str = rx.trim();
+
+    // Sets x Reps pattern: "4x8-10", "3x20", "4x12-15 each arm"
+    const setsMatch = str.match(/(\d+)\s*x\s*(\d+(?:-\d+)?(?:\s*(?:each\s*(?:arm|side|leg)?))?)/i);
+    if (setsMatch) {
+      tags.push({ icon: '◆', label: setsMatch[0].trim(), color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)' });
+    }
+
+    // "Work up to" pattern
+    const workUpMatch = str.match(/work\s*up\s*to\s+([^,@]+)/i);
+    if (workUpMatch) {
+      tags.push({ icon: '▲', label: workUpMatch[0].trim(), color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)' });
+    }
+
+    // Sets standalone: "3-5 sets"
+    const setsStandalone = str.match(/(\d+(?:-\d+)?)\s*sets/i);
+    if (setsStandalone && !setsMatch) {
+      tags.push({ icon: '◆', label: `${setsStandalone[1]} sets`, color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)' });
+    }
+
+    // RPE
+    const rpeMatch = str.match(/(?:@\s*)?RPE\s*(\d+(?:-\d+)?)/i);
+    if (rpeMatch) {
+      tags.push({ icon: '⚡', label: `RPE ${rpeMatch[1]}`, color: '#ff6b6b', bg: 'rgba(255,107,107,0.08)', border: 'rgba(255,107,107,0.2)' });
+    }
+
+    // Tempo
+    const tempoMatch = str.match(/tempo\s*([\d]-[\d]-[\d]-[\d])/i);
+    if (tempoMatch) {
+      tags.push({ icon: '◷', label: `Tempo ${tempoMatch[1]}`, color: '#ba68c8', bg: 'rgba(186,104,200,0.08)', border: 'rgba(186,104,200,0.2)' });
+    }
+
+    // Rest
+    const restMatch = str.match(/rest\s*([\d:]+\s*(?:min|sec|s)?)/i);
+    if (restMatch) {
+      tags.push({ icon: '⏱', label: `Rest ${restMatch[1]}`, color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)', border: 'rgba(79,195,247,0.2)' });
+    }
+
+    // RIR
+    const rirMatch = str.match(/(\d+)\s*RIR/i);
+    if (rirMatch) {
+      tags.push({ icon: '◇', label: `${rirMatch[1]} RIR`, color: '#ffb800', bg: 'rgba(255,184,0,0.08)', border: 'rgba(255,184,0,0.2)' });
+    }
+
+    // % / percentage
+    const pctMatch = str.match(/(\d+(?:-\d+)?)\s*%/);
+    if (pctMatch) {
+      tags.push({ icon: '%', label: `${pctMatch[1]}%`, color: '#ffb800', bg: 'rgba(255,184,0,0.08)', border: 'rgba(255,184,0,0.2)' });
+    }
+
+    // "each arm/side/leg" standalone (if not already captured with sets)
+    const eachMatch = str.match(/each\s*(arm|side|leg)/i);
+    if (eachMatch && !setsMatch?.[0]?.toLowerCase().includes('each')) {
+      tags.push({ icon: '↔', label: `each ${eachMatch[1]}`, color: '#aaa', bg: 'rgba(170,170,170,0.08)', border: 'rgba(170,170,170,0.2)' });
+    }
+
+    // If nothing was parsed, show the raw prescription as a single neutral tag
+    if (tags.length === 0) {
+      tags.push({ icon: '•', label: str, color: '#aaa', bg: 'rgba(170,170,170,0.06)', border: 'rgba(170,170,170,0.15)' });
+    }
+
+    return tags;
+  };
+
   const findLastExerciseLog = (exerciseName: string): { date: string; prescription: string } | null => {
     const entries = Object.entries(operator.workouts).sort(([dateA], [dateB]) => dateB.localeCompare(dateA));
 
@@ -578,10 +647,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
                 {workout ? (
                   <div>
-                    <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '26px', fontWeight: 'bold', marginBottom: '4px' }}>
+                    <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '15px', fontWeight: 'bold', marginBottom: '2px' }}>
                       {workout.title}
                     </div>
-                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: '15px', color: '#aaa' }}>
+                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: '12px', color: '#aaa' }}>
                       {workout.blocks.length} blocks
                     </div>
                   </div>
@@ -682,45 +751,74 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
             {workout.blocks.length > 0 && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', marginBottom: '12px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '13px', fontWeight: 'bold', marginBottom: '10px', letterSpacing: '1.5px' }}>
                   WORKOUT BLOCKS
                 </div>
                 {workout.blocks.map((block, idx) => {
                   const label = getBlockLabels(workout.blocks)[idx];
                   if (block.type === 'exercise') {
                     const vidUrl = block.videoUrl || getVideoUrl(block.exerciseName);
+                    const parsed = parsePrescription(block.prescription);
                     return (
-                      <div key={block.id} style={{ marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #00bcd4' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '26px', fontWeight: 'bold' }}>
+                      <div key={block.id} style={{
+                        marginBottom: '8px',
+                        padding: '10px 12px',
+                        borderLeft: '3px solid #00bcd4',
+                        background: 'rgba(0,188,212,0.04)',
+                        borderRadius: '0 4px 4px 0',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '15px', fontWeight: 700 }}>
                             {label}) {block.exerciseName}
                           </div>
                           {vidUrl && (
-                            <a href={vidUrl} target="_blank" rel="noopener noreferrer" className="video-link">
+                            <a href={vidUrl} target="_blank" rel="noopener noreferrer" className="video-link" style={{ fontSize: '10px' }}>
                               ▶ DEMO
                             </a>
                           )}
                         </div>
-                        <div style={{ fontFamily: 'Share Tech Mono', color: '#aaa', fontSize: '26px', marginTop: '2px' }}>
-                          {block.prescription}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {parsed.map((tag, ti) => (
+                            <span key={ti} style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '3px',
+                              fontFamily: 'Share Tech Mono, monospace',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              background: tag.bg,
+                              color: tag.color,
+                              border: `1px solid ${tag.border}`,
+                              letterSpacing: '0.3px',
+                            }}>
+                              <span style={{ fontSize: '10px', opacity: 0.7 }}>{tag.icon}</span>
+                              {tag.label}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     );
                   } else {
                     return (
-                      <div key={block.id} style={{ marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #ffb800' }}>
-                        <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '26px', fontWeight: 'bold' }}>
+                      <div key={block.id} style={{
+                        marginBottom: '8px',
+                        padding: '10px 12px',
+                        borderLeft: '3px solid #ffb800',
+                        background: 'rgba(255,184,0,0.04)',
+                        borderRadius: '0 4px 4px 0',
+                      }}>
+                        <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 700, marginBottom: '4px' }}>
                           {block.format}
                         </div>
-                        <div
-                          style={{
-                            fontFamily: 'Share Tech Mono',
-                            color: '#aaa',
-                            fontSize: '26px',
-                            marginTop: '2px',
-                            whiteSpace: 'pre-wrap',
-                          }}
-                        >
+                        <div style={{
+                          fontFamily: 'Share Tech Mono',
+                          color: '#aaa',
+                          fontSize: '13px',
+                          lineHeight: '1.5',
+                          whiteSpace: 'pre-wrap',
+                        }}>
                           {block.description}
                         </div>
                       </div>
