@@ -181,10 +181,17 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
   const weekDates = getWeekDates();
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const lastWidthRef = useRef(0);
 
   useEffect(() => {
     setMounted(true);
-    const check = () => setIsMobile(window.innerWidth < 768);
+    const check = () => {
+      const w = window.innerWidth;
+      if (w !== lastWidthRef.current) {
+        lastWidthRef.current = w;
+        setIsMobile(w < 768);
+      }
+    };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Operator, Meal, PRRecord, Injury } from '@/lib/types';
 
 // Local type aliases for internal state management
@@ -2481,8 +2481,15 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
   };
 
   const [isMobile, setIsMobile] = useState(false);
+  const lastWidthRef = useRef(0);
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
+    const check = () => {
+      const w = window.innerWidth;
+      if (w !== lastWidthRef.current) {
+        lastWidthRef.current = w;
+        setIsMobile(w < 768);
+      }
+    };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
