@@ -33,7 +33,6 @@ const AppShell: React.FC<AppShellProps> = ({
   const [isMobile, setIsMobile] = useState(false);
   const lastWidthRef = useRef(0);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -47,26 +46,31 @@ const AppShell: React.FC<AppShellProps> = ({
     check();
     window.addEventListener('resize', check);
 
-    // Use visualViewport API to detect keyboard open/close on iOS/Android
-    const vv = window.visualViewport;
-    if (vv) {
-      const initialHeight = vv.height;
-      const handleViewportResize = () => {
-        const currentHeight = vv.height;
-        const heightDiff = initialHeight - currentHeight;
-        // If viewport shrunk by more than 150px, keyboard is likely open
-        const isKeyboard = heightDiff > 150;
-        setKeyboardOpen(isKeyboard);
-        setViewportHeight(currentHeight);
-      };
-      vv.addEventListener('resize', handleViewportResize);
-      return () => {
-        window.removeEventListener('resize', check);
-        vv.removeEventListener('resize', handleViewportResize);
-      };
-    }
+    // Detect keyboard via focus/blur on input elements — stable, no bounce
+    const handleFocusIn = (e: FocusEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+        setKeyboardOpen(true);
+      }
+    };
+    const handleFocusOut = () => {
+      // Small delay to avoid flicker when tapping between inputs
+      setTimeout(() => {
+        const active = document.activeElement?.tagName?.toLowerCase();
+        if (active !== 'input' && active !== 'textarea' && active !== 'select') {
+          setKeyboardOpen(false);
+        }
+      }, 100);
+    };
 
-    return () => window.removeEventListener('resize', check);
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      window.removeEventListener('resize', check);
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+    };
   }, []);
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
@@ -285,7 +289,6 @@ const AppShell: React.FC<AppShellProps> = ({
         backgroundColor: '#030303',
         position: 'relative',
         paddingBottom: isMobile && !keyboardOpen ? '56px' : '0',
-        ...(viewportHeight && keyboardOpen ? { height: `${viewportHeight - (isMobile ? 44 : 52) - 1}px` } : {}),
       }}>
         {renderTabContent()}
       </main>
