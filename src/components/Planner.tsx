@@ -619,7 +619,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
         </div>
 
         {showWorkoutBuilder ? (
-          <WorkoutBuilder />
+          renderWorkoutBuilder()
         ) : workout ? (
           <div style={{ padding: '20px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 188, 212, 0.3)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -769,7 +769,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   // WORKOUT BUILDER COMPONENT
   // ============================================================================
 
-  const WorkoutBuilder = () => {
+  const renderWorkoutBuilder = () => {
     const blockLabels = getBlockLabels(builderData.blocks);
 
     return (
