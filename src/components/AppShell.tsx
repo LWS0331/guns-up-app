@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Operator, AppTab } from '@/lib/types';
 import Logo from '@/components/Logo';
 import UserSwitcher from '@/components/UserSwitcher';
+import LanguageToggle from '@/components/LanguageToggle';
+import { useLanguage } from '@/lib/i18n';
 import COCDashboard from '@/components/COCDashboard';
 import Planner from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
@@ -24,6 +26,7 @@ const AppShell: React.FC<AppShellProps> = ({
   onUpdateOperator,
   onLogout,
 }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<AppTab>('coc');
   const [selectedOperator, setSelectedOperator] = useState<Operator>(currentUser);
   const [mounted, setMounted] = useState(false);
@@ -46,11 +49,11 @@ const AppShell: React.FC<AppShellProps> = ({
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
 
-  const tabs: { id: AppTab; label: string; icon: string }[] = [
-    { id: 'coc', label: 'COC', icon: '◆' },
-    { id: 'planner', label: 'PLAN', icon: '▦' },
-    { id: 'intel', label: 'INTEL', icon: '◈' },
-    { id: 'gunny', label: 'GUNNY', icon: '▶' },
+  const tabs: { id: AppTab; label: string; labelKey: string; icon: string }[] = [
+    { id: 'coc', label: t('nav.coc_short'), labelKey: 'nav.coc_short', icon: '◆' },
+    { id: 'planner', label: t('nav.planner'), labelKey: 'nav.planner', icon: '▦' },
+    { id: 'intel', label: t('nav.intel_short'), labelKey: 'nav.intel_short', icon: '◈' },
+    { id: 'gunny', label: t('nav.gunny_short'), labelKey: 'nav.gunny_short', icon: '▶' },
   ];
 
   const renderTabContent = () => {
@@ -211,15 +214,16 @@ const AppShell: React.FC<AppShellProps> = ({
                 }}>
                   {tab.icon}
                 </span>
-                {tab.label}
+                {t(tab.labelKey)}
                 <div className="tab-indicator" />
               </button>
             );
           })}
         </nav>
 
-        {/* Right: User Switcher (desktop) + mobile user indicator */}
-        <div className="desktop-user-switcher" style={{ minWidth: '140px', display: 'flex', justifyContent: 'flex-end' }}>
+        {/* Right: Language Toggle + User Switcher (desktop) */}
+        <div className="desktop-user-switcher" style={{ minWidth: '280px', display: 'flex', justifyContent: 'flex-end', gap: '16px', alignItems: 'center' }}>
+          <LanguageToggle compact={true} />
           <UserSwitcher
             currentUser={currentUser}
             accessibleUsers={accessibleUsers}
@@ -321,7 +325,7 @@ const AppShell: React.FC<AppShellProps> = ({
                 letterSpacing: '1px',
                 transition: 'color 0.2s ease',
               }}>
-                {tab.label}
+                {t(tab.labelKey)}
               </span>
             </button>
           );

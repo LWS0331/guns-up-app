@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import LogoFull from '@/components/LogoFull';
+import LanguageToggle from '@/components/LanguageToggle';
+import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
 
 interface LoginScreenProps {
@@ -21,6 +23,7 @@ interface Particle {
 }
 
 export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
+  const { t } = useLanguage();
   const [pin, setPin] = useState<string>('');
   const [error, setError] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
@@ -230,6 +233,16 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
         aria-label="PIN input"
       />
 
+      {/* Language Toggle (top-right) */}
+      <div style={{
+        position: 'absolute',
+        top: '20px',
+        right: '20px',
+        zIndex: 50,
+      }}>
+        <LanguageToggle compact={true} />
+      </div>
+
       {/* Main content */}
       <div style={{
         display: 'flex',
@@ -296,7 +309,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               letterSpacing: '3px',
               animation: 'accessTextPulse 3s ease-in-out infinite',
             }}>
-              Enter Access Code
+              {t('login.enter_pin')}
             </div>
 
             {/* PIN boxes */}
@@ -399,7 +412,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               minHeight: '14px',
               textShadow: error ? '0 0 8px rgba(255,68,68,0.4)' : 'none',
             }}>
-              {error ? '// ACCESS DENIED' : ''}
+              {error ? `// ${t('login.access_denied')}` : ''}
             </div>
           </div>
         ) : (
@@ -459,7 +472,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
                 letterSpacing: '2px',
                 textTransform: 'uppercase',
               }}>
-                Access Granted
+                {t('login.access_granted')}
               </div>
             </div>
 

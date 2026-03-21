@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
 
 interface COCDashboardProps {
@@ -173,6 +174,7 @@ function isToday(date: Date): boolean {
 }
 
 export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
+  const { t } = useLanguage();
   const workoutsThisWeek = countWorkoutsThisWeek(operator);
   const streak = calculateStreak(operator);
   const volume = calculateWeeklyVolume(operator);
@@ -204,10 +206,10 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
   const animPRs = useCountUp(prCount, 800, 800);
 
   const stats = [
-    { label: 'WORKOUTS', value: animWorkouts, suffix: '', sub: 'THIS WEEK', color: '#00ff41', delay: 0 },
-    { label: 'STREAK', value: animStreak, suffix: 'D', sub: 'CONSECUTIVE', color: '#00ff41', delay: 1 },
+    { label: t('dashboard.workouts'), labelKey: 'dashboard.workouts', value: animWorkouts, suffix: '', sub: 'THIS WEEK', color: '#00ff41', delay: 0 },
+    { label: t('dashboard.streak'), labelKey: 'dashboard.streak', value: animStreak, suffix: 'D', sub: 'CONSECUTIVE', color: '#00ff41', delay: 1 },
     { label: 'VOLUME', value: animVolume, suffix: '', sub: 'LBS MOVED', color: '#ffb800', delay: 2 },
-    { label: 'PR COUNT', value: animPRs, suffix: '', sub: 'LIFETIME', color: '#00bcd4', delay: 3 },
+    { label: t('dashboard.pr_records'), labelKey: 'dashboard.pr_records', value: animPRs, suffix: '', sub: 'LIFETIME', color: '#00bcd4', delay: 3 },
   ];
 
   return (
@@ -281,7 +283,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
         position: 'relative',
       }}>
         {stats.map((stat, i) => (
-          <div key={stat.label} style={{
+          <div key={stat.labelKey} style={{
             border: '1px solid rgba(0,255,65,0.06)',
             padding: '20px',
             position: 'relative',
@@ -375,7 +377,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
             gap: '8px',
           }}>
             <span style={{ color: '#00ff41', fontSize: '15px' }}>▶</span>
-            WEEKLY OPERATIONS
+            {t('dashboard.weekly_ops')}
           </div>
 
           <div style={{
@@ -509,7 +511,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
               gap: '8px',
             }}>
               <span style={{ color: '#ffb800', fontSize: '15px' }}>◆</span>
-              RECENT PR BOARD
+              RECENT {t('dashboard.pr_records')}
             </div>
 
             <div style={{
@@ -589,7 +591,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
               gap: '8px',
             }}>
               <span style={{ color: '#00bcd4', fontSize: '15px' }}>◈</span>
-              OPERATOR READINESS
+              OPERATOR {t('dashboard.readiness')}
             </div>
 
             <div style={{

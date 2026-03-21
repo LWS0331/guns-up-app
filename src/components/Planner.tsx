@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode } from '@/lib/types';
 import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 
@@ -10,6 +11,7 @@ interface PlannerProps {
 }
 
 const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
+  const { t } = useLanguage();
   // ============================================================================
   // STATE
   // ============================================================================
@@ -785,7 +787,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div style={{ fontFamily: 'Orbitron', color: '#00ff41', fontSize: '26px', fontWeight: 900, letterSpacing: '2px' }}>
-            WORKOUT BUILDER
+            {t('planner.title')}
           </div>
           <div style={{ fontFamily: 'Share Tech Mono', color: '#666', fontSize: '15px' }}>
             // {selectedDate}
@@ -795,7 +797,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
         {/* TITLE */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
-            Workout Title
+            {t('planner.title_label')}
           </label>
           <input
             type="text"
@@ -818,7 +820,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
         {/* COACH'S NOTES */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
-            Coach's Notes
+            {t('planner.notes')}
           </label>
           <textarea
             value={builderData.notes}
@@ -841,7 +843,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
         {/* WARMUP */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
-            Warmup
+            {t('planner.warmup')}
           </label>
           <textarea
             value={builderData.warmup}
@@ -1137,7 +1139,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
         {/* COOLDOWN */}
         <div style={{ marginBottom: '20px' }}>
           <label style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
-            Cooldown
+            {t('planner.cooldown')}
           </label>
           <textarea
             value={builderData.cooldown}
@@ -1172,7 +1174,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               cursor: 'pointer',
             }}
           >
-            Cancel
+            {t('planner.cancel')}
           </button>
           <button
             onClick={handleSaveWorkout}
@@ -1187,7 +1189,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               cursor: 'pointer',
             }}
           >
-            Save Workout
+            {t('planner.save')}
           </button>
         </div>
       </div>

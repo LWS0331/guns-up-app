@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal } from '@/lib/types';
 
 interface GunnyChatProps {
@@ -188,6 +189,7 @@ const getTimeOfDay = (): string => {
 };
 
 export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, onUpdateOperator }) => {
+  const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -508,12 +510,21 @@ ${mealSuggestion}`;
   };
 
   const quickActions = [
-    { label: 'BUILD WOD', icon: '▶' },
-    { label: 'GOAL PATHS', icon: '◆' },
-    { label: 'CHECK READINESS', icon: '◈' },
-    { label: 'WEEKLY PLAN', icon: '▦' },
-    { label: 'MACRO CHECK', icon: '◉' },
+    { id: 'build_wod', label: t('gunny.build_wod'), icon: '▶' },
+    { id: 'goal_paths', label: t('gunny.goal_paths'), icon: '◆' },
+    { id: 'check_readiness', label: t('gunny.check_readiness'), icon: '◈' },
+    { id: 'weekly_plan', label: t('gunny.weekly_plan'), icon: '▦' },
+    { id: 'macro_check', label: t('gunny.macro_check'), icon: '◉' },
   ];
+
+  const handleQuickActionById = (actionId: string) => {
+    let actionText = 'BUILD A WORKOUT';
+    if (actionId === 'goal_paths') actionText = 'SHOW ME GOAL PATHS';
+    if (actionId === 'check_readiness') actionText = 'CHECK MY READINESS';
+    if (actionId === 'weekly_plan') actionText = 'PLAN MY WEEK';
+    if (actionId === 'macro_check') actionText = 'CHECK MACROS';
+    handleQuickAction(actionText);
+  };
 
   return (
     <div style={{
@@ -670,7 +681,7 @@ ${mealSuggestion}`;
             letterSpacing: '1.5px',
             fontFamily: '"Share Tech Mono", monospace',
           }}>
-            ONLINE
+            {t('gunny.online')}
           </span>
         </div>
       </div>
@@ -683,8 +694,8 @@ ${mealSuggestion}`;
         borderBottom: '1px solid rgba(0,255,65,0.05)',
         backgroundColor: 'rgba(0,255,65,0.01)',
       }}>
-        {quickActions.map((action, idx) => (
-          <button key={idx} className="quick-btn" onClick={() => handleQuickAction(action.label)}>
+        {quickActions.map((action) => (
+          <button key={action.id} className="quick-btn" onClick={() => handleQuickActionById(action.id)}>
             <span style={{ color: '#00ff41', fontSize: '15px', opacity: 0.6 }}>{action.icon}</span>
             {action.label}
           </button>

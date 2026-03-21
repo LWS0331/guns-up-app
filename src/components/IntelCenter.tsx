@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, PRRecord, Injury } from '@/lib/types';
 
 // Local type aliases for internal state management
@@ -62,6 +63,7 @@ interface LocalState {
 }
 
 const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<SubTab>('PROFILE');
 
   // Helper function to get today's date in YYYY-MM-DD format
@@ -2534,13 +2536,13 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
     PREFERENCES: '◇',
   };
 
-  const tabLabels: Record<SubTab, string> = {
-    PROFILE: 'PROFILE',
-    NUTRITION: 'NUTR',
-    PR_BOARD: 'PRs',
-    INJURIES: 'INJURY',
-    PREFERENCES: 'PREFS',
-  };
+  const getTabLabels = (): Record<SubTab, string> => ({
+    PROFILE: t('intel.profile'),
+    NUTRITION: t('intel.nutrition'),
+    PR_BOARD: t('intel.pr_board'),
+    INJURIES: t('intel.injuries'),
+    PREFERENCES: t('intel.preferences'),
+  });
 
   const [isMobile, setIsMobile] = useState(false);
   const lastWidthRef = useRef(0);
@@ -2601,7 +2603,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   transition: 'all 0.2s ease',
                 }}
               >
-                {tabLabels[tab]}
+                {getTabLabels()[tab]}
               </button>
             );
           })}
@@ -2648,7 +2650,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                 }}
               >
                 <span style={{ fontSize: '15px', opacity: isActive ? 1 : 0.4 }}>{tabIcons[tab]}</span>
-                {tab.replace('_', ' ')}
+                {getTabLabels()[tab]}
               </button>
             );
           })}
@@ -2686,7 +2688,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               minHeight: '36px',
             }}
           >
-            SAVE
+            {t('intel.save_changes')}
           </button>
         </div>
 
