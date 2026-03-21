@@ -563,7 +563,9 @@ Total: ${clients.length} active clients`;
       return { response };
     }
 
-    if (lower.includes('build') || lower.includes('workout') || lower.includes('wod') || lower.includes('program')) {
+    if (lower.includes('build a workout') || lower.includes('build me a') || lower.includes('build a wod') ||
+        lower.includes('build workout') || lower.includes('give me a workout') || lower.includes('create a workout') ||
+        (lower.includes('build') && getMuscleGroup(userMessage))) {
       const muscleGroup = getMuscleGroup(userMessage);
       const goalKey = getGoalPath(userMessage);
       if (muscleGroup) {
@@ -572,11 +574,11 @@ Total: ${clients.length} active clients`;
       return { response: "Roger that, champ. Need to know your target — CHEST, BACK, LEGS, SHOULDERS, or ARMS? Ask me to BUILD A CHEST WORKOUT or similar and I'll lock it in." };
     }
 
-    if (lower.includes('goal path') || lower.includes('goal paths') || lower.includes('paths')) {
+    if (lower.includes('goal path') || lower.includes('goal paths') || lower === 'paths' || lower === 'show me goal paths') {
       return { response: `Roger that, champ. Here's what I've got:\n\nHYPERTROPHY — ${GOAL_PATHS.HYPERTROPHY.description}\n\nFAT LOSS — ${GOAL_PATHS.FAT_LOSS.description}\n\nSTRENGTH — ${GOAL_PATHS.STRENGTH.description}\n\nATHLETIC PERFORMANCE — ${GOAL_PATHS.ATHLETIC_PERFORMANCE.description}\n\nGENERAL FITNESS — ${GOAL_PATHS.GENERAL_FITNESS.description}\n\nTell me your target and I'll build accordingly. Copy that?` };
     }
 
-    if (lower.includes('readiness') || lower.includes('check readiness') || lower.includes('how am i')) {
+    if (lower.includes('readiness') || lower.includes('check readiness') || lower === 'how am i doing') {
       const readiness = operator.profile?.readiness || 75;
       const sleep = operator.profile?.sleep || 7;
       const stress = operator.profile?.stress || 5;
@@ -594,7 +596,7 @@ Total: ${clients.length} active clients`;
       return { response: `WEEKLY OPERATION PLAN — ${split} split, ${daysPerWeek} days/week\n\nDay 1: PUSH (Chest, Shoulders, Triceps)\nDay 2: PULL (Back, Biceps)\nDay 3: LEGS (Quads, Hamstrings, Glutes)\nDay 4: ACCESSORIES (Weak points)\n${daysPerWeek >= 5 ? 'Day 5: CONDITIONING (Metcon focus)\n' : ''}\nTell me which day and I'll build that workout, champ.` };
     }
 
-    if (lower.includes('injury') || lower.includes('hurt') || lower.includes('pain') || lower.includes('restriction')) {
+    if (lower.includes('my injuries') || lower.includes('injury list') || lower.includes('show injuries') || lower.includes('my restrictions')) {
       const injuries = operator.injuries || [];
       if (injuries.length > 0) {
         const injuryList = injuries.map((inj) => `${inj.name}: ${inj.restrictions?.join(', ') || 'avoid heavy loading'}`).join('\n');
@@ -708,7 +710,7 @@ ${mealSuggestion}`;
       return { response };
     }
 
-    if (lower.includes('nutrition') || lower.includes('macro') || lower.includes('food') || lower.includes('eat')) {
+    if (lower.includes('nutrition status') || lower.includes('check macros') || lower.includes('macro status') || lower.includes('how are my macros')) {
       const nutrition = operator.nutrition;
       const today = new Date().toISOString().split('T')[0];
       const todayMeals = nutrition?.meals?.[today] || [];
@@ -722,7 +724,7 @@ ${mealSuggestion}`;
       return { response: `NUTRITION STATUS:\nCalories: ${currentCalories}/${targetCalories} | Protein: ${currentProtein}g/${targetProtein}g\n\n${rec}` };
     }
 
-    if (lower.includes('pr') || lower.includes('personal record') || lower.includes('best')) {
+    if (/\bprs?\b/.test(lower) || lower.includes('personal record') || /\bmy best\b/.test(lower) || lower.includes('show my best')) {
       const prs = operator.prs || [];
       if (prs.length > 0) {
         const prList = prs.slice(0, 3).map((pr) => `${pr.exercise}: ${pr.weight}lbs x${pr.reps}`).join('\n');
@@ -808,7 +810,10 @@ ${mealSuggestion}`;
 
   const FALLBACK_RESPONSE = "Stay in the fight, champ. What's the mission? BUILD A WORKOUT, check READINESS, review GOAL PATHS, or plan your WEEK?";
 
-  const callGunnyAPI = async (allMessages: Message[]) => {
+  // Store last workout data from AI for "add it" / "save it" commands
+  const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
+
+  const callGunnyAPI = async (allMessages: Message[]): Promise<{ response: string; workoutData?: Record<string, unknown> } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -840,20 +845,85 @@ ${mealSuggestion}`;
 
       if (!res.ok) throw new Error('API error');
       const data = await res.json();
-      return data.response;
+      return { response: data.response, workoutData: data.workoutData };
     } catch {
       return null;
     }
   };
 
+  // Save workout to planner
+  const saveWorkoutToPlanner = (workoutData: Record<string, unknown>) => {
+    if (!onUpdateOperator) return;
+    const today = new Date().toISOString().split('T')[0];
+    const updatedOp = { ...operator };
+
+    const blocks = ((workoutData.blocks as Array<Record<string, unknown>>) || []).map((block, i) => {
+      if (block.type === 'conditioning') {
+        return {
+          type: 'conditioning' as const,
+          id: `block-ai-${Date.now()}-${i}`,
+          sortOrder: i + 1,
+          format: (block.format as string) || '',
+          description: (block.description as string) || '',
+          isLinkedToNext: false,
+        };
+      }
+      return {
+        type: 'exercise' as const,
+        id: `block-ai-${Date.now()}-${i}`,
+        sortOrder: i + 1,
+        exerciseName: (block.exerciseName as string) || '',
+        prescription: (block.prescription as string) || '',
+        videoUrl: (block.videoUrl as string) || '',
+        isLinkedToNext: false,
+      };
+    });
+
+    updatedOp.workouts = {
+      ...updatedOp.workouts,
+      [today]: {
+        id: `wk-ai-${Date.now()}`,
+        date: today,
+        title: (workoutData.title as string) || 'AI Generated Workout',
+        notes: (workoutData.notes as string) || '',
+        warmup: (workoutData.warmup as string) || '',
+        blocks,
+        cooldown: (workoutData.cooldown as string) || '',
+        completed: false,
+      },
+    };
+
+    onUpdateOperator(updatedOp);
+  };
+
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
     const text = inputValue;
+    const lower = text.toLowerCase();
     const userMessage: Message = { id: 'user-' + Date.now(), role: 'user', text, timestamp: new Date() };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInputValue('');
     setIsTyping(true);
+
+    // Check for "add it" / "save it" / "I like it" — save last workout to planner
+    const isSaveCommand = /\b(add it|save it|i like it|lock it in|add to planner|save to planner|add that|save that|add this|log it)\b/i.test(lower);
+    if (isSaveCommand && lastWorkoutDataRef.current) {
+      saveWorkoutToPlanner(lastWorkoutDataRef.current);
+      const savedTitle = (lastWorkoutDataRef.current.title as string) || 'workout';
+      lastWorkoutDataRef.current = null;
+      setTimeout(() => {
+        const gunnyResponse: Message = {
+          id: 'gunny-' + Date.now(), role: 'gunny',
+          text: `LOCKED IN. "${savedTitle}" is now on your PLANNER for today. Go to PLANNER tab to review and execute. No excuses, champ.`,
+          timestamp: new Date(),
+        };
+        setIsTyping(false);
+        setMessages((prev) => [...prev, gunnyResponse]);
+      }, 300);
+      inputRef.current?.focus();
+      return;
+    }
 
     // Try local handler first (for state-modifying actions like food logging, client roster)
     const result = generateGunnyResponse(text);
@@ -863,18 +933,27 @@ ${mealSuggestion}`;
       if (result.updatedOperator && onUpdateOperator) {
         onUpdateOperator(result.updatedOperator);
       }
-      const isWorkout = text.toLowerCase().includes('build') || text.toLowerCase().includes('workout') || text.toLowerCase().includes('wod');
       setTimeout(() => {
-        const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: result.response, timestamp: new Date(), isWorkout };
+        const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: result.response, timestamp: new Date() };
         setIsTyping(false);
         setMessages((prev) => [...prev, gunnyResponse]);
       }, 400 + Math.random() * 300);
     } else {
       // No local match — call Anthropic API
-      const apiResponse = await callGunnyAPI(updatedMessages);
-      const responseText = apiResponse || FALLBACK_RESPONSE;
-      const isWorkout = text.toLowerCase().includes('build') || text.toLowerCase().includes('workout') || text.toLowerCase().includes('wod');
-      const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: responseText, timestamp: new Date(), isWorkout };
+      const apiResult = await callGunnyAPI(updatedMessages);
+      const responseText = apiResult?.response || FALLBACK_RESPONSE;
+
+      // Store workout data if AI generated one
+      if (apiResult?.workoutData) {
+        lastWorkoutDataRef.current = apiResult.workoutData;
+      }
+
+      const hasWorkout = !!apiResult?.workoutData;
+      const gunnyResponse: Message = {
+        id: 'gunny-' + Date.now(), role: 'gunny',
+        text: responseText + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : ''),
+        timestamp: new Date(), isWorkout: hasWorkout,
+      };
       setIsTyping(false);
       setMessages((prev) => [...prev, gunnyResponse]);
     }
@@ -894,17 +973,23 @@ ${mealSuggestion}`;
       if (result.updatedOperator && onUpdateOperator) {
         onUpdateOperator(result.updatedOperator);
       }
-      const isWorkout = action.toLowerCase().includes('build') || action.toLowerCase().includes('wod');
       setTimeout(() => {
-        const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: result.response, timestamp: new Date(), isWorkout };
+        const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: result.response, timestamp: new Date() };
         setIsTyping(false);
         setMessages((prev) => [...prev, gunnyResponse]);
       }, 400 + Math.random() * 300);
     } else {
-      const apiResponse = await callGunnyAPI(updatedMessages);
-      const responseText = apiResponse || FALLBACK_RESPONSE;
-      const isWorkout = action.toLowerCase().includes('build') || action.toLowerCase().includes('wod');
-      const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: responseText, timestamp: new Date(), isWorkout };
+      const apiResult = await callGunnyAPI(updatedMessages);
+      const responseText = apiResult?.response || FALLBACK_RESPONSE;
+      if (apiResult?.workoutData) {
+        lastWorkoutDataRef.current = apiResult.workoutData;
+      }
+      const hasWorkout = !!apiResult?.workoutData;
+      const gunnyResponse: Message = {
+        id: 'gunny-' + Date.now(), role: 'gunny',
+        text: responseText + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : ''),
+        timestamp: new Date(), isWorkout: hasWorkout,
+      };
       setIsTyping(false);
       setMessages((prev) => [...prev, gunnyResponse]);
     }
@@ -1213,7 +1298,17 @@ ${mealSuggestion}`;
                   background: 'linear-gradient(90deg, transparent, #ffb800, transparent)',
                 }} />
               )}
-              {message.text}
+              {message.text.split(/(\[VIDEO: [^\]]+\]\([^)]+\))/).map((part, i) => {
+                const videoMatch = part.match(/\[VIDEO: ([^\]]+)\]\(([^)]+)\)/);
+                if (videoMatch) {
+                  return (
+                    <a key={i} href={videoMatch[2]} target="_blank" rel="noopener noreferrer" className="video-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', color: '#ff4444', background: 'rgba(255,68,68,0.05)', border: '1px solid rgba(255,68,68,0.15)', cursor: 'pointer', textDecoration: 'none', margin: '2px 0' }}>
+                      ▶ {videoMatch[1]}
+                    </a>
+                  );
+                }
+                return <span key={i}>{part}</span>;
+              })}
               {/* Timestamp */}
               <div style={{
                 fontSize: '15px',
