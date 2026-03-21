@@ -165,13 +165,23 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   const hiddenInputStyle: React.CSSProperties = {
     position: 'absolute',
     opacity: 0,
-    pointerEvents: 'none',
-    width: 0,
-    height: 0,
+    width: '1px',
+    height: '1px',
+    border: 'none',
+    outline: 'none',
+    padding: 0,
+    margin: 0,
+    overflow: 'hidden',
+  };
+
+  const handleContainerClick = () => {
+    if (hiddenInputRef.current) {
+      hiddenInputRef.current.focus();
+    }
   };
 
   return (
-    <div style={containerStyle}>
+    <div style={containerStyle} onClick={handleContainerClick}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
@@ -203,10 +213,19 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
       <input
         ref={hiddenInputRef}
-        type="text"
+        type="tel"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        maxLength={4}
+        value={pin}
         style={hiddenInputStyle}
         onKeyDown={handleKeyDown}
+        onChange={(e) => {
+          const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+          setPin(val);
+        }}
         autoFocus
+        autoComplete="off"
         aria-label="PIN input"
       />
 
