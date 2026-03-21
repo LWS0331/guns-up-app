@@ -3,10 +3,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import LogoFull from '@/components/LogoFull';
 import { Operator } from '@/lib/types';
-import { OPERATORS } from '@/data/operators';
 
 interface LoginScreenProps {
   onLogin: (operator: Operator) => void;
+  operators: Operator[];
 }
 
 // Floating particle for background
@@ -20,7 +20,7 @@ interface Particle {
   delay: number;
 }
 
-export default function LoginScreen({ onLogin }: LoginScreenProps) {
+export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
   const [pin, setPin] = useState<string>('');
   const [error, setError] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
@@ -48,7 +48,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
   useEffect(() => {
     if (pin.length === 4) {
-      const operator = OPERATORS.find((op) => op.pin === pin);
+      const operator = operators.find((op) => op.pin === pin);
       if (operator) {
         setSuccess(true);
         setError(false);
@@ -68,7 +68,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         }, 800);
       }
     }
-  }, [pin, onLogin]);
+  }, [pin, operators, onLogin]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (/^[0-9]$/.test(e.key)) {

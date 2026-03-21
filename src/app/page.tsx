@@ -12,6 +12,18 @@ export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
+    // Register service worker for PWA support
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((registration) => {
+          console.log('Service Worker registered successfully:', registration);
+        })
+        .catch((error) => {
+          console.log('Service Worker registration failed:', error);
+        });
+    }
+
     // Load saved state from memory (no localStorage in this env)
     setIsLoaded(true);
   }, []);
@@ -48,7 +60,7 @@ export default function Home() {
   }
 
   if (!currentUser) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={handleLogin} operators={operators} />;
   }
 
   const accessibleUsers = getAccessibleOperators(currentUser.id, operators);

@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "GUNS UP",
   description: "Tactical Workout Command Center",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -27,6 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <link rel="manifest" href="/manifest.json" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"

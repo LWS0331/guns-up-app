@@ -62,7 +62,7 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />;
       case 'gunny':
-        return <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} />;
+        return <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />;
       default:
         return null;
     }
