@@ -53,6 +53,26 @@ const DataRain: React.FC = () => {
   return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }} />;
 };
 
+// ═══ Gunny Chat Message Types ═══
+interface ChatMessage {
+  role: 'user' | 'gunny';
+  text: string;
+  timestamp?: number;
+}
+
+interface OperatorContextData {
+  callsign: string;
+  name: string;
+  role: string;
+  weight?: number;
+  goals?: string[];
+  readiness?: number;
+  prs?: Array<{ exercise: string; weight: number }>;
+  injuries?: Array<{ id: string; name: string; status: string; notes?: string; restrictions?: string[] }>;
+  trainerNotes?: string;
+  language?: string;
+}
+
 interface AppShellProps {
   currentUser: Operator;
   accessibleUsers: Operator[];
@@ -68,12 +88,23 @@ const AppShell: React.FC<AppShellProps> = ({
   onUpdateOperator,
   onLogout,
 }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<AppTab>('coc');
   const [selectedOperator, setSelectedOperator] = useState<Operator>(currentUser);
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const lastWidthRef = useRef(0);
+
+  // Gunny AI panel state
+  const [showGunnyPanel, setShowGunnyPanel] = useState(false);
+  const [gunnyMessages, setGunnyMessages] = useState<ChatMessage[]>([]);
+  const [gunnyInput, setGunnyInput] = useState('');
+  const [gunnyLoading, setGunnyLoading] = useState(false);
+  const [gunnyGreeted, setGunnyGreeted] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize mounted state and responsive detection
   useEffect(() => {
     setMounted(true);
     const check = () => {
@@ -87,6 +118,100 @@ const AppShell: React.FC<AppShellProps> = ({
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  // Auto-scroll messages to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [gunnyMessages]);
+
+  // Add greeting when Gunny panel first opens
+  useEffect(() => {
+    if (showGunnyPanel && !gunnyGreeted && gunnyMessages.length === 0) {
+      setGunnyGreeted(true);
+      setGunnyMessages([{
+        role: 'gunny',
+        text: `Let's get to work. What are we hitting today, ${selectedOperator.callsign}?`,
+        timestamp: Date.now(),
+      }]);
+    }
+  }, [showGunnyPanel, gunnyGreeted, selectedOperator.callsign, gunnyMessages.length]);
+
+  // Focus input when panel opens
+  useEffect(() => {
+    if (showGunnyPanel && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [showGunnyPanel]);
+
+  // Build operator context for API
+  const buildOperatorContext = (): OperatorContextData => {
+    const op = selectedOperator;
+    return {
+      callsign: op.callsign,
+      name: op.name,
+      role: op.role || 'operator',
+      weight: op.profile?.weight,
+      goals: op.profile?.goals,
+      readiness: op.profile?.readiness,
+      prs: op.prs?.map(pr => ({ exercise: pr.exercise, weight: pr.weight })),
+      injuries: op.injuries?.map(inj => ({
+        id: inj.id,
+        name: inj.name,
+        status: inj.status,
+        notes: inj.notes,
+        restrictions: inj.restrictions,
+      })),
+      trainerNotes: op.trainerNotes,
+      language: language || 'en',
+    };
+  };
+
+  // Send message to Gunny API
+  const sendGunnyMessage = async () => {
+    if (!gunnyInput.trim()) return;
+
+    const userMessage: ChatMessage = {
+      role: 'user',
+      text: gunnyInput,
+      timestamp: Date.now(),
+    };
+
+    setGunnyMessages(prev => [...prev, userMessage]);
+    setGunnyInput('');
+    setGunnyLoading(true);
+
+    try {
+      const response = await fetch('/api/gunny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...gunnyMessages, userMessage],
+          operatorContext: buildOperatorContext(),
+          tier: selectedOperator.tier || 'standard',
+        }),
+      });
+
+      if (!response.ok) throw new Error('Gunny API error');
+
+      const data = await response.json();
+      const gunnyReply: ChatMessage = {
+        role: 'gunny',
+        text: data.message || data.text || 'Copy that, soldier.',
+        timestamp: Date.now(),
+      };
+      setGunnyMessages(prev => [...prev, gunnyReply]);
+    } catch (error) {
+      console.error('Gunny API error:', error);
+      const errorMessage: ChatMessage = {
+        role: 'gunny',
+        text: 'Systems temporarily offline. Stand by.',
+        timestamp: Date.now(),
+      };
+      setGunnyMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setGunnyLoading(false);
+    }
+  };
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
 
@@ -125,6 +250,51 @@ const AppShell: React.FC<AppShellProps> = ({
     }}>
 
       <style>{`
+        @keyframes breathingGlow {
+          0%, 100% { text-shadow: 0 0 8px rgba(0,255,65,0.3), 0 0 12px rgba(0,255,65,0.1); }
+          50% { text-shadow: 0 0 12px rgba(0,255,65,0.5), 0 0 20px rgba(0,255,65,0.2); }
+        }
+
+        @keyframes accentPulse {
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 1; }
+        }
+
+        @keyframes cornerBracketIn {
+          from { opacity: 0; }
+          to { opacity: 0.4; }
+        }
+
+        .guns-up-breathing {
+          animation: breathingGlow 3s ease-in-out infinite;
+        }
+
+        .accent-pulse {
+          animation: accentPulse 2.5s ease-in-out infinite;
+        }
+
+        .bracket-decoration {
+          position: absolute;
+          pointer-events: none;
+          animation: cornerBracketIn 0.6s ease-out forwards;
+        }
+
+        .bracket-tl::before, .bracket-tl::after { content: ''; position: absolute; background: #ffb800; }
+        .bracket-tl::before { width: 12px; height: 2px; top: 0; left: 0; }
+        .bracket-tl::after { width: 2px; height: 12px; top: 0; left: 0; }
+
+        .bracket-tr::before, .bracket-tr::after { content: ''; position: absolute; background: #ffb800; }
+        .bracket-tr::before { width: 12px; height: 2px; top: 0; right: 0; }
+        .bracket-tr::after { width: 2px; height: 12px; top: 0; right: 0; }
+
+        .bracket-bl::before, .bracket-bl::after { content: ''; position: absolute; background: #ffb800; }
+        .bracket-bl::before { width: 12px; height: 2px; bottom: 0; left: 0; }
+        .bracket-bl::after { width: 2px; height: 12px; bottom: 0; left: 0; }
+
+        .bracket-br::before, .bracket-br::after { content: ''; position: absolute; background: #ffb800; }
+        .bracket-br::before { width: 12px; height: 2px; bottom: 0; right: 0; }
+        .bracket-br::after { width: 2px; height: 12px; bottom: 0; right: 0; }
+
         .nav-tab {
           position: relative;
           font-family: 'Orbitron', sans-serif;
@@ -164,16 +334,214 @@ const AppShell: React.FC<AppShellProps> = ({
           display: flex;
         }
 
+        /* Gunny panel styles */
+        .gunny-panel-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(4px);
+          zIndex: 300;
+          animation: fadeIn 0.3s ease;
+        }
+
+        .gunny-panel {
+          position: fixed;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          width: 380px;
+          background: rgba(3, 3, 3, 0.92);
+          backdrop-filter: blur(16px);
+          WebkitBackdropFilter: blur(16px);
+          border-left: 3px solid #ffb800;
+          box-shadow: -8px 0 32px rgba(0, 0, 0, 0.8);
+          display: flex;
+          flex-direction: column;
+          zIndex: 310;
+          animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .gunny-header {
+          padding: 16px;
+          border-bottom: 1px solid rgba(255, 184, 0, 0.2);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-shrink: 0;
+        }
+
+        .gunny-messages {
+          flex: 1;
+          overflow-y: auto;
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .gunny-message {
+          padding: 12px;
+          border-radius: 4px;
+          font-size: 14px;
+          line-height: 1.5;
+          max-width: 100%;
+          word-wrap: break-word;
+          animation: messageSlideIn 0.3s ease;
+        }
+
+        @keyframes messageSlideIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .gunny-message.user {
+          align-self: flex-end;
+          background: rgba(0, 255, 65, 0.12);
+          border-left: 2px solid #00ff41;
+          color: #00ff41;
+          max-width: 90%;
+        }
+
+        .gunny-message.gunny {
+          align-self: flex-start;
+          background: rgba(255, 184, 0, 0.08);
+          border-left: 2px solid #ffb800;
+          color: #ffb800;
+          max-width: 90%;
+        }
+
+        .gunny-input-area {
+          padding: 12px;
+          border-top: 1px solid rgba(255, 184, 0, 0.2);
+          display: flex;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+
+        .gunny-input {
+          flex: 1;
+          padding: 10px 12px;
+          background: rgba(255, 184, 0, 0.06);
+          border: 1px solid rgba(255, 184, 0, 0.3);
+          border-radius: 4px;
+          color: #ffb800;
+          font-family: 'Share Tech Mono', monospace;
+          font-size: 16px;
+          transition: all 0.2s ease;
+          outline: none;
+        }
+
+        .gunny-input:focus {
+          background: rgba(255, 184, 0, 0.1);
+          border-color: #ffb800;
+          box-shadow: 0 0 12px rgba(255, 184, 0, 0.2);
+        }
+
+        .gunny-input::placeholder {
+          color: rgba(255, 184, 0, 0.4);
+        }
+
+        .gunny-send-btn {
+          padding: 10px 16px;
+          background: rgba(255, 184, 0, 0.15);
+          border: 1px solid #ffb800;
+          border-radius: 4px;
+          color: #ffb800;
+          cursor: pointer;
+          font-family: 'Orbitron', sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .gunny-send-btn:hover:not(:disabled) {
+          background: rgba(255, 184, 0, 0.25);
+          box-shadow: 0 0 12px rgba(255, 184, 0, 0.3);
+        }
+
+        .gunny-send-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .gunny-toggle-btn {
+          position: fixed;
+          bottom: 28px;
+          right: 20px;
+          width: 48px;
+          height: 48px;
+          background: rgba(255, 184, 0, 0.15);
+          border: 2px solid #ffb800;
+          border-radius: 4px;
+          color: #ffb800;
+          cursor: pointer;
+          font-size: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          zIndex: 250;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 16px rgba(255, 184, 0, 0.1);
+        }
+
+        .gunny-toggle-btn:hover {
+          background: rgba(255, 184, 0, 0.25);
+          box-shadow: 0 6px 24px rgba(255, 184, 0, 0.2);
+        }
+
+        .classification-bar {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 16px;
+          background: rgba(3, 3, 3, 0.95);
+          border-top: 1px solid rgba(0, 255, 65, 0.04);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: 'Share Tech Mono', monospace;
+          font-size: 10px;
+          color: rgba(0, 255, 65, 0.15);
+          letter-spacing: 2px;
+          zIndex: 50;
+          pointer-events: none;
+        }
+
         @media (max-width: 768px) {
           .bottom-nav {
             display: flex !important;
           }
-          /* Bottom nav stays visible — iOS naturally hides it behind keyboard */
           .desktop-nav {
             display: none !important;
           }
           .desktop-user-switcher {
             display: none !important;
+          }
+
+          .gunny-panel {
+            width: 100%;
+            animation: slideInUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+
+          @keyframes slideInUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+          }
+
+          .gunny-toggle-btn {
+            bottom: 72px;
           }
         }
       `}</style>
@@ -222,13 +590,12 @@ const AppShell: React.FC<AppShellProps> = ({
         }}>
           <Logo size={isMobile ? 22 : 26} color="#00ff41" />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-            <span style={{
+            <span className="guns-up-breathing" style={{
               fontFamily: 'Orbitron, sans-serif',
               fontSize: isMobile ? '10px' : '11px',
               fontWeight: 700,
               letterSpacing: '3px',
               color: '#00ff41',
-              textShadow: '0 0 8px rgba(0,255,65,0.3)',
             }}>
               GUNS UP
             </span>
@@ -304,8 +671,8 @@ const AppShell: React.FC<AppShellProps> = ({
         )}
       </header>
 
-      {/* Accent Line */}
-      <div style={{
+      {/* Accent Line with pulse animation */}
+      <div className="accent-pulse" style={{
         height: '1px',
         background: 'linear-gradient(90deg, transparent 5%, rgba(255,184,0,0.6) 30%, #ffb800 50%, rgba(255,184,0,0.6) 70%, transparent 95%)',
         boxShadow: '0 1px 8px rgba(255,184,0,0.15)',
@@ -323,10 +690,10 @@ const AppShell: React.FC<AppShellProps> = ({
         {renderTabContent()}
       </main>
 
-      {/* Mobile Bottom Tab Bar — hidden when keyboard is open */}
+      {/* Mobile Bottom Tab Bar */}
       <nav className="bottom-nav" style={{
         position: 'fixed',
-        bottom: 0,
+        bottom: 16,
         left: 0,
         right: 0,
         height: '56px',
@@ -336,6 +703,7 @@ const AppShell: React.FC<AppShellProps> = ({
         alignItems: 'center',
         zIndex: 200,
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        marginBottom: '16px',
       }}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -350,11 +718,13 @@ const AppShell: React.FC<AppShellProps> = ({
                 alignItems: 'center',
                 gap: '4px',
                 padding: '8px 0',
-                background: 'none',
+                background: isActive ? 'rgba(0, 255, 65, 0.08)' : 'none',
                 border: 'none',
                 cursor: 'pointer',
                 position: 'relative',
                 minHeight: '44px',
+                borderRadius: '4px',
+                margin: '0 4px',
               }}
             >
               {/* Active top indicator */}
@@ -390,6 +760,117 @@ const AppShell: React.FC<AppShellProps> = ({
           );
         })}
       </nav>
+
+      {/* Gunny AI Floating Toggle Button */}
+      {!isMobile && !showGunnyPanel && (
+        <button
+          className="gunny-toggle-btn"
+          onClick={() => setShowGunnyPanel(true)}
+          title="Open Gunny AI"
+        >
+          ⬆
+        </button>
+      )}
+
+      {/* Gunny AI Panel Overlay (mobile) */}
+      {showGunnyPanel && isMobile && (
+        <div
+          className="gunny-panel-overlay"
+          onClick={() => setShowGunnyPanel(false)}
+        />
+      )}
+
+      {/* Gunny AI Side Panel */}
+      {showGunnyPanel && (
+        <div className="gunny-panel">
+          {/* Header with OVERWATCH brackets */}
+          <div className="gunny-header">
+            <div style={{ position: 'relative', flex: 1 }}>
+              <div className="bracket-decoration bracket-tl" style={{ width: '16px', height: '16px' }} />
+              <div className="bracket-decoration bracket-tr" style={{ width: '16px', height: '16px' }} />
+              <span style={{
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: '14px',
+                fontWeight: 700,
+                color: '#ffb800',
+                letterSpacing: '2px',
+                textAlign: 'center',
+              }}>
+                GUNNY AI
+              </span>
+            </div>
+            <button
+              onClick={() => setShowGunnyPanel(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ffb800',
+                fontSize: '16px',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                transition: 'color 0.2s ease',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#ffc300')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#ffb800')}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Messages Container */}
+          <div className="gunny-messages">
+            {gunnyMessages.length === 0 && !gunnyGreeted && (
+              <div style={{
+                textAlign: 'center',
+                color: 'rgba(255, 184, 0, 0.4)',
+                fontSize: '13px',
+                marginTop: '20px',
+              }}>
+                {t('gunny.waiting') || 'Awaiting orders...'}
+              </div>
+            )}
+            {gunnyMessages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`gunny-message ${msg.role}`}
+              >
+                {msg.text}
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="gunny-input-area">
+            <input
+              ref={inputRef}
+              type="text"
+              className="gunny-input"
+              placeholder="Your orders, sergeant..."
+              value={gunnyInput}
+              onChange={(e) => setGunnyInput(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !gunnyLoading) {
+                  sendGunnyMessage();
+                }
+              }}
+              disabled={gunnyLoading}
+            />
+            <button
+              className="gunny-send-btn"
+              onClick={sendGunnyMessage}
+              disabled={gunnyLoading || !gunnyInput.trim()}
+            >
+              {gunnyLoading ? '⋯' : '▶'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Classification Bar */}
+      <div className="classification-bar">
+        GUNS UP — EYES ONLY
+      </div>
     </div>
   );
 };
