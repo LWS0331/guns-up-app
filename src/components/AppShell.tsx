@@ -347,22 +347,22 @@ const AppShell: React.FC<AppShellProps> = ({
         .gunny-panel {
           position: fixed;
           top: 0;
-          right: 0;
+          left: 0;
           bottom: 0;
           width: 380px;
-          background: rgba(3, 3, 3, 0.92);
+          background: rgba(3, 3, 3, 0.95);
           backdrop-filter: blur(16px);
-          WebkitBackdropFilter: blur(16px);
-          border-left: 3px solid #ffb800;
-          box-shadow: -8px 0 32px rgba(0, 0, 0, 0.8);
+          -webkit-backdrop-filter: blur(16px);
+          border-right: 3px solid #ffb800;
+          box-shadow: 8px 0 32px rgba(0, 0, 0, 0.8);
           display: flex;
           flex-direction: column;
           z-index: 310;
-          animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+          animation: slideInLeft 0.35s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
-        @keyframes slideInRight {
-          from { transform: translateX(100%); }
+        @keyframes slideInLeft {
+          from { transform: translateX(-100%); }
           to { transform: translateX(0); }
         }
 
@@ -477,36 +477,37 @@ const AppShell: React.FC<AppShellProps> = ({
 
         .gunny-toggle-btn {
           position: fixed;
-          bottom: 32px;
-          right: 24px;
-          padding: 12px 20px;
+          left: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          padding: 16px 10px;
           background: linear-gradient(135deg, rgba(255,184,0,0.2), rgba(255,184,0,0.1));
           border: 2px solid #ffb800;
-          border-radius: 6px;
+          border-left: none;
+          border-radius: 0 8px 8px 0;
           color: #ffb800;
           cursor: pointer;
           font-family: 'Orbitron', sans-serif;
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 700;
           letter-spacing: 2px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
+          writing-mode: vertical-rl;
+          text-orientation: mixed;
           z-index: 9997;
           transition: all 0.3s ease;
-          box-shadow: 0 4px 20px rgba(255,184,0,0.15), 0 0 40px rgba(255,184,0,0.05);
-          animation: breathingGlow 3s ease-in-out infinite;
+          box-shadow: 4px 0 20px rgba(255,184,0,0.15);
+          animation: togglePulse 3s ease-in-out infinite;
         }
 
         .gunny-toggle-btn:hover {
           background: linear-gradient(135deg, rgba(255,184,0,0.35), rgba(255,184,0,0.2));
-          box-shadow: 0 6px 30px rgba(255,184,0,0.3), 0 0 60px rgba(255,184,0,0.1);
-          transform: translateY(-2px);
+          box-shadow: 6px 0 30px rgba(255,184,0,0.3);
+          padding-right: 14px;
         }
 
-        @keyframes breathingGlow {
-          0%, 100% { box-shadow: 0 4px 20px rgba(255,184,0,0.15), 0 0 40px rgba(255,184,0,0.05); }
-          50% { box-shadow: 0 4px 24px rgba(255,184,0,0.25), 0 0 50px rgba(255,184,0,0.1); }
+        @keyframes togglePulse {
+          0%, 100% { box-shadow: 4px 0 20px rgba(255,184,0,0.15); }
+          50% { box-shadow: 4px 0 24px rgba(255,184,0,0.3); }
         }
 
         .classification-bar {
@@ -540,17 +541,20 @@ const AppShell: React.FC<AppShellProps> = ({
           }
 
           .gunny-panel {
-            width: 100%;
-            animation: slideInUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-          }
-
-          @keyframes slideInUp {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
+            width: 85%;
+            max-width: 340px;
+            animation: slideInLeft 0.35s cubic-bezier(0.25, 1, 0.5, 1);
           }
 
           .gunny-toggle-btn {
-            bottom: 72px;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 14px 8px;
+            font-size: 10px;
+          }
+
+          .classification-bar {
+            display: none !important;
           }
         }
       `}</style>
@@ -702,7 +706,7 @@ const AppShell: React.FC<AppShellProps> = ({
       {/* Mobile Bottom Tab Bar */}
       <nav className="bottom-nav" style={{
         position: 'fixed',
-        bottom: 16,
+        bottom: 0,
         left: 0,
         right: 0,
         height: '56px',
@@ -712,7 +716,6 @@ const AppShell: React.FC<AppShellProps> = ({
         alignItems: 'center',
         zIndex: 200,
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        marginBottom: '16px',
       }}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -770,14 +773,13 @@ const AppShell: React.FC<AppShellProps> = ({
         })}
       </nav>
 
-      {/* Gunny AI Floating Toggle Button — always visible when panel closed */}
-      {!showGunnyPanel && (
+      {/* Gunny AI Toggle — left edge tab, hidden on Gunny tab */}
+      {!showGunnyPanel && activeTab !== 'gunny' && (
         <button
           className="gunny-toggle-btn"
           onClick={() => setShowGunnyPanel(true)}
           title="Open Gunny AI"
         >
-          <span style={{ fontSize: '18px' }}>▶</span>
           GUNNY
         </button>
       )}
