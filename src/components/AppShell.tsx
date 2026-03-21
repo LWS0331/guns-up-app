@@ -196,7 +196,7 @@ const AppShell: React.FC<AppShellProps> = ({
       const data = await response.json();
       const gunnyReply: ChatMessage = {
         role: 'gunny',
-        text: data.message || data.text || 'Copy that, soldier.',
+        text: data.response || data.message || data.text || 'Copy that, soldier.',
         timestamp: Date.now(),
       };
       setGunnyMessages(prev => [...prev, gunnyReply]);
@@ -340,7 +340,7 @@ const AppShell: React.FC<AppShellProps> = ({
           inset: 0;
           background: rgba(0, 0, 0, 0.5);
           backdrop-filter: blur(4px);
-          zIndex: 300;
+          z-index: 300;
           animation: fadeIn 0.3s ease;
         }
 
@@ -357,7 +357,7 @@ const AppShell: React.FC<AppShellProps> = ({
           box-shadow: -8px 0 32px rgba(0, 0, 0, 0.8);
           display: flex;
           flex-direction: column;
-          zIndex: 310;
+          z-index: 310;
           animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
@@ -490,7 +490,7 @@ const AppShell: React.FC<AppShellProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          zIndex: 250;
+          z-index: 250;
           transition: all 0.3s ease;
           box-shadow: 0 4px 16px rgba(255, 184, 0, 0.1);
         }
@@ -515,7 +515,7 @@ const AppShell: React.FC<AppShellProps> = ({
           font-size: 10px;
           color: rgba(0, 255, 65, 0.15);
           letter-spacing: 2px;
-          zIndex: 50;
+          z-index: 50;
           pointer-events: none;
         }
 
@@ -761,14 +761,14 @@ const AppShell: React.FC<AppShellProps> = ({
         })}
       </nav>
 
-      {/* Gunny AI Floating Toggle Button */}
-      {!isMobile && !showGunnyPanel && (
+      {/* Gunny AI Floating Toggle Button — always visible when panel closed */}
+      {!showGunnyPanel && (
         <button
           className="gunny-toggle-btn"
           onClick={() => setShowGunnyPanel(true)}
           title="Open Gunny AI"
         >
-          ⬆
+          <Logo size={24} color="#ffb800" />
         </button>
       )}
 
@@ -783,18 +783,16 @@ const AppShell: React.FC<AppShellProps> = ({
       {/* Gunny AI Side Panel */}
       {showGunnyPanel && (
         <div className="gunny-panel">
-          {/* Header with OVERWATCH brackets */}
+          {/* Header with Logo and close button */}
           <div className="gunny-header">
-            <div style={{ position: 'relative', flex: 1 }}>
-              <div className="bracket-decoration bracket-tl" style={{ width: '16px', height: '16px' }} />
-              <div className="bracket-decoration bracket-tr" style={{ width: '16px', height: '16px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+              <Logo size={20} color="#ffb800" />
               <span style={{
                 fontFamily: 'Orbitron, sans-serif',
                 fontSize: '14px',
                 fontWeight: 700,
                 color: '#ffb800',
                 letterSpacing: '2px',
-                textAlign: 'center',
               }}>
                 GUNNY AI
               </span>
@@ -802,18 +800,24 @@ const AppShell: React.FC<AppShellProps> = ({
             <button
               onClick={() => setShowGunnyPanel(false)}
               style={{
-                background: 'none',
-                border: 'none',
-                color: '#ffb800',
-                fontSize: '16px',
+                background: 'rgba(255,68,68,0.1)',
+                border: '1px solid rgba(255,68,68,0.3)',
+                borderRadius: '4px',
+                color: '#ff4444',
+                fontSize: '14px',
                 cursor: 'pointer',
-                padding: '4px 8px',
-                transition: 'color 0.2s ease',
+                padding: '6px 12px',
+                fontFamily: "'Orbitron', sans-serif",
+                fontWeight: 700,
+                letterSpacing: '1px',
+                transition: 'all 0.2s ease',
+                minWidth: '44px',
+                minHeight: '36px',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#ffc300')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#ffb800')}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,68,68,0.2)'; e.currentTarget.style.borderColor = '#ff4444'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,68,68,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,68,68,0.3)'; }}
             >
-              ✕
+              CLOSE
             </button>
           </div>
 
