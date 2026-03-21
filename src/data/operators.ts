@@ -1,4 +1,29 @@
-import { Operator } from '@/lib/types';
+import { Operator, AiTier } from '@/lib/types';
+
+// Helper to create a new client operator with defaults
+function makeClient(
+  id: string, name: string, callsign: string, pin: string, tier: AiTier,
+  coupleWith: string | null, trainerId: string, betaUser: boolean,
+  profile: Partial<Operator['profile']>, prefs: Partial<Operator['preferences']>,
+  lang?: 'es'
+): Operator {
+  return {
+    id, name, callsign, pin, role: 'client', tier, coupleWith, trainerId, betaUser,
+    profile: {
+      age: profile.age ?? 30, height: profile.height ?? "5'8\"", weight: profile.weight ?? 170,
+      bodyFat: profile.bodyFat ?? 20, trainingAge: profile.trainingAge ?? '2 years',
+      goals: profile.goals ?? ['general fitness'], readiness: profile.readiness ?? 7,
+      sleep: profile.sleep ?? 7, stress: profile.stress ?? 4,
+    },
+    nutrition: { targets: { calories: 2200, protein: 160, carbs: 220, fat: 75 }, meals: {} },
+    prs: [], injuries: [], workouts: {}, dayTags: {},
+    preferences: {
+      split: prefs.split ?? 'Full Body', equipment: prefs.equipment ?? ['Dumbbell', 'Barbell'],
+      sessionDuration: prefs.sessionDuration ?? 60, daysPerWeek: prefs.daysPerWeek ?? 3,
+      weakPoints: prefs.weakPoints ?? [], avoidMovements: prefs.avoidMovements ?? [],
+    },
+  };
+}
 
 export const OPERATORS: Operator[] = [
   {
@@ -9,7 +34,7 @@ export const OPERATORS: Operator[] = [
     role: 'trainer',
     tier: 'opus',
     coupleWith: 'op-britney',
-    clientIds: ['op-efrain', 'op-erika'],
+    clientIds: ['op-efrain', 'op-erika', 'op-jonathan', 'op-natalie', 'op-mary', 'op-harold', 'op-rosa', 'op-rubensr', 'op-edgar', 'op-patty', 'op-aldo', 'op-jasmine'],
     betaUser: true,
     profile: {
       age: 31,
@@ -292,7 +317,7 @@ export const OPERATORS: Operator[] = [
     role: 'trainer',
     tier: 'opus',
     coupleWith: 'op-ruben',
-    clientIds: ['op-efrain', 'op-erika'],
+    clientIds: ['op-efrain', 'op-erika', 'op-jonathan', 'op-natalie', 'op-mary', 'op-harold', 'op-rosa', 'op-rubensr', 'op-edgar', 'op-patty', 'op-aldo', 'op-jasmine'],
     betaUser: true,
     profile: {
       age: 29,
@@ -1077,6 +1102,49 @@ export const OPERATORS: Operator[] = [
       },
     },
   },
+  // ═══════════════════════════════════════
+  // NEW USERS — Beta Wave 2
+  // ═══════════════════════════════════════
+
+  // Jonathan + Natalie
+  makeClient('op-jonathan', 'Jonathan', 'IRONSIDE', '3001', 'sonnet', 'op-natalie', 'op-ruben', true,
+    { age: 32, height: "5'11\"", weight: 190, bodyFat: 17, trainingAge: '5 years', goals: ['strength', 'hypertrophy'], readiness: 7, sleep: 7, stress: 4 },
+    { split: 'Push/Pull/Legs', equipment: ['Barbell', 'Dumbbell', 'Cable'], sessionDuration: 75, daysPerWeek: 4, weakPoints: ['Shoulders'], avoidMovements: [] }),
+  makeClient('op-natalie', 'Natalie', 'NOVA', '3002', 'haiku', 'op-jonathan', 'op-ruben', true,
+    { age: 30, height: "5'6\"", weight: 140, bodyFat: 23, trainingAge: '2 years', goals: ['toning', 'weight loss'], readiness: 7, sleep: 7.5, stress: 3 },
+    { split: 'Upper/Lower', equipment: ['Dumbbell', 'Cable', 'Bodyweight'], sessionDuration: 45, daysPerWeek: 3, weakPoints: ['Core strength'], avoidMovements: [] }),
+
+  // Mary + Harold
+  makeClient('op-mary', 'Mary', 'DUCHESS', '3003', 'haiku', 'op-harold', 'op-ruben', true,
+    { age: 58, height: "5'3\"", weight: 155, bodyFat: 30, trainingAge: '1 year', goals: ['mobility', 'weight loss', 'bone density'], readiness: 6, sleep: 6.5, stress: 5 },
+    { split: 'Full Body', equipment: ['Dumbbell', 'Cable', 'Bodyweight'], sessionDuration: 40, daysPerWeek: 3, weakPoints: ['Balance', 'Hip mobility'], avoidMovements: ['Heavy overhead press', 'Box jumps'] }),
+  makeClient('op-harold', 'Harold', 'GENERAL', '3004', 'haiku', 'op-mary', 'op-ruben', true,
+    { age: 62, height: "5'9\"", weight: 185, bodyFat: 28, trainingAge: '1 year', goals: ['mobility', 'heart health', 'strength maintenance'], readiness: 6, sleep: 6, stress: 4 },
+    { split: 'Full Body', equipment: ['Dumbbell', 'Cable', 'Machine'], sessionDuration: 45, daysPerWeek: 3, weakPoints: ['Lower back', 'Knee stability'], avoidMovements: ['Heavy squats', 'Running'] }),
+
+  // Rosa + Ruben Sr. (Spanish-preferred)
+  makeClient('op-rosa', 'Rosa Rodriguez', 'REINA', '3005', 'haiku', 'op-rubensr', 'op-ruben', true,
+    { age: 56, height: "5'2\"", weight: 148, bodyFat: 32, trainingAge: '6 months', goals: ['weight loss', 'mobility', 'energy'], readiness: 6, sleep: 6, stress: 5 },
+    { split: 'Full Body', equipment: ['Dumbbell', 'Bodyweight', 'Resistance Band'], sessionDuration: 35, daysPerWeek: 3, weakPoints: ['Core', 'Balance'], avoidMovements: ['Heavy weights', 'High impact'] }),
+  makeClient('op-rubensr', 'Ruben Rodriguez Sr.', 'LOBO', '3006', 'haiku', 'op-rosa', 'op-ruben', true,
+    { age: 60, height: "5'10\"", weight: 200, bodyFat: 30, trainingAge: '6 months', goals: ['heart health', 'strength', 'mobility'], readiness: 5, sleep: 5.5, stress: 5 },
+    { split: 'Full Body', equipment: ['Dumbbell', 'Machine', 'Bodyweight'], sessionDuration: 40, daysPerWeek: 3, weakPoints: ['Shoulders', 'Knees'], avoidMovements: ['Heavy deadlifts', 'Running', 'Box jumps'] }),
+
+  // Edgar + Patty
+  makeClient('op-edgar', 'Edgar', 'VIPER', '3007', 'sonnet', 'op-patty', 'op-ruben', true,
+    { age: 34, height: "5'10\"", weight: 195, bodyFat: 19, trainingAge: '8 years', goals: ['strength', 'athletic performance'], readiness: 8, sleep: 7.5, stress: 3 },
+    { split: 'Push/Pull/Legs', equipment: ['Barbell', 'Dumbbell', 'Cable', 'Kettlebell'], sessionDuration: 75, daysPerWeek: 5, weakPoints: ['Overhead mobility'], avoidMovements: [] }),
+  makeClient('op-patty', 'Patty', 'SPARTAN', '3008', 'haiku', 'op-edgar', 'op-ruben', true,
+    { age: 32, height: "5'5\"", weight: 135, bodyFat: 22, trainingAge: '3 years', goals: ['toning', 'endurance', 'flexibility'], readiness: 7, sleep: 7, stress: 4 },
+    { split: 'Upper/Lower', equipment: ['Dumbbell', 'Cable', 'Bodyweight', 'Resistance Band'], sessionDuration: 50, daysPerWeek: 4, weakPoints: ['Upper body strength'], avoidMovements: [] }),
+
+  // Aldo + Jasmine
+  makeClient('op-aldo', 'Aldo', 'TITAN', '3009', 'sonnet', 'op-jasmine', 'op-ruben', true,
+    { age: 28, height: "6'0\"", weight: 205, bodyFat: 16, trainingAge: '10 years', goals: ['hypertrophy', 'aesthetics'], readiness: 8, sleep: 8, stress: 2 },
+    { split: 'Bro Split', equipment: ['Barbell', 'Dumbbell', 'Cable', 'Machine'], sessionDuration: 90, daysPerWeek: 6, weakPoints: ['Calves', 'Rear delts'], avoidMovements: [] }),
+  makeClient('op-jasmine', 'Jasmine', 'ATHENA', '3010', 'haiku', 'op-aldo', 'op-ruben', true,
+    { age: 27, height: "5'7\"", weight: 130, bodyFat: 20, trainingAge: '4 years', goals: ['glute development', 'toning', 'strength'], readiness: 8, sleep: 7.5, stress: 3 },
+    { split: 'Upper/Lower + Glute Day', equipment: ['Barbell', 'Dumbbell', 'Cable', 'Hip Thrust Bench'], sessionDuration: 60, daysPerWeek: 5, weakPoints: ['Upper body pulling'], avoidMovements: [] }),
 ];
 
 export function getAccessibleOperators(userId: string, ops?: Operator[]): Operator[] {
