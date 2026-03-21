@@ -311,8 +311,8 @@ export const OPERATORS: Operator[] = [
   },
   {
     id: 'op-britney',
-    name: 'Daniela Rodriguez',
-    callsign: 'WHISKEY',
+    name: 'Britney Rodriguez',
+    callsign: 'SIREN',
     pin: '5678',
     role: 'trainer',
     tier: 'opus',
@@ -1114,8 +1114,8 @@ export const OPERATORS: Operator[] = [
     { age: 30, height: "5'6\"", weight: 140, bodyFat: 23, trainingAge: '2 years', goals: ['toning', 'weight loss'], readiness: 7, sleep: 7.5, stress: 3 },
     { split: 'Upper/Lower', equipment: ['Dumbbell', 'Cable', 'Bodyweight'], sessionDuration: 45, daysPerWeek: 3, weakPoints: ['Core strength'], avoidMovements: [] }),
 
-  // Selena + Harold
-  makeClient('op-mary', 'Selena', 'DUCHESS', '3003', 'haiku', 'op-harold', 'op-ruben', true,
+  // Mary + Harold
+  makeClient('op-mary', 'Mary', 'EMBER', '3003', 'haiku', 'op-harold', 'op-ruben', true,
     { age: 58, height: "5'3\"", weight: 155, bodyFat: 30, trainingAge: '1 year', goals: ['mobility', 'weight loss', 'bone density'], readiness: 6, sleep: 6.5, stress: 5 },
     { split: 'Full Body', equipment: ['Dumbbell', 'Cable', 'Bodyweight'], sessionDuration: 40, daysPerWeek: 3, weakPoints: ['Balance', 'Hip mobility'], avoidMovements: ['Heavy overhead press', 'Box jumps'] }),
   makeClient('op-harold', 'Harold', 'GENERAL', '3004', 'haiku', 'op-mary', 'op-ruben', true,
