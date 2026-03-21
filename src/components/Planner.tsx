@@ -16,13 +16,26 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
   const [clipboard, setClipboard] = useState<Workout | null>(null);
   const [showDayTagEditor, setShowDayTagEditor] = useState<string | null>(null);
   const [tagNoteInput, setTagNoteInput] = useState('');
   const [selectedTagColor, setSelectedTagColor] = useState<'green' | 'amber' | 'red' | 'cyan'>('green');
+  const [showDayMenu, setShowDayMenu] = useState<string | null>(null);
+  const [showWorkoutBuilder, setShowWorkoutBuilder] = useState(false);
+
+  // Workout builder state
+  const [builderData, setBuilderData] = useState<Workout>({
+    id: '',
+    date: '',
+    title: '',
+    notes: '',
+    warmup: '',
+    blocks: [],
+    cooldown: '',
+    completed: false,
+  });
+
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
-  const [exerciseSearchIndex, setExerciseSearchIndex] = useState(-1);
   const [showExerciseAutocomplete, setShowExerciseAutocomplete] = useState(false);
   const [autocompleteFor, setAutocompleteFor] = useState<number | null>(null);
   const autocompleteRef = useRef<HTMLDivElement>(null);
@@ -45,6 +58,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   const parseDate = (dateStr: string): Date => {
     const [year, month, day] = dateStr.split('-').map(Number);
     return new Date(year, month - 1, day);
+  };
+
+  const formatDateForDisplay = (dateStr: string): string => {
+    const date = parseDate(dateStr);
+    const options: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+    return date.toLocaleDateString('en-US', options);
   };
 
   const getWeekDates = (date: Date): Date[] => {
@@ -121,29 +140,24 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
   const getFilteredExercises = (query: string) => {
     if (!query.trim()) return [];
-    return EXERCISE_LIBRARY.filter(ex => fuzzyMatch(query, ex.name))
-      .slice(0, 8);
+    return EXERCISE_LIBRARY.filter(ex => fuzzyMatch(query, ex.name)).slice(0, 8);
   };
 
   const getBlockLabels = (blocks: WorkoutBlock[]): string[] => {
     const labels: string[] = [];
     let currentLetter = 'A';
+    let supersetCount = 0;
 
     for (let i = 0; i < blocks.length; i++) {
       const isLinkedToPrevious = i > 0 && blocks[i - 1].isLinkedToNext;
-      const isLinkedToNext = blocks[i].isLinkedToNext;
 
       if (!isLinkedToPrevious) {
-        currentLetter = String.fromCharCode(65 + labels.filter((_, idx) => !labels[idx].includes('1') && !labels[idx].includes('2')).length);
-      }
-
-      if (isLinkedToNext || isLinkedToPrevious) {
-        const baseLabel = isLinkedToPrevious ? labels[i - 1].charAt(0) : currentLetter;
-        const number = isLinkedToPrevious ? (parseInt(labels[i - 1].charAt(1)) || 1) + 1 : 1;
-        labels.push(`${baseLabel}${number}`);
-      } else {
         labels.push(currentLetter);
+        supersetCount = 0;
         currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
+      } else {
+        supersetCount++;
+        labels.push(`${labels[i - 1].charAt(0)}${supersetCount + 1}`);
       }
     }
 
@@ -151,8 +165,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   };
 
   const findLastExerciseLog = (exerciseName: string): { date: string; prescription: string } | null => {
-    const entries = Object.entries(operator.workouts)
-      .sort(([dateA], [dateB]) => dateB.localeCompare(dateA));
+    const entries = Object.entries(operator.workouts).sort(([dateA], [dateB]) => dateB.localeCompare(dateA));
 
     for (const [date, workout] of entries) {
       if (date >= (selectedDate || formatDate(new Date()))) continue;
@@ -167,6 +180,21 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     return null;
   };
 
+  const getTagColor = (color: string): string => {
+    switch (color) {
+      case 'green':
+        return '#00ff41';
+      case 'amber':
+        return '#ffb800';
+      case 'red':
+        return '#ff4444';
+      case 'cyan':
+        return '#00bcd4';
+      default:
+        return '#00ff41';
+    }
+  };
+
   // ============================================================================
   // HANDLERS
   // ============================================================================
@@ -174,6 +202,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   const handleViewModeChange = (mode: ViewMode) => {
     setViewMode(mode);
     setSelectedDate(null);
+    setShowWorkoutBuilder(false);
   };
 
   const handleNavigatePrevious = () => {
@@ -200,976 +229,288 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     setCurrentDate(newDate);
   };
 
-  const handleTodayClick = () => {
-    setCurrentDate(new Date());
-  };
-
-  const handleDayClick = (date: Date) => {
-    const dateStr = formatDate(date);
-    const existing = getWorkoutForDate(date);
-
-    if (existing) {
-      setSelectedDate(dateStr);
-      setViewMode('day');
-      setEditingWorkout(null);
-    } else {
-      setSelectedDate(dateStr);
-      setViewMode('day');
-    }
-  };
-
-  const handleStartWorkout = (date: Date) => {
-    const dateStr = formatDate(date);
+  const handleAddWorkout = (dateStr: string) => {
     setSelectedDate(dateStr);
-    setViewMode('day');
-    setEditingWorkout({
+    setBuilderData({
       id: generateId(),
-      date: selectedDate || formatDate(new Date()),
+      date: dateStr,
       title: '',
       notes: '',
       warmup: '',
-      cooldown: '',
       blocks: [],
+      cooldown: '',
       completed: false,
     });
+    setShowWorkoutBuilder(true);
+    setShowDayMenu(null);
   };
 
-  const handleStartRest = (date: Date) => {
-    const dateStr = formatDate(date);
-    const updated = { ...operator };
-    updated.workouts[dateStr] = {
-      id: generateId(),
-      date: dateStr,
-      title: 'REST DAY',
-      notes: '',
-      warmup: '',
-      cooldown: '',
-      blocks: [],
-      completed: false,
-    };
-    onUpdateOperator(updated);
-  };
-
-  const handlePasteWorkout = (date: Date) => {
-    if (!clipboard) return;
-    const dateStr = formatDate(date);
-    const updated = { ...operator };
-    updated.workouts[dateStr] = {
-      ...clipboard,
-      id: generateId(),
-      date: dateStr,
-    };
-    onUpdateOperator(updated);
-  };
-
-  const handleCopyWorkout = (date: Date) => {
-    const workout = getWorkoutForDate(date);
-    if (workout) {
-      setClipboard(workout);
-    }
+  const handleEditWorkout = (workout: Workout) => {
+    setSelectedDate(workout.date);
+    setBuilderData(JSON.parse(JSON.stringify(workout)));
+    setShowWorkoutBuilder(true);
+    setShowDayMenu(null);
   };
 
   const handleSaveWorkout = () => {
-    if (!selectedDate || !editingWorkout) return;
+    if (!selectedDate || !builderData.title.trim()) {
+      alert('Please enter a workout title');
+      return;
+    }
 
     const updated = { ...operator };
-    updated.workouts[selectedDate] = editingWorkout;
+    updated.workouts[selectedDate] = builderData;
     onUpdateOperator(updated);
-
-    setEditingWorkout(null);
+    setShowWorkoutBuilder(false);
     setSelectedDate(null);
   };
 
   const handleCancelWorkout = () => {
-    setEditingWorkout(null);
+    setShowWorkoutBuilder(false);
     setSelectedDate(null);
   };
 
-  const handleDeleteWorkout = (date: Date) => {
-    const dateStr = formatDate(date);
-    const updated = { ...operator };
-    delete updated.workouts[dateStr];
-    onUpdateOperator(updated);
-  };
-
-  const handleEditWorkout = (date: Date) => {
-    const dateStr = formatDate(date);
-    const workout = getWorkoutForDate(date);
-    if (workout) {
-      setSelectedDate(dateStr);
-      setEditingWorkout({ ...workout });
-      setViewMode('day');
-    }
-  };
-
   const handleAddExerciseBlock = () => {
-    if (!editingWorkout) return;
     const newBlock: ExerciseBlock = {
       type: 'exercise',
       id: generateId(),
-      sortOrder: editingWorkout.blocks.length,
+      sortOrder: builderData.blocks.length,
       exerciseName: '',
       prescription: '',
       isLinkedToNext: false,
     };
-    setEditingWorkout({
-      ...editingWorkout,
-      blocks: [...editingWorkout.blocks, newBlock],
+    setBuilderData({
+      ...builderData,
+      blocks: [...builderData.blocks, newBlock],
     });
   };
 
   const handleAddConditioningBlock = () => {
-    if (!editingWorkout) return;
     const newBlock: ConditioningBlock = {
       type: 'conditioning',
       id: generateId(),
-      sortOrder: editingWorkout.blocks.length,
+      sortOrder: builderData.blocks.length,
       format: '',
       description: '',
       isLinkedToNext: false,
     };
-    setEditingWorkout({
-      ...editingWorkout,
-      blocks: [...editingWorkout.blocks, newBlock],
+    setBuilderData({
+      ...builderData,
+      blocks: [...builderData.blocks, newBlock],
     });
   };
 
-  const handleUpdateExerciseBlock = (index: number, updates: Partial<ExerciseBlock>) => {
-    if (!editingWorkout) return;
-    const newBlocks = [...editingWorkout.blocks];
+  const handleUpdateBlock = (index: number, updates: Record<string, unknown>) => {
+    const newBlocks = [...builderData.blocks];
     newBlocks[index] = { ...newBlocks[index], ...updates } as WorkoutBlock;
-    setEditingWorkout({
-      ...editingWorkout,
+    setBuilderData({
+      ...builderData,
       blocks: newBlocks,
     });
   };
 
-  const handleToggleSupersetLink = (index: number) => {
-    if (!editingWorkout) return;
-    const newBlocks = [...editingWorkout.blocks];
-    newBlocks[index].isLinkedToNext = !newBlocks[index].isLinkedToNext;
-    setEditingWorkout({
-      ...editingWorkout,
+  const handleDeleteBlock = (index: number) => {
+    const newBlocks = builderData.blocks.filter((_, i) => i !== index);
+    setBuilderData({
+      ...builderData,
       blocks: newBlocks,
     });
   };
 
-  const handleDeleteExerciseBlock = (index: number) => {
-    if (!editingWorkout) return;
-    const newBlocks = editingWorkout.blocks.filter((_, i) => i !== index);
-    setEditingWorkout({
-      ...editingWorkout,
-      blocks: newBlocks,
-    });
+  const handleCopyWorkout = (workout: Workout) => {
+    setClipboard(workout);
+    setShowDayMenu(null);
   };
 
-  const handleUpdateConditioningBlock = (globalBlockIndex: number, updates: Partial<ConditioningBlock>) => {
-    if (!editingWorkout) return;
-    const newBlocks = [...editingWorkout.blocks];
-    newBlocks[globalBlockIndex] = { ...newBlocks[globalBlockIndex], ...updates } as WorkoutBlock;
-    setEditingWorkout({
-      ...editingWorkout,
-      blocks: newBlocks,
-    });
-  };
+  const handlePasteWorkout = (dateStr: string) => {
+    if (!clipboard) return;
 
-  const handleDeleteConditioningBlock = (globalBlockIndex: number) => {
-    if (!editingWorkout) return;
-    const newBlocks = editingWorkout.blocks.filter((_, i) => i !== globalBlockIndex);
-    setEditingWorkout({
-      ...editingWorkout,
-      blocks: newBlocks,
-    });
-  };
+    const newWorkout: Workout = {
+      ...JSON.parse(JSON.stringify(clipboard)),
+      id: generateId(),
+      date: dateStr,
+      completed: false,
+    };
 
-  const handleSelectExercise = (exerciseName: string, blockIndex: number) => {
-    handleUpdateExerciseBlock(blockIndex, { exerciseName: exerciseName });
-    setShowExerciseAutocomplete(false);
-    setExerciseSearchQuery('');
-    setAutocompleteFor(null);
-  };
-
-  const handleOpenTagEditor = (dateStr: string) => {
-    const tag = getDayTag(dateStr);
-    setShowDayTagEditor(dateStr);
-    setSelectedTagColor((tag?.color as 'green' | 'amber' | 'red' | 'cyan') || 'green');
-    setTagNoteInput(tag?.note || '');
-  };
-
-  const handleSaveTag = () => {
-    if (!showDayTagEditor) return;
     const updated = { ...operator };
-    if (!updated.dayTags) updated.dayTags = {};
-    updated.dayTags[showDayTagEditor] = {
+    updated.workouts[dateStr] = newWorkout;
+    onUpdateOperator(updated);
+    setShowDayMenu(null);
+  };
+
+  const handleSetRestDay = (dateStr: string) => {
+    const updated = { ...operator };
+    if (updated.workouts[dateStr]) {
+      delete updated.workouts[dateStr];
+    }
+    updated.dayTags = updated.dayTags || {};
+    updated.dayTags[dateStr] = { color: 'cyan', note: 'Rest Day' };
+    onUpdateOperator(updated);
+    setShowDayMenu(null);
+  };
+
+  const handleDeleteWorkout = (dateStr: string) => {
+    if (!confirm('Delete this workout?')) return;
+
+    const updated = { ...operator };
+    if (updated.workouts[dateStr]) {
+      delete updated.workouts[dateStr];
+    }
+    onUpdateOperator(updated);
+    setShowWorkoutBuilder(false);
+    setSelectedDate(null);
+  };
+
+  const handleSaveDayTag = (dateStr: string) => {
+    const updated = { ...operator };
+    updated.dayTags = updated.dayTags || {};
+    updated.dayTags[dateStr] = {
       color: selectedTagColor,
       note: tagNoteInput,
     };
     onUpdateOperator(updated);
     setShowDayTagEditor(null);
+    setTagNoteInput('');
   };
 
-  const handleDeleteTag = () => {
-    if (!showDayTagEditor) return;
-    const updated = { ...operator };
-    if (updated.dayTags) {
-      delete updated.dayTags[showDayTagEditor];
-    }
-    onUpdateOperator(updated);
-    setShowDayTagEditor(null);
+  const handleExerciseSelect = (exerciseName: string, blockIndex: number) => {
+    handleUpdateBlock(blockIndex, { exerciseName });
+    setShowExerciseAutocomplete(false);
+    setExerciseSearchQuery('');
+    setAutocompleteFor(null);
   };
 
-  const handleExportCalendar = () => {
-    const jsonStr = JSON.stringify(operator.workouts, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
+  const handleExportJson = () => {
+    const dataStr = JSON.stringify(operator, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `workouts-${formatDate(new Date())}.json`;
+    a.download = `${operator.callsign}_workouts_${formatDate(new Date())}.json`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
   // ============================================================================
-  // STYLES
+  // RENDER MONTH VIEW
   // ============================================================================
-
-  const colors = {
-    bg: '#030303',
-    green: '#00ff41',
-    amber: '#ffb800',
-    cyan: '#00bcd4',
-    red: '#ff4444',
-    darkGray: '#1a1a1a',
-    medGray: '#333333',
-    lightGray: '#555555',
-  };
-
-  const containerStyle: React.CSSProperties = {
-    width: '100%',
-    minHeight: '100vh',
-    backgroundColor: colors.bg,
-    color: colors.green,
-    fontFamily: '"Chakra Petch", sans-serif',
-    padding: '24px',
-    overflow: 'auto',
-  };
-
-  const topBarStyle: React.CSSProperties = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '32px',
-    gap: '24px',
-  };
-
-  const viewModesContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '8px',
-  };
-
-  const viewModeButtonStyle = (active: boolean): React.CSSProperties => ({
-    padding: '6px 12px',
-    backgroundColor: active ? colors.green : 'transparent',
-    color: active ? colors.bg : colors.green,
-    border: `1px solid ${active ? colors.green : colors.lightGray}`,
-    fontFamily: '"Orbitron", sans-serif',
-    fontSize: '8px',
-    fontWeight: 600,
-    letterSpacing: '1px',
-    cursor: 'pointer',
-    clipPath: 'polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%)',
-    transition: 'all 0.2s ease',
-  });
-
-  const navigationStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-  };
-
-  const navButtonStyle: React.CSSProperties = {
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: colors.green,
-    cursor: 'pointer',
-    fontSize: '18px',
-    padding: '4px 8px',
-    transition: 'all 0.2s ease',
-  };
-
-  const dateDisplayStyle: React.CSSProperties = {
-    fontFamily: '"Orbitron", sans-serif',
-    fontSize: '14px',
-    fontWeight: 600,
-    minWidth: '200px',
-    textAlign: 'center',
-    borderBottom: `1px solid rgba(0, 255, 65, 0.2)`,
-    paddingBottom: '4px',
-  };
-
-  const todayButtonStyle: React.CSSProperties = {
-    padding: '6px 12px',
-    backgroundColor: 'transparent',
-    color: colors.green,
-    border: `1px solid rgba(0, 255, 65, 0.3)`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '10px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  };
-
-  const exportButtonStyle: React.CSSProperties = {
-    padding: '6px 12px',
-    backgroundColor: 'transparent',
-    color: colors.green,
-    border: `1px solid rgba(0, 255, 65, 0.3)`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '10px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  };
-
-  const monthGridStyle: React.CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: '12px',
-    marginBottom: '32px',
-  };
-
-  const weekDayHeaderStyle: React.CSSProperties = {
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '9px',
-    fontWeight: 600,
-    color: colors.lightGray,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    paddingBottom: '8px',
-    borderBottom: `1px solid rgba(0, 255, 65, 0.1)`,
-    letterSpacing: '1px',
-  };
-
-  const monthDayCellStyle = (isCurrentMonth: boolean, isCurrentDay: boolean): React.CSSProperties => ({
-    minHeight: '100px',
-    padding: '12px',
-    backgroundColor: `rgba(0, 255, 65, ${isCurrentDay ? 0.08 : 0.02})`,
-    border: `1px solid rgba(0, 255, 65, ${isCurrentDay ? 0.15 : 0.04})`,
-    borderRadius: '2px',
-    cursor: 'pointer',
-    opacity: isCurrentMonth ? 1 : 0.3,
-    transition: 'all 0.2s ease',
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-  });
-
-  const monthDayCellHoverStyle: React.CSSProperties = {
-    backgroundColor: `rgba(0, 255, 65, 0.08)`,
-    borderColor: `rgba(0, 255, 65, 0.15)`,
-    boxShadow: 'none',
-  };
-
-  const dateLabelStyle = (isToday: boolean): React.CSSProperties => ({
-    fontFamily: '"Share Tech Mono", monospace',
-    fontSize: '11px',
-    color: isToday ? colors.green : colors.lightGray,
-    fontWeight: 600,
-    textAlign: 'right',
-    marginBottom: 'auto',
-  });
-
-  const cellContentStyle: React.CSSProperties = {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  };
-
-  const workoutTitleStyle: React.CSSProperties = {
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '11px',
-    fontWeight: 600,
-    color: colors.green,
-    borderLeft: `3px solid ${colors.green}`,
-    paddingLeft: '6px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  };
-
-  const blockCountStyle: React.CSSProperties = {
-    fontFamily: '"Share Tech Mono", monospace',
-    fontSize: '9px',
-    color: colors.cyan,
-    paddingLeft: '6px',
-  };
-
-  const tagDotStyle = (color: string): React.CSSProperties => ({
-    position: 'absolute',
-    top: '8px',
-    left: '8px',
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    backgroundColor: color,
-    cursor: 'pointer',
-    border: `1px solid rgba(255, 255, 255, 0.3)`,
-  });
-
-  const dayViewContainerStyle: React.CSSProperties = {
-    width: '100%',
-    marginBottom: '32px',
-  };
-
-  const dayHeaderStyle: React.CSSProperties = {
-    fontFamily: '"Orbitron", sans-serif',
-    fontSize: '16px',
-    fontWeight: 600,
-    marginBottom: '24px',
-    paddingBottom: '12px',
-    borderBottom: `1px solid rgba(0, 255, 65, 0.2)`,
-  };
-
-  const noOperationStyle: React.CSSProperties = {
-    textAlign: 'center',
-    padding: '48px 24px',
-    color: colors.lightGray,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '14px',
-  };
-
-  const noOperationButtonsStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '16px',
-    justifyContent: 'center',
-    marginTop: '24px',
-  };
-
-  const primaryButtonStyle: React.CSSProperties = {
-    padding: '10px 20px',
-    backgroundColor: colors.green,
-    color: colors.bg,
-    border: 'none',
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  };
-
-  const secondaryButtonStyle: React.CSSProperties = {
-    padding: '10px 20px',
-    backgroundColor: 'transparent',
-    color: colors.amber,
-    border: `1px solid ${colors.amber}`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  };
-
-  const tertiaryButtonStyle: React.CSSProperties = {
-    padding: '10px 20px',
-    backgroundColor: 'transparent',
-    color: colors.cyan,
-    border: `1px solid ${colors.cyan}`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  };
-
-  const workoutBuilderStyle: React.CSSProperties = {
-    border: `1px solid rgba(0, 255, 65, 0.2)`,
-    backgroundColor: `rgba(0, 255, 65, 0.02)`,
-    padding: '24px',
-    borderRadius: '2px',
-  };
-
-  const formGroupStyle: React.CSSProperties = {
-    marginBottom: '20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  };
-
-  const formLabelStyle: React.CSSProperties = {
-    fontFamily: '"Orbitron", sans-serif',
-    fontSize: '11px',
-    fontWeight: 600,
-    color: colors.green,
-    textTransform: 'uppercase',
-    letterSpacing: '1px',
-  };
-
-  const textInputStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    backgroundColor: `rgba(0, 0, 0, 0.6)`,
-    color: colors.green,
-    border: `1px solid rgba(0, 255, 65, 0.2)`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '12px',
-    outline: 'none',
-    transition: 'all 0.2s ease',
-  };
-
-  const textAreaStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    backgroundColor: `rgba(0, 0, 0, 0.6)`,
-    color: colors.green,
-    border: `1px solid rgba(0, 255, 65, 0.2)`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '11px',
-    outline: 'none',
-    resize: 'vertical',
-    transition: 'all 0.2s ease',
-  };
-
-  const blocksStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    marginBottom: '20px',
-  };
-
-  const exerciseBlockStyle = (isLinked: boolean): React.CSSProperties => ({
-    display: 'flex',
-    gap: '12px',
-    alignItems: 'center',
-    padding: '12px',
-    backgroundColor: `rgba(0, 0, 0, 0.4)`,
-    border: `1px solid ${isLinked ? 'rgba(255, 68, 68, 0.3)' : 'rgba(0, 255, 65, 0.1)'}`,
-    borderLeft: `3px solid ${isLinked ? colors.red : 'transparent'}`,
-    borderRadius: '2px',
-  });
-
-  const exerciseLabelStyle: React.CSSProperties = {
-    fontFamily: '"Share Tech Mono", monospace',
-    fontSize: '11px',
-    fontWeight: 600,
-    color: colors.cyan,
-    minWidth: '30px',
-    textAlign: 'center',
-  };
-
-  const exerciseInputContainerStyle: React.CSSProperties = {
-    flex: 1,
-    position: 'relative',
-  };
-
-  const exerciseInputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '8px 10px',
-    backgroundColor: `rgba(0, 0, 0, 0.6)`,
-    color: colors.green,
-    border: `1px solid rgba(0, 255, 65, 0.2)`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '11px',
-    outline: 'none',
-  };
-
-  const autocompleteContainerStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    marginTop: '4px',
-    backgroundColor: colors.darkGray,
-    border: `1px solid rgba(0, 255, 65, 0.3)`,
-    borderRadius: '2px',
-    zIndex: 100,
-    maxHeight: '200px',
-    overflowY: 'auto',
-  };
-
-  const autocompleteItemStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    cursor: 'pointer',
-    borderBottom: `1px solid rgba(0, 255, 65, 0.1)`,
-    transition: 'all 0.2s ease',
-  };
-
-  const autocompleteItemHoverStyle: React.CSSProperties = {
-    backgroundColor: `rgba(0, 255, 65, 0.1)`,
-  };
-
-  const exerciseNameStyle: React.CSSProperties = {
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '11px',
-    fontWeight: 600,
-    color: colors.green,
-  };
-
-  const exerciseCategoryStyle: React.CSSProperties = {
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '9px',
-    color: colors.lightGray,
-    marginTop: '2px',
-  };
-
-  const lastLogBannerStyle: React.CSSProperties = {
-    marginTop: '6px',
-    padding: '6px 8px',
-    backgroundColor: `rgba(0, 255, 65, 0.08)`,
-    border: `1px solid rgba(0, 255, 65, 0.2)`,
-    borderRadius: '2px',
-    fontFamily: '"Share Tech Mono", monospace',
-    fontSize: '9px',
-    color: colors.green,
-  };
-
-  const prescriptionInputStyle: React.CSSProperties = {
-    width: '120px',
-    padding: '8px 10px',
-    backgroundColor: `rgba(0, 0, 0, 0.6)`,
-    color: colors.green,
-    border: `1px solid rgba(0, 255, 65, 0.2)`,
-    fontFamily: '"Share Tech Mono", monospace',
-    fontSize: '11px',
-    outline: 'none',
-  };
-
-  const linkButtonStyle = (isLinked: boolean): React.CSSProperties => ({
-    padding: '6px 8px',
-    backgroundColor: 'transparent',
-    color: isLinked ? colors.red : colors.cyan,
-    border: `1px solid ${isLinked ? colors.red : colors.cyan}`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '10px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  });
-
-  const deleteButtonStyle: React.CSSProperties = {
-    padding: '6px 8px',
-    backgroundColor: 'transparent',
-    color: colors.red,
-    border: `1px solid ${colors.red}`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '10px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  };
-
-  const addButtonStyle = (color: string): React.CSSProperties => ({
-    padding: '10px 16px',
-    backgroundColor: 'transparent',
-    color: color,
-    border: `1px solid ${color}`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '11px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    marginRight: '8px',
-    marginBottom: '20px',
-  });
-
-  const conditioningBlockStyle: React.CSSProperties = {
-    padding: '12px',
-    backgroundColor: `rgba(0, 0, 0, 0.4)`,
-    border: `1px solid rgba(255, 184, 0, 0.2)`,
-    borderLeft: `3px solid ${colors.amber}`,
-    borderRadius: '2px',
-    display: 'flex',
-    gap: '12px',
-    alignItems: 'flex-start',
-  };
-
-  const conditioningInputStyle: React.CSSProperties = {
-    width: '100px',
-    padding: '8px 10px',
-    backgroundColor: `rgba(0, 0, 0, 0.6)`,
-    color: colors.amber,
-    border: `1px solid rgba(255, 184, 0, 0.2)`,
-    fontFamily: '"Share Tech Mono", monospace',
-    fontSize: '11px',
-    outline: 'none',
-  };
-
-  const conditioningDescStyle: React.CSSProperties = {
-    flex: 1,
-    padding: '8px 10px',
-    backgroundColor: `rgba(0, 0, 0, 0.6)`,
-    color: colors.amber,
-    border: `1px solid rgba(255, 184, 0, 0.2)`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '11px',
-    outline: 'none',
-    resize: 'vertical',
-  };
-
-  const workoutActionsStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '24px',
-  };
-
-  const cancelButtonStyle: React.CSSProperties = {
-    padding: '10px 20px',
-    backgroundColor: 'transparent',
-    color: colors.lightGray,
-    border: `1px solid rgba(85, 85, 85, 0.5)`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  };
-
-  const tagEditorOverlayStyle: React.CSSProperties = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 200,
-  };
-
-  const tagEditorStyle: React.CSSProperties = {
-    backgroundColor: colors.darkGray,
-    border: `1px solid rgba(0, 255, 65, 0.3)`,
-    padding: '24px',
-    borderRadius: '2px',
-    minWidth: '300px',
-  };
-
-  const tagEditorHeaderStyle: React.CSSProperties = {
-    fontFamily: '"Orbitron", sans-serif',
-    fontSize: '12px',
-    fontWeight: 600,
-    marginBottom: '16px',
-    color: colors.green,
-  };
-
-  const colorPickerStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '12px',
-    marginBottom: '16px',
-  };
-
-  const colorButtonStyle = (color: string, isSelected: boolean): React.CSSProperties => ({
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    backgroundColor: color,
-    border: isSelected ? `2px solid ${colors.green}` : '1px solid rgba(255, 255, 255, 0.2)',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  });
-
-  const tagNoteInputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px 12px',
-    backgroundColor: `rgba(0, 0, 0, 0.6)`,
-    color: colors.green,
-    border: `1px solid rgba(0, 255, 65, 0.2)`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '11px',
-    marginBottom: '16px',
-    outline: 'none',
-  };
-
-  const tagEditorActionsStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '12px',
-  };
-
-  const dayActionButtonsStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '8px',
-    alignItems: 'center',
-  };
-
-  const dayActionButton = (color: string): React.CSSProperties => ({
-    padding: '6px 12px',
-    backgroundColor: 'transparent',
-    color: color,
-    border: `1px solid ${color}`,
-    fontFamily: '"Chakra Petch", sans-serif',
-    fontSize: '10px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  });
-
-  // ============================================================================
-  // RENDERING HELPERS
-  // ============================================================================
-
-  const renderTopBar = () => {
-    let dateDisplay = '';
-
-    if (viewMode === 'month') {
-      dateDisplay = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    } else if (viewMode === 'week') {
-      const weekDates = getWeekDates(currentDate);
-      const startDate = weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const endDate = weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      dateDisplay = `${startDate} - ${endDate}`;
-    } else {
-      dateDisplay = currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    }
-
-    return (
-      <div style={topBarStyle}>
-        <div style={viewModesContainerStyle}>
-          {(['month', 'week', 'day'] as ViewMode[]).map(mode => (
-            <button
-              key={mode}
-              onClick={() => handleViewModeChange(mode)}
-              style={viewModeButtonStyle(viewMode === mode)}
-              onMouseEnter={e => {
-                if (viewMode !== mode) {
-                  Object.assign(e.currentTarget.style, { opacity: 0.8 });
-                }
-              }}
-              onMouseLeave={e => {
-                Object.assign(e.currentTarget.style, { opacity: 1 });
-              }}
-            >
-              {mode.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
-        <div style={navigationStyle}>
-          <button
-            onClick={handleNavigatePrevious}
-            style={navButtonStyle}
-            onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.8 })}
-            onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-          >
-            ◄
-          </button>
-          <div style={dateDisplayStyle}>{dateDisplay}</div>
-          <button
-            onClick={handleNavigateNext}
-            style={navButtonStyle}
-            onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.8 })}
-            onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-          >
-            ►
-          </button>
-          <button
-            onClick={handleTodayClick}
-            style={todayButtonStyle}
-            onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(0, 255, 65, 0.1)` })}
-            onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-          >
-            TODAY
-          </button>
-        </div>
-
-        <button
-          onClick={handleExportCalendar}
-          style={exportButtonStyle}
-          onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(0, 255, 65, 0.1)` })}
-          onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-        >
-          EXPORT
-        </button>
-      </div>
-    );
-  };
 
   const renderMonthView = () => {
     const monthDates = getMonthDates(currentDate);
+    const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
     return (
       <div>
-        <div style={monthGridStyle}>
+        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 20px 0', fontSize: '24px' }}>
+            {monthName}
+          </h2>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', marginBottom: '20px' }}>
           {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
-            <div key={day} style={weekDayHeaderStyle}>
+            <div
+              key={day}
+              style={{
+                textAlign: 'center',
+                fontFamily: 'Chakra Petch',
+                color: '#00ff41',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                padding: '8px',
+              }}
+            >
               {day}
             </div>
           ))}
+        </div>
 
-          {monthDates.map((week, weekIdx) =>
-            week.map((date, dayIdx) => {
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
+          {monthDates.map(week =>
+            week.map(date => {
               const dateStr = formatDate(date);
-              const workout = getWorkoutForDate(date);
+              const workout = getWorkoutForDate(dateStr);
               const tag = getDayTag(dateStr);
-              const isCurrent = isCurrentMonth(date);
               const isCurrentDay = isToday(date);
-              const [hovering, setHovering] = React.useState(false);
+              const isInMonth = isCurrentMonth(date);
+              const bgColor = isCurrentDay ? 'rgba(0, 255, 65, 0.1)' : isInMonth ? '#030303' : '#0a0a0a';
 
               return (
                 <div
-                  key={`${weekIdx}-${dayIdx}`}
-                  style={{
-                    ...monthDayCellStyle(isCurrent, isCurrentDay),
-                    ...(hovering && !workout ? monthDayCellHoverStyle : {}),
+                  key={dateStr}
+                  onClick={() => {
+                    setSelectedDate(dateStr);
+                    setViewMode('day');
                   }}
-                  onClick={() => workout && handleDayClick(date)}
-                  onMouseEnter={() => !isCurrent && setHovering(true)}
-                  onMouseLeave={() => setHovering(false)}
+                  onContextMenu={e => {
+                    e.preventDefault();
+                    setShowDayMenu(dateStr);
+                  }}
+                  style={{
+                    minHeight: '100px',
+                    padding: '12px',
+                    backgroundColor: bgColor,
+                    border: isCurrentDay ? '2px solid #00ff41' : '1px solid rgba(0, 255, 65, 0.2)',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0, 255, 65, 0.05)';
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = bgColor;
+                  }}
                 >
-                  {tag && (
-                    <div
-                      style={tagDotStyle(
-                        tag.color === 'green' ? colors.green :
-                        tag.color === 'amber' ? colors.amber :
-                        tag.color === 'red' ? colors.red :
-                        colors.cyan
-                      )}
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleOpenTagEditor(dateStr);
-                      }}
-                    />
-                  )}
-
-                  <div style={dateLabelStyle(isCurrentDay)}>
+                  <div
+                    style={{
+                      fontFamily: 'Chakra Petch',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      color: isInMonth ? '#00ff41' : '#666',
+                      marginBottom: '6px',
+                    }}
+                  >
                     {date.getDate()}
                   </div>
 
-                  {workout ? (
-                    <div style={cellContentStyle}>
-                      <div style={workoutTitleStyle}>{workout.title}</div>
-                      <div style={blockCountStyle}>
-                        {workout.blocks.filter(b => b.type === 'exercise').length > 0 && `${workout.blocks.filter(b => b.type === 'exercise').length}E`}
-                        {workout.blocks.filter(b => b.type === 'conditioning').length > 0 && `${workout.blocks.filter(b => b.type === 'conditioning').length}C`}
-                      </div>
+                  {workout && (
+                    <div
+                      style={{
+                        fontFamily: 'Share Tech Mono',
+                        fontSize: '10px',
+                        color: '#00bcd4',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      {workout.title}
                     </div>
-                  ) : (
-                    hovering && isCurrent && (
-                      <div style={dayActionButtonsStyle}>
-                        <button
-                          style={dayActionButton(colors.green)}
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleStartWorkout(date);
-                          }}
-                        >
-                          WOD
-                        </button>
-                        <button
-                          style={dayActionButton(colors.amber)}
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleStartRest(date);
-                          }}
-                        >
-                          REST
-                        </button>
-                        {clipboard && (
-                          <button
-                            style={dayActionButton(colors.cyan)}
-                            onClick={e => {
-                              e.stopPropagation();
-                              handlePasteWorkout(date);
-                            }}
-                          >
-                            PASTE
-                          </button>
-                        )}
-                      </div>
-                    )
+                  )}
+
+                  {tag && (
+                    <div
+                      style={{
+                        display: 'inline-block',
+                        padding: '2px 6px',
+                        backgroundColor: `${getTagColor(tag.color)}22`,
+                        border: `1px solid ${getTagColor(tag.color)}`,
+                        borderRadius: '3px',
+                        fontFamily: 'Share Tech Mono',
+                        fontSize: '9px',
+                        color: getTagColor(tag.color),
+                      }}
+                    >
+                      {tag.note.substring(0, 8)}
+                    </div>
+                  )}
+
+                  {showDayMenu === dateStr && (
+                    <DayMenu dateStr={dateStr} workout={workout} onClose={() => setShowDayMenu(null)} />
                   )}
                 </div>
               );
@@ -1180,528 +521,751 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     );
   };
 
+  // ============================================================================
+  // RENDER WEEK VIEW
+  // ============================================================================
+
   const renderWeekView = () => {
     const weekDates = getWeekDates(currentDate);
+    const weekStart = formatDateForDisplay(formatDate(weekDates[0]));
+    const weekEnd = formatDateForDisplay(formatDate(weekDates[6]));
 
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '12px' }}>
-        {weekDates.map(date => {
-          const dateStr = formatDate(date);
-          const workout = getWorkoutForDate(date);
-          const tag = getDayTag(dateStr);
-          const isCurrentDay = isToday(date);
-          const [hovering, setHovering] = React.useState(false);
+      <div>
+        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 20px 0', fontSize: '24px' }}>
+            Week: {weekStart} - {weekEnd}
+          </h2>
+        </div>
 
-          return (
-            <div
-              key={dateStr}
-              style={{
-                ...monthDayCellStyle(true, isCurrentDay),
-                minHeight: '200px',
-                ...(hovering && !workout ? monthDayCellHoverStyle : {}),
-              }}
-              onClick={() => workout && handleDayClick(date)}
-              onMouseEnter={() => setHovering(true)}
-              onMouseLeave={() => setHovering(false)}
-            >
-              {tag && (
-                <div
-                  style={tagDotStyle(
-                    tag.color === 'green' ? colors.green :
-                    tag.color === 'amber' ? colors.amber :
-                    tag.color === 'red' ? colors.red :
-                    colors.cyan
-                  )}
-                  onClick={e => {
-                    e.stopPropagation();
-                    handleOpenTagEditor(dateStr);
-                  }}
-                />
-              )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
+          {weekDates.map(date => {
+            const dateStr = formatDate(date);
+            const workout = getWorkoutForDate(dateStr);
+            const tag = getDayTag(dateStr);
+            const isCurrentDay = isToday(date);
+            const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
 
-              <div style={{ ...dateLabelStyle(isCurrentDay), marginBottom: '8px' }}>
-                {date.toLocaleDateString('en-US', { weekday: 'short' })}<br />
-                {date.getDate()}
-              </div>
-
-              {workout ? (
-                <div style={cellContentStyle}>
-                  <div style={workoutTitleStyle}>{workout.title}</div>
-                  <div style={blockCountStyle}>
-                    {workout.blocks.filter(b => b.type === 'exercise').length > 0 && `${workout.blocks.filter(b => b.type === 'exercise').length}E`}
-                    {workout.blocks.filter(b => b.type === 'conditioning').length > 0 && ` ${workout.blocks.filter(b => b.type === 'conditioning').length}C`}
-                  </div>
+            return (
+              <div
+                key={dateStr}
+                onClick={() => {
+                  setSelectedDate(dateStr);
+                  setViewMode('day');
+                }}
+                style={{
+                  minHeight: '200px',
+                  padding: '12px',
+                  backgroundColor: isCurrentDay ? 'rgba(0, 255, 65, 0.1)' : '#030303',
+                  border: isCurrentDay ? '2px solid #00ff41' : '1px solid rgba(0, 255, 65, 0.2)',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>
+                  {dayName} {date.getDate()}
                 </div>
-              ) : (
-                hovering && (
-                  <div style={dayActionButtonsStyle}>
-                    <button
-                      style={dayActionButton(colors.green)}
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleStartWorkout(date);
-                      }}
-                    >
-                      WOD
-                    </button>
-                    <button
-                      style={dayActionButton(colors.amber)}
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleStartRest(date);
-                      }}
-                    >
-                      REST
-                    </button>
+
+                {workout ? (
+                  <div>
+                    <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>
+                      {workout.title}
+                    </div>
+                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: '10px', color: '#888' }}>
+                      {workout.blocks.length} blocks
+                    </div>
                   </div>
-                )
-              )}
-            </div>
-          );
-        })}
+                ) : tag ? (
+                  <div style={{ fontFamily: 'Chakra Petch', color: getTagColor(tag.color), fontSize: '12px' }}>
+                    {tag.note}
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: 'Share Tech Mono', color: '#666', fontSize: '10px' }}>No workout</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
 
+  // ============================================================================
+  // RENDER DAY VIEW
+  // ============================================================================
+
   const renderDayView = () => {
-    if (!selectedDate) return null;
+    const dateObj = selectedDate ? parseDate(selectedDate) : currentDate;
+    const dateStr = formatDate(dateObj);
+    const workout = getWorkoutForDate(dateStr);
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-    const selectedDateObj = parseDate(selectedDate);
-    const workout = getWorkoutForDate(selectedDate) || editingWorkout;
-
-    if (!workout && !editingWorkout) {
-      return (
-        <div style={dayViewContainerStyle}>
-          <div style={dayHeaderStyle}>
-            {selectedDateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-          </div>
-          <div style={noOperationStyle}>
-            <div>NO OPERATION SCHEDULED</div>
-            <div style={noOperationButtonsStyle}>
-              <button
-                style={primaryButtonStyle}
-                onClick={() => handleStartWorkout(selectedDateObj)}
-                onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.9 })}
-                onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-              >
-                + WOD
-              </button>
-              <button
-                style={secondaryButtonStyle}
-                onClick={() => handleStartRest(selectedDateObj)}
-                onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.9 })}
-                onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-              >
-                REST DAY
-              </button>
-            </div>
-          </div>
+    return (
+      <div>
+        <div style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 10px 0', fontSize: '24px' }}>
+            {dayName}
+          </h2>
         </div>
-      );
-    }
 
-    if (editingWorkout) {
-      const labels = getBlockLabels(editingWorkout.blocks);
-
-      return (
-        <div style={dayViewContainerStyle}>
-          <div style={dayHeaderStyle}>
-            {selectedDateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-          </div>
-
-          <div style={workoutBuilderStyle}>
-            <div style={formGroupStyle}>
-              <label style={formLabelStyle}>Operation Title</label>
-              <input
-                type="text"
-                style={textInputStyle}
-                placeholder="Operation Title"
-                value={editingWorkout.title}
-                onChange={e => setEditingWorkout({ ...editingWorkout, title: e.target.value })}
-                onFocus={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.5)` })}
-                onBlur={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.2)` })}
-              />
+        {showWorkoutBuilder ? (
+          <WorkoutBuilder />
+        ) : workout ? (
+          <div style={{ padding: '20px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 188, 212, 0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', margin: 0 }}>{workout.title}</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => handleEditWorkout(workout)}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#00ff41',
+                    color: '#000',
+                    border: 'none',
+                    fontFamily: 'Chakra Petch',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleDeleteWorkout(dateStr)}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#ff4444',
+                    color: '#000',
+                    border: 'none',
+                    fontFamily: 'Chakra Petch',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
 
-            <div style={formGroupStyle}>
-              <label style={formLabelStyle}>Notes</label>
-              <textarea
-                style={textAreaStyle}
-                placeholder="Commander's Notes"
-                rows={2}
-                value={editingWorkout.notes}
-                onChange={e => setEditingWorkout({ ...editingWorkout, notes: e.target.value })}
-                onFocus={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.5)` })}
-                onBlur={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.2)` })}
-              />
-            </div>
-
-            <div style={formGroupStyle}>
-              <label style={formLabelStyle}>Warmup</label>
-              <textarea
-                style={textAreaStyle}
-                placeholder="Warmup protocol..."
-                rows={3}
-                value={editingWorkout.warmup}
-                onChange={e => setEditingWorkout({ ...editingWorkout, warmup: e.target.value })}
-                onFocus={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.5)` })}
-                onBlur={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.2)` })}
-              />
-            </div>
-
-            {editingWorkout.blocks.filter(b => b.type === 'exercise').length > 0 && (
-              <div>
-                <label style={formLabelStyle}>Exercise Blocks</label>
-                <div style={blocksStyle}>
-                  {editingWorkout.blocks.filter(b => b.type === 'exercise').map((block, idx) => {
-                    const lastLog = findLastExerciseLog((block as ExerciseBlock).exerciseName);
-                    const filteredExercises = showExerciseAutocomplete && autocompleteFor === idx ? getFilteredExercises(exerciseSearchQuery) : [];
-
-                    return (
-                      <div key={block.id}>
-                        <div style={exerciseBlockStyle((block as ExerciseBlock).isLinkedToNext)}>
-                          <div style={exerciseLabelStyle}>{labels[idx]}</div>
-
-                          <div style={exerciseInputContainerStyle}>
-                            <input
-                              type="text"
-                              style={exerciseInputStyle}
-                              placeholder="Exercise name"
-                              value={(block as ExerciseBlock).exerciseName}
-                              onChange={e => {
-                                handleUpdateExerciseBlock(idx, { exerciseName: e.target.value });
-                                setExerciseSearchQuery(e.target.value);
-                                setShowExerciseAutocomplete(e.target.value.length > 0);
-                                setAutocompleteFor(idx);
-                              }}
-                              onFocus={() => {
-                                setShowExerciseAutocomplete(true);
-                                setAutocompleteFor(idx);
-                              }}
-                              onBlur={() => setTimeout(() => setShowExerciseAutocomplete(false), 150)}
-                            />
-
-                            {showExerciseAutocomplete && autocompleteFor === idx && filteredExercises.length > 0 && (
-                              <div style={autocompleteContainerStyle} ref={autocompleteRef}>
-                                {filteredExercises.map(exercise => (
-                                  <div
-                                    key={exercise.id}
-                                    style={autocompleteItemStyle}
-                                    onClick={() => handleSelectExercise(exercise.name, idx)}
-                                    onMouseEnter={e => Object.assign(e.currentTarget.style, autocompleteItemHoverStyle)}
-                                    onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-                                  >
-                                    <div style={exerciseNameStyle}>{exercise.name}</div>
-                                    <div style={exerciseCategoryStyle}>{exercise.category} • {exercise.equipment}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {lastLog && (
-                              <div style={lastLogBannerStyle}>
-                                Last logged: {lastLog.date} — {lastLog.prescription}
-                              </div>
-                            )}
-                          </div>
-
-                          <input
-                            type="text"
-                            style={prescriptionInputStyle}
-                            placeholder="Prescription"
-                            value={block.prescription}
-                            onChange={e => handleUpdateExerciseBlock(idx, { prescription: e.target.value })}
-                            onFocus={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.5)` })}
-                            onBlur={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.2)` })}
-                          />
-
-                          <button
-                            style={linkButtonStyle(block.isLinkedToNext)}
-                            onClick={() => handleToggleSupersetLink(idx)}
-                            onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.8 })}
-                            onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-                          >
-                            {block.isLinkedToNext ? 'UNLINK' : 'LINK'}
-                          </button>
-
-                          <button
-                            style={deleteButtonStyle}
-                            onClick={() => handleDeleteExerciseBlock(idx)}
-                            onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.8 })}
-                            onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+            {workout.notes && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold' }}>
+                  COACH'S NOTES
                 </div>
-              </div>
-            )}
-
-            <button
-              style={addButtonStyle(colors.green)}
-              onClick={handleAddExerciseBlock}
-              onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(0, 255, 65, 0.1)` })}
-              onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-            >
-              + EXERCISE
-            </button>
-
-            {editingWorkout.blocks.filter(b => b.type === 'conditioning').length > 0 && (
-              <div style={blocksStyle}>
-                {editingWorkout.blocks.map((block, globalIdx) =>
-                  block.type === 'conditioning' ? (
-                    <div key={block.id} style={conditioningBlockStyle}>
-                      <input
-                        type="text"
-                        style={conditioningInputStyle}
-                        placeholder="Format"
-                        value={(block as ConditioningBlock).format}
-                        onChange={e => handleUpdateConditioningBlock(globalIdx, { format: e.target.value })}
-                        onFocus={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(255, 184, 0, 0.5)` })}
-                        onBlur={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(255, 184, 0, 0.2)` })}
-                      />
-                      <textarea
-                        style={conditioningDescStyle}
-                        placeholder="Description"
-                        rows={2}
-                        value={(block as ConditioningBlock).description}
-                        onChange={e => handleUpdateConditioningBlock(globalIdx, { description: e.target.value })}
-                        onFocus={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(255, 184, 0, 0.5)` })}
-                        onBlur={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(255, 184, 0, 0.2)` })}
-                      />
-                      <button
-                        style={deleteButtonStyle}
-                        onClick={() => handleDeleteConditioningBlock(globalIdx)}
-                        onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.8 })}
-                        onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : null
-                )}
-              </div>
-            )}
-
-            <button
-              style={addButtonStyle(colors.amber)}
-              onClick={handleAddConditioningBlock}
-              onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(255, 184, 0, 0.1)` })}
-              onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-            >
-              + CONDITIONING
-            </button>
-
-            <div style={formGroupStyle}>
-              <label style={formLabelStyle}>Cooldown</label>
-              <textarea
-                style={textAreaStyle}
-                placeholder="Cooldown protocol..."
-                rows={3}
-                value={editingWorkout.cooldown}
-                onChange={e => setEditingWorkout({ ...editingWorkout, cooldown: e.target.value })}
-                onFocus={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.5)` })}
-                onBlur={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.2)` })}
-              />
-            </div>
-
-            <div style={workoutActionsStyle}>
-              <button
-                style={primaryButtonStyle}
-                onClick={handleSaveWorkout}
-                onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.9 })}
-                onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-              >
-                SAVE WORKOUT
-              </button>
-              <button
-                style={cancelButtonStyle}
-                onClick={handleCancelWorkout}
-                onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(85, 85, 85, 0.1)` })}
-                onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-              >
-                CANCEL
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (workout) {
-      return (
-        <div style={dayViewContainerStyle}>
-          <div style={dayHeaderStyle}>
-            {selectedDateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-          </div>
-
-          <div style={{ ...workoutBuilderStyle, border: `1px solid rgba(0, 255, 65, 0.3)` }}>
-            <div style={{ ...formGroupStyle, marginBottom: '24px' }}>
-              <div style={{ ...formLabelStyle, marginBottom: '8px' }}>{workout.title}</div>
-              {workout.notes && (
-                <div style={{ fontFamily: '"Chakra Petch", sans-serif', fontSize: '11px', color: colors.lightGray }}>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ccc', fontSize: '12px', marginTop: '4px' }}>
                   {workout.notes}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {workout.warmup && (
-              <div style={formGroupStyle}>
-                <div style={formLabelStyle}>Warmup</div>
-                <div style={{ fontFamily: '"Chakra Petch", sans-serif', fontSize: '11px', color: colors.lightGray, whiteSpace: 'pre-wrap' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '12px', fontWeight: 'bold' }}>
+                  WARMUP
+                </div>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ccc', fontSize: '12px', marginTop: '4px' }}>
                   {workout.warmup}
                 </div>
               </div>
             )}
 
-            {workout.blocks.filter(b => b.type === 'exercise').length > 0 && (
-              <div style={formGroupStyle}>
-                <div style={formLabelStyle}>Exercises</div>
-                {workout.blocks.filter(b => b.type === 'exercise').map((block, idx) => (
-                  <div key={block.id} style={{ paddingLeft: '12px', marginBottom: '8px' }}>
-                    <div style={{ ...exerciseNameStyle, marginBottom: '4px' }}>
-                      {(block as ExerciseBlock).exerciseName} • {(block as ExerciseBlock).prescription}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {workout.blocks.filter(b => b.type === 'conditioning').length > 0 && (
-              <div style={formGroupStyle}>
-                <div style={formLabelStyle}>Conditioning</div>
-                {workout.blocks.filter(b => b.type === 'conditioning').map((block, idx) => (
-                  <div key={block.id} style={{ paddingLeft: '12px', marginBottom: '8px' }}>
-                    <div style={{ ...exerciseNameStyle, color: colors.amber, marginBottom: '4px' }}>
-                      {(block as ConditioningBlock).format}
-                    </div>
-                    <div style={{ fontFamily: '"Chakra Petch", sans-serif', fontSize: '10px', color: colors.lightGray }}>
-                      {(block as ConditioningBlock).description}
-                    </div>
-                  </div>
-                ))}
+            {workout.blocks.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold', marginBottom: '12px' }}>
+                  WORKOUT BLOCKS
+                </div>
+                {workout.blocks.map((block, idx) => {
+                  const label = getBlockLabels(workout.blocks)[idx];
+                  if (block.type === 'exercise') {
+                    return (
+                      <div key={block.id} style={{ marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #00bcd4' }}>
+                        <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '14px', fontWeight: 'bold' }}>
+                          {label}) {block.exerciseName}
+                        </div>
+                        <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: '11px', marginTop: '2px' }}>
+                          {block.prescription}
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div key={block.id} style={{ marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #ffb800' }}>
+                        <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '14px', fontWeight: 'bold' }}>
+                          {block.format}
+                        </div>
+                        <div
+                          style={{
+                            fontFamily: 'Share Tech Mono',
+                            color: '#888',
+                            fontSize: '11px',
+                            marginTop: '2px',
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {block.description}
+                        </div>
+                      </div>
+                    );
+                  }
+                })}
               </div>
             )}
 
             {workout.cooldown && (
-              <div style={formGroupStyle}>
-                <div style={formLabelStyle}>Cooldown</div>
-                <div style={{ fontFamily: '"Chakra Petch", sans-serif', fontSize: '11px', color: colors.lightGray, whiteSpace: 'pre-wrap' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '12px', fontWeight: 'bold' }}>
+                  COOLDOWN
+                </div>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ccc', fontSize: '12px', marginTop: '4px' }}>
                   {workout.cooldown}
                 </div>
               </div>
             )}
-
-            <div style={workoutActionsStyle}>
-              <button
-                style={{ ...secondaryButtonStyle, marginRight: '8px' }}
-                onClick={() => handleEditWorkout(selectedDateObj)}
-                onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(255, 184, 0, 0.1)` })}
-                onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-              >
-                EDIT
-              </button>
-              <button
-                style={{ ...tertiaryButtonStyle, marginRight: '8px' }}
-                onClick={() => handleCopyWorkout(selectedDateObj)}
-                onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(0, 188, 212, 0.1)` })}
-                onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-              >
-                COPY
-              </button>
-              <button
-                style={deleteButtonStyle}
-                onClick={() => {
-                  handleDeleteWorkout(selectedDateObj);
-                  setSelectedDate(null);
-                  setViewMode('month');
-                }}
-                onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(255, 68, 68, 0.1)` })}
-                onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-              >
-                DELETE
-              </button>
-            </div>
           </div>
-        </div>
-      );
-    }
-
-    return null;
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+            <p style={{ fontFamily: 'Chakra Petch' }}>No workout for this day</p>
+            <button
+              onClick={() => handleAddWorkout(dateStr)}
+              style={{
+                marginTop: '12px',
+                padding: '8px 16px',
+                backgroundColor: '#00ff41',
+                color: '#000',
+                border: 'none',
+                fontFamily: 'Chakra Petch',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}
+            >
+              Create Workout
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
-  const renderTagEditor = () => {
-    if (!showDayTagEditor) return null;
+  // ============================================================================
+  // WORKOUT BUILDER COMPONENT
+  // ============================================================================
+
+  const WorkoutBuilder = () => {
+    const blockLabels = getBlockLabels(builderData.blocks);
 
     return (
       <div
-        style={tagEditorOverlayStyle}
-        onClick={() => setShowDayTagEditor(null)}
+        style={{
+          padding: '24px',
+          backgroundColor: '#030303',
+          border: '1px solid rgba(0, 188, 212, 0.4)',
+          borderRadius: '4px',
+          maxWidth: '900px',
+        }}
       >
-        <div
-          style={tagEditorStyle}
-          onClick={e => e.stopPropagation()}
-        >
-          <div style={tagEditorHeaderStyle}>
-            Tag: {showDayTagEditor}
-          </div>
+        <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', margin: '0 0 20px 0', fontSize: '18px' }}>
+          Workout Builder - {selectedDate}
+        </h3>
 
-          <div style={colorPickerStyle}>
-            {(['green', 'amber', 'red', 'cyan'] as const).map(color => (
-              <button
-                key={color}
-                style={colorButtonStyle(
-                  color === 'green' ? colors.green :
-                  color === 'amber' ? colors.amber :
-                  color === 'red' ? colors.red :
-                  colors.cyan,
-                  selectedTagColor === color
-                )}
-                onClick={() => setSelectedTagColor(color)}
-              />
-            ))}
-          </div>
-
+        {/* TITLE */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+            Workout Title
+          </label>
           <input
             type="text"
-            style={tagNoteInputStyle}
-            placeholder="Tag note (optional)"
-            value={tagNoteInput}
-            onChange={e => setTagNoteInput(e.target.value)}
-            onFocus={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.5)` })}
-            onBlur={e => Object.assign(e.currentTarget.style, { borderColor: `rgba(0, 255, 65, 0.2)` })}
+            value={builderData.title}
+            onChange={e => setBuilderData({ ...builderData, title: e.target.value })}
+            placeholder="e.g. Lower Body Push"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: '#0a0a0a',
+              border: '1px solid rgba(0, 255, 65, 0.3)',
+              color: '#00ff41',
+              fontFamily: 'Chakra Petch',
+              fontSize: '14px',
+              boxSizing: 'border-box',
+            }}
           />
-
-          <div style={tagEditorActionsStyle}>
-            <button
-              style={primaryButtonStyle}
-              onClick={handleSaveTag}
-              onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.9 })}
-              onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-            >
-              SAVE
-            </button>
-            <button
-              style={deleteButtonStyle}
-              onClick={handleDeleteTag}
-              onMouseEnter={e => Object.assign(e.currentTarget.style, { opacity: 0.8 })}
-              onMouseLeave={e => Object.assign(e.currentTarget.style, { opacity: 1 })}
-            >
-              DELETE
-            </button>
-            <button
-              style={cancelButtonStyle}
-              onClick={() => setShowDayTagEditor(null)}
-              onMouseEnter={e => Object.assign(e.currentTarget.style, { backgroundColor: `rgba(85, 85, 85, 0.1)` })}
-              onMouseLeave={e => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-            >
-              CLOSE
-            </button>
-          </div>
         </div>
+
+        {/* COACH'S NOTES */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+            Coach's Notes
+          </label>
+          <textarea
+            value={builderData.notes}
+            onChange={e => setBuilderData({ ...builderData, notes: e.target.value })}
+            placeholder="Add coaching notes or cues..."
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: '#0a0a0a',
+              border: '1px solid rgba(0, 255, 65, 0.3)',
+              color: '#00ff41',
+              fontFamily: 'Chakra Petch',
+              fontSize: '12px',
+              minHeight: '60px',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* WARMUP */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+            Warmup
+          </label>
+          <textarea
+            value={builderData.warmup}
+            onChange={e => setBuilderData({ ...builderData, warmup: e.target.value })}
+            placeholder="e.g. 10 min elliptical"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: '#0a0a0a',
+              border: '1px solid rgba(255, 184, 0, 0.3)',
+              color: '#ffb800',
+              fontFamily: 'Chakra Petch',
+              fontSize: '12px',
+              minHeight: '50px',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* WORKOUT BLOCKS */}
+        {builderData.blocks.length > 0 && (
+          <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 188, 212, 0.2)', borderRadius: '4px' }}>
+            <h4 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', margin: '0 0 16px 0', fontSize: '14px' }}>
+              WORKOUT BLOCKS
+            </h4>
+
+            {builderData.blocks.map((block, idx) => {
+              const label = blockLabels[idx];
+              const lastLog = block.type === 'exercise' ? findLastExerciseLog(block.exerciseName) : null;
+
+              return (
+                <div key={block.id} style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#000', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: '3px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold' }}>
+                      {label}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteBlock(idx)}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#ff4444',
+                        color: '#fff',
+                        border: 'none',
+                        fontFamily: 'Share Tech Mono',
+                        fontSize: '10px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+
+                  {block.type === 'exercise' ? (
+                    <>
+                      {/* Exercise Name */}
+                      <div style={{ marginBottom: '12px', position: 'relative' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                          Exercise Name
+                        </label>
+                        <input
+                          type="text"
+                          value={block.exerciseName}
+                          onChange={e => {
+                            handleUpdateBlock(idx, { exerciseName: e.target.value });
+                            setAutocompleteFor(e.target.value.length > 0 ? idx : null);
+                            setExerciseSearchQuery(e.target.value);
+                            setShowExerciseAutocomplete(e.target.value.length > 0);
+                          }}
+                          placeholder="Search exercise..."
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            backgroundColor: '#0a0a0a',
+                            border: '1px solid rgba(0, 188, 212, 0.4)',
+                            color: '#00bcd4',
+                            fontFamily: 'Share Tech Mono',
+                            fontSize: '12px',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+
+                        {showExerciseAutocomplete && autocompleteFor === idx && (
+                          <div
+                            ref={autocompleteRef}
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              right: 0,
+                              backgroundColor: '#0a0a0a',
+                              border: '1px solid #00bcd4',
+                              zIndex: 100,
+                              maxHeight: '150px',
+                              overflowY: 'auto',
+                            }}
+                          >
+                            {getFilteredExercises(block.exerciseName).map(ex => (
+                              <div
+                                key={ex.id}
+                                onClick={() => handleExerciseSelect(ex.name, idx)}
+                                style={{
+                                  padding: '8px',
+                                  cursor: 'pointer',
+                                  borderBottom: '1px solid rgba(0, 188, 212, 0.2)',
+                                  fontFamily: 'Share Tech Mono',
+                                  fontSize: '11px',
+                                  color: '#00bcd4',
+                                }}
+                                onMouseEnter={e => {
+                                  (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0, 188, 212, 0.1)';
+                                }}
+                                onMouseLeave={e => {
+                                  (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                {ex.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Last Log */}
+                      {lastLog && (
+                        <div style={{ marginBottom: '12px', padding: '8px', backgroundColor: 'rgba(0, 255, 65, 0.05)', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: '2px' }}>
+                          <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: '10px' }}>
+                            Last logged: {lastLog.date} - {lastLog.prescription}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Prescription */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                          Prescription
+                        </label>
+                        <textarea
+                          value={block.prescription}
+                          onChange={e => handleUpdateBlock(idx, { prescription: e.target.value })}
+                          placeholder="e.g. 3 REPS EVERY 90 SECONDS X 4"
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            backgroundColor: '#0a0a0a',
+                            border: '1px solid rgba(0, 188, 212, 0.4)',
+                            color: '#00bcd4',
+                            fontFamily: 'Share Tech Mono',
+                            fontSize: '11px',
+                            minHeight: '40px',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+
+                      {/* Superset Link */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          checked={block.isLinkedToNext}
+                          onChange={e => handleUpdateBlock(idx, { isLinkedToNext: e.target.checked })}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '10px', cursor: 'pointer' }}>
+                          Superset to next exercise
+                        </label>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Conditioning Format */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ffb800', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                          Format
+                        </label>
+                        <input
+                          type="text"
+                          value={block.format}
+                          onChange={e => handleUpdateBlock(idx, { format: e.target.value })}
+                          placeholder="e.g. 3 rounds for time"
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            backgroundColor: '#0a0a0a',
+                            border: '1px solid rgba(255, 184, 0, 0.4)',
+                            color: '#ffb800',
+                            fontFamily: 'Share Tech Mono',
+                            fontSize: '11px',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+
+                      {/* Conditioning Description */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ffb800', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                          Description
+                        </label>
+                        <textarea
+                          value={block.description}
+                          onChange={e => handleUpdateBlock(idx, { description: e.target.value })}
+                          placeholder="e.g. Run 400m&#10;10 box jumps&#10;15 Hang Power Clean"
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            backgroundColor: '#0a0a0a',
+                            border: '1px solid rgba(255, 184, 0, 0.4)',
+                            color: '#ffb800',
+                            fontFamily: 'Share Tech Mono',
+                            fontSize: '11px',
+                            minHeight: '60px',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ADD BLOCKS */}
+        <div style={{ marginBottom: '20px', display: 'flex', gap: '8px' }}>
+          <button
+            onClick={handleAddExerciseBlock}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#00bcd4',
+              color: '#000',
+              border: 'none',
+              fontFamily: 'Chakra Petch',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            + Exercise
+          </button>
+          <button
+            onClick={handleAddConditioningBlock}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#ffb800',
+              color: '#000',
+              border: 'none',
+              fontFamily: 'Chakra Petch',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            + Conditioning
+          </button>
+        </div>
+
+        {/* COOLDOWN */}
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+            Cooldown
+          </label>
+          <textarea
+            value={builderData.cooldown}
+            onChange={e => setBuilderData({ ...builderData, cooldown: e.target.value })}
+            placeholder="e.g. 5 min walk + stretch"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: '#0a0a0a',
+              border: '1px solid rgba(255, 184, 0, 0.3)',
+              color: '#ffb800',
+              fontFamily: 'Chakra Petch',
+              fontSize: '12px',
+              minHeight: '50px',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* ACTION BUTTONS */}
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+          <button
+            onClick={handleCancelWorkout}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: 'transparent',
+              border: '1px solid rgba(255, 68, 68, 0.5)',
+              color: '#ff4444',
+              fontFamily: 'Chakra Petch',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSaveWorkout}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#00ff41',
+              color: '#000',
+              border: 'none',
+              fontFamily: 'Chakra Petch',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            Save Workout
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // ============================================================================
+  // DAY MENU COMPONENT
+  // ============================================================================
+
+  const DayMenu = ({ dateStr, workout, onClose }: { dateStr: string; workout?: Workout; onClose: () => void }) => {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          top: '100%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#0a0a0a',
+          border: '1px solid #00ff41',
+          zIndex: 1000,
+          minWidth: '150px',
+          boxShadow: '0 0 20px rgba(0, 255, 65, 0.1)',
+        }}
+      >
+        {!workout ? (
+          <>
+            <button
+              onClick={() => handleAddWorkout(dateStr)}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: '#00ff41',
+                fontFamily: 'Chakra Petch',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                borderBottom: '1px solid rgba(0, 255, 65, 0.2)',
+              }}
+            >
+              Workout
+            </button>
+            <button
+              onClick={() => handleSetRestDay(dateStr)}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: '#00bcd4',
+                fontFamily: 'Chakra Petch',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                borderBottom: '1px solid rgba(0, 188, 212, 0.2)',
+              }}
+            >
+              Rest Day
+            </button>
+            <button
+              onClick={() => clipboard && handlePasteWorkout(dateStr)}
+              disabled={!clipboard}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: clipboard ? '#ffb800' : '#666',
+                fontFamily: 'Chakra Petch',
+                fontSize: '12px',
+                cursor: clipboard ? 'pointer' : 'not-allowed',
+                textAlign: 'left',
+              }}
+            >
+              Paste
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => handleEditWorkout(workout)}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: '#00ff41',
+                fontFamily: 'Chakra Petch',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                borderBottom: '1px solid rgba(0, 255, 65, 0.2)',
+              }}
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => handleCopyWorkout(workout)}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: '#ffb800',
+                fontFamily: 'Chakra Petch',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                borderBottom: '1px solid rgba(255, 184, 0, 0.2)',
+              }}
+            >
+              Copy
+            </button>
+            <button
+              onClick={() => handleDeleteWorkout(dateStr)}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: '#ff4444',
+                fontFamily: 'Chakra Petch',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              Delete
+            </button>
+          </>
+        )}
       </div>
     );
   };
@@ -1711,19 +1275,120 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   // ============================================================================
 
   return (
-    <div style={containerStyle}>
-      {renderTopBar()}
+    <div
+      style={{
+        backgroundColor: '#030303',
+        color: '#00ff41',
+        fontFamily: 'Chakra Petch',
+        padding: '24px',
+        minHeight: '100vh',
+      }}
+    >
+      {/* HEADER */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgba(0, 255, 65, 0.2)' }}>
+        <h1 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: 0, fontSize: '32px' }}>
+          {operator.callsign} - PLANNER
+        </h1>
+        <button
+          onClick={handleExportJson}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#00bcd4',
+            color: '#000',
+            border: 'none',
+            fontFamily: 'Chakra Petch',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 'bold',
+          }}
+        >
+          Export JSON
+        </button>
+      </div>
 
-      {selectedDate && viewMode === 'day' ? (
-        renderDayView()
-      ) : (
-        <>
-          {viewMode === 'month' && renderMonthView()}
-          {viewMode === 'week' && renderWeekView()}
-        </>
-      )}
+      {/* VIEW MODE CONTROLS */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', justifyContent: 'center' }}>
+        {(['month', 'week', 'day'] as ViewMode[]).map(mode => (
+          <button
+            key={mode}
+            onClick={() => handleViewModeChange(mode)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: viewMode === mode ? '#00ff41' : '#0a0a0a',
+              color: viewMode === mode ? '#000' : '#00ff41',
+              border: `2px solid ${viewMode === mode ? '#00ff41' : 'rgba(0, 255, 65, 0.3)'}`,
+              fontFamily: 'Chakra Petch',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
 
-      {renderTagEditor()}
+      {/* NAVIGATION */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <button
+          onClick={handleNavigatePrevious}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#0a0a0a',
+            color: '#00ff41',
+            border: '1px solid rgba(0, 255, 65, 0.3)',
+            fontFamily: 'Chakra Petch',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 'bold',
+          }}
+        >
+          ← Previous
+        </button>
+
+        <button
+          onClick={() => {
+            setCurrentDate(new Date());
+            setSelectedDate(null);
+          }}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#0a0a0a',
+            color: '#00ff41',
+            border: '1px solid rgba(0, 255, 65, 0.3)',
+            fontFamily: 'Chakra Petch',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 'bold',
+          }}
+        >
+          Today
+        </button>
+
+        <button
+          onClick={handleNavigateNext}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#0a0a0a',
+            color: '#00ff41',
+            border: '1px solid rgba(0, 255, 65, 0.3)',
+            fontFamily: 'Chakra Petch',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 'bold',
+          }}
+        >
+          Next →
+        </button>
+      </div>
+
+      {/* CONTENT */}
+      <div style={{ marginBottom: '24px' }}>
+        {viewMode === 'month' && renderMonthView()}
+        {viewMode === 'week' && renderWeekView()}
+        {viewMode === 'day' && renderDayView()}
+      </div>
     </div>
   );
 };
