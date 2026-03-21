@@ -72,19 +72,31 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     setGunnyInput('');
     setGunnyLoading(true);
     try {
+      // Build full message history for the API (expects { role, text }[] format)
+      const apiMessages = newMsgs.map(m => ({ role: m.role, text: m.text }));
+      // Prepend planner context to the first user message
+      const plannerCtx = `[PLANNER CONTEXT: Building workout for ${selectedDate}. Title: "${builderData.title}". ${builderData.blocks.length} blocks so far. Help build this workout. Always include <workout_json> when suggesting a full workout.]`;
+      if (apiMessages.length > 0 && apiMessages[0].role === 'user') {
+        apiMessages[0] = { ...apiMessages[0], text: plannerCtx + '\n' + apiMessages[0].text };
+      }
       const res = await fetch('/api/gunny', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: msg,
-          operator: {
+          messages: apiMessages,
+          operatorContext: {
             callsign: operator.callsign,
+            name: operator.name,
+            role: operator.role,
             weight: operator.profile?.weight,
             goals: operator.profile?.goals,
-            injuries: operator.injuries,
+            readiness: operator.profile?.readiness,
+            prs: operator.prs?.map(p => `${p.exercise}: ${p.weight}lbs`).join(', '),
+            injuries: operator.injuries?.map(i => `${i.name} (${i.status}): ${i.notes}`).join(', '),
+            trainerNotes: operator.trainerNotes,
+            language: 'en',
           },
           tier: operator.tier || 'haiku',
-          context: `User is currently building a workout in the Planner for ${selectedDate}. Current workout title: "${builderData.title}". Blocks so far: ${builderData.blocks.length}. Help them build this workout. If you suggest exercises, format them clearly so the user can add them.`,
         }),
       });
       const data = await res.json();
@@ -108,18 +120,40 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     const wd = gunnyWorkoutRef.current;
     if (!wd) return;
     const blocks: WorkoutBlock[] = [];
-    const phases = (wd.phases || wd.blocks || []) as Record<string, unknown>[];
-    for (const phase of phases) {
-      const exercises = (phase.exercises || []) as Record<string, unknown>[];
-      for (const ex of exercises) {
+    // The API returns blocks as a flat array — each has type, exerciseName/prescription or format/description
+    const rawBlocks = (wd.blocks || wd.phases || []) as Record<string, unknown>[];
+    for (const item of rawBlocks) {
+      // Check if it's a nested phase with exercises array
+      if (Array.isArray(item.exercises)) {
+        for (const ex of item.exercises as Record<string, unknown>[]) {
+          blocks.push({
+            type: 'exercise',
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            sortOrder: blocks.length,
+            exerciseName: String(ex.name || ex.exerciseName || ''),
+            prescription: String(ex.prescription || ex.sets || ''),
+            isLinkedToNext: false,
+            videoUrl: ex.videoUrl ? String(ex.videoUrl) : undefined,
+          } as ExerciseBlock);
+        }
+      } else if (item.type === 'conditioning' || item.format) {
+        blocks.push({
+          type: 'conditioning',
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          sortOrder: blocks.length,
+          format: String(item.format || ''),
+          description: String(item.description || ''),
+          isLinkedToNext: false,
+        } as ConditioningBlock);
+      } else {
         blocks.push({
           type: 'exercise',
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           sortOrder: blocks.length,
-          exerciseName: String(ex.name || ex.exerciseName || ''),
-          prescription: String(ex.prescription || ex.sets || ''),
+          exerciseName: String(item.name || item.exerciseName || ''),
+          prescription: String(item.prescription || item.sets || ''),
           isLinkedToNext: false,
-          videoUrl: ex.videoUrl ? String(ex.videoUrl) : undefined,
+          videoUrl: item.videoUrl ? String(item.videoUrl) : undefined,
         } as ExerciseBlock);
       }
     }
