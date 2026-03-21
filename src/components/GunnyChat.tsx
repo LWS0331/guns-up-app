@@ -1298,16 +1298,75 @@ ${mealSuggestion}`;
                   background: 'linear-gradient(90deg, transparent, #ffb800, transparent)',
                 }} />
               )}
-              {message.text.split(/(\[VIDEO: [^\]]+\]\([^)]+\))/).map((part, i) => {
-                const videoMatch = part.match(/\[VIDEO: ([^\]]+)\]\(([^)]+)\)/);
-                if (videoMatch) {
+              {/* Render text with VIDEO links and phase headers */}
+              {message.text.split('\n').map((line, lineIdx) => {
+                // Phase headers — style them prominently
+                const isPhaseHeader = /^(PHASE \d|OPERATION:|TARGET:|GOAL PATH:|COOLDOWN:|━+$|PRIMER|COMPLEX|STRENGTH|ISOLATION|METCON)/i.test(line.trim());
+                const isSectionDivider = /^━+$/.test(line.trim());
+                const isAddItPrompt = line.includes('Say "ADD IT"');
+
+                if (isSectionDivider) {
+                  return <div key={lineIdx} style={{ height: '1px', background: 'linear-gradient(90deg, transparent, rgba(255,184,0,0.4), transparent)', margin: '8px 0' }} />;
+                }
+
+                if (isAddItPrompt) {
                   return (
-                    <a key={i} href={videoMatch[2]} target="_blank" rel="noopener noreferrer" className="video-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', color: '#ff4444', background: 'rgba(255,68,68,0.05)', border: '1px solid rgba(255,68,68,0.15)', cursor: 'pointer', textDecoration: 'none', margin: '2px 0' }}>
-                      ▶ {videoMatch[1]}
-                    </a>
+                    <div key={lineIdx} style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        onClick={() => {
+                          if (lastWorkoutDataRef.current) {
+                            saveWorkoutToPlanner(lastWorkoutDataRef.current);
+                            const title = (lastWorkoutDataRef.current.title as string) || 'workout';
+                            lastWorkoutDataRef.current = null;
+                            const confirmMsg: Message = { id: 'gunny-confirm-' + Date.now(), role: 'gunny', text: `LOCKED IN. "${title}" saved to your PLANNER. Go execute, champ.`, timestamp: new Date() };
+                            setMessages(prev => [...prev, confirmMsg]);
+                          }
+                        }}
+                        style={{
+                          padding: '10px 24px', fontFamily: '"Orbitron", sans-serif', fontSize: '13px',
+                          fontWeight: 800, letterSpacing: '2px', color: '#030303', background: '#ffb800',
+                          border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                          boxShadow: '0 0 12px rgba(255,184,0,0.3)',
+                        }}
+                      >
+                        ◆ ADD TO PLANNER
+                      </button>
+                      <span style={{ fontSize: '12px', color: '#666', fontFamily: '"Share Tech Mono", monospace' }}>or type "add it"</span>
+                    </div>
                   );
                 }
-                return <span key={i}>{part}</span>;
+
+                // Check for VIDEO links within the line
+                const parts = line.split(/(\[VIDEO: [^\]]+\]\([^)]+\))/);
+                return (
+                  <div key={lineIdx} style={{
+                    ...(isPhaseHeader ? {
+                      color: '#ffb800', fontFamily: '"Orbitron", sans-serif', fontSize: '13px',
+                      fontWeight: 700, letterSpacing: '2px', marginTop: '12px', marginBottom: '4px',
+                      textShadow: '0 0 6px rgba(255,184,0,0.3)',
+                    } : {}),
+                    minHeight: line.trim() === '' ? '8px' : undefined,
+                  }}>
+                    {parts.map((part, i) => {
+                      const videoMatch = part.match(/\[VIDEO: ([^\]]+)\]\(([^)]+)\)/);
+                      if (videoMatch) {
+                        return (
+                          <a key={i} href={videoMatch[2]} target="_blank" rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px',
+                              fontFamily: '"Share Tech Mono", monospace', fontSize: '11px', color: '#ff4444',
+                              background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.2)',
+                              cursor: 'pointer', textDecoration: 'none', margin: '2px 4px 2px 0',
+                              transition: 'all 0.2s',
+                            }}>
+                            ▶ {videoMatch[1]}
+                          </a>
+                        );
+                      }
+                      return <span key={i}>{part}</span>;
+                    })}
+                  </div>
+                );
               })}
               {/* Timestamp */}
               <div style={{
