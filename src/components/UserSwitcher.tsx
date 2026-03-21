@@ -53,7 +53,7 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
         onClick={() => setIsOpen(!isOpen)}
         style={{
           fontFamily: 'Orbitron, sans-serif',
-          fontSize: '8px',
+          fontSize: '15px',
           letterSpacing: '1.5px',
           textTransform: 'uppercase',
           fontWeight: 600,
@@ -116,7 +116,7 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
                   border: 'none',
                   color: '#00ff41',
                   fontFamily: '"Chakra Petch", sans-serif',
-                  fontSize: '12px',
+                  fontSize: '15px',
                   textAlign: 'left',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
@@ -158,7 +158,7 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
                   <span
                     style={{
                       fontWeight: selectedUser.id === user.id ? 700 : 500,
-                      fontSize: '11px',
+                      fontSize: '26px',
                       letterSpacing: '0.5px',
                     }}
                   >
@@ -166,7 +166,7 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
                   </span>
                   <span
                     style={{
-                      fontSize: '10px',
+                      fontSize: '15px',
                       color: 'rgba(0, 255, 65, 0.5)',
                       fontWeight: 400,
                     }}
@@ -200,7 +200,7 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
               border: 'none',
               color: 'rgba(255, 68, 68, 0.8)',
               fontFamily: '"Chakra Petch", sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               textAlign: 'left',
               cursor: 'pointer',
               transition: 'all 0.15s ease',

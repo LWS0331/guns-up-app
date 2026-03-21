@@ -436,7 +436,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <div
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '20px',
+            fontSize: '26px',
             fontWeight: 900,
             color: '#00ff41',
             marginBottom: '4px',
@@ -449,8 +449,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         </div>
         <div style={{
           fontFamily: 'Share Tech Mono, monospace',
-          fontSize: '9px',
-          color: '#333',
+          fontSize: '15px',
+          color: '#666',
           letterSpacing: '1px',
         }}>
           {operator.name} // {operator.role.toUpperCase()}
@@ -462,8 +462,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -480,10 +480,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             cursor: 'not-allowed',
             boxSizing: 'border-box',
           }}
@@ -495,8 +495,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -513,10 +513,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -534,8 +534,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -552,10 +552,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -573,8 +573,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -591,10 +591,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -612,8 +612,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -631,10 +631,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -652,8 +652,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -670,10 +670,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -691,8 +691,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -711,10 +711,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -732,8 +732,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -752,10 +752,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -773,8 +773,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -793,10 +793,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -814,8 +814,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '8px',
             textTransform: 'uppercase',
@@ -837,7 +837,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                 border: '1px solid #00ff41',
                 borderRadius: '4px',
                 fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '11px',
+                fontSize: '26px',
                 color: '#00ff41',
               }}
             >
@@ -849,7 +849,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   border: 'none',
                   color: '#ff4444',
                   cursor: 'pointer',
-                  fontSize: '14px',
+                  fontSize: '26px',
                   padding: 0,
                 }}
               >
@@ -871,10 +871,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               flex: 1,
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -890,7 +890,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px 16px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
               backgroundColor: 'transparent',
               border: '1px solid #00ff41',
               color: '#00ff41',
@@ -927,7 +927,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <h3
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '10px',
+            fontSize: '15px',
             color: '#00ff41',
             marginBottom: '16px',
             textTransform: 'uppercase',
@@ -941,8 +941,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             <label
               style={{
                 fontFamily: 'Orbitron, sans-serif',
-                fontSize: '8px',
-                color: '#555',
+                fontSize: '15px',
+                color: '#888',
                 display: 'block',
                 marginBottom: '4px',
                 textTransform: 'uppercase',
@@ -962,10 +962,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   flex: 1,
                   padding: '8px',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '12px',
+                  fontSize: '15px',
                   backgroundColor: 'rgba(0,255,65,0.02)',
                   border: '1px solid rgba(0,255,65,0.06)',
-                  color: '#ccc',
+                  color: '#ddd',
                   boxSizing: 'border-box',
                   transition: 'border-color 0.2s',
                 }}
@@ -983,8 +983,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             <label
               style={{
                 fontFamily: 'Orbitron, sans-serif',
-                fontSize: '8px',
-                color: '#555',
+                fontSize: '15px',
+                color: '#888',
                 display: 'block',
                 marginBottom: '4px',
                 textTransform: 'uppercase',
@@ -1004,10 +1004,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   flex: 1,
                   padding: '8px',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '12px',
+                  fontSize: '15px',
                   backgroundColor: 'rgba(0,255,65,0.02)',
                   border: '1px solid rgba(0,255,65,0.06)',
-                  color: '#ccc',
+                  color: '#ddd',
                   boxSizing: 'border-box',
                   transition: 'border-color 0.2s',
                 }}
@@ -1025,8 +1025,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             <label
               style={{
                 fontFamily: 'Orbitron, sans-serif',
-                fontSize: '8px',
-                color: '#555',
+                fontSize: '15px',
+                color: '#888',
                 display: 'block',
                 marginBottom: '4px',
                 textTransform: 'uppercase',
@@ -1046,10 +1046,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   flex: 1,
                   padding: '8px',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '12px',
+                  fontSize: '15px',
                   backgroundColor: 'rgba(0,255,65,0.02)',
                   border: '1px solid rgba(0,255,65,0.06)',
-                  color: '#ccc',
+                  color: '#ddd',
                   boxSizing: 'border-box',
                   transition: 'border-color 0.2s',
                 }}
@@ -1067,8 +1067,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             <label
               style={{
                 fontFamily: 'Orbitron, sans-serif',
-                fontSize: '8px',
-                color: '#555',
+                fontSize: '15px',
+                color: '#888',
                 display: 'block',
                 marginBottom: '4px',
                 textTransform: 'uppercase',
@@ -1088,10 +1088,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   flex: 1,
                   padding: '8px',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '12px',
+                  fontSize: '15px',
                   backgroundColor: 'rgba(0,255,65,0.02)',
                   border: '1px solid rgba(0,255,65,0.06)',
-                  color: '#ccc',
+                  color: '#ddd',
                   boxSizing: 'border-box',
                   transition: 'border-color 0.2s',
                 }}
@@ -1119,7 +1119,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <h3
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '10px',
+            fontSize: '15px',
             color: '#00ff41',
             marginBottom: '16px',
             textTransform: 'uppercase',
@@ -1137,10 +1137,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               justifyContent: 'space-between',
               marginBottom: '6px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
             }}
           >
-            <span style={{ color: '#ccc' }}>CALORIES</span>
+            <span style={{ color: '#ddd' }}>CALORIES</span>
             <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#00ff41' }}>
               {mealTotals.calories} / {state.nutrition.calorieTarget}
             </span>
@@ -1174,10 +1174,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               justifyContent: 'space-between',
               marginBottom: '6px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
             }}
           >
-            <span style={{ color: '#ccc' }}>PROTEIN</span>
+            <span style={{ color: '#ddd' }}>PROTEIN</span>
             <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#00bcd4' }}>
               {mealTotals.protein} / {state.nutrition.proteinTarget}g
             </span>
@@ -1211,10 +1211,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               justifyContent: 'space-between',
               marginBottom: '6px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
             }}
           >
-            <span style={{ color: '#ccc' }}>CARBS</span>
+            <span style={{ color: '#ddd' }}>CARBS</span>
             <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#ffb800' }}>
               {mealTotals.carbs} / {state.nutrition.carbsTarget}g
             </span>
@@ -1248,10 +1248,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               justifyContent: 'space-between',
               marginBottom: '6px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
             }}
           >
-            <span style={{ color: '#ccc' }}>FAT</span>
+            <span style={{ color: '#ddd' }}>FAT</span>
             <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#a855f7' }}>
               {mealTotals.fat} / {state.nutrition.fatTarget}g
             </span>
@@ -1290,7 +1290,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <h3
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '10px',
+            fontSize: '15px',
             color: '#00ff41',
             marginBottom: '16px',
             textTransform: 'uppercase',
@@ -1318,10 +1318,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -1340,10 +1340,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -1362,10 +1362,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -1384,10 +1384,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -1406,10 +1406,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -1425,7 +1425,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px 16px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
               backgroundColor: 'transparent',
               border: '1px solid #00ff41',
               color: '#00ff41',
@@ -1452,9 +1452,9 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               style={{
                 textAlign: 'center',
                 padding: '16px',
-                color: '#555',
+                color: '#888',
                 fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '12px',
+                fontSize: '15px',
               }}
             >
               No meals logged today
@@ -1470,21 +1470,21 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   padding: '10px',
                   borderBottom: '1px solid rgba(0,255,65,0.06)',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '11px',
+                  fontSize: '26px',
                 }}
               >
                 <div style={{ flex: 1 }}>
-                  <div style={{ color: '#ccc', marginBottom: '4px' }}>{meal.name}</div>
-                  <div style={{ color: '#555', fontSize: '9px' }}>
+                  <div style={{ color: '#ddd', marginBottom: '4px' }}>{meal.name}</div>
+                  <div style={{ color: '#888', fontSize: '15px' }}>
                     {meal.calories} cal | P: {meal.protein}g C: {meal.carbs}g F: {meal.fat}g
                   </div>
                 </div>
                 <div
                   style={{
-                    color: '#555',
+                    color: '#888',
                     marginRight: '16px',
                     fontFamily: 'Share Tech Mono, monospace',
-                    fontSize: '10px',
+                    fontSize: '15px',
                   }}
                 >
                   {new Date(meal.time).toLocaleTimeString([], {
@@ -1499,7 +1499,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                     border: 'none',
                     color: '#ff4444',
                     cursor: 'pointer',
-                    fontSize: '14px',
+                    fontSize: '26px',
                     padding: 0,
                   }}
                 >
@@ -1518,7 +1518,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               backgroundColor: 'rgba(0,255,65,0.04)',
               borderRadius: '4px',
               fontFamily: 'Share Tech Mono, monospace',
-              fontSize: '11px',
+              fontSize: '26px',
               color: '#00ff41',
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
@@ -1527,23 +1527,23 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             }}
           >
             <div>
-              <div style={{ color: '#555', fontSize: '9px', marginBottom: '2px' }}>
+              <div style={{ color: '#888', fontSize: '15px', marginBottom: '2px' }}>
                 CALORIES
               </div>
               {mealTotals.calories}
             </div>
             <div>
-              <div style={{ color: '#555', fontSize: '9px', marginBottom: '2px' }}>
+              <div style={{ color: '#888', fontSize: '15px', marginBottom: '2px' }}>
                 PROTEIN
               </div>
               {mealTotals.protein}g
             </div>
             <div>
-              <div style={{ color: '#555', fontSize: '9px', marginBottom: '2px' }}>CARBS</div>
+              <div style={{ color: '#888', fontSize: '15px', marginBottom: '2px' }}>CARBS</div>
               {mealTotals.carbs}g
             </div>
             <div>
-              <div style={{ color: '#555', fontSize: '9px', marginBottom: '2px' }}>FAT</div>
+              <div style={{ color: '#888', fontSize: '15px', marginBottom: '2px' }}>FAT</div>
               {mealTotals.fat}g
             </div>
           </div>
@@ -1575,8 +1575,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   padding: '12px',
                   textAlign: 'left',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '9px',
-                  color: '#555',
+                  fontSize: '15px',
+                  color: '#888',
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
                   fontWeight: 'normal',
@@ -1589,8 +1589,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   padding: '12px',
                   textAlign: 'right',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '9px',
-                  color: '#555',
+                  fontSize: '15px',
+                  color: '#888',
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
                   fontWeight: 'normal',
@@ -1603,8 +1603,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   padding: '12px',
                   textAlign: 'right',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '9px',
-                  color: '#555',
+                  fontSize: '15px',
+                  color: '#888',
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
                   fontWeight: 'normal',
@@ -1617,8 +1617,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   padding: '12px',
                   textAlign: 'right',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '9px',
-                  color: '#555',
+                  fontSize: '15px',
+                  color: '#888',
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
                   fontWeight: 'normal',
@@ -1631,8 +1631,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   padding: '12px',
                   textAlign: 'left',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '9px',
-                  color: '#555',
+                  fontSize: '15px',
+                  color: '#888',
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
                   fontWeight: 'normal',
@@ -1666,10 +1666,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                         width: '100%',
                         padding: '6px',
                         fontFamily: 'Chakra Petch, sans-serif',
-                        fontSize: '12px',
+                        fontSize: '15px',
                         backgroundColor: 'transparent',
                         border: 'none',
-                        color: '#ccc',
+                        color: '#ddd',
                         outline: 'none',
                       }}
                     />
@@ -1683,7 +1683,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                         width: '80px',
                         padding: '6px',
                         fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '12px',
+                        fontSize: '15px',
                         backgroundColor: 'transparent',
                         border: 'none',
                         color: '#00ff41',
@@ -1701,7 +1701,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                         width: '60px',
                         padding: '6px',
                         fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '12px',
+                        fontSize: '15px',
                         backgroundColor: 'transparent',
                         border: 'none',
                         color: '#00bcd4',
@@ -1718,10 +1718,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                       style={{
                         padding: '6px',
                         fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '11px',
+                        fontSize: '26px',
                         backgroundColor: 'transparent',
                         border: 'none',
-                        color: '#555',
+                        color: '#888',
                         outline: 'none',
                       }}
                     />
@@ -1735,10 +1735,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                         width: '100%',
                         padding: '6px',
                         fontFamily: 'Chakra Petch, sans-serif',
-                        fontSize: '11px',
+                        fontSize: '26px',
                         backgroundColor: 'transparent',
                         border: 'none',
-                        color: '#555',
+                        color: '#888',
                         outline: 'none',
                       }}
                     />
@@ -1751,7 +1751,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                         border: 'none',
                         color: '#ff4444',
                         cursor: 'pointer',
-                        fontSize: '14px',
+                        fontSize: '26px',
                         padding: 0,
                       }}
                     >
@@ -1770,7 +1770,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         style={{
           padding: '10px 16px',
           fontFamily: 'Chakra Petch, sans-serif',
-          fontSize: '11px',
+          fontSize: '26px',
           backgroundColor: 'transparent',
           border: '1px solid #00ff41',
           color: '#00ff41',
@@ -1815,11 +1815,11 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                     width: '100%',
                     padding: '8px',
                     fontFamily: 'Chakra Petch, sans-serif',
-                    fontSize: '14px',
+                    fontSize: '26px',
                     fontWeight: 'bold',
                     backgroundColor: 'transparent',
                     border: 'none',
-                    color: '#ccc',
+                    color: '#ddd',
                     marginBottom: '8px',
                     outline: 'none',
                   }}
@@ -1839,7 +1839,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                     style={{
                       padding: '6px 8px',
                       fontFamily: 'Chakra Petch, sans-serif',
-                      fontSize: '11px',
+                      fontSize: '26px',
                       backgroundColor:
                         injury.status === 'active'
                           ? '#ff4444'
@@ -1868,10 +1868,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                     width: '100%',
                     padding: '8px',
                     fontFamily: 'Chakra Petch, sans-serif',
-                    fontSize: '12px',
+                    fontSize: '15px',
                     backgroundColor: 'rgba(0,255,65,0.02)',
                     border: '1px solid rgba(0,255,65,0.06)',
-                    color: '#ccc',
+                    color: '#ddd',
                     marginBottom: '8px',
                     minHeight: '60px',
                     boxSizing: 'border-box',
@@ -1892,8 +1892,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   <label
                     style={{
                       fontFamily: 'Orbitron, sans-serif',
-                      fontSize: '8px',
-                      color: '#555',
+                      fontSize: '15px',
+                      color: '#888',
                       display: 'block',
                       marginBottom: '8px',
                       textTransform: 'uppercase',
@@ -1915,7 +1915,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                           border: '1px solid #ff4444',
                           borderRadius: '4px',
                           fontFamily: 'Chakra Petch, sans-serif',
-                          fontSize: '10px',
+                          fontSize: '15px',
                           color: '#ff4444',
                         }}
                       >
@@ -1927,7 +1927,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                             border: 'none',
                             color: '#ff4444',
                             cursor: 'pointer',
-                            fontSize: '12px',
+                            fontSize: '15px',
                             padding: 0,
                           }}
                         >
@@ -1941,7 +1941,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                     style={{
                       padding: '6px 12px',
                       fontFamily: 'Chakra Petch, sans-serif',
-                      fontSize: '10px',
+                      fontSize: '15px',
                       backgroundColor: 'transparent',
                       border: '1px solid #ff4444',
                       color: '#ff4444',
@@ -1968,7 +1968,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                 style={{
                   padding: '8px 12px',
                   fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '11px',
+                  fontSize: '26px',
                   backgroundColor: '#ff4444',
                   border: 'none',
                   color: '#030303',
@@ -1997,7 +1997,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         style={{
           padding: '10px 16px',
           fontFamily: 'Chakra Petch, sans-serif',
-          fontSize: '11px',
+          fontSize: '26px',
           backgroundColor: 'transparent',
           border: '1px solid #ff4444',
           color: '#ff4444',
@@ -2025,8 +2025,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -2043,10 +2043,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -2064,8 +2064,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -2082,10 +2082,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -2103,8 +2103,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '4px',
             textTransform: 'uppercase',
@@ -2123,10 +2123,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '12px',
+            fontSize: '15px',
             backgroundColor: 'rgba(0,255,65,0.02)',
             border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ccc',
+            color: '#ddd',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s',
           }}
@@ -2144,8 +2144,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '8px',
             textTransform: 'uppercase',
@@ -2167,7 +2167,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                 border: '1px solid #00ff41',
                 borderRadius: '4px',
                 fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '11px',
+                fontSize: '26px',
                 color: '#00ff41',
               }}
             >
@@ -2179,7 +2179,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   border: 'none',
                   color: '#ff4444',
                   cursor: 'pointer',
-                  fontSize: '14px',
+                  fontSize: '26px',
                   padding: 0,
                 }}
               >
@@ -2201,10 +2201,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               flex: 1,
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -2220,7 +2220,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px 16px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
               backgroundColor: 'transparent',
               border: '1px solid #00ff41',
               color: '#00ff41',
@@ -2246,8 +2246,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '8px',
             textTransform: 'uppercase',
@@ -2269,7 +2269,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                 border: '1px solid #ffb800',
                 borderRadius: '4px',
                 fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '11px',
+                fontSize: '26px',
                 color: '#ffb800',
               }}
             >
@@ -2281,7 +2281,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   border: 'none',
                   color: '#ff4444',
                   cursor: 'pointer',
-                  fontSize: '14px',
+                  fontSize: '26px',
                   padding: 0,
                 }}
               >
@@ -2303,10 +2303,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               flex: 1,
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -2322,7 +2322,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px 16px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
               backgroundColor: 'transparent',
               border: '1px solid #ffb800',
               color: '#ffb800',
@@ -2348,8 +2348,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         <label
           style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            color: '#555',
+            fontSize: '15px',
+            color: '#888',
             display: 'block',
             marginBottom: '8px',
             textTransform: 'uppercase',
@@ -2371,7 +2371,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                 border: '1px solid #ff4444',
                 borderRadius: '4px',
                 fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '11px',
+                fontSize: '26px',
                 color: '#ff4444',
               }}
             >
@@ -2383,7 +2383,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   border: 'none',
                   color: '#ff4444',
                   cursor: 'pointer',
-                  fontSize: '14px',
+                  fontSize: '26px',
                   padding: 0,
                 }}
               >
@@ -2405,10 +2405,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               flex: 1,
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
+              fontSize: '15px',
               backgroundColor: 'rgba(0,255,65,0.02)',
               border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ccc',
+              color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
             }}
@@ -2424,7 +2424,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px 16px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '11px',
+              fontSize: '26px',
               backgroundColor: 'transparent',
               border: '1px solid #ff4444',
               color: '#ff4444',
@@ -2495,7 +2495,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         flexDirection: isMobile ? 'column' : 'row',
         height: '100%',
         backgroundColor: '#030303',
-        color: '#ccc',
+        color: '#ddd',
         fontFamily: 'Chakra Petch, sans-serif',
         position: 'relative',
       }}
@@ -2521,10 +2521,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   backgroundColor: 'transparent',
                   border: 'none',
                   borderBottom: isActive ? '2px solid #00ff41' : '2px solid transparent',
-                  color: isActive ? '#00ff41' : '#444',
+                  color: isActive ? '#00ff41' : '#777',
                   cursor: 'pointer',
                   fontFamily: 'Orbitron, sans-serif',
-                  fontSize: '7px',
+                  fontSize: '15px',
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
                   whiteSpace: 'nowrap',
@@ -2549,7 +2549,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
           }}
         >
           <div style={{ padding: '0 16px 16px 16px', borderBottom: '1px solid rgba(0,255,65,0.05)', marginBottom: '8px' }}>
-            <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '8px', fontWeight: 700, color: '#444', letterSpacing: '2px' }}>
+            <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '15px', fontWeight: 700, color: '#777', letterSpacing: '2px' }}>
               INTEL CENTER
             </div>
           </div>
@@ -2565,10 +2565,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   backgroundColor: isActive ? 'rgba(0,255,65,0.04)' : 'transparent',
                   border: 'none',
                   borderLeft: isActive ? '2px solid #00ff41' : '2px solid transparent',
-                  color: isActive ? '#ccc' : '#444',
+                  color: isActive ? '#ccc' : '#777',
                   cursor: 'pointer',
                   fontFamily: 'Orbitron, sans-serif',
-                  fontSize: '8px',
+                  fontSize: '15px',
                   textTransform: 'uppercase',
                   letterSpacing: '1.5px',
                   textAlign: 'left',
@@ -2578,7 +2578,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   gap: '8px',
                 }}
               >
-                <span style={{ fontSize: '6px', opacity: isActive ? 1 : 0.4 }}>{tabIcons[tab]}</span>
+                <span style={{ fontSize: '15px', opacity: isActive ? 1 : 0.4 }}>{tabIcons[tab]}</span>
                 {tab.replace('_', ' ')}
               </button>
             );
@@ -2597,7 +2597,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
           borderBottom: '1px solid rgba(0,255,65,0.06)',
           background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
         }}>
-          <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '9px', color: '#333', letterSpacing: '1px' }}>
+          <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '15px', color: '#666', letterSpacing: '1px' }}>
             {operator.callsign} // {activeTab.replace('_', ' ')}
           </div>
           <button
@@ -2605,7 +2605,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
             style={{
               padding: '8px 18px',
               fontFamily: 'Orbitron, sans-serif',
-              fontSize: '9px',
+              fontSize: '15px',
               backgroundColor: '#00ff41',
               border: 'none',
               color: '#030303',

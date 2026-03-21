@@ -263,7 +263,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
       flexDirection: 'column',
       height: '100%',
       backgroundColor: '#030303',
-      color: '#ccc',
+      color: '#ddd',
       fontFamily: '"Chakra Petch", sans-serif',
       position: 'relative',
       overflow: 'hidden',
@@ -284,7 +284,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
         }
         .quick-btn {
           padding: 8px 16px;
-          font-size: 9px;
+          font-size: 15px;
           font-family: 'Share Tech Mono', monospace;
           color: #00ff41;
           background: rgba(0,255,65,0.03);
@@ -304,7 +304,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
         }
         .send-btn {
           padding: 10px 20px;
-          font-size: 10px;
+          font-size: 15px;
           font-family: 'Orbitron', sans-serif;
           color: #030303;
           background: #00ff41;
@@ -321,7 +321,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
         .chat-input {
           flex: 1;
           padding: 12px 16px;
-          font-size: 12px;
+          font-size: 15px;
           font-family: 'Chakra Petch', sans-serif;
           background: rgba(0,255,65,0.02);
           border: 1px solid rgba(0,255,65,0.08);
@@ -355,7 +355,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '20px',
+          fontSize: '26px',
           fontWeight: 900,
           color: '#030303',
           fontFamily: '"Orbitron", sans-serif',
@@ -367,7 +367,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
 
         <div style={{ flex: 1 }}>
           <div style={{
-            fontSize: '14px',
+            fontSize: '26px',
             fontFamily: '"Orbitron", sans-serif',
             color: '#00ff41',
             fontWeight: 900,
@@ -377,9 +377,9 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
             GUNNY
           </div>
           <div style={{
-            fontSize: '8px',
+            fontSize: '15px',
             fontFamily: '"Share Tech Mono", monospace',
-            color: '#555',
+            color: '#888',
             letterSpacing: '2px',
             textTransform: 'uppercase',
             marginTop: '2px',
@@ -406,7 +406,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
             animation: 'pulse 2s infinite',
           }} />
           <span style={{
-            fontSize: '8px',
+            fontSize: '15px',
             fontWeight: 700,
             color: '#00ff41',
             letterSpacing: '1.5px',
@@ -427,7 +427,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
       }}>
         {quickActions.map((action, idx) => (
           <button key={idx} className="quick-btn" onClick={() => handleQuickAction(action.label)}>
-            <span style={{ color: '#00ff41', fontSize: '7px', opacity: 0.6 }}>{action.icon}</span>
+            <span style={{ color: '#00ff41', fontSize: '15px', opacity: 0.6 }}>{action.icon}</span>
             {action.label}
           </button>
         ))}
@@ -459,7 +459,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '14px',
+                fontSize: '26px',
                 fontWeight: 900,
                 color: '#030303',
                 flexShrink: 0,
@@ -474,7 +474,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
             <div style={{
               maxWidth: '75%',
               padding: message.isWorkout ? '16px' : '10px 14px',
-              fontSize: '12px',
+              fontSize: '15px',
               lineHeight: '1.65',
               backgroundColor: message.role === 'user'
                 ? 'rgba(0,150,255,0.05)'
@@ -507,8 +507,8 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
               {message.text}
               {/* Timestamp */}
               <div style={{
-                fontSize: '8px',
-                color: '#333',
+                fontSize: '15px',
+                color: '#666',
                 marginTop: '6px',
                 fontFamily: '"Share Tech Mono", monospace',
                 textAlign: message.role === 'user' ? 'right' : 'left',
@@ -535,7 +535,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '14px',
+              fontSize: '26px',
               fontWeight: 900,
               color: '#030303',
               flexShrink: 0,
@@ -580,7 +580,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
       }}>
         <div style={{
           fontFamily: '"Share Tech Mono", monospace',
-          fontSize: '10px',
+          fontSize: '15px',
           color: '#222',
           marginRight: '4px',
         }}>

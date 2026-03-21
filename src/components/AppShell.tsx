@@ -165,8 +165,8 @@ const AppShell: React.FC<AppShellProps> = ({
             </span>
             <span style={{
               fontFamily: 'Share Tech Mono, monospace',
-              fontSize: '7px',
-              color: '#333',
+              fontSize: '15px',
+              color: '#666',
               letterSpacing: '1px',
             }}>
               {currentSelectedOp.callsign}
@@ -190,7 +190,7 @@ const AppShell: React.FC<AppShellProps> = ({
                 className={`nav-tab ${isActive ? 'active' : ''}`}
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  fontSize: '9px',
+                  fontSize: '15px',
                   padding: '8px 20px',
                   fontWeight: isActive ? 800 : 500,
                   color: isActive ? '#00ff41' : '#3a3a3a',
@@ -198,9 +198,9 @@ const AppShell: React.FC<AppShellProps> = ({
                 }}
               >
                 <span className="tab-icon" style={{
-                  fontSize: '7px',
+                  fontSize: '15px',
                   opacity: isActive ? 1 : 0.3,
-                  color: isActive ? '#00ff41' : '#555',
+                  color: isActive ? '#00ff41' : '#888',
                 }}>
                   {tab.icon}
                 </span>
@@ -300,17 +300,17 @@ const AppShell: React.FC<AppShellProps> = ({
                 }} />
               )}
               <span style={{
-                fontSize: '14px',
-                color: isActive ? '#00ff41' : '#333',
+                fontSize: '26px',
+                color: isActive ? '#00ff41' : '#666',
                 transition: 'color 0.2s ease',
               }}>
                 {tab.icon}
               </span>
               <span style={{
                 fontFamily: 'Orbitron, sans-serif',
-                fontSize: '7px',
+                fontSize: '15px',
                 fontWeight: isActive ? 800 : 500,
-                color: isActive ? '#00ff41' : '#333',
+                color: isActive ? '#00ff41' : '#666',
                 letterSpacing: '1px',
                 transition: 'color 0.2s ease',
               }}>

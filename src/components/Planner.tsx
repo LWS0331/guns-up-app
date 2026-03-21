@@ -411,7 +411,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     return (
       <div>
         <div style={{ marginBottom: '16px', textAlign: 'center' }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: 0, fontSize: '18px', fontWeight: 900, letterSpacing: '4px', textShadow: '0 0 8px rgba(0,255,65,0.2)' }}>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: 0, fontSize: '26px', fontWeight: 900, letterSpacing: '4px', textShadow: '0 0 8px rgba(0,255,65,0.2)' }}>
             {monthName.toUpperCase()}
           </h2>
         </div>
@@ -421,7 +421,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
             <div key={`${day}-${i}`} style={{
               textAlign: 'center',
               fontFamily: 'Orbitron',
-              color: '#333',
+              color: '#666',
               fontSize: isMobile ? '6px' : '7px',
               fontWeight: 700,
               padding: isMobile ? '4px' : '8px',
@@ -472,9 +472,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
                   <div style={{
                     fontFamily: 'Share Tech Mono',
-                    fontSize: '12px',
+                    fontSize: '15px',
                     fontWeight: 700,
-                    color: isCurrentDay ? '#00ff41' : isInMonth ? '#555' : '#222',
+                    color: isCurrentDay ? '#00ff41' : isInMonth ? '#888' : '#222',
                     marginBottom: '6px',
                   }}>
                     {date.getDate()}
@@ -483,7 +483,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                   {workout && (
                     <div style={{
                       fontFamily: 'Chakra Petch',
-                      fontSize: '9px',
+                      fontSize: '15px',
                       color: '#00bcd4',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
@@ -503,7 +503,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                       backgroundColor: `${getTagColor(tag.color)}10`,
                       border: `1px solid ${getTagColor(tag.color)}40`,
                       fontFamily: 'Share Tech Mono',
-                      fontSize: '7px',
+                      fontSize: '15px',
                       color: getTagColor(tag.color),
                       letterSpacing: '0.5px',
                     }}>
@@ -535,7 +535,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     return (
       <div>
         <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 20px 0', fontSize: '24px' }}>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 20px 0', fontSize: '26px' }}>
             Week: {weekStart} - {weekEnd}
           </h2>
         </div>
@@ -563,25 +563,25 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                   cursor: 'pointer',
                 }}
               >
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', marginBottom: '8px' }}>
                   {dayName} {date.getDate()}
                 </div>
 
                 {workout ? (
                   <div>
-                    <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>
+                    <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '26px', fontWeight: 'bold', marginBottom: '4px' }}>
                       {workout.title}
                     </div>
-                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: '10px', color: '#888' }}>
+                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: '15px', color: '#aaa' }}>
                       {workout.blocks.length} blocks
                     </div>
                   </div>
                 ) : tag ? (
-                  <div style={{ fontFamily: 'Chakra Petch', color: getTagColor(tag.color), fontSize: '12px' }}>
+                  <div style={{ fontFamily: 'Chakra Petch', color: getTagColor(tag.color), fontSize: '15px' }}>
                     {tag.note}
                   </div>
                 ) : (
-                  <div style={{ fontFamily: 'Share Tech Mono', color: '#666', fontSize: '10px' }}>No workout</div>
+                  <div style={{ fontFamily: 'Share Tech Mono', color: '#999', fontSize: '15px' }}>No workout</div>
                 )}
               </div>
             );
@@ -604,7 +604,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     return (
       <div>
         <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 10px 0', fontSize: '24px' }}>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 10px 0', fontSize: '26px' }}>
             {dayName}
           </h2>
         </div>
@@ -625,7 +625,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                     border: 'none',
                     fontFamily: 'Chakra Petch',
                     cursor: 'pointer',
-                    fontSize: '12px',
+                    fontSize: '15px',
                     fontWeight: 'bold',
                   }}
                 >
@@ -640,7 +640,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                     border: 'none',
                     fontFamily: 'Chakra Petch',
                     cursor: 'pointer',
-                    fontSize: '12px',
+                    fontSize: '15px',
                     fontWeight: 'bold',
                   }}
                 >
@@ -651,10 +651,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
             {workout.notes && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold' }}>
                   COACH'S NOTES
                 </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ccc', fontSize: '12px', marginTop: '4px' }}>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '15px', marginTop: '4px' }}>
                   {workout.notes}
                 </div>
               </div>
@@ -662,10 +662,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
             {workout.warmup && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '12px', fontWeight: 'bold' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 'bold' }}>
                   WARMUP
                 </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ccc', fontSize: '12px', marginTop: '4px' }}>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '15px', marginTop: '4px' }}>
                   {workout.warmup}
                 </div>
               </div>
@@ -673,7 +673,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
             {workout.blocks.length > 0 && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold', marginBottom: '12px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', marginBottom: '12px' }}>
                   WORKOUT BLOCKS
                 </div>
                 {workout.blocks.map((block, idx) => {
@@ -683,7 +683,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                     return (
                       <div key={block.id} style={{ marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #00bcd4' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '14px', fontWeight: 'bold' }}>
+                          <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '26px', fontWeight: 'bold' }}>
                             {label}) {block.exerciseName}
                           </div>
                           {vidUrl && (
@@ -692,7 +692,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                             </a>
                           )}
                         </div>
-                        <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: '11px', marginTop: '2px' }}>
+                        <div style={{ fontFamily: 'Share Tech Mono', color: '#aaa', fontSize: '26px', marginTop: '2px' }}>
                           {block.prescription}
                         </div>
                       </div>
@@ -700,14 +700,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                   } else {
                     return (
                       <div key={block.id} style={{ marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #ffb800' }}>
-                        <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '14px', fontWeight: 'bold' }}>
+                        <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '26px', fontWeight: 'bold' }}>
                           {block.format}
                         </div>
                         <div
                           style={{
                             fontFamily: 'Share Tech Mono',
-                            color: '#888',
-                            fontSize: '11px',
+                            color: '#aaa',
+                            fontSize: '26px',
                             marginTop: '2px',
                             whiteSpace: 'pre-wrap',
                           }}
@@ -723,17 +723,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
             {workout.cooldown && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '12px', fontWeight: 'bold' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 'bold' }}>
                   COOLDOWN
                 </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ccc', fontSize: '12px', marginTop: '4px' }}>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '15px', marginTop: '4px' }}>
                   {workout.cooldown}
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
             <p style={{ fontFamily: 'Chakra Petch' }}>No workout for this day</p>
             <button
               onClick={() => handleAddWorkout(dateStr)}
@@ -777,17 +777,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, rgba(0,188,212,0.4), transparent)' }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-          <div style={{ fontFamily: 'Orbitron', color: '#00ff41', fontSize: '14px', fontWeight: 900, letterSpacing: '2px' }}>
+          <div style={{ fontFamily: 'Orbitron', color: '#00ff41', fontSize: '26px', fontWeight: 900, letterSpacing: '2px' }}>
             WORKOUT BUILDER
           </div>
-          <div style={{ fontFamily: 'Share Tech Mono', color: '#333', fontSize: '9px' }}>
+          <div style={{ fontFamily: 'Share Tech Mono', color: '#666', fontSize: '15px' }}>
             // {selectedDate}
           </div>
         </div>
 
         {/* TITLE */}
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
             Workout Title
           </label>
           <input
@@ -802,7 +802,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               border: '1px solid rgba(0, 255, 65, 0.3)',
               color: '#00ff41',
               fontFamily: 'Chakra Petch',
-              fontSize: '14px',
+              fontSize: '26px',
               boxSizing: 'border-box',
             }}
           />
@@ -810,7 +810,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
         {/* COACH'S NOTES */}
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
             Coach's Notes
           </label>
           <textarea
@@ -824,7 +824,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               border: '1px solid rgba(0, 255, 65, 0.3)',
               color: '#00ff41',
               fontFamily: 'Chakra Petch',
-              fontSize: '12px',
+              fontSize: '15px',
               minHeight: '60px',
               boxSizing: 'border-box',
             }}
@@ -833,7 +833,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
         {/* WARMUP */}
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
             Warmup
           </label>
           <textarea
@@ -847,7 +847,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               border: '1px solid rgba(255, 184, 0, 0.3)',
               color: '#ffb800',
               fontFamily: 'Chakra Petch',
-              fontSize: '12px',
+              fontSize: '15px',
               minHeight: '50px',
               boxSizing: 'border-box',
             }}
@@ -857,7 +857,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
         {/* WORKOUT BLOCKS */}
         {builderData.blocks.length > 0 && (
           <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 188, 212, 0.2)', borderRadius: '4px' }}>
-            <h4 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', margin: '0 0 16px 0', fontSize: '14px' }}>
+            <h4 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', margin: '0 0 16px 0', fontSize: '26px' }}>
               WORKOUT BLOCKS
             </h4>
 
@@ -868,7 +868,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               return (
                 <div key={block.id} style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#000', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: '3px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '12px', fontWeight: 'bold' }}>
+                    <span style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold' }}>
                       {label}
                     </span>
                     <button
@@ -879,7 +879,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                         color: '#fff',
                         border: 'none',
                         fontFamily: 'Share Tech Mono',
-                        fontSize: '10px',
+                        fontSize: '15px',
                         cursor: 'pointer',
                       }}
                     >
@@ -891,7 +891,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                     <>
                       {/* Exercise Name */}
                       <div style={{ marginBottom: '12px', position: 'relative' }}>
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
                           Exercise Name
                         </label>
                         <input
@@ -911,7 +911,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                             border: '1px solid rgba(0, 188, 212, 0.4)',
                             color: '#00bcd4',
                             fontFamily: 'Share Tech Mono',
-                            fontSize: '12px',
+                            fontSize: '15px',
                             boxSizing: 'border-box',
                           }}
                         />
@@ -940,7 +940,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                                   cursor: 'pointer',
                                   borderBottom: '1px solid rgba(0, 188, 212, 0.2)',
                                   fontFamily: 'Share Tech Mono',
-                                  fontSize: '11px',
+                                  fontSize: '26px',
                                   color: '#00bcd4',
                                 }}
                                 onMouseEnter={e => {
@@ -960,7 +960,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                       {/* Last Log */}
                       {lastLog && (
                         <div style={{ marginBottom: '12px', padding: '8px', backgroundColor: 'rgba(0, 255, 65, 0.05)', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: '2px' }}>
-                          <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: '10px' }}>
+                          <div style={{ fontFamily: 'Share Tech Mono', color: '#aaa', fontSize: '15px' }}>
                             Last logged: {lastLog.date} - {lastLog.prescription}
                           </div>
                         </div>
@@ -968,7 +968,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
                       {/* Prescription */}
                       <div style={{ marginBottom: '12px' }}>
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
                           Prescription
                         </label>
                         <textarea
@@ -982,7 +982,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                             border: '1px solid rgba(0, 188, 212, 0.4)',
                             color: '#00bcd4',
                             fontFamily: 'Share Tech Mono',
-                            fontSize: '11px',
+                            fontSize: '26px',
                             minHeight: '40px',
                             boxSizing: 'border-box',
                           }}
@@ -991,7 +991,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
                       {/* Video URL */}
                       <div style={{ marginBottom: '12px' }}>
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ff4444', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ff4444', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
                           Demo Video URL (YouTube)
                         </label>
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -1007,7 +1007,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                               border: '1px solid rgba(255, 68, 68, 0.2)',
                               color: '#ff4444',
                               fontFamily: 'Share Tech Mono',
-                              fontSize: '11px',
+                              fontSize: '26px',
                               boxSizing: 'border-box',
                             }}
                           />
@@ -1033,7 +1033,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                           onChange={e => handleUpdateBlock(idx, { isLinkedToNext: e.target.checked })}
                           style={{ cursor: 'pointer' }}
                         />
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '10px', cursor: 'pointer' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '15px', cursor: 'pointer' }}>
                           Superset to next exercise
                         </label>
                       </div>
@@ -1042,7 +1042,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                     <>
                       {/* Conditioning Format */}
                       <div style={{ marginBottom: '12px' }}>
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ffb800', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ffb800', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
                           Format
                         </label>
                         <input
@@ -1057,7 +1057,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                             border: '1px solid rgba(255, 184, 0, 0.4)',
                             color: '#ffb800',
                             fontFamily: 'Share Tech Mono',
-                            fontSize: '11px',
+                            fontSize: '26px',
                             boxSizing: 'border-box',
                           }}
                         />
@@ -1065,7 +1065,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
                       {/* Conditioning Description */}
                       <div style={{ marginBottom: '12px' }}>
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ffb800', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ffb800', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
                           Description
                         </label>
                         <textarea
@@ -1079,7 +1079,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                             border: '1px solid rgba(255, 184, 0, 0.4)',
                             color: '#ffb800',
                             fontFamily: 'Share Tech Mono',
-                            fontSize: '11px',
+                            fontSize: '26px',
                             minHeight: '60px',
                             boxSizing: 'border-box',
                           }}
@@ -1103,7 +1103,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               color: '#000',
               border: 'none',
               fontFamily: 'Chakra Petch',
-              fontSize: '12px',
+              fontSize: '15px',
               fontWeight: 'bold',
               cursor: 'pointer',
             }}
@@ -1118,7 +1118,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               color: '#000',
               border: 'none',
               fontFamily: 'Chakra Petch',
-              fontSize: '12px',
+              fontSize: '15px',
               fontWeight: 'bold',
               cursor: 'pointer',
             }}
@@ -1129,7 +1129,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
         {/* COOLDOWN */}
         <div style={{ marginBottom: '20px' }}>
-          <label style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
             Cooldown
           </label>
           <textarea
@@ -1143,7 +1143,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               border: '1px solid rgba(255, 184, 0, 0.3)',
               color: '#ffb800',
               fontFamily: 'Chakra Petch',
-              fontSize: '12px',
+              fontSize: '15px',
               minHeight: '50px',
               boxSizing: 'border-box',
             }}
@@ -1160,7 +1160,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               border: '1px solid rgba(255, 68, 68, 0.5)',
               color: '#ff4444',
               fontFamily: 'Chakra Petch',
-              fontSize: '12px',
+              fontSize: '15px',
               fontWeight: 'bold',
               cursor: 'pointer',
             }}
@@ -1175,7 +1175,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               color: '#000',
               border: 'none',
               fontFamily: 'Chakra Petch',
-              fontSize: '12px',
+              fontSize: '15px',
               fontWeight: 'bold',
               cursor: 'pointer',
             }}
@@ -1218,7 +1218,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 border: 'none',
                 color: '#00ff41',
                 fontFamily: 'Chakra Petch',
-                fontSize: '12px',
+                fontSize: '15px',
                 cursor: 'pointer',
                 textAlign: 'left',
                 borderBottom: '1px solid rgba(0, 255, 65, 0.2)',
@@ -1236,7 +1236,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 border: 'none',
                 color: '#00bcd4',
                 fontFamily: 'Chakra Petch',
-                fontSize: '12px',
+                fontSize: '15px',
                 cursor: 'pointer',
                 textAlign: 'left',
                 borderBottom: '1px solid rgba(0, 188, 212, 0.2)',
@@ -1253,9 +1253,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 padding: '10px 12px',
                 backgroundColor: 'transparent',
                 border: 'none',
-                color: clipboard ? '#ffb800' : '#666',
+                color: clipboard ? '#ffb800' : '#999',
                 fontFamily: 'Chakra Petch',
-                fontSize: '12px',
+                fontSize: '15px',
                 cursor: clipboard ? 'pointer' : 'not-allowed',
                 textAlign: 'left',
               }}
@@ -1275,7 +1275,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 border: 'none',
                 color: '#00ff41',
                 fontFamily: 'Chakra Petch',
-                fontSize: '12px',
+                fontSize: '15px',
                 cursor: 'pointer',
                 textAlign: 'left',
                 borderBottom: '1px solid rgba(0, 255, 65, 0.2)',
@@ -1293,7 +1293,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 border: 'none',
                 color: '#ffb800',
                 fontFamily: 'Chakra Petch',
-                fontSize: '12px',
+                fontSize: '15px',
                 cursor: 'pointer',
                 textAlign: 'left',
                 borderBottom: '1px solid rgba(255, 184, 0, 0.2)',
@@ -1311,7 +1311,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 border: 'none',
                 color: '#ff4444',
                 fontFamily: 'Chakra Petch',
-                fontSize: '12px',
+                fontSize: '15px',
                 cursor: 'pointer',
                 textAlign: 'left',
               }}
@@ -1352,10 +1352,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
       {/* HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '16px', borderBottom: '1px solid rgba(0,255,65,0.06)', position: 'relative' }}>
         <div>
-          <div style={{ fontFamily: 'Orbitron', color: '#00ff41', fontSize: '16px', fontWeight: 900, letterSpacing: '3px', textShadow: '0 0 8px rgba(0,255,65,0.3)' }}>
+          <div style={{ fontFamily: 'Orbitron', color: '#00ff41', fontSize: '26px', fontWeight: 900, letterSpacing: '3px', textShadow: '0 0 8px rgba(0,255,65,0.3)' }}>
             {operator.callsign}
           </div>
-          <div style={{ fontFamily: 'Share Tech Mono', color: '#333', fontSize: '8px', letterSpacing: '1px', marginTop: '4px' }}>
+          <div style={{ fontFamily: 'Share Tech Mono', color: '#666', fontSize: '15px', letterSpacing: '1px', marginTop: '4px' }}>
             TRAINING PLANNER // ACTIVE
           </div>
         </div>
@@ -1368,7 +1368,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
             border: '1px solid rgba(0,188,212,0.2)',
             fontFamily: 'Share Tech Mono',
             cursor: 'pointer',
-            fontSize: '9px',
+            fontSize: '15px',
             fontWeight: 700,
             letterSpacing: '1px',
             transition: 'all 0.2s ease',
@@ -1385,11 +1385,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
           style={{
             padding: '6px 14px',
             backgroundColor: 'transparent',
-            color: '#555',
+            color: '#888',
             border: '1px solid rgba(0,255,65,0.08)',
             fontFamily: 'Orbitron',
             cursor: 'pointer',
-            fontSize: '9px',
+            fontSize: '15px',
             fontWeight: 700,
             transition: 'all 0.2s ease',
           }}
@@ -1408,7 +1408,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 color: viewMode === mode ? '#00ff41' : '#3a3a3a',
                 border: viewMode === mode ? '1px solid rgba(0,255,65,0.2)' : '1px solid transparent',
                 fontFamily: 'Orbitron',
-                fontSize: '8px',
+                fontSize: '15px',
                 fontWeight: viewMode === mode ? 800 : 500,
                 cursor: 'pointer',
                 textTransform: 'uppercase',
@@ -1434,7 +1434,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               border: '1px solid rgba(0,255,65,0.15)',
               fontFamily: 'Share Tech Mono',
               cursor: 'pointer',
-              fontSize: '8px',
+              fontSize: '15px',
               fontWeight: 700,
               letterSpacing: '1px',
               transition: 'all 0.2s ease',
@@ -1449,11 +1449,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
           style={{
             padding: '6px 14px',
             backgroundColor: 'transparent',
-            color: '#555',
+            color: '#888',
             border: '1px solid rgba(0,255,65,0.08)',
             fontFamily: 'Orbitron',
             cursor: 'pointer',
-            fontSize: '9px',
+            fontSize: '15px',
             fontWeight: 700,
             transition: 'all 0.2s ease',
           }}

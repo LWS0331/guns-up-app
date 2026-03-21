@@ -8,10 +8,10 @@
   --green-bright: #00e639;
   --green-muted: #00cc33;
   --green-dark: #003d10;
-  --text-primary: #cccccc;
-  --text-secondary: #888888;
-  --text-tertiary: #555555;
-  --text-dim: #3a3a3a;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #707070;
+  --text-dim: #4a4a4a;
   --text-bright: #ffffff;
   --color-warning: #ffb800;
   --color-danger: #ff4444;
@@ -30,7 +30,8 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 12px;
+  font-size: 15px;
+  line-height: 1.5;
   overflow-x: hidden;
 }
 
@@ -360,7 +361,7 @@ body::after {
 /* Label style */
 .label-text {
   font-family: 'Orbitron', sans-serif;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 2px;
   text-transform: uppercase;
@@ -385,7 +386,7 @@ input, textarea, select {
 /* Touch-friendly tap targets */
 @media (max-width: 768px) {
   body {
-    font-size: 13px;
+    font-size: 15px;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
   }
@@ -413,7 +414,7 @@ input, textarea, select {
 /* Small phones */
 @media (max-width: 480px) {
   body {
-    font-size: 12px;
+    font-size: 14px;
   }
 }
 
@@ -443,7 +444,7 @@ input, textarea, select {
   gap: 4px;
   padding: 3px 8px;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 9px;
+  font-size: 12px;
   color: #ff4444;
   background: rgba(255, 68, 68, 0.05);
   border: 1px solid rgba(255, 68, 68, 0.15);

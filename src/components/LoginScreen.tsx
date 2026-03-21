@@ -255,9 +255,9 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         {/* Subtitle */}
         <div style={{
           fontFamily: 'Orbitron, monospace',
-          fontSize: '9px',
+          fontSize: '15px',
           letterSpacing: '4px',
-          color: '#444',
+          color: '#777',
           textTransform: 'uppercase',
           textAlign: 'center',
           opacity: mounted ? 1 : 0,
@@ -290,8 +290,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             {/* Label */}
             <div style={{
               fontFamily: 'Orbitron, monospace',
-              fontSize: '8px',
-              color: '#555',
+              fontSize: '15px',
+              color: '#888',
               textTransform: 'uppercase',
               letterSpacing: '3px',
               animation: 'accessTextPulse 3s ease-in-out infinite',
@@ -364,7 +364,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                     {filled ? (
                       <div style={{
                         fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '22px',
+                        fontSize: '26px',
                         color: '#00ff41',
                         textShadow: '0 0 8px rgba(0,255,65,0.5)',
                         animation: 'fadeInScale 0.15s ease',
@@ -388,7 +388,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             {/* Error message */}
             <div style={{
               fontFamily: 'Orbitron, monospace',
-              fontSize: '9px',
+              fontSize: '15px',
               color: '#ff4444',
               textTransform: 'uppercase',
               letterSpacing: '2px',
@@ -414,7 +414,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             {/* Callsign */}
             <div style={{
               fontFamily: 'Orbitron, monospace',
-              fontSize: '28px',
+              fontSize: '30px',
               fontWeight: 900,
               color: '#00ff41',
               letterSpacing: '6px',
@@ -427,8 +427,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             {/* Real name */}
             <div style={{
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '12px',
-              color: '#888',
+              fontSize: '15px',
+              color: '#aaa',
               letterSpacing: '3px',
               textTransform: 'uppercase',
               opacity: 0,
@@ -454,7 +454,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               }} />
               <div style={{
                 fontFamily: 'Share Tech Mono, monospace',
-                fontSize: '10px',
+                fontSize: '15px',
                 color: '#00ff41',
                 letterSpacing: '2px',
                 textTransform: 'uppercase',

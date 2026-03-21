@@ -74,7 +74,7 @@ function ProgressRing({ value, max, size = 80, color = '#00ff41', label }: {
           alignItems: 'center',
           justifyContent: 'center',
           fontFamily: 'Share Tech Mono, monospace',
-          fontSize: '16px',
+          fontSize: '26px',
           color: color,
           textShadow: `0 0 8px ${color}60`,
         }}>
@@ -83,9 +83,9 @@ function ProgressRing({ value, max, size = 80, color = '#00ff41', label }: {
       </div>
       <div style={{
         fontFamily: 'Orbitron, sans-serif',
-        fontSize: '7px',
+        fontSize: '15px',
         letterSpacing: '1.5px',
-        color: '#555',
+        color: '#888',
         textTransform: 'uppercase',
         fontWeight: 700,
       }}>
@@ -206,7 +206,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
   return (
     <div style={{
       backgroundColor: '#030303',
-      color: '#ccc',
+      color: '#ddd',
       fontFamily: 'Chakra Petch, sans-serif',
       padding: isMobile ? '16px' : '24px',
       minHeight: '100vh',
@@ -237,7 +237,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
         <div>
           <div style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '18px',
+            fontSize: '26px',
             fontWeight: 900,
             color: '#00ff41',
             letterSpacing: '4px',
@@ -247,8 +247,8 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
           </div>
           <div style={{
             fontFamily: 'Share Tech Mono, monospace',
-            fontSize: '9px',
-            color: '#444',
+            fontSize: '15px',
+            color: '#777',
             letterSpacing: '1px',
             marginTop: '4px',
           }}>
@@ -257,8 +257,8 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
         </div>
         <div style={{
           fontFamily: 'Share Tech Mono, monospace',
-          fontSize: '9px',
-          color: '#333',
+          fontSize: '15px',
+          color: '#666',
           textAlign: 'right',
         }}>
           {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}
@@ -301,9 +301,9 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
 
             <div style={{
               fontFamily: 'Orbitron, sans-serif',
-              fontSize: '7px',
+              fontSize: '15px',
               letterSpacing: '2px',
-              color: '#555',
+              color: '#888',
               textTransform: 'uppercase',
               fontWeight: 700,
               marginBottom: '12px',
@@ -323,7 +323,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
             </div>
             <div style={{
               fontFamily: 'Share Tech Mono, monospace',
-              fontSize: '8px',
+              fontSize: '15px',
               color: '#3a3a3a',
               letterSpacing: '1px',
             }}>
@@ -357,9 +357,9 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
         <div style={{ flex: isMobile ? '1' : '0 0 58%' }}>
           <div style={{
             fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
+            fontSize: '15px',
             letterSpacing: '2px',
-            color: '#555',
+            color: '#888',
             textTransform: 'uppercase',
             fontWeight: 700,
             marginBottom: '16px',
@@ -367,7 +367,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
             alignItems: 'center',
             gap: '8px',
           }}>
-            <span style={{ color: '#00ff41', fontSize: '6px' }}>▶</span>
+            <span style={{ color: '#00ff41', fontSize: '15px' }}>▶</span>
             WEEKLY OPERATIONS
           </div>
 
@@ -408,8 +408,8 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
 
                   <div style={{
                     fontFamily: 'Orbitron, sans-serif',
-                    fontSize: '8px',
-                    color: today ? '#00ff41' : '#444',
+                    fontSize: '15px',
+                    color: today ? '#00ff41' : '#777',
                     width: '40px',
                     fontWeight: today ? 800 : 600,
                     letterSpacing: '1px',
@@ -419,8 +419,8 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
 
                   <div style={{
                     fontFamily: 'Share Tech Mono, monospace',
-                    fontSize: '8px',
-                    color: '#333',
+                    fontSize: '15px',
+                    color: '#666',
                     width: '30px',
                   }}>
                     {dayInfo.date.getDate()}
@@ -437,7 +437,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                     }}>
                       <div style={{
                         fontFamily: 'Chakra Petch, sans-serif',
-                        fontSize: '10px',
+                        fontSize: '15px',
                         color: '#bbb',
                         flex: 1,
                       }}>
@@ -445,7 +445,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                       </div>
                       <div style={{
                         fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '8px',
+                        fontSize: '15px',
                         color: '#00bcd4',
                         padding: '2px 8px',
                         border: '1px solid rgba(0,188,212,0.2)',
@@ -456,7 +456,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                       {workout.completed && (
                         <div style={{
                           fontFamily: 'Share Tech Mono, monospace',
-                          fontSize: '7px',
+                          fontSize: '15px',
                           color: '#00ff41',
                           padding: '2px 6px',
                           border: '1px solid rgba(0,255,65,0.2)',
@@ -470,7 +470,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                     <div style={{
                       flex: 1,
                       fontFamily: 'Chakra Petch, sans-serif',
-                      fontSize: '9px',
+                      fontSize: '15px',
                       color: '#222',
                       paddingLeft: '10px',
                       borderLeft: '2px solid rgba(0,255,65,0.05)',
@@ -491,9 +491,9 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
           <div>
             <div style={{
               fontFamily: 'Orbitron, sans-serif',
-              fontSize: '8px',
+              fontSize: '15px',
               letterSpacing: '2px',
-              color: '#555',
+              color: '#888',
               textTransform: 'uppercase',
               fontWeight: 700,
               marginBottom: '16px',
@@ -501,7 +501,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
               alignItems: 'center',
               gap: '8px',
             }}>
-              <span style={{ color: '#ffb800', fontSize: '6px' }}>◆</span>
+              <span style={{ color: '#ffb800', fontSize: '15px' }}>◆</span>
               RECENT PR BOARD
             </div>
 
@@ -521,7 +521,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                 }}>
                   <div style={{
                     fontFamily: 'Chakra Petch, sans-serif',
-                    fontSize: '10px',
+                    fontSize: '15px',
                     color: '#bbb',
                     marginBottom: '4px',
                   }}>
@@ -534,7 +534,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                   }}>
                     <div style={{
                       fontFamily: 'Share Tech Mono, monospace',
-                      fontSize: '13px',
+                      fontSize: '15px',
                       color: '#ffb800',
                       textShadow: '0 0 6px rgba(255,184,0,0.3)',
                     }}>
@@ -542,8 +542,8 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                     </div>
                     <div style={{
                       fontFamily: 'Share Tech Mono, monospace',
-                      fontSize: '8px',
-                      color: '#444',
+                      fontSize: '15px',
+                      color: '#777',
                     }}>
                       {formatPRDate(pr.date)}
                     </div>
@@ -553,8 +553,8 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                 <div style={{
                   padding: '24px 16px',
                   fontFamily: 'Share Tech Mono, monospace',
-                  fontSize: '9px',
-                  color: '#333',
+                  fontSize: '15px',
+                  color: '#666',
                   textAlign: 'center',
                 }}>
                   NO RECORDS LOGGED
@@ -571,9 +571,9 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
           }}>
             <div style={{
               fontFamily: 'Orbitron, sans-serif',
-              fontSize: '8px',
+              fontSize: '15px',
               letterSpacing: '2px',
-              color: '#555',
+              color: '#888',
               textTransform: 'uppercase',
               fontWeight: 700,
               marginBottom: '20px',
@@ -581,7 +581,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
               alignItems: 'center',
               gap: '8px',
             }}>
-              <span style={{ color: '#00bcd4', fontSize: '6px' }}>◈</span>
+              <span style={{ color: '#00bcd4', fontSize: '15px' }}>◈</span>
               OPERATOR READINESS
             </div>
 
