@@ -32,8 +32,6 @@ const AppShell: React.FC<AppShellProps> = ({
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const lastWidthRef = useRef(0);
-  const bottomNavRef = useRef<HTMLElement>(null);
-
   useEffect(() => {
     setMounted(true);
     const check = () => {
@@ -45,31 +43,7 @@ const AppShell: React.FC<AppShellProps> = ({
     };
     check();
     window.addEventListener('resize', check);
-
-    // Keyboard detection via direct DOM manipulation — NO React state, NO re-renders
-    const handleFocusIn = (e: FocusEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        bottomNavRef.current?.classList.add('keyboard-open');
-      }
-    };
-    const handleFocusOut = () => {
-      setTimeout(() => {
-        const active = document.activeElement?.tagName?.toLowerCase();
-        if (active !== 'input' && active !== 'textarea' && active !== 'select') {
-          bottomNavRef.current?.classList.remove('keyboard-open');
-        }
-      }, 150);
-    };
-
-    document.addEventListener('focusin', handleFocusIn);
-    document.addEventListener('focusout', handleFocusOut);
-
-    return () => {
-      window.removeEventListener('resize', check);
-      document.removeEventListener('focusin', handleFocusIn);
-      document.removeEventListener('focusout', handleFocusOut);
-    };
+    return () => window.removeEventListener('resize', check);
   }, []);
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
@@ -152,9 +126,7 @@ const AppShell: React.FC<AppShellProps> = ({
           .bottom-nav {
             display: flex !important;
           }
-          .bottom-nav.keyboard-open {
-            display: none !important;
-          }
+          /* Bottom nav stays visible — iOS naturally hides it behind keyboard */
           .desktop-nav {
             display: none !important;
           }
@@ -293,7 +265,7 @@ const AppShell: React.FC<AppShellProps> = ({
       </main>
 
       {/* Mobile Bottom Tab Bar — hidden when keyboard is open */}
-      <nav ref={bottomNavRef} className="bottom-nav" style={{
+      <nav className="bottom-nav" style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
