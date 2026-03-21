@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Operator, Meal, PRRecord, Injury } from '@/lib/types';
 
 // Local type aliases for internal state management
@@ -2472,10 +2472,27 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
     PREFERENCES: '◇',
   };
 
+  const tabLabels: Record<SubTab, string> = {
+    PROFILE: 'PROFILE',
+    NUTRITION: 'NUTR',
+    PR_BOARD: 'PRs',
+    INJURIES: 'INJURY',
+    PREFERENCES: 'PREFS',
+  };
+
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   return (
     <div
       style={{
         display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
         height: '100%',
         backgroundColor: '#030303',
         color: '#ccc',
@@ -2483,36 +2500,61 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         position: 'relative',
       }}
     >
-      {/* Sidebar */}
-      <div
-        style={{
-          width: '180px',
-          borderRight: '1px solid rgba(0,255,65,0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          paddingTop: '20px',
-          background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
-        }}
-      >
-        {/* Sidebar header */}
+      {/* Sidebar (desktop) / Top tabs (mobile) */}
+      {isMobile ? (
         <div style={{
-          padding: '0 16px 16px 16px',
-          borderBottom: '1px solid rgba(0,255,65,0.05)',
-          marginBottom: '8px',
+          display: 'flex',
+          overflowX: 'auto',
+          borderBottom: '1px solid rgba(0,255,65,0.06)',
+          background: 'rgba(8,8,8,0.5)',
+          flexShrink: 0,
+          WebkitOverflowScrolling: 'touch',
         }}>
-          <div style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '8px',
-            fontWeight: 700,
-            color: '#444',
-            letterSpacing: '2px',
-          }}>
-            INTEL CENTER
-          </div>
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES'] as const).map((tab) => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: '10px 14px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderBottom: isActive ? '2px solid #00ff41' : '2px solid transparent',
+                  color: isActive ? '#00ff41' : '#444',
+                  cursor: 'pointer',
+                  fontFamily: 'Orbitron, sans-serif',
+                  fontSize: '7px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  whiteSpace: 'nowrap',
+                  minHeight: '40px',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {tabLabels[tab]}
+              </button>
+            );
+          })}
         </div>
+      ) : (
+        <div
+          style={{
+            width: '180px',
+            borderRight: '1px solid rgba(0,255,65,0.06)',
+            display: 'flex',
+            flexDirection: 'column',
+            paddingTop: '20px',
+            background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
+          }}
+        >
+          <div style={{ padding: '0 16px 16px 16px', borderBottom: '1px solid rgba(0,255,65,0.05)', marginBottom: '8px' }}>
+            <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '8px', fontWeight: 700, color: '#444', letterSpacing: '2px' }}>
+              INTEL CENTER
+            </div>
+          </div>
 
-        {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES'] as const).map(
-          (tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -2535,53 +2577,27 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
                   alignItems: 'center',
                   gap: '8px',
                 }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.borderLeftColor = 'rgba(0,255,65,0.3)';
-                    e.currentTarget.style.color = '#888';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.borderLeftColor = 'transparent';
-                    e.currentTarget.style.color = '#444';
-                  }
-                }}
               >
                 <span style={{ fontSize: '6px', opacity: isActive ? 1 : 0.4 }}>{tabIcons[tab]}</span>
                 {tab.replace('_', ' ')}
               </button>
             );
-          }
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
       {/* Main Content */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Header with Save Button */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 24px',
-            borderBottom: '1px solid rgba(0,255,65,0.06)',
-            background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
-          }}
-        >
-          <div style={{
-            fontFamily: 'Share Tech Mono, monospace',
-            fontSize: '9px',
-            color: '#333',
-            letterSpacing: '1px',
-          }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: isMobile ? '10px 16px' : '12px 24px',
+          borderBottom: '1px solid rgba(0,255,65,0.06)',
+          background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
+        }}>
+          <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '9px', color: '#333', letterSpacing: '1px' }}>
             {operator.callsign} // {activeTab.replace('_', ' ')}
           </div>
           <button
@@ -2598,14 +2614,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
               letterSpacing: '2px',
               fontWeight: 800,
               transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#33ff77';
-              e.currentTarget.style.boxShadow = '0 0 16px rgba(0,255,65,0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#00ff41';
-              e.currentTarget.style.boxShadow = 'none';
+              minHeight: '36px',
             }}
           >
             SAVE
@@ -2613,14 +2622,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, onUpdateOperator })
         </div>
 
         {/* Content Area */}
-        <div
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            padding: '24px',
-            backgroundColor: '#030303',
-          }}
-        >
+        <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px' : '24px', backgroundColor: '#030303' }}>
           {renderContent()}
         </div>
       </div>

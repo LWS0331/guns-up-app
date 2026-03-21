@@ -27,14 +27,21 @@ const AppShell: React.FC<AppShellProps> = ({
   const [activeTab, setActiveTab] = useState<AppTab>('coc');
   const [selectedOperator, setSelectedOperator] = useState<Operator>(currentUser);
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
 
   const tabs: { id: AppTab; label: string; icon: string }[] = [
     { id: 'coc', label: 'COC', icon: '◆' },
-    { id: 'planner', label: 'PLANNER', icon: '▦' },
+    { id: 'planner', label: 'PLAN', icon: '▦' },
     { id: 'intel', label: 'INTEL', icon: '◈' },
     { id: 'gunny', label: 'GUNNY', icon: '▶' },
   ];
@@ -59,7 +66,7 @@ const AppShell: React.FC<AppShellProps> = ({
       display: 'flex',
       flexDirection: 'column',
       width: '100%',
-      height: '100vh',
+      height: '100dvh',
       backgroundColor: '#030303',
       color: '#00ff41',
       fontFamily: '"Chakra Petch", sans-serif',
@@ -70,10 +77,8 @@ const AppShell: React.FC<AppShellProps> = ({
         .nav-tab {
           position: relative;
           font-family: 'Orbitron', sans-serif;
-          font-size: 9px;
           letter-spacing: 2px;
           text-transform: uppercase;
-          padding: 8px 20px;
           cursor: pointer;
           border: none;
           outline: none;
@@ -97,18 +102,33 @@ const AppShell: React.FC<AppShellProps> = ({
         .nav-tab.active .tab-indicator {
           transform: scaleX(1);
         }
-        .nav-tab:hover {
-          color: #00ff41 !important;
+        .nav-tab:hover { color: #00ff41 !important; }
+        .nav-tab .tab-icon { transition: opacity 0.2s ease; }
+
+        /* Mobile bottom nav */
+        .bottom-nav {
+          display: none;
         }
-        .nav-tab .tab-icon {
-          font-size: 7px;
-          transition: opacity 0.2s ease;
+        .desktop-nav {
+          display: flex;
+        }
+
+        @media (max-width: 768px) {
+          .bottom-nav {
+            display: flex !important;
+          }
+          .desktop-nav {
+            display: none !important;
+          }
+          .desktop-user-switcher {
+            display: none !important;
+          }
         }
       `}</style>
 
-      {/* Header Bar */}
+      {/* Top Header Bar */}
       <header style={{
-        height: '52px',
+        height: isMobile ? '44px' : '52px',
         background: 'linear-gradient(180deg, rgba(10,10,10,0.95) 0%, rgba(5,5,5,0.98) 100%)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
@@ -116,8 +136,8 @@ const AppShell: React.FC<AppShellProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingLeft: '20px',
-        paddingRight: '20px',
+        paddingLeft: isMobile ? '12px' : '20px',
+        paddingRight: isMobile ? '12px' : '20px',
         flexShrink: 0,
         position: 'relative',
         zIndex: 100,
@@ -129,14 +149,13 @@ const AppShell: React.FC<AppShellProps> = ({
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
-          minWidth: '140px',
+          gap: isMobile ? '8px' : '12px',
         }}>
-          <Logo size={26} color="#00ff41" />
+          <Logo size={isMobile ? 22 : 26} color="#00ff41" />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
             <span style={{
               fontFamily: 'Orbitron, sans-serif',
-              fontSize: '11px',
+              fontSize: isMobile ? '10px' : '11px',
               fontWeight: 700,
               letterSpacing: '3px',
               color: '#00ff41',
@@ -150,14 +169,13 @@ const AppShell: React.FC<AppShellProps> = ({
               color: '#333',
               letterSpacing: '1px',
             }}>
-              v2.0 // {currentSelectedOp.callsign}
+              {currentSelectedOp.callsign}
             </span>
           </div>
         </div>
 
-        {/* Center: Navigation Tabs */}
-        <nav style={{
-          display: 'flex',
+        {/* Center: Desktop Navigation Tabs */}
+        <nav className="desktop-nav" style={{
           gap: '2px',
           flex: 1,
           justifyContent: 'center',
@@ -172,12 +190,15 @@ const AppShell: React.FC<AppShellProps> = ({
                 className={`nav-tab ${isActive ? 'active' : ''}`}
                 onClick={() => setActiveTab(tab.id)}
                 style={{
+                  fontSize: '9px',
+                  padding: '8px 20px',
                   fontWeight: isActive ? 800 : 500,
                   color: isActive ? '#00ff41' : '#3a3a3a',
                   backgroundColor: isActive ? 'rgba(0, 255, 65, 0.04)' : 'transparent',
                 }}
               >
                 <span className="tab-icon" style={{
+                  fontSize: '7px',
                   opacity: isActive ? 1 : 0.3,
                   color: isActive ? '#00ff41' : '#555',
                 }}>
@@ -190,8 +211,8 @@ const AppShell: React.FC<AppShellProps> = ({
           })}
         </nav>
 
-        {/* Right: User Switcher */}
-        <div style={{ minWidth: '140px', display: 'flex', justifyContent: 'flex-end' }}>
+        {/* Right: User Switcher (desktop) + mobile user indicator */}
+        <div className="desktop-user-switcher" style={{ minWidth: '140px', display: 'flex', justifyContent: 'flex-end' }}>
           <UserSwitcher
             currentUser={currentUser}
             accessibleUsers={accessibleUsers}
@@ -200,9 +221,20 @@ const AppShell: React.FC<AppShellProps> = ({
             onLogout={onLogout}
           />
         </div>
+
+        {/* Mobile: compact user switcher */}
+        {isMobile && (
+          <UserSwitcher
+            currentUser={currentUser}
+            accessibleUsers={accessibleUsers}
+            selectedUser={currentSelectedOp}
+            onSelectUser={setSelectedOperator}
+            onLogout={onLogout}
+          />
+        )}
       </header>
 
-      {/* Accent Line — gradient with glow */}
+      {/* Accent Line */}
       <div style={{
         height: '1px',
         background: 'linear-gradient(90deg, transparent 5%, rgba(255,184,0,0.6) 30%, #ffb800 50%, rgba(255,184,0,0.6) 70%, transparent 95%)',
@@ -216,9 +248,78 @@ const AppShell: React.FC<AppShellProps> = ({
         overflow: 'auto',
         backgroundColor: '#030303',
         position: 'relative',
+        paddingBottom: isMobile ? '56px' : '0',
       }}>
         {renderTabContent()}
       </main>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="bottom-nav" style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '56px',
+        background: 'linear-gradient(180deg, rgba(8,8,8,0.98) 0%, rgba(3,3,3,1) 100%)',
+        borderTop: '1px solid rgba(0,255,65,0.08)',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        zIndex: 200,
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '8px 0',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                position: 'relative',
+                minHeight: '44px',
+              }}
+            >
+              {/* Active top indicator */}
+              {isActive && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: '25%',
+                  right: '25%',
+                  height: '2px',
+                  backgroundColor: '#00ff41',
+                  boxShadow: '0 0 8px rgba(0,255,65,0.4)',
+                }} />
+              )}
+              <span style={{
+                fontSize: '14px',
+                color: isActive ? '#00ff41' : '#333',
+                transition: 'color 0.2s ease',
+              }}>
+                {tab.icon}
+              </span>
+              <span style={{
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: '7px',
+                fontWeight: isActive ? 800 : 500,
+                color: isActive ? '#00ff41' : '#333',
+                letterSpacing: '1px',
+                transition: 'color 0.2s ease',
+              }}>
+                {tab.label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 };

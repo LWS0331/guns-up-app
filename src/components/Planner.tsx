@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode } from '@/lib/types';
-import { EXERCISE_LIBRARY } from '@/data/exercises';
+import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 
 interface PlannerProps {
   operator: Operator;
@@ -13,6 +13,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   // ============================================================================
   // STATE
   // ============================================================================
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -409,23 +416,23 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
           </h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '4px' }}>
-          {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
-            <div key={day} style={{
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: isMobile ? '2px' : '4px', marginBottom: isMobile ? '2px' : '4px' }}>
+          {(isMobile ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']).map((day, i) => (
+            <div key={`${day}-${i}`} style={{
               textAlign: 'center',
               fontFamily: 'Orbitron',
               color: '#333',
-              fontSize: '7px',
+              fontSize: isMobile ? '6px' : '7px',
               fontWeight: 700,
-              padding: '8px',
-              letterSpacing: '2px',
+              padding: isMobile ? '4px' : '8px',
+              letterSpacing: isMobile ? '1px' : '2px',
             }}>
               {day}
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: isMobile ? '2px' : '4px' }}>
           {monthDates.map(week =>
             week.map(date => {
               const dateStr = formatDate(date);
@@ -440,8 +447,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                   onClick={() => { setSelectedDate(dateStr); setViewMode('day'); }}
                   onContextMenu={e => { e.preventDefault(); setShowDayMenu(dateStr); }}
                   style={{
-                    minHeight: '90px',
-                    padding: '8px',
+                    minHeight: isMobile ? '60px' : '90px',
+                    padding: isMobile ? '4px' : '8px',
                     backgroundColor: isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)',
                     border: isCurrentDay ? '1px solid rgba(0,255,65,0.3)' : '1px solid rgba(0,255,65,0.04)',
                     cursor: 'pointer',
@@ -672,10 +679,18 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 {workout.blocks.map((block, idx) => {
                   const label = getBlockLabels(workout.blocks)[idx];
                   if (block.type === 'exercise') {
+                    const vidUrl = block.videoUrl || getVideoUrl(block.exerciseName);
                     return (
                       <div key={block.id} style={{ marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #00bcd4' }}>
-                        <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '14px', fontWeight: 'bold' }}>
-                          {label}) {block.exerciseName}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '14px', fontWeight: 'bold' }}>
+                            {label}) {block.exerciseName}
+                          </div>
+                          {vidUrl && (
+                            <a href={vidUrl} target="_blank" rel="noopener noreferrer" className="video-link">
+                              ▶ DEMO
+                            </a>
+                          )}
                         </div>
                         <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: '11px', marginTop: '2px' }}>
                           {block.prescription}
@@ -972,6 +987,42 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                             boxSizing: 'border-box',
                           }}
                         />
+                      </div>
+
+                      {/* Video URL */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#ff4444', fontSize: '10px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                          Demo Video URL (YouTube)
+                        </label>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <input
+                            type="url"
+                            value={block.videoUrl || ''}
+                            onChange={e => handleUpdateBlock(idx, { videoUrl: e.target.value })}
+                            placeholder={getVideoUrl(block.exerciseName) ? 'Auto-linked from library' : 'https://youtube.com/watch?v=...'}
+                            style={{
+                              flex: 1,
+                              padding: '6px 8px',
+                              backgroundColor: '#0a0a0a',
+                              border: '1px solid rgba(255, 68, 68, 0.2)',
+                              color: '#ff4444',
+                              fontFamily: 'Share Tech Mono',
+                              fontSize: '11px',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                          {(block.videoUrl || getVideoUrl(block.exerciseName)) && (
+                            <a
+                              href={block.videoUrl || getVideoUrl(block.exerciseName)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="video-link"
+                              style={{ whiteSpace: 'nowrap' }}
+                            >
+                              ▶ WATCH
+                            </a>
+                          )}
+                        </div>
                       </div>
 
                       {/* Superset Link */}

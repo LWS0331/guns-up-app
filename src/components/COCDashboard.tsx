@@ -180,8 +180,15 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
   const recentPRs = getRecentPRs(operator);
   const weekDates = getWeekDates();
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   // Animated counters
   const animWorkouts = useCountUp(workoutsThisWeek, 800, 200);
@@ -201,7 +208,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
       backgroundColor: '#030303',
       color: '#ccc',
       fontFamily: 'Chakra Petch, sans-serif',
-      padding: '24px',
+      padding: isMobile ? '16px' : '24px',
       minHeight: '100vh',
       position: 'relative',
     }}>
@@ -261,8 +268,8 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
       {/* Hero Stats Row */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '12px',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+        gap: isMobile ? '8px' : '12px',
         marginBottom: '24px',
         position: 'relative',
       }}>
@@ -305,7 +312,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
             </div>
             <div style={{
               fontFamily: 'Share Tech Mono, monospace',
-              fontSize: stat.label === 'VOLUME' ? '32px' : '42px',
+              fontSize: isMobile ? (stat.label === 'VOLUME' ? '22px' : '28px') : (stat.label === 'VOLUME' ? '32px' : '42px'),
               color: stat.color,
               lineHeight: '1',
               marginBottom: '8px',
@@ -344,10 +351,10 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
       }} />
 
       {/* Two-Column Layout */}
-      <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', position: 'relative' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '16px' : '24px', marginBottom: '24px', position: 'relative' }}>
 
         {/* Left Column: Weekly Overview */}
-        <div style={{ flex: '0 0 58%' }}>
+        <div style={{ flex: isMobile ? '1' : '0 0 58%' }}>
           <div style={{
             fontFamily: 'Orbitron, sans-serif',
             fontSize: '8px',

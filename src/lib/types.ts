@@ -88,6 +88,7 @@ export interface ExerciseBlock {
   sortOrder: number;
   exerciseName: string;
   prescription: string;
+  videoUrl?: string;
   isLinkedToNext: boolean;
 }
 
@@ -111,6 +112,7 @@ export interface Exercise {
   name: string;
   category: string;
   equipment: string;
+  videoUrl?: string;
 }
 
 export type ViewMode = 'month' | 'week' | 'day';
