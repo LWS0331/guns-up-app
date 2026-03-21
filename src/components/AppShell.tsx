@@ -477,27 +477,36 @@ const AppShell: React.FC<AppShellProps> = ({
 
         .gunny-toggle-btn {
           position: fixed;
-          bottom: 28px;
-          right: 20px;
-          width: 48px;
-          height: 48px;
-          background: rgba(255, 184, 0, 0.15);
+          bottom: 32px;
+          right: 24px;
+          padding: 12px 20px;
+          background: linear-gradient(135deg, rgba(255,184,0,0.2), rgba(255,184,0,0.1));
           border: 2px solid #ffb800;
-          border-radius: 4px;
+          border-radius: 6px;
           color: #ffb800;
           cursor: pointer;
-          font-size: 20px;
+          font-family: 'Orbitron', sans-serif;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 2px;
           display: flex;
           align-items: center;
-          justify-content: center;
-          z-index: 250;
+          gap: 10px;
+          z-index: 9997;
           transition: all 0.3s ease;
-          box-shadow: 0 4px 16px rgba(255, 184, 0, 0.1);
+          box-shadow: 0 4px 20px rgba(255,184,0,0.15), 0 0 40px rgba(255,184,0,0.05);
+          animation: breathingGlow 3s ease-in-out infinite;
         }
 
         .gunny-toggle-btn:hover {
-          background: rgba(255, 184, 0, 0.25);
-          box-shadow: 0 6px 24px rgba(255, 184, 0, 0.2);
+          background: linear-gradient(135deg, rgba(255,184,0,0.35), rgba(255,184,0,0.2));
+          box-shadow: 0 6px 30px rgba(255,184,0,0.3), 0 0 60px rgba(255,184,0,0.1);
+          transform: translateY(-2px);
+        }
+
+        @keyframes breathingGlow {
+          0%, 100% { box-shadow: 0 4px 20px rgba(255,184,0,0.15), 0 0 40px rgba(255,184,0,0.05); }
+          50% { box-shadow: 0 4px 24px rgba(255,184,0,0.25), 0 0 50px rgba(255,184,0,0.1); }
         }
 
         .classification-bar {
@@ -768,7 +777,8 @@ const AppShell: React.FC<AppShellProps> = ({
           onClick={() => setShowGunnyPanel(true)}
           title="Open Gunny AI"
         >
-          <Logo size={24} color="#ffb800" />
+          <span style={{ fontSize: '18px' }}>▶</span>
+          GUNNY
         </button>
       )}
 
