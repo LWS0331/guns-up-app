@@ -513,17 +513,16 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         </label>
         <input
           type="text"
-          readOnly
           value={state.profile.name}
+          onChange={(e) => handleProfileChange('name', e.target.value)}
           style={{
             width: '100%',
             padding: '8px',
             fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
+            fontSize: '16px',
             backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
+            border: '1px solid rgba(0,255,65,0.1)',
             color: '#ddd',
-            cursor: 'not-allowed',
             boxSizing: 'border-box',
           }}
         />
