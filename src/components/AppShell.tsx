@@ -288,7 +288,7 @@ const AppShell: React.FC<AppShellProps> = ({
         overflow: 'auto',
         backgroundColor: '#030303',
         position: 'relative',
-        paddingBottom: isMobile && !keyboardOpen ? '56px' : '0',
+        paddingBottom: isMobile ? '56px' : '0',
       }}>
         {renderTabContent()}
       </main>

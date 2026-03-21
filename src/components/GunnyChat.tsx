@@ -806,45 +806,108 @@ ${mealSuggestion}`;
     return { response: "Stay in the fight, champ. What's the mission? BUILD A WORKOUT, check READINESS, review GOAL PATHS, or plan your WEEK?" };
   };
 
-  const handleSendMessage = () => {
+  const FALLBACK_RESPONSE = "Stay in the fight, champ. What's the mission? BUILD A WORKOUT, check READINESS, review GOAL PATHS, or plan your WEEK?";
+
+  const callGunnyAPI = async (allMessages: Message[]) => {
+    try {
+      const recentMessages = allMessages.slice(-10).map(m => ({
+        role: m.role,
+        text: m.text,
+      }));
+
+      const operatorContext = {
+        callsign: operator.callsign,
+        name: operator.name,
+        role: operator.role,
+        weight: operator.profile?.weight,
+        goals: operator.profile?.goals,
+        readiness: operator.profile?.readiness,
+        prs: operator.prs?.slice(0, 5).map(pr => `${pr.exercise}: ${pr.weight}lbs x${pr.reps}`).join(', ') || 'None',
+        injuries: operator.injuries?.map(inj => inj.name).join(', ') || 'None',
+        trainerNotes: operator.trainerNotes || 'None',
+        language: 'en',
+      };
+
+      const res = await fetch('/api/gunny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: recentMessages,
+          tier: operator.tier,
+          operatorContext,
+        }),
+      });
+
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      return data.response;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
     const text = inputValue;
     const userMessage: Message = { id: 'user-' + Date.now(), role: 'user', text, timestamp: new Date() };
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInputValue('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      const result = generateGunnyResponse(text);
-      const responseText = result.response;
+    // Try local handler first (for state-modifying actions like food logging, client roster)
+    const result = generateGunnyResponse(text);
+
+    if (result.response !== FALLBACK_RESPONSE) {
+      // Local handler matched — use it
       if (result.updatedOperator && onUpdateOperator) {
         onUpdateOperator(result.updatedOperator);
       }
       const isWorkout = text.toLowerCase().includes('build') || text.toLowerCase().includes('workout') || text.toLowerCase().includes('wod');
+      setTimeout(() => {
+        const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: result.response, timestamp: new Date(), isWorkout };
+        setIsTyping(false);
+        setMessages((prev) => [...prev, gunnyResponse]);
+      }, 400 + Math.random() * 300);
+    } else {
+      // No local match — call Anthropic API
+      const apiResponse = await callGunnyAPI(updatedMessages);
+      const responseText = apiResponse || FALLBACK_RESPONSE;
+      const isWorkout = text.toLowerCase().includes('build') || text.toLowerCase().includes('workout') || text.toLowerCase().includes('wod');
       const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: responseText, timestamp: new Date(), isWorkout };
       setIsTyping(false);
       setMessages((prev) => [...prev, gunnyResponse]);
-    }, 800 + Math.random() * 600);
+    }
 
     inputRef.current?.focus();
   };
 
-  const handleQuickAction = (action: string) => {
+  const handleQuickAction = async (action: string) => {
     const userMessage: Message = { id: 'user-' + Date.now(), role: 'user', text: action, timestamp: new Date() };
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setIsTyping(true);
 
-    setTimeout(() => {
-      const result = generateGunnyResponse(action);
-      const responseText = result.response;
+    const result = generateGunnyResponse(action);
+
+    if (result.response !== FALLBACK_RESPONSE) {
       if (result.updatedOperator && onUpdateOperator) {
         onUpdateOperator(result.updatedOperator);
       }
       const isWorkout = action.toLowerCase().includes('build') || action.toLowerCase().includes('wod');
+      setTimeout(() => {
+        const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: result.response, timestamp: new Date(), isWorkout };
+        setIsTyping(false);
+        setMessages((prev) => [...prev, gunnyResponse]);
+      }, 400 + Math.random() * 300);
+    } else {
+      const apiResponse = await callGunnyAPI(updatedMessages);
+      const responseText = apiResponse || FALLBACK_RESPONSE;
+      const isWorkout = action.toLowerCase().includes('build') || action.toLowerCase().includes('wod');
       const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: responseText, timestamp: new Date(), isWorkout };
       setIsTyping(false);
       setMessages((prev) => [...prev, gunnyResponse]);
-    }, 600 + Math.random() * 400);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
