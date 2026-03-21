@@ -312,7 +312,7 @@ export const OPERATORS: Operator[] = [
   {
     id: 'op-britney',
     name: 'Britney Rodriguez',
-    callsign: 'SIREN',
+    callsign: 'VALKYRIE',
     pin: '5678',
     role: 'trainer',
     tier: 'opus',
@@ -1150,7 +1150,7 @@ export const OPERATORS: Operator[] = [
   makeClient('op-arnold', 'Arnold', 'WARHORSE', '3011', 'sonnet', 'op-lynette', 'op-ruben', true,
     { age: 35, height: "5'11\"", weight: 210, bodyFat: 18, trainingAge: '10 years', goals: ['strength', 'hypertrophy', 'athletic performance'], readiness: 8, sleep: 7, stress: 3 },
     { split: 'Push/Pull/Legs', equipment: ['Barbell', 'Dumbbell', 'Cable', 'Kettlebell'], sessionDuration: 75, daysPerWeek: 5, weakPoints: ['Hamstrings', 'Mobility'], avoidMovements: [] }),
-  makeClient('op-lynette', 'Lynette', 'VALKYRIE', '3012', 'haiku', 'op-arnold', 'op-ruben', true,
+  makeClient('op-lynette', 'Lynette', 'SIREN', '3012', 'haiku', 'op-arnold', 'op-ruben', true,
     { age: 33, height: "5'5\"", weight: 140, bodyFat: 22, trainingAge: '3 years', goals: ['toning', 'endurance', 'weight loss'], readiness: 7, sleep: 7.5, stress: 4 },
     { split: 'Upper/Lower', equipment: ['Dumbbell', 'Cable', 'Bodyweight', 'Resistance Band'], sessionDuration: 50, daysPerWeek: 4, weakPoints: ['Core', 'Upper body strength'], avoidMovements: [] }),
 ];
