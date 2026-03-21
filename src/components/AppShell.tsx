@@ -11,6 +11,48 @@ import Planner from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
 
+// ═══ Matrix Code Rain Background ═══
+const DataRain: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let animId: number;
+    const chars = '01アイウエオカキクケコサシスセソABCDEF0123456789ΣΩΔλ{}[]<>/\\=+*&#@';
+    const fontSize = 13;
+    let columns: number;
+    let drops: number[];
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      columns = Math.floor(canvas.width / fontSize);
+      drops = Array.from({ length: columns }, () => Math.random() * -100);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    const draw = () => {
+      ctx.fillStyle = 'rgba(3,3,3,0.06)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = `${fontSize}px 'Share Tech Mono', monospace`;
+      for (let i = 0; i < drops.length; i++) {
+        const char = chars[Math.floor(Math.random() * chars.length)];
+        const x = i * fontSize;
+        const y = drops[i] * fontSize;
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.06)';
+        ctx.fillText(char, x, y);
+        if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
+        drops[i] += Math.random() > 0.5 ? 1 : 0.5;
+      }
+      animId = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(animId); };
+  }, []);
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }} />;
+};
+
 interface AppShellProps {
   currentUser: Operator;
   accessibleUsers: Operator[];
@@ -135,6 +177,23 @@ const AppShell: React.FC<AppShellProps> = ({
           }
         }
       `}</style>
+
+      {/* ═══ OVERWATCH-style background overlays ═══ */}
+      {/* Scanline overlay */}
+      <div style={{ position: 'fixed', inset: 0, background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,65,.012) 2px, rgba(0,255,65,.012) 4px)', mixBlendMode: 'screen', pointerEvents: 'none', zIndex: 999 }} />
+      {/* Background grid + radar ellipses */}
+      <svg style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}>
+        <defs><pattern id="gu-grid" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(0,255,65,0.03)" strokeWidth="0.5" /></pattern></defs>
+        <rect width="100%" height="100%" fill="url(#gu-grid)" />
+        <g opacity=".05" stroke="#00ff41" fill="none" strokeWidth=".4">
+          <ellipse cx="50%" cy="55%" rx="350" ry="200"/>
+          <ellipse cx="50%" cy="55%" rx="270" ry="150"/>
+          <ellipse cx="50%" cy="55%" rx="190" ry="100"/>
+          <ellipse cx="50%" cy="55%" rx="110" ry="55"/>
+        </g>
+      </svg>
+      {/* Matrix code rain */}
+      <DataRain />
 
       {/* Top Header Bar */}
       <header style={{
