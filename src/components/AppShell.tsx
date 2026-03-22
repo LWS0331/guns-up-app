@@ -111,6 +111,12 @@ interface OperatorContextData {
   prs?: Array<{ exercise: string; weight: number }>;
   injuries?: Array<{ id: string; name: string; status: string; notes?: string; restrictions?: string[] }>;
   injuryNotes?: string;
+  movementScreenScore?: number;
+  motivationFactors?: string[];
+  mealsPerDay?: number;
+  dailyWaterOz?: number;
+  proteinPriority?: string;
+  wearableDevice?: string;
   trainerNotes?: string;
   language?: string;
 }
@@ -448,6 +454,12 @@ const AppShell: React.FC<AppShellProps> = ({
         restrictions: inj.restrictions,
       })),
       injuryNotes: intake?.injuryNotes,
+      movementScreenScore: intake?.movementScreenScore,
+      motivationFactors: intake?.motivationFactors,
+      mealsPerDay: intake?.mealsPerDay,
+      dailyWaterOz: intake?.dailyWaterOz,
+      proteinPriority: intake?.proteinPriority,
+      wearableDevice: intake?.wearableDevice,
       trainerNotes: op.trainerNotes,
       language: language || 'en',
     };

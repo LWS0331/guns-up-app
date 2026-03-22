@@ -555,13 +555,21 @@ Preferred Workout Time: ${operatorContext.preferredWorkoutTime || 'Unknown'}
 Available Equipment: ${operatorContext.availableEquipment?.join(', ') || 'Unknown'}
 ${operatorContext.equipmentDetailed?.length ? `Equipment Details: ${operatorContext.equipmentDetailed.map(e => e.description ? `${e.name} (${e.description})` : e.name).join(', ')}` : ''}
 
-WELLNESS:
+WELLNESS & RECOVERY:
 Goals: ${operatorContext.goals?.join(', ') || 'General fitness'}
+Motivation Factors: ${operatorContext.motivationFactors?.length ? operatorContext.motivationFactors.join(', ') : 'Not specified'}
 Readiness: ${operatorContext.readiness || 'Unknown'}/10
+Mobility Score: ${operatorContext.movementScreenScore || 'Unknown'}/10
 Sleep Quality: ${operatorContext.sleepQuality || 'Unknown'}/10
 Stress Level: ${operatorContext.stressLevel || 'Unknown'}/10
+${operatorContext.wearableDevice ? `Wearable: ${operatorContext.wearableDevice}` : ''}
+
+NUTRITION:
 Nutrition Habits: ${operatorContext.nutritionHabits || 'Unknown'}
-${operatorContext.currentDiet ? `Current Diet: ${operatorContext.currentDiet}` : ''}
+${operatorContext.currentDiet ? `Diet Approach: ${operatorContext.currentDiet.replace(/_/g, ' ')}` : ''}
+${operatorContext.mealsPerDay ? `Meals Per Day: ${operatorContext.mealsPerDay}` : ''}
+${operatorContext.dailyWaterOz ? `Daily Water: ${operatorContext.dailyWaterOz}oz` : ''}
+${operatorContext.proteinPriority ? `Protein Priority: ${operatorContext.proteinPriority}` : ''}
 ${operatorContext.macroTargets ? `Macro Targets: ${operatorContext.macroTargets.calories}cal / ${operatorContext.macroTargets.protein}g P / ${operatorContext.macroTargets.carbs}g C / ${operatorContext.macroTargets.fat}g F` : ''}
 ${operatorContext.dietaryRestrictions?.length ? `Dietary Restrictions: ${operatorContext.dietaryRestrictions.join(', ')}` : ''}
 ${operatorContext.supplements?.length ? `Supplements: ${operatorContext.supplements.join(', ')}` : ''}
