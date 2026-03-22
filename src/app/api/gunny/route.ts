@@ -8,9 +8,9 @@ const client = new Anthropic({
 // Map app tiers to Anthropic models
 const TIER_MODEL_MAP: Record<string, string> = {
   haiku: 'claude-haiku-4-5-20251001',
-  sonnet: 'claude-sonnet-4-5-20250514',
-  opus: 'claude-opus-4-20250514',
-  white_glove: 'claude-opus-4-20250514',
+  sonnet: 'claude-sonnet-4-6-20250514',
+  opus: 'claude-opus-4-6-20250514',
+  white_glove: 'claude-opus-4-6-20250514',
 };
 
 const SYSTEM_PROMPT = `You are GUNNY — the most advanced tactical AI fitness coach ever built. You live inside the GUNS UP app. You are a former Marine drill instructor turned elite strength coach, sports scientist, and nutrition strategist. You have encyclopedic knowledge of:
@@ -284,6 +284,34 @@ FORMAT:
 - Use dashes and clean formatting if listing anything
 - Match the operator's energy`;
 
+// Ops intelligence mode prompt — business operations advisor with database access
+const OPS_PROMPT = `You are GUNNY — but in this mode you are operating as the TACTICAL OPERATIONS ADVISOR for the GUNS UP platform. You have direct access to real-time operational data from the command center database.
+
+ROLE: Business operations analyst for GUNS UP fitness platform
+AUDIENCE: Platform owner (RAMPAGE — Ruben Rodriguez) and authorized operators only
+CLEARANCE: CLASSIFIED — full access to all platform metrics
+
+YOU CAN ANSWER QUESTIONS ABOUT:
+- Revenue: MRR, ARR, per-tier breakdown, cost per user, profit margins, growth projections
+- Users: Total operators, active vs inactive, tier distribution, profile completion rates
+- Platform health: Total workouts generated, meals logged, PRs tracked, chat sessions, AI token usage
+- Beta program: Beta user status, conversion rates, days remaining, VANGUARD members
+- Marketing: Social platform status, content scheduling, campaign performance
+- Cost analysis: Per-user API cost burden, infrastructure costs, break-even analysis
+- Growth strategy: When to scale, pricing optimization, tier conversion funnels
+
+OPERATIONAL DATA (injected from database):
+The ops data block below contains REAL numbers from the live PostgreSQL database. Use these numbers in your answers — do not estimate or guess.
+
+COMMUNICATION STYLE:
+- Same Marine DI tone but focused on BUSINESS OPS, not fitness
+- Use terms like "sitrep", "intel", "mission status", "operational tempo"
+- Be direct with numbers — show exact figures, percentages, comparisons
+- If asked to project or forecast, base it on the real data provided
+- Present data in clean formatted blocks, not markdown
+
+FORMAT: Clean monospace, dashes, section breaks. No markdown headers or asterisks.`;
+
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -305,7 +333,12 @@ export async function POST(req: NextRequest) {
 
     const isAssistantMode = mode === 'assistant';
     const isOnboardingMode = mode === 'onboarding';
+    const isOpsMode = mode === 'ops';
     const model = TIER_MODEL_MAP[tier] || 'claude-haiku-4-5-20251001';
+
+    // Force Opus 4.6 for platform owner
+    const ownerOverride = operatorContext?.callsign === 'RAMPAGE';
+    const finalModel = ownerOverride ? 'claude-opus-4-6-20250514' : model;
 
     // Build rich context about the operator
     let contextBlock = '';
@@ -331,16 +364,21 @@ Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeri
       contextBlock += `\n\n═══ WHAT THE OPERATOR IS CURRENTLY VIEWING ═══\n${screenContext}`;
     }
 
+    // Add ops data for ops mode
+    if (isOpsMode && body.opsData) {
+      contextBlock += `\n\n═══ LIVE OPERATIONAL DATA FROM DATABASE ═══\n${JSON.stringify(body.opsData, null, 2)}`;
+    }
+
     // Convert messages to Anthropic format
     const anthropicMessages = messages.map((msg: { role: string; text: string }) => ({
       role: msg.role === 'gunny' ? 'assistant' as const : 'user' as const,
       content: msg.text,
     }));
 
-    const basePrompt = isOnboardingMode ? ONBOARDING_PROMPT : isAssistantMode ? ASSISTANT_PROMPT : SYSTEM_PROMPT;
-    const maxTokens = isAssistantMode ? 1024 : isOnboardingMode ? 2048 : 4096;
+    const basePrompt = isOpsMode ? OPS_PROMPT : isOnboardingMode ? ONBOARDING_PROMPT : isAssistantMode ? ASSISTANT_PROMPT : SYSTEM_PROMPT;
+    const maxTokens = ownerOverride ? 8192 : (isAssistantMode ? 1024 : isOnboardingMode ? 2048 : 4096);
     const response = await client.messages.create({
-      model,
+      model: finalModel,
       max_tokens: maxTokens,
       system: basePrompt + contextBlock,
       messages: anthropicMessages,
@@ -383,7 +421,7 @@ Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeri
       response: cleanResponse,
       workoutData,
       profileData,
-      model,
+      model: finalModel,
       usage: {
         input_tokens: response.usage.input_tokens,
         output_tokens: response.usage.output_tokens,

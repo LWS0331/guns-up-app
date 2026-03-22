@@ -40,6 +40,25 @@ export async function POST() {
       );
     `);
 
+    // Add new beta/promo columns to Operator (safe to run multiple times — IF NOT EXISTS not needed, ALTER ADD handles gracefully)
+    const newColumns = [
+      { name: 'betaStartDate', type: 'TEXT' },
+      { name: 'betaEndDate', type: 'TEXT' },
+      { name: 'isVanguard', type: 'BOOLEAN NOT NULL DEFAULT false' },
+      { name: 'tierLocked', type: 'BOOLEAN NOT NULL DEFAULT false' },
+      { name: 'promoActive', type: 'BOOLEAN NOT NULL DEFAULT false' },
+      { name: 'promoType', type: 'TEXT' },
+      { name: 'promoExpiry', type: 'TEXT' },
+    ];
+    for (const col of newColumns) {
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE "Operator" ADD COLUMN "${col.name}" ${col.type};
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+      `);
+    }
+
     // Create ChatHistory table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "ChatHistory" (

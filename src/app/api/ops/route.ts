@@ -88,10 +88,15 @@ export async function GET(req: Request) {
     let totalOnboardingChats = 0;
     let totalPanelChats = 0;
 
+    const chatsByOperator: Record<string, number> = {};
+
     chatHistories.forEach(chat => {
       const messages = (chat.messages as unknown[]) || [];
       const msgCount = messages.length;
       totalMessages += msgCount;
+
+      // Track per-operator message counts
+      chatsByOperator[chat.operatorId] = (chatsByOperator[chat.operatorId] || 0) + msgCount;
 
       if (chat.chatType === 'gunny-tab') totalGunnyChats++;
       if (chat.chatType === 'gunny-onboarding') totalOnboardingChats++;
@@ -133,6 +138,7 @@ export async function GET(req: Request) {
         totalInjuries,
         activeWearables,
       },
+      chatsByOperator,
       ai: {
         totalChatSessions: chatHistories.length,
         totalMessages,

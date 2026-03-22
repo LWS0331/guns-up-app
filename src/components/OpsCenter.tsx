@@ -60,6 +60,7 @@ interface DbMetrics {
     chatRows: number;
     estTotalRows: number;
   };
+  chatsByOperator?: Record<string, number>;
 }
 
 interface MarketingPlatform {
@@ -85,6 +86,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const [metrics, setMetrics] = useState<DbMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<string>('');
+  const [selectedOperatorForPromo, setSelectedOperatorForPromo] = useState<string | null>(null);
 
   // Verify access
   if (!OPS_CENTER_ACCESS.includes(currentUser.id)) {
@@ -119,6 +121,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const opStats = metrics?.operators.operatorStats || [];
   const trainers = metrics ? opStats.filter(op => op.role === 'trainer') : operators.filter(op => op.role === 'trainer');
   const clients = metrics ? opStats.filter(op => op.role === 'client') : operators.filter(op => op.role === 'client');
+  const chatsByOperator = metrics?.chatsByOperator || {};
 
   // ═══════════════════════════════════════
   // REVENUE CALCULATIONS (always from operators + TIER_CONFIGS)
@@ -180,94 +183,281 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     </div>
   );
 
+  // Handle tier change
+  const handleTierChange = async (operatorId: string, newTier: AiTier) => {
+    try {
+      const op = operators.find(o => o.id === operatorId);
+      if (!op) return;
+
+      const updated = { ...op, tier: newTier };
+      const res = await fetch(`/api/operators/${operatorId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      if (res.ok) {
+        fetchMetrics();
+      }
+    } catch (err) {
+      console.error('Failed to update tier:', err);
+    }
+  };
+
+  // Handle activate beta
+  const handleActivateBeta = async () => {
+    try {
+      const today = new Date();
+      const betaEnd = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000);
+
+      for (const op of operators.filter(o => o.role !== 'trainer')) {
+        const updated = {
+          ...op,
+          betaUser: true,
+          betaStartDate: today.toISOString().split('T')[0],
+          betaEndDate: betaEnd.toISOString().split('T')[0],
+        };
+        await fetch(`/api/operators/${op.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        });
+      }
+      fetchMetrics();
+    } catch (err) {
+      console.error('Failed to activate beta:', err);
+    }
+  };
+
+  // Handle lock all tiers
+  const handleLockAllTiers = async () => {
+    try {
+      for (const op of operators) {
+        const updated = { ...op, tierLocked: true };
+        await fetch(`/api/operators/${op.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        });
+      }
+      fetchMetrics();
+    } catch (err) {
+      console.error('Failed to lock tiers:', err);
+    }
+  };
+
+  // Handle grant vanguard
+  const handleGrantVanguard = async (operatorId: string) => {
+    try {
+      const op = operators.find(o => o.id === operatorId);
+      if (!op) return;
+
+      const updated = { ...op, isVanguard: true };
+      await fetch(`/api/operators/${operatorId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      fetchMetrics();
+    } catch (err) {
+      console.error('Failed to grant vanguard:', err);
+    }
+  };
+
+  // Handle reset all accounts
+  const handleResetAllAccounts = async () => {
+    if (!window.confirm('Are you sure? This will reset all accounts except op-ruben.')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/ops/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operatorId: currentUser.id,
+          excludeIds: ['op-ruben'],
+        }),
+      });
+      if (res.ok) {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Failed to reset accounts:', err);
+    }
+  };
+
+  // Handle promo
+  const handleOfferPromo = async (promoType: 'recon' | 'operator') => {
+    if (!selectedOperatorForPromo) return;
+    try {
+      const op = operators.find(o => o.id === selectedOperatorForPromo);
+      if (!op) return;
+
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + 30);
+
+      const updated = {
+        ...op,
+        promoActive: true,
+        promoType,
+        promoExpiry: expiry.toISOString().split('T')[0],
+      };
+      await fetch(`/api/operators/${selectedOperatorForPromo}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      setSelectedOperatorForPromo(null);
+      fetchMetrics();
+    } catch (err) {
+      console.error('Failed to offer promo:', err);
+    }
+  };
+
   // ═══════════════════════════════════════
   // RENDER FUNCTIONS
   // ═══════════════════════════════════════
-  const renderRevenue = () => (
-    <div style={{ padding: '20px' }}>
-      <LiveBadge />
-      {/* Top-level KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-        <KPICard label="MRR" value={`$${totalMRR.toFixed(2)}`} color="#00ff41" />
-        <KPICard label="ARR" value={`$${totalARR.toFixed(2)}`} color="#00ff41" />
-        <KPICard label="NET PROFIT/MO" value={`$${netProfit.toFixed(2)}`} color={netProfit > 0 ? '#00ff41' : '#ff4444'} />
-        <KPICard label="TOTAL CLIENTS" value={String(clients.length)} color="#00bcd4" />
-        <KPICard label="TRAINER PAYOUT" value={`$${totalTrainerPayout.toFixed(2)}/mo`} color="#ffb800" />
-        <KPICard label="API COST" value={`$${totalApiCost.toFixed(2)}/mo`} color="#ff4444" />
-      </div>
+  const renderRevenue = () => {
+    // Sort operators by est cost descending
+    const costPerUserData = operators.map(op => {
+      const workouts = opStats.find(s => s.id === op.id)?.workoutCount || 0;
+      const messages = chatsByOperator[op.id] || 0;
+      const estTokens = messages * 500;
+      const estCost = (estTokens / 1000000) * 3;
 
-      {/* Revenue by Tier */}
-      <SectionHeader title="REVENUE BY TIER" />
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
-              {['TIER', 'USERS', 'PRICE', 'MRR', 'TRAINER $', 'PLATFORM $', 'API COST', 'STRIPE', 'MARGIN'].map(h => (
-                <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(Object.keys(TIER_CONFIGS) as AiTier[]).map(tier => {
-              const config = TIER_CONFIGS[tier];
-              const data = revenueByTier[tier];
-              const margin = data.mrr > 0 ? ((data.platformRevenue - data.apiCost - data.stripeFees - data.infraCost) / data.mrr * 100) : 0;
-              return (
-                <tr key={tier} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <td style={{ padding: '10px 8px', color: tierColor(tier), fontWeight: 700 }}>{config.codename}</td>
-                  <td style={{ padding: '10px 8px', color: '#ddd' }}>{data.count}</td>
-                  <td style={{ padding: '10px 8px', color: '#888' }}>${config.monthlyPrice}</td>
-                  <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.mrr.toFixed(2)}</td>
-                  <td style={{ padding: '10px 8px', color: '#ffb800' }}>${data.trainerPayout.toFixed(2)}</td>
-                  <td style={{ padding: '10px 8px', color: '#00bcd4' }}>${data.platformRevenue.toFixed(2)}</td>
-                  <td style={{ padding: '10px 8px', color: '#ff4444' }}>${data.apiCost.toFixed(2)}</td>
-                  <td style={{ padding: '10px 8px', color: '#888' }}>${data.stripeFees.toFixed(2)}</td>
-                  <td style={{ padding: '10px 8px', color: margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{margin.toFixed(1)}%</td>
+      let status = 'PAID';
+      if (op.betaUser && !op.tierLocked) {
+        status = 'BETA FREE';
+      } else if (op.isVanguard) {
+        status = 'VANGUARD';
+      } else if (op.promoActive) {
+        status = 'PROMO';
+      }
+
+      return {
+        id: op.id,
+        callsign: op.callsign,
+        tier: op.tier,
+        workouts,
+        messages,
+        estTokens,
+        estCost,
+        status,
+      };
+    }).sort((a, b) => b.estCost - a.estCost);
+
+    return (
+      <div style={{ padding: '20px' }}>
+        <LiveBadge />
+        {/* Top-level KPIs */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+          <KPICard label="MRR" value={`$${totalMRR.toFixed(2)}`} color="#00ff41" />
+          <KPICard label="ARR" value={`$${totalARR.toFixed(2)}`} color="#00ff41" />
+          <KPICard label="NET PROFIT/MO" value={`$${netProfit.toFixed(2)}`} color={netProfit > 0 ? '#00ff41' : '#ff4444'} />
+          <KPICard label="TOTAL CLIENTS" value={String(clients.length)} color="#00bcd4" />
+          <KPICard label="TRAINER PAYOUT" value={`$${totalTrainerPayout.toFixed(2)}/mo`} color="#ffb800" />
+          <KPICard label="API COST" value={`$${totalApiCost.toFixed(2)}/mo`} color="#ff4444" />
+        </div>
+
+        {/* Revenue by Tier */}
+        <SectionHeader title="REVENUE BY TIER" />
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
+                {['TIER', 'USERS', 'PRICE', 'MRR', 'TRAINER $', 'PLATFORM $', 'API COST', 'STRIPE', 'MARGIN'].map(h => (
+                  <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(Object.keys(TIER_CONFIGS) as AiTier[]).map(tier => {
+                const config = TIER_CONFIGS[tier];
+                const data = revenueByTier[tier];
+                const margin = data.mrr > 0 ? ((data.platformRevenue - data.apiCost - data.stripeFees - data.infraCost) / data.mrr * 100) : 0;
+                return (
+                  <tr key={tier} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <td style={{ padding: '10px 8px', color: tierColor(tier), fontWeight: 700 }}>{config.codename}</td>
+                    <td style={{ padding: '10px 8px', color: '#ddd' }}>{data.count}</td>
+                    <td style={{ padding: '10px 8px', color: '#888' }}>${config.monthlyPrice}</td>
+                    <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.mrr.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: '#ffb800' }}>${data.trainerPayout.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: '#00bcd4' }}>${data.platformRevenue.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: '#ff4444' }}>${data.apiCost.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: '#888' }}>${data.stripeFees.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{margin.toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Cost/Burden Per User */}
+        <SectionHeader title="COST/BURDEN PER USER" />
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
+                {['CALLSIGN', 'TIER', 'WORKOUTS', 'MESSAGES', 'EST TOKENS', 'EST COST ($)', 'STATUS'].map(h => (
+                  <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {costPerUserData.map(row => (
+                <tr key={row.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <td style={{ padding: '10px 8px', color: '#ddd', fontWeight: 600 }}>{row.callsign}</td>
+                  <td style={{ padding: '10px 8px', color: tierColor(row.tier) }}>{row.tier}</td>
+                  <td style={{ padding: '10px 8px', color: '#888' }}>{row.workouts}</td>
+                  <td style={{ padding: '10px 8px', color: '#888' }}>{row.messages}</td>
+                  <td style={{ padding: '10px 8px', color: '#00bcd4' }}>{row.estTokens.toLocaleString()}</td>
+                  <td style={{ padding: '10px 8px', color: row.estCost > 10 ? '#ff4444' : '#00ff41' }}>${row.estCost.toFixed(2)}</td>
+                  <td style={{ padding: '10px 8px', color: row.status === 'VANGUARD' ? '#ff00ff' : row.status === 'BETA FREE' ? '#00ff41' : row.status === 'PROMO' ? '#ffb800' : '#888' }}>{row.status}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {/* Trainer Revenue Breakdown */}
-      <SectionHeader title="TRAINER PAYOUT BREAKDOWN" />
-      {operators.filter(op => op.role === 'trainer').map(trainer => {
-        const trainerClients = operators.filter(op => op.trainerId === trainer.id);
-        const trainerMRR = trainerClients.reduce((sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0), 0);
-        return (
-          <div key={trainer.id} style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.03)',
-          }}>
-            <div>
-              <span style={{ color: '#ddd', fontFamily: '"Chakra Petch", sans-serif', fontSize: '14px' }}>{trainer.callsign}</span>
-              <span style={{ color: '#555', fontSize: '12px', marginLeft: '8px' }}>({trainerClients.length} clients)</span>
-            </div>
-            <span style={{ color: '#ffb800', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px' }}>${trainerMRR.toFixed(2)}/mo</span>
-          </div>
-        );
-      })}
-
-      {/* Projections */}
-      <SectionHeader title="GROWTH PROJECTIONS" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-        {[25, 50, 100, 250, 500].map(count => {
-          const avgRevPerUser = clients.length > 0 ? totalMRR / clients.length : 5;
-          const projected = count * avgRevPerUser;
+        {/* Trainer Revenue Breakdown */}
+        <SectionHeader title="TRAINER PAYOUT BREAKDOWN" />
+        {operators.filter(op => op.role === 'trainer').map(trainer => {
+          const trainerClients = operators.filter(op => op.trainerId === trainer.id);
+          const trainerMRR = trainerClients.reduce((sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0), 0);
           return (
-            <div key={count} style={{
-              padding: '12px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)',
+            <div key={trainer.id} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.03)',
             }}>
-              <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{count} USERS</div>
-              <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700 }}>${projected.toFixed(0)}/mo</div>
-              <div style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>${(projected * 12).toFixed(0)}/yr</div>
+              <div>
+                <span style={{ color: '#ddd', fontFamily: '"Chakra Petch", sans-serif', fontSize: '14px' }}>{trainer.callsign}</span>
+                <span style={{ color: '#555', fontSize: '12px', marginLeft: '8px' }}>({trainerClients.length} clients)</span>
+              </div>
+              <span style={{ color: '#ffb800', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px' }}>${trainerMRR.toFixed(2)}/mo</span>
             </div>
           );
         })}
+
+        {/* Projections */}
+        <SectionHeader title="GROWTH PROJECTIONS" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          {[25, 50, 100, 250, 500].map(count => {
+            const avgRevPerUser = clients.length > 0 ? totalMRR / clients.length : 5;
+            const projected = count * avgRevPerUser;
+            return (
+              <div key={count} style={{
+                padding: '12px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)',
+              }}>
+                <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{count} USERS</div>
+                <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700 }}>${projected.toFixed(0)}/mo</div>
+                <div style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>${(projected * 12).toFixed(0)}/yr</div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderUsers = () => {
     // Use DB stats when available for real activity data
@@ -276,6 +466,41 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     return (
       <div style={{ padding: '20px' }}>
         <LiveBadge />
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleActivateBeta}
+            style={{
+              padding: '8px 16px', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace',
+              color: '#00ff41', background: 'rgba(0,255,65,0.08)', border: '1px solid rgba(0,255,65,0.2)',
+              cursor: 'pointer', letterSpacing: '1px',
+            }}
+          >
+            ACTIVATE BETA
+          </button>
+          <button
+            onClick={handleLockAllTiers}
+            style={{
+              padding: '8px 16px', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace',
+              color: '#ffb800', background: 'rgba(255,184,0,0.08)', border: '1px solid rgba(255,184,0,0.2)',
+              cursor: 'pointer', letterSpacing: '1px',
+            }}
+          >
+            LOCK ALL TIERS
+          </button>
+          <button
+            onClick={handleResetAllAccounts}
+            style={{
+              padding: '8px 16px', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace',
+              color: '#ff4444', background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.2)',
+              cursor: 'pointer', letterSpacing: '1px',
+            }}
+          >
+            RESET ALL ACCOUNTS
+          </button>
+        </div>
+
         {/* User KPIs — real from DB */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
           <KPICard label="TOTAL OPERATORS" value={String(dbStats?.total ?? operators.length)} color="#00bcd4" />
@@ -298,51 +523,70 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                 <div style={{ color: tierColor(tier), fontFamily: '"Orbitron", sans-serif', fontSize: '11px', letterSpacing: '2px' }}>
                   {TIER_CONFIGS[tier].codename}
                 </div>
-                <div style={{ color: '#ddd', fontFamily: '"Orbitron", sans-serif', fontSize: '24px', fontWeight: 700 }}>{count}</div>
-                <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{pct}%</div>
+                <div style={{ color: tierColor(tier), fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700, marginTop: '4px' }}>
+                  {count}
+                </div>
+                <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px', marginTop: '2px' }}>
+                  {pct}% of {total}
+                </div>
               </div>
             );
           })}
         </div>
 
-        {/* Full User Roster — use DB stats for workout/PR counts */}
-        <SectionHeader title="ALL OPERATORS" />
+        {/* Roster with Tier Management */}
+        <SectionHeader title="OPERATOR ROSTER" />
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
-                {['CALLSIGN', 'NAME', 'ROLE', 'TIER', 'WORKOUTS', 'PRs', 'ACTIVE', 'PROFILE', 'BETA'].map(h => (
-                  <th key={h} style={{ padding: '8px', color: '#555', textAlign: 'left', fontSize: '10px', letterSpacing: '1px' }}>{h}</th>
+                {['CALLSIGN', 'NAME', 'ROLE', 'TIER', 'LOCKED', 'ACTIONS'].map(h => (
+                  <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {(opStats.length > 0 ? opStats : operators.map(op => ({
-                id: op.id, callsign: op.callsign, name: op.name, role: op.role, tier: op.tier,
-                workoutCount: Object.keys(op.workouts || {}).length,
-                prCount: (op.prs || []).length,
-                isActive: false, hasProfile: !!(op.profile?.age && op.profile?.weight),
-                betaUser: op.betaUser || false,
-              }))).map(op => (
-                <tr key={op.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                  <td style={{ padding: '8px', color: tierColor(op.tier), fontWeight: 600 }}>{op.callsign}</td>
-                  <td style={{ padding: '8px', color: '#888' }}>{op.name}</td>
-                  <td style={{ padding: '8px', color: op.role === 'trainer' ? '#ffb800' : '#00bcd4' }}>{op.role.toUpperCase()}</td>
-                  <td style={{ padding: '8px', color: tierColor(op.tier) }}>{TIER_CONFIGS[op.tier as AiTier]?.codename || op.tier}</td>
-                  <td style={{ padding: '8px', color: op.workoutCount > 0 ? '#00ff41' : '#333' }}>{op.workoutCount}</td>
-                  <td style={{ padding: '8px', color: op.prCount > 0 ? '#00bcd4' : '#333' }}>{op.prCount}</td>
-                  <td style={{ padding: '8px' }}>
-                    <span style={{
-                      padding: '2px 6px', fontSize: '9px',
-                      background: op.isActive ? 'rgba(0,255,65,0.08)' : 'rgba(255,68,68,0.05)',
-                      color: op.isActive ? '#00ff41' : '#444',
-                      border: `1px solid ${op.isActive ? 'rgba(0,255,65,0.15)' : 'rgba(255,255,255,0.03)'}`,
-                    }}>
-                      {op.isActive ? 'ACTIVE' : 'INACTIVE'}
-                    </span>
+              {operators.map(op => (
+                <tr key={op.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <td style={{ padding: '10px 8px', color: '#ddd', fontWeight: 600 }}>{op.callsign}</td>
+                  <td style={{ padding: '10px 8px', color: '#888' }}>{op.name || '—'}</td>
+                  <td style={{ padding: '10px 8px', color: '#888' }}>{op.role}</td>
+                  <td style={{ padding: '10px 8px' }}>
+                    {op.tierLocked ? (
+                      <span style={{ color: '#888' }}>🔒 {op.tier}</span>
+                    ) : (
+                      <select
+                        value={op.tier}
+                        onChange={(e) => handleTierChange(op.id, e.target.value as AiTier)}
+                        style={{
+                          padding: '4px 6px', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace',
+                          color: tierColor(op.tier), background: 'rgba(0,0,0,0.3)',
+                          border: `1px solid ${tierColor(op.tier)}30`, cursor: 'pointer',
+                        }}
+                      >
+                        {(Object.keys(TIER_CONFIGS) as AiTier[]).map(tier => (
+                          <option key={tier} value={tier}>{TIER_CONFIGS[tier].codename}</option>
+                        ))}
+                      </select>
+                    )}
                   </td>
-                  <td style={{ padding: '8px', color: op.hasProfile ? '#00ff41' : '#ff4444' }}>{op.hasProfile ? 'YES' : 'NO'}</td>
-                  <td style={{ padding: '8px', color: op.betaUser ? '#ff00ff' : '#333' }}>{op.betaUser ? 'YES' : '—'}</td>
+                  <td style={{ padding: '10px 8px', color: op.tierLocked ? '#ffb800' : '#555' }}>
+                    {op.tierLocked ? 'YES' : 'NO'}
+                  </td>
+                  <td style={{ padding: '10px 8px' }}>
+                    {op.betaUser && !op.isVanguard && (
+                      <button
+                        onClick={() => handleGrantVanguard(op.id)}
+                        style={{
+                          padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                          color: '#ff00ff', background: 'rgba(255,0,255,0.08)', border: '1px solid rgba(255,0,255,0.2)',
+                          cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        VANGUARD
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -353,79 +597,35 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   };
 
   const renderPlatform = () => {
-    const pm = metrics?.platform;
-    const ai = metrics?.ai;
-    const db = metrics?.db;
-
-    // Real counts from DB when available
-    const totalWorkouts = pm?.totalWorkouts ?? operators.reduce((sum, op) => sum + Object.keys(op.workouts || {}).length, 0);
-    const totalMeals = pm?.totalMeals ?? 0;
-    const totalPRs = pm?.totalPRs ?? operators.reduce((sum, op) => sum + (op.prs?.length || 0), 0);
-    const totalInjuries = pm?.totalInjuries ?? operators.reduce((sum, op) => sum + (op.injuries?.length || 0), 0);
-    const activeWearables = pm?.activeWearables ?? 0;
-
-    // Real AI usage from DB
-    const totalChatSessions = ai?.totalChatSessions ?? 0;
-    const totalMessages = ai?.totalMessages ?? 0;
-    const estTokens = ai?.estTotalTokens ?? 0;
-    const estCost = ai?.estMonthlyCostUSD ?? 0;
+    const dbPlatform = metrics?.platform;
 
     return (
       <div style={{ padding: '20px' }}>
         <LiveBadge />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="TOTAL WORKOUTS" value={String(totalWorkouts)} color="#00ff41" />
-          <KPICard label="MEALS LOGGED" value={String(totalMeals)} color="#ffb800" />
-          <KPICard label="PRs RECORDED" value={String(totalPRs)} color="#00bcd4" />
-          <KPICard label="INJURIES TRACKED" value={String(totalInjuries)} color="#ff4444" />
-          <KPICard label="WEARABLE LINKS" value={String(activeWearables)} color="#ff00ff" />
+        {/* Platform KPIs */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+          <KPICard label="TOTAL WORKOUTS" value={String(dbPlatform?.totalWorkouts ?? 0)} color="#00ff41" />
+          <KPICard label="TOTAL MEALS" value={String(dbPlatform?.totalMeals ?? 0)} color="#00bcd4" />
+          <KPICard label="TOTAL PRs" value={String(dbPlatform?.totalPRs ?? 0)} color="#ffb800" />
+          <KPICard label="INJURIES" value={String(dbPlatform?.totalInjuries ?? 0)} color="#ff4444" />
+          <KPICard label="ACTIVE WEARABLES" value={String(dbPlatform?.activeWearables ?? 0)} color="#ff00ff" />
         </div>
 
-        {/* AI Usage — real from chat history DB */}
-        <SectionHeader title="GUNNY AI USAGE" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="CHAT SESSIONS" value={String(totalChatSessions)} color="#ffb800" />
-          <KPICard label="TOTAL MESSAGES" value={String(totalMessages)} color="#00bcd4" />
-          <KPICard label="GUNNY TAB" value={String(ai?.gunnyChatSessions ?? 0)} color="#00ff41" />
-          <KPICard label="ONBOARDING" value={String(ai?.onboardingSessions ?? 0)} color="#ff00ff" />
-          <KPICard label="SIDE PANEL" value={String(ai?.panelSessions ?? 0)} color="#ffb800" />
-          <KPICard label="EST TOKENS" value={estTokens > 1000000 ? `${(estTokens / 1000000).toFixed(1)}M` : estTokens > 1000 ? `${(estTokens / 1000).toFixed(0)}K` : String(estTokens)} color="#ff4444" />
-          <KPICard label="EST API COST" value={`$${estCost.toFixed(2)}`} color="#ff4444" />
-        </div>
-
-        <SectionHeader title="INFRASTRUCTURE STATUS" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-          <StatusRow label="RAILWAY DEPLOY" status="LIVE" color="#00ff41" />
-          <StatusRow label="POSTGRESQL" status={metrics ? 'CONNECTED' : 'CHECKING...'} color={metrics ? '#00ff41' : '#ffb800'} />
-          <StatusRow label="ANTHROPIC API" status="ACTIVE" color="#00ff41" />
-          <StatusRow label="JUNCTION WEARABLES" status={activeWearables > 0 ? `${activeWearables} LINKED` : 'PENDING CONFIG'} color={activeWearables > 0 ? '#00ff41' : '#ffb800'} />
-          <StatusRow label="PRISMA 7" status="v7.5.0" color="#00bcd4" />
-          <StatusRow label="NEXT.JS" status="v14.2" color="#00bcd4" />
-        </div>
-
-        <SectionHeader title="DATABASE VOLUME" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          <DataRow label="Operator rows" value={String(db?.operatorRows ?? operators.length)} />
-          <DataRow label="Chat history rows" value={String(db?.chatRows ?? 0)} />
-          <DataRow label="Workouts stored" value={String(totalWorkouts)} />
-          <DataRow label="Meal entries" value={String(totalMeals)} />
-          <DataRow label="PR records" value={String(totalPRs)} />
-          <DataRow label="Injury records" value={String(totalInjuries)} />
-          <DataRow label="Wearable connections" value={String(activeWearables)} />
-          <DataRow label="Est. total DB rows" value={`~${db?.estTotalRows ?? operators.length}`} />
-        </div>
+        {/* Platform Details */}
+        <SectionHeader title="PLATFORM METRICS" />
+        <StatusRow label="Total Workouts" status={String(dbPlatform?.totalWorkouts ?? 0)} color="#00ff41" />
+        <StatusRow label="Total Meals Logged" status={String(dbPlatform?.totalMeals ?? 0)} color="#00bcd4" />
+        <StatusRow label="Personal Records" status={String(dbPlatform?.totalPRs ?? 0)} color="#ffb800" />
+        <StatusRow label="Injury Reports" status={String(dbPlatform?.totalInjuries ?? 0)} color="#ff4444" />
+        <StatusRow label="Wearable Devices" status={String(dbPlatform?.activeWearables ?? 0)} color="#ff00ff" />
       </div>
     );
   };
 
   const renderBeta = () => {
-    // Normalize beta operators into a common shape
-    const betaOps = (opStats.length > 0 ? opStats : operators.map(op => ({
-      id: op.id, callsign: op.callsign, name: op.name, role: op.role, tier: op.tier,
-      betaUser: op.betaUser || false, hasProfile: !!(op.profile?.age && op.profile?.weight),
-      workoutCount: 0, mealCount: 0, prCount: 0, injuryCount: 0, isActive: false,
-      createdAt: '', updatedAt: '',
-    }))).filter(op => op.betaUser);
+    const betaOps = operators.map(op => ({
+      ...op, createdAt: '', updatedAt: '',
+    })).filter(op => op.betaUser);
 
     const allFeedback = operators.flatMap(op =>
       (op.betaFeedback || []).map(fb => ({ callsign: op.callsign, feedback: fb, tier: op.tier }))
@@ -439,12 +639,56 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
           <KPICard label="BETA USERS" value={String(dbBeta?.beta ?? betaOps.length)} color="#ff00ff" />
           <KPICard label="TOTAL FEEDBACK" value={String(allFeedback.length)} color="#00bcd4" />
-          <KPICard label="PROFILE COMPLETE" value={`${betaOps.filter(op => op.hasProfile).length}/${betaOps.length}`} color="#00ff41" />
+          <KPICard label="PROFILE COMPLETE" value={`${betaOps.filter(op => op.profile?.age && op.profile?.weight).length}/${betaOps.length}`} color="#00ff41" />
+        </div>
+
+        {/* Promotions */}
+        <SectionHeader title="PROMOTIONS" />
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={selectedOperatorForPromo || ''}
+            onChange={(e) => setSelectedOperatorForPromo(e.target.value || null)}
+            style={{
+              padding: '6px 10px', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace',
+              color: '#ddd', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="">Select operator...</option>
+            {operators.filter(op => op.betaUser).map(op => (
+              <option key={op.id} value={op.id}>{op.callsign}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => handleOfferPromo('recon')}
+            disabled={!selectedOperatorForPromo}
+            style={{
+              padding: '6px 12px', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace',
+              color: '#ffb800', background: 'rgba(255,184,0,0.08)', border: '1px solid rgba(255,184,0,0.2)',
+              cursor: selectedOperatorForPromo ? 'pointer' : 'not-allowed', opacity: selectedOperatorForPromo ? 1 : 0.5,
+              letterSpacing: '1px',
+            }}
+          >
+            OFFER FREE MONTH — RECON TIER
+          </button>
+          <button
+            onClick={() => handleOfferPromo('operator')}
+            disabled={!selectedOperatorForPromo}
+            style={{
+              padding: '6px 12px', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace',
+              color: '#00bcd4', background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)',
+              cursor: selectedOperatorForPromo ? 'pointer' : 'not-allowed', opacity: selectedOperatorForPromo ? 1 : 0.5,
+              letterSpacing: '1px',
+            }}
+          >
+            OFFER FREE MONTH — OPERATOR TIER
+          </button>
         </div>
 
         <SectionHeader title="BETA ROSTER" />
         {betaOps.map(op => {
           const fbCount = operators.find(o => o.id === op.id)?.betaFeedback?.length || 0;
+          const profiled = !!(op.profile?.age && op.profile?.weight);
           return (
             <div key={op.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -460,11 +704,11 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                 </span>
                 <span style={{
                   padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
-                  background: op.hasProfile ? 'rgba(0,255,65,0.08)' : 'rgba(255,68,68,0.08)',
-                  color: op.hasProfile ? '#00ff41' : '#ff4444',
-                  border: `1px solid ${op.hasProfile ? 'rgba(0,255,65,0.15)' : 'rgba(255,68,68,0.15)'}`,
+                  background: profiled ? 'rgba(0,255,65,0.08)' : 'rgba(255,68,68,0.08)',
+                  color: profiled ? '#00ff41' : '#ff4444',
+                  border: `1px solid ${profiled ? 'rgba(0,255,65,0.15)' : 'rgba(255,68,68,0.15)'}`,
                 }}>
-                  {op.hasProfile ? 'PROFILED' : 'INCOMPLETE'}
+                  {profiled ? 'PROFILED' : 'INCOMPLETE'}
                 </span>
               </div>
             </div>
@@ -669,9 +913,9 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   );
 };
 
-// ═══════════════════════════════════════
+// ═══════════════════════════════════
 // SHARED UI COMPONENTS
-// ═══════════════════════════════════════
+// ═══════════════════════════════════
 const KPICard: React.FC<{ label: string; value: string; color: string }> = ({ label, value, color }) => (
   <div style={{
     padding: '14px 16px', background: 'rgba(0,0,0,0.3)',

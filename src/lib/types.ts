@@ -55,6 +55,13 @@ export interface Operator {
   trainerNotes?: string; // Custom directives from trainer for this client's Gunny
   betaUser?: boolean; // true = in beta trial, no charge
   betaFeedback?: string[]; // collected feedback during beta
+  betaStartDate?: string; // ISO date when beta period started
+  betaEndDate?: string; // ISO date when beta expires (45 days from start)
+  isVanguard?: boolean; // true = founding member (VANGUARD status)
+  tierLocked?: boolean; // true = post-launch, tier cannot be changed by admin
+  promoActive?: boolean; // true = currently on a promotional free month
+  promoType?: string; // e.g. "free_month_recon", "free_month_operator"
+  promoExpiry?: string; // ISO date when promo expires
   profile: OperatorProfile;
   nutrition: NutritionData;
   prs: PRRecord[];
@@ -169,6 +176,7 @@ export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'ops';
 
 // Hardcoded admin access for OPS CENTER
 export const OPS_CENTER_ACCESS = ['op-ruben', 'op-britney'];
+export const BETA_DURATION_DAYS = 45;
 export type IntelTab = 'profile' | 'nutrition' | 'prs' | 'injuries' | 'preferences';
 
 export interface AuthState {

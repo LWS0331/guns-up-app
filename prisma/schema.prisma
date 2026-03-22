@@ -20,6 +20,13 @@ model Operator {
   trainerNotes String?
   betaUser    Boolean   @default(false)
   betaFeedback String[] @default([])
+  betaStartDate String?               // ISO date when beta started
+  betaEndDate   String?               // ISO date when beta expires (45 days)
+  isVanguard    Boolean  @default(false) // founding member status
+  tierLocked    Boolean  @default(false) // post-launch: tier cannot be changed
+  promoActive   Boolean  @default(false) // currently on promotional period
+  promoType     String?               // e.g. "free_month_recon"
+  promoExpiry   String?               // ISO date when promo expires
 
   // Complex nested data stored as JSONB
   profile     Json      @default("{}")
