@@ -1086,6 +1086,16 @@ ${mealSuggestion}`;
 
       const apiMode = forceMode || (isOnboarding ? 'onboarding' : undefined);
 
+      // Build trainer dataset for workout personalization
+      const trainer = operator.trainerId ? allOperators.find(op => op.id === operator.trainerId) : null;
+      const trainerData = trainer ? {
+        workouts: trainer.workouts,
+        preferences: trainer.preferences,
+        prs: trainer.prs,
+        profile: trainer.profile,
+        trainerNotes: operator.trainerNotes,
+      } : null;
+
       const res = await fetch('/api/gunny', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1094,6 +1104,7 @@ ${mealSuggestion}`;
           tier: operator.tier,
           operatorContext,
           ...(apiMode && { mode: apiMode }),
+          ...(trainerData && { trainerData }),
         }),
       });
 

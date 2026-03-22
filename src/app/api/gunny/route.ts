@@ -312,6 +312,93 @@ COMMUNICATION STYLE:
 
 FORMAT: Clean monospace, dashes, section breaks. No markdown headers or asterisks.`;
 
+// Build trainer programming dataset from trainer's workout history
+function buildTrainerDataset(trainerData: Record<string, unknown> | null): string {
+  if (!trainerData) return '';
+
+  const workouts = trainerData.workouts as Record<string, Record<string, unknown>> | undefined;
+  const preferences = trainerData.preferences as Record<string, unknown> | undefined;
+  const prs = trainerData.prs as Array<Record<string, unknown>> | undefined;
+  const trainerNotes = trainerData.trainerNotes as string | undefined;
+
+  if (!workouts || Object.keys(workouts).length === 0) return '';
+
+  // Extract programming patterns from trainer's workouts
+  const workoutList = Object.values(workouts);
+  const exerciseFrequency: Record<string, number> = {};
+  const volumePatterns: { exercise: string; sets: string; prescription: string }[] = [];
+  const splitDays: string[] = [];
+
+  workoutList.forEach((w: Record<string, unknown>) => {
+    if (w.title) splitDays.push(w.title as string);
+    const blocks = w.blocks as Array<Record<string, unknown>> | undefined;
+    if (blocks) {
+      blocks.forEach(b => {
+        if (b.type === 'exercise' && b.exerciseName) {
+          const name = b.exerciseName as string;
+          exerciseFrequency[name] = (exerciseFrequency[name] || 0) + 1;
+          volumePatterns.push({
+            exercise: name,
+            sets: (b.prescription as string) || '',
+            prescription: (b.prescription as string) || '',
+          });
+        }
+      });
+    }
+  });
+
+  // Build the dataset block
+  let dataset = `\n\n═══ TRAINER PROGRAMMING DATASET ═══
+This operator's trainer has a specific programming style. Use these patterns to inform your workout design — match the trainer's methodology, exercise selection tendencies, volume prescriptions, and intensity levels. Scale appropriately based on the operator's fitness level relative to the trainer.
+
+TRAINER SPLIT: ${preferences?.split || 'Push/Pull/Legs'}
+TRAINER DAYS/WEEK: ${preferences?.daysPerWeek || 5}
+TRAINER SESSION DURATION: ${preferences?.sessionDuration || 90} min
+TRAINER EQUIPMENT: ${(preferences?.equipment as string[] || []).join(', ')}
+
+TRAINER PR BENCHMARKS (for scaling reference):
+${(prs || []).map((pr: Record<string, unknown>) => `- ${pr.exercise}: ${pr.weight}lbs x ${pr.reps}`).join('\n')}
+
+RECENT TRAINER WORKOUTS (programming patterns to model):`;
+
+  workoutList.slice(0, 5).forEach((w: Record<string, unknown>) => {
+    dataset += `\n\n${w.title}:`;
+    const blocks = w.blocks as Array<Record<string, unknown>> | undefined;
+    if (blocks) {
+      blocks.forEach(b => {
+        if (b.type === 'exercise') {
+          dataset += `\n  - ${b.exerciseName}: ${b.prescription}`;
+        } else if (b.type === 'conditioning') {
+          dataset += `\n  - CONDITIONING: ${b.format} — ${b.description}`;
+        }
+      });
+    }
+  });
+
+  // Favorite exercises (by frequency)
+  const sorted = Object.entries(exerciseFrequency).sort((a, b) => b[1] - a[1]);
+  if (sorted.length > 0) {
+    dataset += `\n\nTRAINER EXERCISE PREFERENCES (by frequency):`;
+    sorted.slice(0, 10).forEach(([name, count]) => {
+      dataset += `\n  - ${name} (${count}x)`;
+    });
+  }
+
+  dataset += `\n\nSCALING INSTRUCTIONS:
+- The trainer's numbers represent an ADVANCED lifter (${(trainerData.profile as Record<string, unknown>)?.weight || 195}lbs, ${(trainerData.profile as Record<string, unknown>)?.trainingAge || '12 years'} training age)
+- Scale all weights proportionally to the client's fitness level and body weight
+- Maintain the same exercise selection patterns and volume structure
+- If the client is a beginner, reduce volume by 30-40% and prioritize form cues
+- If the client is intermediate, match volume but reduce intensity by 20-30%
+- If the client is advanced, match patterns closely with minor adjustments for individual needs`;
+
+  if (trainerNotes) {
+    dataset += `\n\nTRAINER CUSTOM DIRECTIVES FOR THIS CLIENT:\n${trainerNotes}`;
+  }
+
+  return dataset;
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -357,6 +444,11 @@ Injuries/Restrictions: ${operatorContext.injuries || 'None — all clear'}
 Trainer Notes: ${operatorContext.trainerNotes || 'No special directives'}
 Preferred Language: ${operatorContext.language || 'en'}
 Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+    }
+
+    // Add trainer programming dataset
+    if (body.trainerData && !isOpsMode) {
+      contextBlock += buildTrainerDataset(body.trainerData);
     }
 
     // Add screen context for assistant mode

@@ -330,6 +330,16 @@ const AppShell: React.FC<AppShellProps> = ({
     setGunnyLoading(true);
 
     try {
+      // Build trainer dataset for sidebar assistant
+      const trainer = selectedOperator.trainerId ? operators.find(op => op.id === selectedOperator.trainerId) : null;
+      const trainerData = trainer ? {
+        workouts: trainer.workouts,
+        preferences: trainer.preferences,
+        prs: trainer.prs,
+        profile: trainer.profile,
+        trainerNotes: selectedOperator.trainerNotes,
+      } : null;
+
       const response = await fetch('/api/gunny', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -339,6 +349,7 @@ const AppShell: React.FC<AppShellProps> = ({
           tier: selectedOperator.tier || 'standard',
           mode: 'assistant',
           screenContext: getScreenContext(),
+          ...(trainerData && { trainerData }),
         }),
       });
 
