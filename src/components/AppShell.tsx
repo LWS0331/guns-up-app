@@ -476,8 +476,9 @@ const AppShell: React.FC<AppShellProps> = ({
 
   // Build operator context for API (includes intake assessment data for Gunny)
   // Reads from intake column first, falls back to profile/preferences fields (which always persist)
-  const buildOperatorContext = (): OperatorContextData => {
-    const op = selectedOperator;
+  // Accepts optional fresh operator to avoid stale closure reads (e.g. post-intake SITREP generation)
+  const buildOperatorContext = (freshOperator?: Operator): OperatorContextData => {
+    const op = freshOperator || selectedOperator;
     const intake = op.intake;
     const prof = op.profile;
     const prefs = op.preferences;
@@ -535,7 +536,7 @@ const AppShell: React.FC<AppShellProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          operatorContext: buildOperatorContext(),
+          operatorContext: buildOperatorContext(updatedOperator),
           tier: updatedOperator.tier,
         }),
       });

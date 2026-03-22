@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Operator, DailyBrief as DailyBriefType, SitrepExercise } from '@/lib/types';
 
 interface DailyBriefProps {
@@ -24,6 +24,10 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
+  // Ref to always read latest operator props (avoids stale closure in async callbacks)
+  const operatorRef = useRef(operator);
+  operatorRef.current = operator;
+
   const generateBrief = useCallback(async () => {
     if (!operator.sitrep) return;
     setLoading(true);
@@ -45,20 +49,46 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
         { calories: 0, protein: 0, carbs: 0, fat: 0 }
       );
 
+      const nPlan = operator.sitrep?.nutritionPlan;
       const yesterdayData = {
         workoutCompleted: !!yesterdayWorkout?.completed,
         workoutTitle: yesterdayWorkout?.title || null,
         mealsLogged: yesterdayMeals.length,
         mealTotals,
-        targetCalories: operator.nutrition?.targets?.calories || operator.sitrep.nutritionPlan?.dailyCalories || 2000,
-        targetProtein: operator.nutrition?.targets?.protein || operator.sitrep.nutritionPlan?.protein || 150,
+        targetCalories: operator.nutrition?.targets?.calories || nPlan?.dailyCalories || 2000,
+        targetProtein: operator.nutrition?.targets?.protein || nPlan?.protein || 150,
+        targetCarbs: operator.nutrition?.targets?.carbs || nPlan?.carbs || 200,
+        targetFat: operator.nutrition?.targets?.fat || nPlan?.fat || 60,
       };
 
+      // Full operator context — gives the AI complete picture for smarter adaptation
+      const intake = operator.intake;
+      const prof = operator.profile;
       const operatorContext = {
         callsign: operator.callsign,
-        fitnessLevel: operator.fitnessLevel || operator.intake?.fitnessLevel || 'beginner',
-        goals: operator.profile?.goals,
-        weight: operator.profile?.weight,
+        name: operator.name,
+        fitnessLevel: operator.fitnessLevel || intake?.fitnessLevel || 'beginner',
+        goals: prof?.goals,
+        weight: prof?.weight,
+        height: prof?.height,
+        age: prof?.age,
+        bodyFat: prof?.bodyFat,
+        injuries: operator.injuries?.map((inj: { name: string; status: string; notes?: string; restrictions?: string[] }) => ({
+          name: inj.name,
+          status: inj.status,
+          notes: inj.notes,
+          restrictions: inj.restrictions,
+        })),
+        injuryNotes: intake?.injuryNotes,
+        availableEquipment: intake?.availableEquipment || operator.preferences?.equipment,
+        currentDiet: intake?.currentDiet,
+        mealsPerDay: intake?.mealsPerDay || nPlan?.mealsPerDay,
+        proteinPriority: intake?.proteinPriority,
+        supplements: intake?.supplements,
+        dietaryRestrictions: intake?.dietaryRestrictions,
+        sleepQuality: intake?.sleepQuality || prof?.sleep,
+        stressLevel: intake?.stressLevel || prof?.stress,
+        prs: operator.prs?.map((pr: { exercise: string; weight: number }) => ({ exercise: pr.exercise, weight: pr.weight })),
       };
 
       const res = await fetch('/api/gunny/daily-brief', {
@@ -76,8 +106,9 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
       const data = await res.json();
       if (data.success && data.brief) {
         setBrief(data.brief);
-        // Save to operator
-        const updated = { ...operator, dailyBrief: data.brief };
+        // Save to operator — use ref for latest state to avoid overwriting concurrent changes
+        const freshOp = operatorRef.current;
+        const updated = { ...freshOp, dailyBrief: data.brief };
         onUpdateOperator(updated);
       }
     } catch (err) {

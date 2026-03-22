@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       userId: vitalUserId,
       provider: (provider || undefined) as Vital.Providers | undefined,
       filterOnProviders: filterProviders,
-      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://guns-up-app-production-3291.up.railway.app'}/api/wearables/callback`,
+      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get('host')}`}/api/wearables/callback`,
     });
 
     return NextResponse.json({

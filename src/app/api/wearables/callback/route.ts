@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const success = searchParams.get('success') || 'true';
 
   // Redirect back to the app with connection status
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://guns-up-app-production-3291.up.railway.app';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get('host')}`;
 
   if (success === 'true') {
     // Connection succeeded — redirect to app with success indicator
