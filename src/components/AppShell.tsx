@@ -17,7 +17,7 @@ import Achievements from '@/components/Achievements';
 import SocialFeed from '@/components/SocialFeed';
 import BetaFeedback from '@/components/BetaFeedback';
 
-// ═══ Matrix Code Rain Background ═══
+// ═══ Matrix Code Rain Background (slowed & subtle) ═══
 const DataRain: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -26,6 +26,9 @@ const DataRain: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     let animId: number;
+    let lastFrame = 0;
+    const FPS = 12; // throttled from ~60fps to 12fps — much easier on the eyes
+    const frameInterval = 1000 / FPS;
     const chars = '01アイウエオカキクケコサシスセソABCDEF0123456789ΣΩΔλ{}[]<>/\\=+*&#@';
     const fontSize = 13;
     let columns: number;
@@ -38,22 +41,27 @@ const DataRain: React.FC = () => {
     };
     resize();
     window.addEventListener('resize', resize);
-    const draw = () => {
-      ctx.fillStyle = 'rgba(3,3,3,0.06)';
+    const draw = (timestamp: number) => {
+      animId = requestAnimationFrame(draw);
+      const delta = timestamp - lastFrame;
+      if (delta < frameInterval) return; // skip frames to maintain target FPS
+      lastFrame = timestamp - (delta % frameInterval);
+      ctx.fillStyle = 'rgba(3,3,3,0.08)'; // slightly faster fade = shorter trails
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.font = `${fontSize}px 'Share Tech Mono', monospace`;
       for (let i = 0; i < drops.length; i++) {
+        // only update ~40% of columns per frame for a staggered, calm effect
+        if (Math.random() > 0.4) continue;
         const char = chars[Math.floor(Math.random() * chars.length)];
         const x = i * fontSize;
         const y = drops[i] * fontSize;
-        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.06)';
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,255,65,0.08)' : 'rgba(0,255,65,0.04)';
         ctx.fillText(char, x, y);
-        if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
-        drops[i] += Math.random() > 0.5 ? 1 : 0.5;
+        if (y > canvas.height && Math.random() > 0.985) drops[i] = 0;
+        drops[i] += 0.4; // slow constant speed (was 0.5-1.0)
       }
-      animId = requestAnimationFrame(draw);
     };
-    draw();
+    animId = requestAnimationFrame(draw);
     return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(animId); };
   }, []);
   return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }} />;
