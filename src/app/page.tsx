@@ -5,6 +5,8 @@ import { Operator } from '@/lib/types';
 import { OPERATORS, getAccessibleOperators } from '@/data/operators';
 import LoginScreen from '@/components/LoginScreen';
 import AppShell from '@/components/AppShell';
+import ClientOnboarding from '@/components/ClientOnboarding';
+import { initAnalytics, identifyUser, resetAnalytics, trackEvent, EVENTS } from '@/lib/analytics';
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<Operator | null>(null);
@@ -17,6 +19,9 @@ export default function Home() {
 
   // Load operators from database on mount
   useEffect(() => {
+    // Initialize PostHog analytics
+    initAnalytics();
+
     // Register service worker for PWA support with auto-update
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
@@ -87,6 +92,35 @@ export default function Home() {
         console.warn('Database not available, using static data:', err);
         setDbReady(false);
       }
+
+      // Check for stored JWT token and auto-login
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          const meRes = await fetch('/api/auth/me', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            setCurrentUser(meData.operator);
+            identifyUser(meData.operator.id, {
+              role: meData.operator.role,
+              tier: meData.operator.tier,
+              callsign: meData.operator.callsign
+            });
+            console.log('Auto-logged in from stored token');
+          } else {
+            // Token invalid, clear it
+            localStorage.removeItem('authToken');
+          }
+        } catch (err) {
+          console.warn('Failed to verify token:', err);
+          localStorage.removeItem('authToken');
+        }
+      }
+
       setIsLoaded(true);
     };
 
@@ -111,9 +145,18 @@ export default function Home() {
     // Get the latest version of this operator from state
     const latest = operators.find(op => op.id === operator.id) || operator;
     setCurrentUser(latest);
+    identifyUser(latest.id, {
+      role: latest.role,
+      tier: latest.tier,
+      callsign: latest.callsign
+    });
+    trackEvent(EVENTS.LOGIN, { role: latest.role, tier: latest.tier });
   };
 
   const handleLogout = () => {
+    trackEvent(EVENTS.LOGOUT);
+    resetAnalytics();
+    localStorage.removeItem('authToken');
     setCurrentUser(null);
   };
 
@@ -151,6 +194,19 @@ export default function Home() {
 
   if (!currentUser) {
     return <LoginScreen onLogin={handleLogin} operators={operators} />;
+  }
+
+  // Check if client needs onboarding (no trainer assigned, is a client)
+  const needsOnboarding = currentUser.role === 'client' && !currentUser.trainerId;
+
+  if (needsOnboarding) {
+    return (
+      <ClientOnboarding
+        operator={currentUser}
+        allOperators={operators}
+        onUpdateOperator={handleUpdateOperator}
+      />
+    );
   }
 
   const accessibleUsers = getAccessibleOperators(currentUser.id, operators);

@@ -5,11 +5,14 @@ import LogoFull from '@/components/LogoFull';
 import LanguageToggle from '@/components/LanguageToggle';
 import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
+import { TermsOfService, PrivacyPolicy } from '@/components/LegalPages';
 
 interface LoginScreenProps {
   onLogin: (operator: Operator) => void;
   operators: Operator[];
 }
+
+type LoginMode = 'pin' | 'email' | 'register';
 
 // Floating particle for background
 interface Particle {
@@ -24,11 +27,19 @@ interface Particle {
 
 export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
   const { t } = useLanguage();
+  const [loginMode, setLoginMode] = useState<LoginMode>('pin');
   const [pin, setPin] = useState<string>('');
-  const [error, setError] = useState<boolean>(false);
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [name, setName] = useState<string>('');
+  const [callsign, setCallsign] = useState<string>('');
+  const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [matchedOperator, setMatchedOperator] = useState<Operator | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [showTOS, setShowTOS] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [particles] = useState<Particle[]>(() =>
     Array.from({ length: 30 }, (_, i) => ({
       id: i,
@@ -54,17 +65,17 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
       const operator = operators.find((op) => op.pin === pin);
       if (operator) {
         setSuccess(true);
-        setError(false);
+        setError('');
         setMatchedOperator(operator);
         setTimeout(() => {
           onLogin(operator);
         }, 1400);
       } else {
-        setError(true);
+        setError('Invalid PIN');
         setSuccess(false);
         setTimeout(() => {
           setPin('');
-          setError(false);
+          setError('');
           if (hiddenInputRef.current) {
             hiddenInputRef.current.focus();
           }
@@ -82,14 +93,76 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
       e.preventDefault();
     } else if (e.key === 'Backspace') {
       setPin(prev => prev.slice(0, -1));
-      setError(false);
+      setError('');
       e.preventDefault();
     }
   }, []);
 
   const handleContainerClick = () => {
-    if (hiddenInputRef.current) {
+    if (hiddenInputRef.current && loginMode === 'pin') {
       hiddenInputRef.current.focus();
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('authToken', data.token);
+        setSuccess(true);
+        setMatchedOperator(data.operator);
+        setTimeout(() => {
+          onLogin(data.operator);
+        }, 1400);
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Login failed');
+      }
+    } catch (err) {
+      setError('Network error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name, callsign }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('authToken', data.token);
+        setSuccess(true);
+        setMatchedOperator(data.operator);
+        setTimeout(() => {
+          onLogin(data.operator);
+        }, 1400);
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Registration failed');
+      }
+    } catch (err) {
+      setError('Network error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -289,8 +362,63 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
           transition: 'opacity 0.6s ease 0.5s',
         }} />
 
+        {/* Mode Selector Tabs */}
+        {!success && (
+          <div style={{
+            display: 'flex',
+            gap: '16px',
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(10px)',
+            transition: 'opacity 0.6s ease 0.5s, transform 0.6s ease 0.5s',
+          }}>
+            <button
+              onClick={() => {
+                setLoginMode('pin');
+                setError('');
+                setPin('');
+              }}
+              style={{
+                fontFamily: 'Orbitron, monospace',
+                fontSize: '11px',
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                padding: '8px 16px',
+                border: `1px solid ${loginMode === 'pin' ? '#00ff41' : 'rgba(0,255,65,0.2)'}`,
+                backgroundColor: loginMode === 'pin' ? 'rgba(0,255,65,0.1)' : 'transparent',
+                color: loginMode === 'pin' ? '#00ff41' : '#666',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              PIN LOGIN (BETA)
+            </button>
+            <button
+              onClick={() => {
+                setLoginMode('email');
+                setError('');
+                setEmail('');
+                setPassword('');
+              }}
+              style={{
+                fontFamily: 'Orbitron, monospace',
+                fontSize: '11px',
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                padding: '8px 16px',
+                border: `1px solid ${loginMode === 'email' ? '#00ff41' : 'rgba(0,255,65,0.2)'}`,
+                backgroundColor: loginMode === 'email' ? 'rgba(0,255,65,0.1)' : 'transparent',
+                color: loginMode === 'email' ? '#00ff41' : '#666',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              EMAIL LOGIN
+            </button>
+          </div>
+        )}
+
         {/* PIN Section */}
-        {!success ? (
+        {!success && loginMode === 'pin' ? (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -415,6 +543,262 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               {error ? `// ${t('login.access_denied')}` : ''}
             </div>
           </div>
+        ) : !success && loginMode === 'email' ? (
+          <form onSubmit={handleEmailLogin} style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(10px)',
+            transition: 'opacity 0.6s ease 0.6s, transform 0.6s ease 0.6s',
+            width: '100%',
+            maxWidth: '300px',
+          }}>
+            {/* Email input */}
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={{
+                fontFamily: 'Chakra Petch, sans-serif',
+                fontSize: '14px',
+                padding: '12px 16px',
+                backgroundColor: 'rgba(0,255,65,0.02)',
+                border: '1px solid rgba(0,255,65,0.2)',
+                color: '#00ff41',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Password input */}
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{
+                fontFamily: 'Chakra Petch, sans-serif',
+                fontSize: '14px',
+                padding: '12px 16px',
+                backgroundColor: 'rgba(0,255,65,0.02)',
+                border: '1px solid rgba(0,255,65,0.2)',
+                color: '#00ff41',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Error message */}
+            {error && (
+              <div style={{
+                fontFamily: 'Orbitron, monospace',
+                fontSize: '12px',
+                color: '#ff4444',
+                textAlign: 'center',
+                textShadow: '0 0 8px rgba(255,68,68,0.4)',
+              }}>
+                {error}
+              </div>
+            )}
+
+            {/* Login button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              style={{
+                fontFamily: 'Orbitron, monospace',
+                fontSize: '13px',
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                padding: '12px 32px',
+                backgroundColor: isLoading ? 'rgba(0,255,65,0.2)' : 'rgba(0,255,65,0.1)',
+                border: '1px solid #00ff41',
+                color: '#00ff41',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {isLoading ? 'LOGGING IN...' : 'LOGIN'}
+            </button>
+
+            {/* Register link */}
+            <div style={{
+              fontFamily: 'Orbitron, monospace',
+              fontSize: '11px',
+              color: '#666',
+            }}>
+              New operator?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('register');
+                  setError('');
+                  setEmail('');
+                  setPassword('');
+                }}
+                style={{
+                  fontFamily: 'Orbitron, monospace',
+                  fontSize: '11px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: '#00ff41',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                REGISTER
+              </button>
+            </div>
+          </form>
+        ) : !success && loginMode === 'register' ? (
+          <form onSubmit={handleRegister} style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(10px)',
+            transition: 'opacity 0.6s ease 0.6s, transform 0.6s ease 0.6s',
+            width: '100%',
+            maxWidth: '300px',
+          }}>
+            {/* Name input */}
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{
+                fontFamily: 'Chakra Petch, sans-serif',
+                fontSize: '14px',
+                padding: '12px 16px',
+                backgroundColor: 'rgba(0,255,65,0.02)',
+                border: '1px solid rgba(0,255,65,0.2)',
+                color: '#00ff41',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Callsign input */}
+            <input
+              type="text"
+              placeholder="Callsign (UPPERCASE, no spaces)"
+              value={callsign}
+              onChange={(e) => setCallsign(e.target.value.toUpperCase())}
+              style={{
+                fontFamily: 'Chakra Petch, sans-serif',
+                fontSize: '14px',
+                padding: '12px 16px',
+                backgroundColor: 'rgba(0,255,65,0.02)',
+                border: '1px solid rgba(0,255,65,0.2)',
+                color: '#00ff41',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Email input */}
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={{
+                fontFamily: 'Chakra Petch, sans-serif',
+                fontSize: '14px',
+                padding: '12px 16px',
+                backgroundColor: 'rgba(0,255,65,0.02)',
+                border: '1px solid rgba(0,255,65,0.2)',
+                color: '#00ff41',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Password input */}
+            <input
+              type="password"
+              placeholder="Password (min 8 chars)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{
+                fontFamily: 'Chakra Petch, sans-serif',
+                fontSize: '14px',
+                padding: '12px 16px',
+                backgroundColor: 'rgba(0,255,65,0.02)',
+                border: '1px solid rgba(0,255,65,0.2)',
+                color: '#00ff41',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Error message */}
+            {error && (
+              <div style={{
+                fontFamily: 'Orbitron, monospace',
+                fontSize: '12px',
+                color: '#ff4444',
+                textAlign: 'center',
+                textShadow: '0 0 8px rgba(255,68,68,0.4)',
+              }}>
+                {error}
+              </div>
+            )}
+
+            {/* Register button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              style={{
+                fontFamily: 'Orbitron, monospace',
+                fontSize: '13px',
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                padding: '12px 32px',
+                backgroundColor: isLoading ? 'rgba(0,255,65,0.2)' : 'rgba(0,255,65,0.1)',
+                border: '1px solid #00ff41',
+                color: '#00ff41',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {isLoading ? 'REGISTERING...' : 'REGISTER'}
+            </button>
+
+            {/* Login link */}
+            <div style={{
+              fontFamily: 'Orbitron, monospace',
+              fontSize: '11px',
+              color: '#666',
+            }}>
+              Already have access?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('email');
+                  setError('');
+                  setEmail('');
+                  setPassword('');
+                }}
+                style={{
+                  fontFamily: 'Orbitron, monospace',
+                  fontSize: '11px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: '#00ff41',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                LOGIN
+              </button>
+            </div>
+          </form>
         ) : (
           /* Success - Operator reveal */
           <div style={{
@@ -497,7 +881,55 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             </div>
           </div>
         )}
+
+        {/* Legal Footer */}
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          textAlign: 'center',
+          fontSize: '12px',
+          color: '#666',
+          fontFamily: 'Chakra Petch, sans-serif',
+          maxWidth: '90%',
+        }}>
+          <p style={{ margin: 0, marginBottom: '8px' }}>
+            By logging in, you agree to our{' '}
+            <button
+              onClick={() => setShowTOS(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#00ff41',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                font: 'inherit',
+              }}
+            >
+              Terms of Service
+            </button>
+            {' '}and{' '}
+            <button
+              onClick={() => setShowPrivacy(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#00ff41',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                font: 'inherit',
+              }}
+            >
+              Privacy Policy
+            </button>
+          </p>
+        </div>
       </div>
+
+      {/* Legal Pages Overlays */}
+      {showTOS && <TermsOfService onClose={() => setShowTOS(false)} />}
+      {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
 
       <style>{`
         @keyframes fadeInScale {

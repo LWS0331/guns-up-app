@@ -16,6 +16,9 @@ import Leaderboard from '@/components/Leaderboard';
 import Achievements from '@/components/Achievements';
 import SocialFeed from '@/components/SocialFeed';
 import BetaFeedback from '@/components/BetaFeedback';
+import TrainerDashboard from '@/components/TrainerDashboard';
+import { TermsOfService, PrivacyPolicy } from '@/components/LegalPages';
+import { trackEvent, EVENTS } from '@/lib/analytics';
 
 // ═══ Matrix Code Rain Background (slowed & subtle) ═══
 const DataRain: React.FC = () => {
@@ -113,6 +116,9 @@ const AppShell: React.FC<AppShellProps> = ({
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const lastWidthRef = useRef(0);
+  const [showTrainerDashboard, setShowTrainerDashboard] = useState(false);
+  const [showTOS, setShowTOS] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   // Gunny AI panel state
   const [showGunnyPanel, setShowGunnyPanel] = useState(false);
@@ -401,8 +407,8 @@ const AppShell: React.FC<AppShellProps> = ({
     { id: 'gunny', label: t('nav.gunny_short'), labelKey: 'nav.gunny_short', icon: '▶' },
   ];
 
-  // Conditionally add OPS CENTER tab for admin users only
-  const tabs = OPS_CENTER_ACCESS.includes(currentUser.id)
+  // Conditionally add OPS tab for trainers and admins
+  const tabs = (OPS_CENTER_ACCESS.includes(currentUser.id) || currentUser.role === 'trainer')
     ? [...baseTabs, { id: 'ops' as AppTab, label: 'OPS', labelKey: 'nav.ops', icon: '⬡' }]
     : baseTabs;
 
@@ -427,6 +433,37 @@ const AppShell: React.FC<AppShellProps> = ({
                 <BetaFeedback operatorId={currentSelectedOp.id} callsign={currentSelectedOp.callsign} />
               </div>
             )}
+            <div style={{ marginTop: 40, paddingTop: 20, borderTop: '1px solid rgba(0, 255, 65, 0.1)', textAlign: 'center' }}>
+              <p style={{ fontSize: 12, color: '#666', margin: '0 0 12px 0', fontFamily: 'Chakra Petch, sans-serif' }}>
+                <button
+                  onClick={() => setShowTOS(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#00ff41',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Terms of Service
+                </button>
+                {' | '}
+                <button
+                  onClick={() => setShowPrivacy(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#00ff41',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Privacy Policy
+                </button>
+              </p>
+            </div>
           </>
         );
       case 'planner':
@@ -436,6 +473,69 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'gunny':
         return <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />;
       case 'ops':
+        // Trainer-specific view
+        if (currentUser.role === 'trainer') {
+          return (
+            <div>
+              {/* Sub-tab toggle for trainers */}
+              <div style={{
+                display: 'flex',
+                gap: '10px',
+                padding: '15px 20px',
+                borderBottom: '1px solid #1a1a2e',
+                backgroundColor: '#0a0a0a',
+              }}>
+                <button
+                  onClick={() => setShowTrainerDashboard(false)}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: !showTrainerDashboard ? '#00ff41' : 'transparent',
+                    color: !showTrainerDashboard ? '#000' : '#888',
+                    border: '1px solid ' + (!showTrainerDashboard ? '#00ff41' : '#333'),
+                    borderRadius: '3px',
+                    cursor: 'pointer',
+                    fontFamily: '"Orbitron", sans-serif',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase',
+                    letterSpacing: '1px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  MY CLIENTS
+                </button>
+                {OPS_CENTER_ACCESS.includes(currentUser.id) && (
+                  <button
+                    onClick={() => setShowTrainerDashboard(true)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: showTrainerDashboard ? '#00ff41' : 'transparent',
+                      color: showTrainerDashboard ? '#000' : '#888',
+                      border: '1px solid ' + (showTrainerDashboard ? '#00ff41' : '#333'),
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      fontFamily: '"Orbitron", sans-serif',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      textTransform: 'uppercase',
+                      letterSpacing: '1px',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    COMMAND CENTER
+                  </button>
+                )}
+              </div>
+              {/* Content */}
+              {showTrainerDashboard && OPS_CENTER_ACCESS.includes(currentUser.id) ? (
+                <OpsCenter currentUser={currentUser} operators={operators} />
+              ) : (
+                <TrainerDashboard trainer={currentUser} allOperators={operators} onUpdateOperator={onUpdateOperator} />
+              )}
+            </div>
+          );
+        }
+        // Admin-only view
         return <OpsCenter currentUser={currentUser} operators={operators} />;
       default:
         return null;
@@ -859,7 +959,10 @@ const AppShell: React.FC<AppShellProps> = ({
               <button
                 key={tab.id}
                 className={`nav-tab ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  trackEvent(EVENTS.TAB_CHANGED, { tab: tab.id });
+                }}
                 style={{
                   fontSize: '15px',
                   padding: '8px 20px',
@@ -944,7 +1047,10 @@ const AppShell: React.FC<AppShellProps> = ({
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                trackEvent(EVENTS.TAB_CHANGED, { tab: tab.id });
+              }}
               style={{
                 flex: 1,
                 display: 'flex',
@@ -1104,6 +1210,10 @@ const AppShell: React.FC<AppShellProps> = ({
           </div>
         </div>
       )}
+
+      {/* Legal Pages Overlays */}
+      {showTOS && <TermsOfService onClose={() => setShowTOS(false)} />}
+      {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
 
       {/* Classification Bar */}
       <div className="classification-bar">

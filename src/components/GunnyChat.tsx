@@ -5,6 +5,7 @@ import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
+import { trackEvent, EVENTS } from '@/lib/analytics';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -1187,6 +1188,13 @@ ${mealSuggestion}`;
     setMessages(updatedMessages);
     setInputValue('');
     setIsTyping(true);
+
+    // Track Gunny chat event
+    trackEvent(EVENTS.GUNNY_CHAT, {
+      operatorId: operator.id,
+      messageLength: text.length,
+      isOnboarding: isOnboarding,
+    });
 
     // ═══ ONBOARDING MODE — always use API with onboarding prompt ═══
     if (isOnboarding) {

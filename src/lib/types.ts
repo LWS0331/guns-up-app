@@ -108,6 +108,8 @@ export interface Operator {
   name: string;
   callsign: string;
   pin: string;
+  email?: string;
+  passwordHash?: string;
   role: UserRole;
   tier: AiTier;
   coupleWith: string | null; // ID of partner operator

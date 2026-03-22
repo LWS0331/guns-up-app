@@ -12,6 +12,8 @@ model Operator {
   name        String
   callsign    String
   pin         String
+  email       String?   @unique
+  passwordHash String?
   role        String                  // "trainer" | "client"
   tier        String                  // "haiku" | "sonnet" | "opus" | "white_glove"
   coupleWith  String?
