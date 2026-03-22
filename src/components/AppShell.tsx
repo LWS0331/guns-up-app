@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Operator, AppTab } from '@/lib/types';
+import { Operator, AppTab, OPS_CENTER_ACCESS } from '@/lib/types';
 import Logo from '@/components/Logo';
+import OpsCenter from '@/components/OpsCenter';
 import UserSwitcher from '@/components/UserSwitcher';
 import LanguageToggle from '@/components/LanguageToggle';
 import { useLanguage } from '@/lib/i18n';
@@ -360,12 +361,17 @@ const AppShell: React.FC<AppShellProps> = ({
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
 
-  const tabs: { id: AppTab; label: string; labelKey: string; icon: string }[] = [
+  const baseTabs: { id: AppTab; label: string; labelKey: string; icon: string }[] = [
     { id: 'coc', label: t('nav.coc_short'), labelKey: 'nav.coc_short', icon: '◆' },
     { id: 'planner', label: t('nav.planner'), labelKey: 'nav.planner', icon: '▦' },
     { id: 'intel', label: t('nav.intel_short'), labelKey: 'nav.intel_short', icon: '◈' },
     { id: 'gunny', label: t('nav.gunny_short'), labelKey: 'nav.gunny_short', icon: '▶' },
   ];
+
+  // Conditionally add OPS CENTER tab for admin users only
+  const tabs = OPS_CENTER_ACCESS.includes(currentUser.id)
+    ? [...baseTabs, { id: 'ops' as AppTab, label: 'OPS', labelKey: 'nav.ops', icon: '⬡' }]
+    : baseTabs;
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -377,6 +383,8 @@ const AppShell: React.FC<AppShellProps> = ({
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} />;
       case 'gunny':
         return <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />;
+      case 'ops':
+        return <OpsCenter currentUser={currentUser} operators={operators} />;
       default:
         return null;
     }
@@ -774,6 +782,8 @@ const AppShell: React.FC<AppShellProps> = ({
         }}>
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
+            const isOps = tab.id === 'ops';
+            const activeColor = isOps ? '#ff2020' : '#00ff41';
             return (
               <button
                 key={tab.id}
@@ -783,19 +793,19 @@ const AppShell: React.FC<AppShellProps> = ({
                   fontSize: '15px',
                   padding: '8px 20px',
                   fontWeight: isActive ? 800 : 500,
-                  color: isActive ? '#00ff41' : '#3a3a3a',
-                  backgroundColor: isActive ? 'rgba(0, 255, 65, 0.04)' : 'transparent',
+                  color: isActive ? activeColor : '#3a3a3a',
+                  backgroundColor: isActive ? (isOps ? 'rgba(255, 32, 32, 0.06)' : 'rgba(0, 255, 65, 0.04)') : 'transparent',
                 }}
               >
                 <span className="tab-icon" style={{
                   fontSize: '15px',
                   opacity: isActive ? 1 : 0.3,
-                  color: isActive ? '#00ff41' : '#888',
+                  color: isActive ? activeColor : '#888',
                 }}>
                   {tab.icon}
                 </span>
                 {t(tab.labelKey)}
-                <div className="tab-indicator" />
+                <div className="tab-indicator" style={isOps ? { background: '#ff2020', boxShadow: '0 0 8px rgba(255,32,32,0.4)' } : undefined} />
               </button>
             );
           })}

@@ -165,7 +165,10 @@ export interface Exercise {
 }
 
 export type ViewMode = 'month' | 'week' | 'day';
-export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny';
+export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'ops';
+
+// Hardcoded admin access for OPS CENTER
+export const OPS_CENTER_ACCESS = ['op-ruben', 'op-britney'];
 export type IntelTab = 'profile' | 'nutrition' | 'prs' | 'injuries' | 'preferences';
 
 export interface AuthState {
