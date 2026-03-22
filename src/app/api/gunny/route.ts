@@ -7,7 +7,7 @@ const client = new Anthropic({
 
 // Map app tiers to Anthropic models
 const TIER_MODEL_MAP: Record<string, string> = {
-  haiku: 'claude-haiku-4-5-20241022',
+  haiku: 'claude-haiku-4-5-20251001',
   sonnet: 'claude-sonnet-4-5-20250514',
   opus: 'claude-opus-4-20250514',
   white_glove: 'claude-opus-4-20250514',
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
     }
 
     const isAssistantMode = mode === 'assistant';
-    const model = TIER_MODEL_MAP[tier] || 'claude-haiku-4-5-20241022';
+    const model = TIER_MODEL_MAP[tier] || 'claude-haiku-4-5-20251001';
 
     // Build rich context about the operator
     let contextBlock = '';
