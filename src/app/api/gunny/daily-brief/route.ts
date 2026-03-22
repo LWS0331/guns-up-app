@@ -14,8 +14,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing operator context or SITREP' }, { status: 400 });
     }
 
-    // Use Haiku for daily briefs — fast + cheap, runs every login
-    const model = tier === 'opus' || tier === 'white_glove' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001';
+    // Tier-based model selection for Daily Briefs
+    // RECON (haiku): Haiku — fast, cheap, runs every login
+    // OPERATOR (sonnet): Sonnet — sharper daily adjustments, better adaptation logic
+    // COMMANDER (opus): Opus — premium daily coaching with deep personalization
+    // WARFIGHTER (white_glove): Opus — premier white-glove daily intel
+    const modelMap: Record<string, string> = {
+      haiku: 'claude-haiku-4-5-20251001',
+      sonnet: 'claude-sonnet-4-6',
+      opus: 'claude-opus-4-6',
+      white_glove: 'claude-opus-4-6',
+    };
+    const model = modelMap[tier] || 'claude-haiku-4-5-20251001';
 
     const response = await client.messages.create({
       model,

@@ -14,8 +14,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing operator context' }, { status: 400 });
     }
 
-    // Use Sonnet for speed + quality balance on SITREP generation
-    const model = tier === 'opus' || tier === 'white_glove' ? 'claude-opus-4-6' : 'claude-sonnet-4-6';
+    // Tier-based model selection for SITREP generation
+    // RECON (haiku): Haiku — fast, solid plans for entry-level operators
+    // OPERATOR (sonnet): Sonnet — smarter programming, better periodization
+    // COMMANDER (opus): Opus — elite-tier precision, deep personalization
+    // WARFIGHTER (white_glove): Opus — premier white-glove service
+    const modelMap: Record<string, string> = {
+      haiku: 'claude-haiku-4-5-20251001',
+      sonnet: 'claude-sonnet-4-6',
+      opus: 'claude-opus-4-6',
+      white_glove: 'claude-opus-4-6',
+    };
+    const model = modelMap[tier] || 'claude-sonnet-4-6';
 
     const response = await client.messages.create({
       model,
