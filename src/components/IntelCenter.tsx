@@ -998,8 +998,161 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     </div>
   );
 
+  // ═══ QUICK NUTRITION CHAT LOG ═══
+  const FOOD_DB: Record<string, { calories: number; protein: number; carbs: number; fat: number }> = {
+    'chicken breast': { calories: 165, protein: 31, carbs: 0, fat: 3.6 }, 'chicken': { calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+    'steak': { calories: 271, protein: 36, carbs: 0, fat: 13 }, 'beef': { calories: 271, protein: 36, carbs: 0, fat: 13 },
+    'salmon': { calories: 280, protein: 25, carbs: 0, fat: 17 }, 'fish': { calories: 200, protein: 22, carbs: 0, fat: 12 },
+    'tuna': { calories: 144, protein: 30, carbs: 0, fat: 1 }, 'shrimp': { calories: 99, protein: 24, carbs: 0, fat: 0.3 },
+    'turkey': { calories: 189, protein: 29, carbs: 0, fat: 7.4 }, 'pork': { calories: 242, protein: 27, carbs: 0, fat: 14 },
+    'ground beef': { calories: 217, protein: 23, carbs: 0, fat: 13 }, 'greek yogurt': { calories: 100, protein: 17, carbs: 7, fat: 0.5 },
+    'egg': { calories: 78, protein: 6, carbs: 0.6, fat: 5.3 }, 'eggs': { calories: 78, protein: 6, carbs: 0.6, fat: 5.3 },
+    'protein shake': { calories: 120, protein: 25, carbs: 2, fat: 1 }, 'milk': { calories: 61, protein: 3.2, carbs: 4.8, fat: 3.3 },
+    'rice': { calories: 206, protein: 4.3, carbs: 45, fat: 0.3 }, 'pasta': { calories: 214, protein: 7.5, carbs: 43, fat: 1.1 },
+    'bread': { calories: 79, protein: 2.7, carbs: 14, fat: 1 }, 'oatmeal': { calories: 389, protein: 17, carbs: 67, fat: 7 },
+    'sweet potato': { calories: 86, protein: 1.6, carbs: 20, fat: 0.1 }, 'potato': { calories: 77, protein: 2, carbs: 17, fat: 0.1 },
+    'banana': { calories: 89, protein: 1.1, carbs: 23, fat: 0.3 }, 'apple': { calories: 52, protein: 0.3, carbs: 14, fat: 0.2 },
+    'avocado': { calories: 160, protein: 2, carbs: 9, fat: 15 }, 'peanut butter': { calories: 188, protein: 8, carbs: 7, fat: 16 },
+    'cheese': { calories: 115, protein: 7, carbs: 0.4, fat: 9.5 }, 'almonds': { calories: 579, protein: 21, carbs: 21, fat: 50 },
+    'pizza': { calories: 285, protein: 12, carbs: 36, fat: 10 }, 'burger': { calories: 540, protein: 30, carbs: 41, fat: 28 },
+    'burrito': { calories: 450, protein: 18, carbs: 51, fat: 20 }, 'sandwich': { calories: 350, protein: 15, carbs: 40, fat: 15 },
+    'salad': { calories: 150, protein: 8, carbs: 12, fat: 8 }, 'tacos': { calories: 200, protein: 10, carbs: 20, fat: 9 },
+    'protein bar': { calories: 200, protein: 20, carbs: 20, fat: 5 }, 'coffee': { calories: 2, protein: 0, carbs: 0, fat: 0 },
+    'tortilla': { calories: 52, protein: 1.5, carbs: 11, fat: 0.5 }, 'bagel': { calories: 289, protein: 11, carbs: 56, fat: 1.5 },
+    'pancakes': { calories: 175, protein: 5, carbs: 26, fat: 6 }, 'granola': { calories: 471, protein: 13, carbs: 61, fat: 20 },
+  };
+
+  const [quickFoodInput, setQuickFoodInput] = useState('');
+  const [quickFoodResult, setQuickFoodResult] = useState<{ name: string; calories: number; protein: number; carbs: number; fat: number } | null>(null);
+
+  const parseQuickFood = (input: string) => {
+    const lower = input.toLowerCase();
+    let foodName = '';
+    let macros: { calories: number; protein: number; carbs: number; fat: number } | null = null;
+    for (const [key, m] of Object.entries(FOOD_DB)) {
+      if (lower.includes(key)) {
+        if (!foodName || key.length > foodName.length) { foodName = key; macros = m; }
+      }
+    }
+    if (!macros) return null;
+    // Parse multiplier
+    let multiplier = 1;
+    const numMatch = lower.match(/(\d+(?:\.\d+)?)\s*(?:x|servings?|pieces?|slices?)?/);
+    if (numMatch) multiplier = parseFloat(numMatch[1]);
+    if (lower.includes('double') || lower.includes('2x')) multiplier = 2;
+    if (lower.includes('half')) multiplier = 0.5;
+    if (lower.includes('large') || lower.includes('big')) multiplier *= 1.5;
+    if (lower.includes('small') || lower.includes('little')) multiplier *= 0.7;
+    return {
+      name: input,
+      calories: Math.round(macros.calories * multiplier),
+      protein: Math.round(macros.protein * multiplier),
+      carbs: Math.round(macros.carbs * multiplier),
+      fat: Math.round(macros.fat * multiplier),
+    };
+  };
+
+  const handleQuickFoodLog = () => {
+    if (!quickFoodInput.trim()) return;
+    const result = parseQuickFood(quickFoodInput);
+    if (result) {
+      setQuickFoodResult(result);
+      // Auto-populate the manual fields
+      setState(prev => ({
+        ...prev,
+        nutrition: {
+          ...prev.nutrition,
+          mealName: result.name,
+          mealCalories: String(result.calories),
+          mealProtein: String(result.protein),
+          mealCarbs: String(result.carbs),
+          mealFat: String(result.fat),
+        },
+      }));
+    } else {
+      setQuickFoodResult(null);
+    }
+  };
+
+  const handleQuickFoodAdd = () => {
+    if (!quickFoodResult) return;
+    const newMeal: Meal = {
+      id: `meal-${Date.now()}`,
+      name: quickFoodResult.name,
+      calories: quickFoodResult.calories,
+      protein: quickFoodResult.protein,
+      carbs: quickFoodResult.carbs,
+      fat: quickFoodResult.fat,
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    };
+    const todayStr = getTodayStr();
+    const updatedMeals = [...(operator.nutrition?.meals?.[todayStr] || []), newMeal];
+    const updated: Operator = {
+      ...operator,
+      nutrition: {
+        ...operator.nutrition,
+        meals: { ...operator.nutrition.meals, [todayStr]: updatedMeals },
+      },
+    };
+    onUpdateOperator(updated);
+    setState(prev => ({
+      ...prev,
+      nutrition: { ...prev.nutrition, mealLogs: updatedMeals, mealName: '', mealCalories: '', mealProtein: '', mealCarbs: '', mealFat: '' },
+    }));
+    setQuickFoodInput('');
+    setQuickFoodResult(null);
+  };
+
   const renderNutritionTab = () => (
     <div>
+      {/* QUICK LOG — Chat-style food input */}
+      <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(224, 64, 251, 0.03)', border: '1px solid rgba(224, 64, 251, 0.15)', borderRadius: 4 }}>
+        <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#e040fb', marginBottom: 12, letterSpacing: 1 }}>
+          QUICK LOG
+        </h3>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontFamily: 'Share Tech Mono' }}>
+          Describe what you ate — e.g. &quot;2 eggs and toast&quot; or &quot;chicken breast with rice&quot;
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="text"
+            value={quickFoodInput}
+            onChange={e => { setQuickFoodInput(e.target.value); setQuickFoodResult(null); }}
+            onKeyDown={e => { if (e.key === 'Enter') handleQuickFoodLog(); }}
+            placeholder="I had chicken breast and rice..."
+            style={{
+              flex: 1, padding: '10px 12px', backgroundColor: '#0a0a0a', border: '1px solid rgba(224, 64, 251, 0.3)',
+              color: '#e0e0e0', fontFamily: "'Share Tech Mono', monospace", fontSize: 14, borderRadius: 4, outline: 'none',
+            }}
+          />
+          <button onClick={handleQuickFoodLog} style={{
+            padding: '10px 16px', backgroundColor: '#e040fb', color: '#000', border: 'none',
+            fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
+          }}>
+            SCAN
+          </button>
+        </div>
+        {quickFoodResult && (
+          <div style={{ marginTop: 12, padding: 12, background: '#0a0a0a', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: 4 }}>
+            <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 13, marginBottom: 8 }}>
+              {quickFoodResult.name}
+            </div>
+            <div style={{ display: 'flex', gap: 16, fontFamily: 'Share Tech Mono', fontSize: 12 }}>
+              <span style={{ color: '#ffb800' }}>{quickFoodResult.calories} cal</span>
+              <span style={{ color: '#00bcd4' }}>{quickFoodResult.protein}g P</span>
+              <span style={{ color: '#4ade80' }}>{quickFoodResult.carbs}g C</span>
+              <span style={{ color: '#f97316' }}>{quickFoodResult.fat}g F</span>
+            </div>
+            <button onClick={handleQuickFoodAdd} style={{
+              marginTop: 8, padding: '6px 16px', backgroundColor: '#00ff41', color: '#000', border: 'none',
+              fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
+            }}>
+              LOG MEAL
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Macro Targets */}
       <div
         style={{

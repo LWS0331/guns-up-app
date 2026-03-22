@@ -12,6 +12,7 @@ import Planner from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
+import Leaderboard from '@/components/Leaderboard';
 
 // ═══ Matrix Code Rain Background ═══
 const DataRain: React.FC = () => {
@@ -386,7 +387,12 @@ const AppShell: React.FC<AppShellProps> = ({
   const renderTabContent = () => {
     switch (activeTab) {
       case 'coc':
-        return <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />;
+        return (
+          <>
+            <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
+            <Leaderboard operators={operators} currentUser={currentUser} />
+          </>
+        );
       case 'planner':
         return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />;
       case 'intel':
