@@ -1068,7 +1068,14 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
   // FOOD_DB imported from @/data/foods (200+ foods with serving sizes)
 
   const [quickFoodInput, setQuickFoodInput] = useState('');
-  const [quickFoodResult, setQuickFoodResult] = useState<{ name: string; calories: number; protein: number; carbs: number; fat: number } | null>(null);
+  const [quickFoodResult, setQuickFoodResult] = useState<{ name: string; calories: number; protein: number; carbs: number; fat: number; accuracy?: string } | null>(null);
+  const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
+  const [photoResult, setPhotoResult] = useState<{ items: Array<{ name: string; portion: string; calories: number; protein: number; carbs: number; fat: number }>; totals: { calories: number; protein: number; carbs: number; fat: number }; confidence: string; notes: string } | null>(null);
+  const [usdaSearch, setUsdaSearch] = useState('');
+  const [usdaResults, setUsdaResults] = useState<Array<{ id: number; name: string; brand: string | null; servingSize: number; servingUnit: string; macros: { calories: number; protein: number; fat: number; carbs: number } }>>([]);
+  const [usdaSearching, setUsdaSearching] = useState(false);
+  const [nutritionLogMode, setNutritionLogMode] = useState<'quick' | 'photo' | 'search' | 'manual'>('quick');
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const parseQuickFood = (input: string) => {
     const lower = input.toLowerCase();
@@ -1148,55 +1155,360 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     setQuickFoodResult(null);
   };
 
+  // Photo analysis handler
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPhotoAnalyzing(true);
+    setPhotoResult(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const mimeType = file.type || 'image/jpeg';
+
+        const res = await fetch('/api/nutrition/analyze-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64, mimeType }),
+        });
+
+        const data = await res.json();
+        if (data.success && data.data) {
+          setPhotoResult(data.data);
+        } else {
+          alert('Could not analyze photo. Try a clearer image.');
+        }
+        setPhotoAnalyzing(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setPhotoAnalyzing(false);
+      alert('Photo analysis failed.');
+    }
+
+    // Reset the input so the same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handlePhotoResultLog = () => {
+    if (!photoResult) return;
+    const newMeal: Meal = {
+      id: `meal-${Date.now()}`,
+      name: photoResult.items.map(i => i.name).join(' + '),
+      calories: photoResult.totals.calories,
+      protein: photoResult.totals.protein,
+      carbs: photoResult.totals.carbs,
+      fat: photoResult.totals.fat,
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    };
+    const todayStr = getTodayStr();
+    const updatedMeals = [...(operator.nutrition?.meals?.[todayStr] || []), newMeal];
+    const updated: Operator = {
+      ...operator,
+      nutrition: {
+        ...operator.nutrition,
+        meals: { ...operator.nutrition.meals, [todayStr]: updatedMeals },
+      },
+    };
+    onUpdateOperator(updated);
+    setState(prev => ({
+      ...prev,
+      nutrition: { ...prev.nutrition, mealLogs: updatedMeals, mealName: '', mealCalories: '', mealProtein: '', mealCarbs: '', mealFat: '' },
+    }));
+    setPhotoResult(null);
+  };
+
+  // USDA food search handler
+  const handleUsdaSearch = async () => {
+    if (!usdaSearch.trim()) return;
+    setUsdaSearching(true);
+    try {
+      const res = await fetch(`/api/nutrition/search?q=${encodeURIComponent(usdaSearch)}&limit=8`);
+      const data = await res.json();
+      if (data.success && data.foods) {
+        setUsdaResults(data.foods);
+      }
+    } catch {
+      setUsdaResults([]);
+    }
+    setUsdaSearching(false);
+  };
+
+  const handleUsdaFoodLog = (food: typeof usdaResults[0]) => {
+    const newMeal: Meal = {
+      id: `meal-${Date.now()}`,
+      name: food.name,
+      calories: food.macros.calories,
+      protein: food.macros.protein,
+      carbs: food.macros.carbs,
+      fat: food.macros.fat,
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    };
+    const todayStr = getTodayStr();
+    const updatedMeals = [...(operator.nutrition?.meals?.[todayStr] || []), newMeal];
+    const updated: Operator = {
+      ...operator,
+      nutrition: {
+        ...operator.nutrition,
+        meals: { ...operator.nutrition.meals, [todayStr]: updatedMeals },
+      },
+    };
+    onUpdateOperator(updated);
+    setState(prev => ({
+      ...prev,
+      nutrition: { ...prev.nutrition, mealLogs: updatedMeals, mealName: '', mealCalories: '', mealProtein: '', mealCarbs: '', mealFat: '' },
+    }));
+    setUsdaResults([]);
+    setUsdaSearch('');
+  };
+
   const renderNutritionTab = () => (
     <div>
-      {/* QUICK LOG — Chat-style food input */}
-      <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(224, 64, 251, 0.03)', border: '1px solid rgba(224, 64, 251, 0.15)', borderRadius: 4 }}>
-        <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#e040fb', marginBottom: 12, letterSpacing: 1 }}>
-          QUICK LOG
-        </h3>
-        <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontFamily: 'Share Tech Mono' }}>
-          Describe what you ate — e.g. &quot;2 eggs and toast&quot; or &quot;chicken breast with rice&quot;
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="text"
-            value={quickFoodInput}
-            onChange={e => { setQuickFoodInput(e.target.value); setQuickFoodResult(null); }}
-            onKeyDown={e => { if (e.key === 'Enter') handleQuickFoodLog(); }}
-            placeholder="I had chicken breast and rice..."
-            style={{
-              flex: 1, padding: '10px 12px', backgroundColor: '#0a0a0a', border: '1px solid rgba(224, 64, 251, 0.3)',
-              color: '#e0e0e0', fontFamily: "'Share Tech Mono', monospace", fontSize: 14, borderRadius: 4, outline: 'none',
-            }}
-          />
-          <button onClick={handleQuickFoodLog} style={{
-            padding: '10px 16px', backgroundColor: '#e040fb', color: '#000', border: 'none',
-            fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
-          }}>
-            SCAN
-          </button>
-        </div>
-        {quickFoodResult && (
-          <div style={{ marginTop: 12, padding: 12, background: '#0a0a0a', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: 4 }}>
-            <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 13, marginBottom: 8 }}>
-              {quickFoodResult.name}
-            </div>
-            <div style={{ display: 'flex', gap: 16, fontFamily: 'Share Tech Mono', fontSize: 12 }}>
-              <span style={{ color: '#ffb800' }}>{quickFoodResult.calories} cal</span>
-              <span style={{ color: '#00bcd4' }}>{quickFoodResult.protein}g P</span>
-              <span style={{ color: '#4ade80' }}>{quickFoodResult.carbs}g C</span>
-              <span style={{ color: '#f97316' }}>{quickFoodResult.fat}g F</span>
-            </div>
-            <button onClick={handleQuickFoodAdd} style={{
-              marginTop: 8, padding: '6px 16px', backgroundColor: '#00ff41', color: '#000', border: 'none',
-              fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
+      {/* ACCURACY TIER KEY */}
+      <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 8 }}>
+        <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#888', letterSpacing: 1, marginBottom: 8 }}>TRACKING ACCURACY TIERS</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {[
+            { tier: 1, label: 'MANUAL ENTRY', desc: 'You weigh + enter exact macros', color: '#00ff41', icon: '⚡', accuracy: '±1-3%' },
+            { tier: 2, label: 'USDA SEARCH', desc: 'FDA-verified database lookup', color: '#4ade80', icon: '🔬', accuracy: '±5-10%' },
+            { tier: 3, label: 'QUICK LOG', desc: 'AI text parsing from description', color: '#facc15', icon: '💬', accuracy: '±15-25%' },
+            { tier: 4, label: 'PHOTO SNAP', desc: 'AI vision analysis of plate photo', color: '#ff6b35', icon: '📸', accuracy: '±20-40%' },
+          ].map(t => (
+            <div key={t.tier} style={{
+              padding: '8px 10px', background: `${t.color}08`, border: `1px solid ${t.color}30`, borderRadius: 6,
+              display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              LOG MEAL
+              <span style={{ fontSize: 16 }}>{t.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: t.color, letterSpacing: 0.5 }}>
+                  TIER {t.tier}: {t.label}
+                </div>
+                <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#555' }}>{t.desc}</div>
+              </div>
+              <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: t.color, fontWeight: 700 }}>{t.accuracy}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* LOG MODE SELECTOR */}
+      <div style={{ marginBottom: 16, display: 'flex', gap: 6 }}>
+        {([
+          { id: 'quick' as const, label: '💬 QUICK', color: '#facc15' },
+          { id: 'photo' as const, label: '📸 PHOTO', color: '#ff6b35' },
+          { id: 'search' as const, label: '🔬 USDA', color: '#4ade80' },
+          { id: 'manual' as const, label: '⚡ MANUAL', color: '#00ff41' },
+        ]).map(m => (
+          <button key={m.id} onClick={() => setNutritionLogMode(m.id)} style={{
+            flex: 1, padding: '8px 4px', fontFamily: 'Orbitron, sans-serif', fontSize: 9, fontWeight: 700,
+            background: nutritionLogMode === m.id ? `${m.color}20` : '#0a0a0a',
+            color: nutritionLogMode === m.id ? m.color : '#555',
+            border: `1px solid ${nutritionLogMode === m.id ? m.color : '#222'}`,
+            borderRadius: 4, cursor: 'pointer', letterSpacing: 0.5, transition: 'all 0.2s',
+          }}>{m.label}</button>
+        ))}
+      </div>
+
+      {/* QUICK LOG MODE */}
+      {nutritionLogMode === 'quick' && (
+        <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(250, 204, 21, 0.03)', border: '1px solid rgba(250, 204, 21, 0.15)', borderRadius: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#facc15', letterSpacing: 1, margin: 0 }}>QUICK LOG</h3>
+            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#facc15', padding: '2px 6px', border: '1px solid rgba(250,204,21,0.3)', borderRadius: 3 }}>TIER 3 · ±15-25%</span>
+          </div>
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontFamily: 'Share Tech Mono' }}>
+            Describe what you ate — e.g. &quot;2 eggs and toast&quot; or &quot;chicken breast with rice&quot;
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              value={quickFoodInput}
+              onChange={e => { setQuickFoodInput(e.target.value); setQuickFoodResult(null); }}
+              onKeyDown={e => { if (e.key === 'Enter') handleQuickFoodLog(); }}
+              placeholder="I had chicken breast and rice..."
+              style={{
+                flex: 1, padding: '10px 12px', backgroundColor: '#0a0a0a', border: '1px solid rgba(250, 204, 21, 0.3)',
+                color: '#e0e0e0', fontFamily: "'Share Tech Mono', monospace", fontSize: 14, borderRadius: 4, outline: 'none',
+              }}
+            />
+            <button onClick={handleQuickFoodLog} style={{
+              padding: '10px 16px', backgroundColor: '#facc15', color: '#000', border: 'none',
+              fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
+            }}>
+              SCAN
             </button>
           </div>
-        )}
-      </div>
+          {quickFoodResult && (
+            <div style={{ marginTop: 12, padding: 12, background: '#0a0a0a', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: 4 }}>
+              <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 13, marginBottom: 8 }}>
+                {quickFoodResult.name}
+              </div>
+              <div style={{ display: 'flex', gap: 16, fontFamily: 'Share Tech Mono', fontSize: 12 }}>
+                <span style={{ color: '#ffb800' }}>{quickFoodResult.calories} cal</span>
+                <span style={{ color: '#00bcd4' }}>{quickFoodResult.protein}g P</span>
+                <span style={{ color: '#4ade80' }}>{quickFoodResult.carbs}g C</span>
+                <span style={{ color: '#f97316' }}>{quickFoodResult.fat}g F</span>
+              </div>
+              <button onClick={handleQuickFoodAdd} style={{
+                marginTop: 8, padding: '6px 16px', backgroundColor: '#00ff41', color: '#000', border: 'none',
+                fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
+              }}>
+                LOG MEAL
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* PHOTO SNAP MODE */}
+      {nutritionLogMode === 'photo' && (
+        <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(255, 107, 53, 0.03)', border: '1px solid rgba(255, 107, 53, 0.15)', borderRadius: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff6b35', letterSpacing: 1, margin: 0 }}>PHOTO SNAP</h3>
+            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#ff6b35', padding: '2px 6px', border: '1px solid rgba(255,107,53,0.3)', borderRadius: 3 }}>TIER 4 · ±20-40%</span>
+          </div>
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 12, fontFamily: 'Share Tech Mono' }}>
+            Snap a photo of your plate. AI vision analyzes portion sizes and estimates macros. Best for quick ballpark tracking.
+          </div>
+          <input ref={photoInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+          <button onClick={() => photoInputRef.current?.click()} disabled={photoAnalyzing} style={{
+            width: '100%', padding: '16px', backgroundColor: photoAnalyzing ? '#333' : 'rgba(255, 107, 53, 0.1)',
+            border: `2px dashed ${photoAnalyzing ? '#555' : '#ff6b35'}`, borderRadius: 8, cursor: photoAnalyzing ? 'default' : 'pointer',
+            fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: photoAnalyzing ? '#888' : '#ff6b35', letterSpacing: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s',
+          }}>
+            {photoAnalyzing ? (
+              <>ANALYZING...</>
+            ) : (
+              <>📸 TAP TO SNAP OR UPLOAD PHOTO</>
+            )}
+          </button>
+
+          {photoResult && (
+            <div style={{ marginTop: 12, padding: 12, background: '#0a0a0a', border: '1px solid rgba(255, 107, 53, 0.2)', borderRadius: 4 }}>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#888', letterSpacing: 1, marginBottom: 8 }}>
+                DETECTED ITEMS ({photoResult.confidence.toUpperCase()} CONFIDENCE)
+              </div>
+              {photoResult.items.map((item, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
+                  <div>
+                    <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 12, color: '#e0e0e0' }}>{item.name}</span>
+                    <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#555', marginLeft: 8 }}>{item.portion}</span>
+                  </div>
+                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, display: 'flex', gap: 8 }}>
+                    <span style={{ color: '#ffb800' }}>{item.calories}</span>
+                    <span style={{ color: '#00bcd4' }}>{item.protein}P</span>
+                    <span style={{ color: '#4ade80' }}>{item.carbs}C</span>
+                    <span style={{ color: '#f97316' }}>{item.fat}F</span>
+                  </div>
+                </div>
+              ))}
+              <div style={{ marginTop: 8, padding: '8px 0', borderTop: '1px solid rgba(255,107,53,0.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Orbitron, sans-serif', fontSize: 12 }}>
+                  <span style={{ color: '#ff6b35' }}>TOTALS</span>
+                  <div style={{ display: 'flex', gap: 12, fontFamily: 'Share Tech Mono, monospace', fontSize: 12 }}>
+                    <span style={{ color: '#ffb800' }}>{photoResult.totals.calories} cal</span>
+                    <span style={{ color: '#00bcd4' }}>{photoResult.totals.protein}g P</span>
+                    <span style={{ color: '#4ade80' }}>{photoResult.totals.carbs}g C</span>
+                    <span style={{ color: '#f97316' }}>{photoResult.totals.fat}g F</span>
+                  </div>
+                </div>
+              </div>
+              {photoResult.notes && (
+                <div style={{ marginTop: 6, fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#666', fontStyle: 'italic' }}>
+                  {photoResult.notes}
+                </div>
+              )}
+              <button onClick={handlePhotoResultLog} style={{
+                marginTop: 10, padding: '8px 20px', backgroundColor: '#00ff41', color: '#000', border: 'none',
+                fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700, cursor: 'pointer', borderRadius: 4, width: '100%',
+              }}>
+                LOG THIS MEAL
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* USDA SEARCH MODE */}
+      {nutritionLogMode === 'search' && (
+        <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(74, 222, 128, 0.03)', border: '1px solid rgba(74, 222, 128, 0.15)', borderRadius: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#4ade80', letterSpacing: 1, margin: 0 }}>USDA DATABASE</h3>
+            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#4ade80', padding: '2px 6px', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 3 }}>TIER 2 · ±5-10%</span>
+          </div>
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontFamily: 'Share Tech Mono' }}>
+            Search 380K+ FDA-verified foods. Macros per 100g standard serving.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              value={usdaSearch}
+              onChange={e => setUsdaSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleUsdaSearch(); }}
+              placeholder="Search: chicken breast, brown rice, almonds..."
+              style={{
+                flex: 1, padding: '10px 12px', backgroundColor: '#0a0a0a', border: '1px solid rgba(74, 222, 128, 0.3)',
+                color: '#e0e0e0', fontFamily: "'Share Tech Mono', monospace", fontSize: 14, borderRadius: 4, outline: 'none',
+              }}
+            />
+            <button onClick={handleUsdaSearch} disabled={usdaSearching} style={{
+              padding: '10px 16px', backgroundColor: usdaSearching ? '#333' : '#4ade80', color: '#000', border: 'none',
+              fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
+            }}>
+              {usdaSearching ? '...' : 'SEARCH'}
+            </button>
+          </div>
+          {usdaResults.length > 0 && (
+            <div style={{ marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
+              {usdaResults.map(food => (
+                <div key={food.id} style={{
+                  padding: '10px 12px', background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 4, marginBottom: 6,
+                  cursor: 'pointer', transition: 'border-color 0.2s',
+                }}
+                  onClick={() => handleUsdaFoodLog(food)}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(74,222,128,0.4)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#1a1a1a'; }}
+                >
+                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 12, color: '#e0e0e0', marginBottom: 4, textTransform: 'capitalize' }}>
+                    {food.name.toLowerCase()}
+                    {food.brand && <span style={{ color: '#555', marginLeft: 6, fontSize: 10 }}>({food.brand})</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, fontFamily: 'Share Tech Mono, monospace', fontSize: 11 }}>
+                    <span style={{ color: '#ffb800' }}>{food.macros.calories} cal</span>
+                    <span style={{ color: '#00bcd4' }}>{food.macros.protein}g P</span>
+                    <span style={{ color: '#4ade80' }}>{food.macros.carbs}g C</span>
+                    <span style={{ color: '#f97316' }}>{food.macros.fat}g F</span>
+                    <span style={{ color: '#555' }}>per {food.servingSize}{food.servingUnit}</span>
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#444', textAlign: 'center', marginTop: 4 }}>
+                Tap a food to log it. Data: USDA FoodData Central
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MANUAL ENTRY MODE — highest accuracy, shown inline when selected */}
+      {nutritionLogMode === 'manual' && (
+        <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(0, 255, 65, 0.03)', border: '1px solid rgba(0, 255, 65, 0.15)', borderRadius: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, margin: 0 }}>MANUAL ENTRY</h3>
+            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#00ff41', padding: '2px 6px', border: '1px solid rgba(0,255,65,0.3)', borderRadius: 3 }}>TIER 1 · ±1-3%</span>
+          </div>
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 12, fontFamily: 'Share Tech Mono' }}>
+            Weigh your food and enter exact macros. Highest accuracy for serious tracking.
+          </div>
+          <div style={{ fontSize: 10, color: '#555', fontFamily: 'Share Tech Mono, monospace', marginBottom: 8 }}>
+            Use the meal log section below to enter exact values manually.
+          </div>
+        </div>
+      )}
 
       {/* Macro Targets */}
       <div
