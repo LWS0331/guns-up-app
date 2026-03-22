@@ -8,9 +8,9 @@ const client = new Anthropic({
 // Map app tiers to Anthropic models
 const TIER_MODEL_MAP: Record<string, string> = {
   haiku: 'claude-haiku-4-5-20251001',
-  sonnet: 'claude-sonnet-4-6-20250514',
-  opus: 'claude-opus-4-6-20250514',
-  white_glove: 'claude-opus-4-6-20250514',
+  sonnet: 'claude-sonnet-4-6',
+  opus: 'claude-opus-4-6',
+  white_glove: 'claude-opus-4-6',
 };
 
 const SYSTEM_PROMPT = `You are GUNNY — the most advanced tactical AI fitness coach ever built. You live inside the GUNS UP app. You are a former Marine drill instructor turned elite strength coach, sports scientist, and nutrition strategist. You have encyclopedic knowledge of:
@@ -528,7 +528,7 @@ export async function POST(req: NextRequest) {
 
     // Force Opus 4.6 for platform owner
     const ownerOverride = operatorContext?.callsign === 'RAMPAGE';
-    const finalModel = ownerOverride ? 'claude-opus-4-6-20250514' : model;
+    const finalModel = ownerOverride ? 'claude-opus-4-6' : model;
 
     // Build rich context about the operator
     let contextBlock = '';
