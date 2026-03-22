@@ -133,6 +133,15 @@ const AppShell: React.FC<AppShellProps> = ({
   // Check if intake is completed (check both intake column AND profile fallback flag)
   const intakeCompleted = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true;
   const [showIntake, setShowIntake] = useState(!intakeCompleted);
+
+  // Sync showIntake when currentUser data updates (e.g. after save completes and re-fetch)
+  useEffect(() => {
+    const completed = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true;
+    if (completed) {
+      setShowIntake(false);
+    }
+  }, [currentUser.intake?.completed, currentUser.profile?.intakeCompleted]);
+
   // Auto-switch to Gunny tab if profile is incomplete (onboarding needed)
   const profileIncomplete = !currentUser.profile?.age || !currentUser.profile?.weight || !currentUser.profile?.goals?.length || !currentUser.preferences?.daysPerWeek;
   const [activeTab, setActiveTab] = useState<AppTab>(profileIncomplete && intakeCompleted ? 'gunny' : 'coc');

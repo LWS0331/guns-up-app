@@ -42,7 +42,19 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json({ operator: updated });
+    return NextResponse.json({
+      operator: {
+        ...updated,
+        intake: updated.intake as Record<string, unknown>,
+        profile: updated.profile as Record<string, unknown>,
+        nutrition: updated.nutrition as Record<string, unknown>,
+        prs: updated.prs as unknown[],
+        injuries: updated.injuries as unknown[],
+        preferences: updated.preferences as Record<string, unknown>,
+        workouts: updated.workouts as Record<string, unknown>,
+        dayTags: updated.dayTags as Record<string, unknown>,
+      },
+    });
   } catch (error) {
     console.error('Failed to update operator:', error);
     return NextResponse.json({ error: 'Failed to update operator' }, { status: 500 });

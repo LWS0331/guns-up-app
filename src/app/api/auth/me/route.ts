@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       operator: {
         ...operatorData,
+        intake: operatorData.intake as Record<string, unknown>,
         profile: operatorData.profile as Record<string, unknown>,
         nutrition: operatorData.nutrition as Record<string, unknown>,
         prs: operatorData.prs as unknown[],
