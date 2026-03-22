@@ -15,35 +15,85 @@ interface TagPillData {
   tooltip: string;
 }
 
+// Global singleton: only one tooltip open at a time
+let globalCloseTooltip: (() => void) | null = null;
+
 const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
   const [showTip, setShowTip] = useState(false);
-  const [touchActive, setTouchActive] = useState(false);
-  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pillRef = useRef<HTMLSpanElement>(null);
 
-  const handleEnter = () => {
-    tipTimer.current = setTimeout(() => setShowTip(true), 200);
+  const open = () => {
+    // Close any other open tooltip first
+    if (globalCloseTooltip) globalCloseTooltip();
+    setShowTip(true);
+    globalCloseTooltip = close;
   };
-  const handleLeave = () => {
-    if (tipTimer.current) clearTimeout(tipTimer.current);
+
+  const close = () => {
+    if (enterTimer.current) clearTimeout(enterTimer.current);
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
     setShowTip(false);
-    setTouchActive(false);
+    if (globalCloseTooltip === close) globalCloseTooltip = null;
   };
-  const handleTouch = (e: React.TouchEvent) => {
+
+  // Desktop: hover with small delay to open, small delay to close (prevents flicker)
+  const handleMouseEnter = () => {
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    enterTimer.current = setTimeout(open, 180);
+  };
+  const handleMouseLeave = () => {
+    if (enterTimer.current) clearTimeout(enterTimer.current);
+    leaveTimer.current = setTimeout(close, 120);
+  };
+
+  // Mobile: tap to toggle, document listener to dismiss on tap-away
+  const handleTouchEnd = (e: React.TouchEvent) => {
     e.preventDefault();
-    if (touchActive) {
-      setShowTip(false);
-      setTouchActive(false);
+    e.stopPropagation();
+    if (showTip) {
+      close();
     } else {
-      setShowTip(true);
-      setTouchActive(true);
+      open();
     }
   };
 
+  // Tap-away listener: close when user taps outside this pill
+  useEffect(() => {
+    if (!showTip) return;
+    const handleDocTouch = (e: TouchEvent) => {
+      if (pillRef.current && !pillRef.current.contains(e.target as Node)) {
+        close();
+      }
+    };
+    // Use setTimeout to avoid catching the same tap that opened it
+    const id = setTimeout(() => {
+      document.addEventListener('touchstart', handleDocTouch, { passive: true });
+    }, 50);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('touchstart', handleDocTouch);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTip]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (enterTimer.current) clearTimeout(enterTimer.current);
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+      if (globalCloseTooltip === close) globalCloseTooltip = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <span
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-      onTouchStart={handleTouch}
+      ref={pillRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onTouchEnd={handleTouchEnd}
       style={{
         position: 'relative',
         display: 'inline-flex',
@@ -54,12 +104,14 @@ const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
         fontFamily: 'Share Tech Mono, monospace',
         fontSize: '12px',
         fontWeight: 600,
-        background: tag.bg,
+        background: showTip ? tag.border : tag.bg,
         color: tag.color,
         border: `1px solid ${tag.border}`,
         letterSpacing: '0.3px',
         cursor: 'help',
+        transition: 'background 0.15s ease',
         WebkitTapHighlightColor: 'transparent',
+        userSelect: 'none',
       }}
     >
       <span style={{ fontSize: '10px', opacity: 0.7 }}>{tag.icon}</span>
@@ -78,6 +130,7 @@ const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
           boxShadow: `0 8px 32px rgba(0,0,0,0.6), 0 0 12px ${tag.bg}`,
           zIndex: 10000,
           pointerEvents: 'none',
+          animation: 'tooltipFadeIn 0.15s ease-out',
         }}>
           <div style={{
             fontFamily: 'Orbitron, sans-serif',
