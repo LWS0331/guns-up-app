@@ -88,8 +88,21 @@ interface OperatorContextData {
   name: string;
   role: string;
   weight?: number;
+  height?: string;
+  age?: number;
+  bodyFat?: number;
   goals?: string[];
   readiness?: number;
+  fitnessLevel?: string;
+  experienceYears?: number;
+  exerciseHistory?: string;
+  currentActivity?: string;
+  availableEquipment?: string[];
+  preferredWorkoutTime?: string;
+  healthConditions?: string[];
+  sleepQuality?: number;
+  stressLevel?: number;
+  nutritionHabits?: string;
   prs?: Array<{ exercise: string; weight: number }>;
   injuries?: Array<{ id: string; name: string; status: string; notes?: string; restrictions?: string[] }>;
   trainerNotes?: string;
@@ -379,16 +392,30 @@ const AppShell: React.FC<AppShellProps> = ({
     return context;
   };
 
-  // Build operator context for API
+  // Build operator context for API (includes intake assessment data for Gunny)
   const buildOperatorContext = (): OperatorContextData => {
     const op = selectedOperator;
+    const intake = op.intake;
     return {
       callsign: op.callsign,
       name: op.name,
       role: op.role || 'operator',
       weight: op.profile?.weight,
+      height: op.profile?.height,
+      age: op.profile?.age,
+      bodyFat: op.profile?.bodyFat,
       goals: op.profile?.goals,
       readiness: op.profile?.readiness,
+      fitnessLevel: op.fitnessLevel || intake?.fitnessLevel,
+      experienceYears: intake?.experienceYears,
+      exerciseHistory: intake?.exerciseHistory,
+      currentActivity: intake?.currentActivity,
+      availableEquipment: intake?.availableEquipment,
+      preferredWorkoutTime: intake?.preferredWorkoutTime,
+      healthConditions: intake?.healthConditions,
+      sleepQuality: intake?.sleepQuality || op.profile?.sleep,
+      stressLevel: intake?.stressLevel || op.profile?.stress,
+      nutritionHabits: intake?.nutritionHabits,
       prs: op.prs?.map(pr => ({ exercise: pr.exercise, weight: pr.weight })),
       injuries: op.injuries?.map(inj => ({
         id: inj.id,
@@ -545,7 +572,7 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'planner':
         return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />;
       case 'intel':
-        return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} />;
+        return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'gunny':
         return <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />;
       case 'ops':
@@ -618,8 +645,8 @@ const AppShell: React.FC<AppShellProps> = ({
     }
   };
 
-  // Show intake form if not completed
-  if (showIntake && !intakeCompleted) {
+  // Show intake form if not completed OR user requested to re-take it
+  if (showIntake) {
     return (
       <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
         <DataRain />

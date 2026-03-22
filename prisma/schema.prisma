@@ -31,6 +31,7 @@ model Operator {
   promoExpiry   String?               // ISO date when promo expires
 
   // Complex nested data stored as JSONB
+  intake      Json      @default("{}")  // IntakeAssessment (completed flag, goals, equipment, etc.)
   profile     Json      @default("{}")
   nutrition   Json      @default("{}")
   prs         Json      @default("[]")

@@ -20,6 +20,7 @@ interface IntelCenterProps {
   operator: Operator;
   currentUser?: Operator;
   onUpdateOperator: (updated: Operator) => void;
+  onRequestIntake?: () => void;
 }
 
 type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES';
@@ -67,7 +68,7 @@ interface LocalState {
   newMovementToAvoid: string;
 }
 
-const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpdateOperator }) => {
+const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpdateOperator, onRequestIntake }) => {
   const isAdmin = currentUser?.role === 'trainer';
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<SubTab>('PROFILE');
@@ -1016,6 +1017,49 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             + ADD
           </button>
         </div>
+      </div>
+
+      {/* Update Assessment Button */}
+      <div style={{ gridColumn: '1 / -1', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(0,255,65,0.08)' }}>
+        <button
+          onClick={() => onRequestIntake?.()}
+          style={{
+            width: '100%',
+            padding: '12px 20px',
+            fontFamily: 'Chakra Petch, sans-serif',
+            fontSize: '13px',
+            fontWeight: 600,
+            backgroundColor: 'transparent',
+            border: '1px solid rgba(0,255,65,0.15)',
+            color: '#888',
+            cursor: 'pointer',
+            textTransform: 'uppercase',
+            letterSpacing: '2px',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.05)';
+            e.currentTarget.style.borderColor = 'rgba(0,255,65,0.3)';
+            e.currentTarget.style.color = '#00ff41';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.borderColor = 'rgba(0,255,65,0.15)';
+            e.currentTarget.style.color = '#888';
+          }}
+        >
+          <span style={{ fontSize: '16px' }}>↻</span>
+          {operator.intake?.completed ? 'UPDATE FITNESS ASSESSMENT' : 'COMPLETE FITNESS ASSESSMENT'}
+        </button>
+        {operator.intake?.completedDate && (
+          <div style={{ fontSize: '11px', color: '#555', textAlign: 'center', marginTop: '6px', fontFamily: 'Share Tech Mono, monospace' }}>
+            Last completed: {new Date(operator.intake.completedDate).toLocaleDateString()}
+          </div>
+        )}
       </div>
     </div>
   );

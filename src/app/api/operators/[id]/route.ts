@@ -31,6 +31,7 @@ export async function PUT(
         promoActive: body.promoActive ?? false,
         promoType: body.promoType ?? null,
         promoExpiry: body.promoExpiry ?? null,
+        intake: body.intake ?? {},
         profile: body.profile ?? {},
         nutrition: body.nutrition ?? {},
         prs: body.prs ?? [],

@@ -539,14 +539,36 @@ CALLSIGN: ${operatorContext.callsign || 'operator'} ← USE THIS to address them
 Name: ${operatorContext.name || 'Unknown'} ← DO NOT use this in conversation
 Role: ${operatorContext.role || 'client'}
 Tier: ${tier || 'haiku'} (${tier === 'opus' || tier === 'white_glove' ? 'COMMANDER — full Opus intelligence' : tier === 'sonnet' ? 'OPERATOR — Sonnet intelligence' : 'RECON — Haiku intelligence'})
+
+PHYSICAL STATS:
+Age: ${operatorContext.age || 'Unknown'}
+Height: ${operatorContext.height || 'Unknown'}
 Weight: ${operatorContext.weight || 'Unknown'}lbs
+Body Fat: ${operatorContext.bodyFat ? operatorContext.bodyFat + '%' : 'Unknown'}
+
+TRAINING BACKGROUND:
+Fitness Level: ${operatorContext.fitnessLevel || 'Unknown'}
+Experience: ${operatorContext.experienceYears != null ? operatorContext.experienceYears + ' years' : 'Unknown'}
+Exercise History: ${operatorContext.exerciseHistory || 'Unknown'}
+Activity Level: ${operatorContext.currentActivity || 'Unknown'}
+Preferred Workout Time: ${operatorContext.preferredWorkoutTime || 'Unknown'}
+Available Equipment: ${operatorContext.availableEquipment?.join(', ') || 'Unknown'}
+
+WELLNESS:
 Goals: ${operatorContext.goals?.join(', ') || 'General fitness'}
 Readiness: ${operatorContext.readiness || 'Unknown'}/10
-PRs: ${operatorContext.prs || 'None logged yet'}
-Injuries/Restrictions: ${operatorContext.injuries || 'None — all clear'}
+Sleep Quality: ${operatorContext.sleepQuality || 'Unknown'}/10
+Stress Level: ${operatorContext.stressLevel || 'Unknown'}/10
+Nutrition Habits: ${operatorContext.nutritionHabits || 'Unknown'}
+Health Conditions: ${operatorContext.healthConditions?.length ? operatorContext.healthConditions.join(', ') : 'None reported'}
+
+PRs: ${operatorContext.prs?.length ? JSON.stringify(operatorContext.prs) : 'None logged yet'}
+Injuries/Restrictions: ${operatorContext.injuries?.length ? JSON.stringify(operatorContext.injuries) : 'None — all clear'}
 Trainer Notes: ${operatorContext.trainerNotes || 'No special directives'}
 Preferred Language: ${operatorContext.language || 'en'}
-Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+
+IMPORTANT: Use ALL of the above data to personalize workouts, nutrition advice, and coaching. Account for their equipment access, injuries, experience level, goals, and schedule preferences when programming.`;
     }
 
     // Add trainer programming dataset
