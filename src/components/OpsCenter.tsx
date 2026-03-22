@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Operator, TIER_CONFIGS, AiTier, OPS_CENTER_ACCESS } from '@/lib/types';
 
 type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'MARKETING';
@@ -11,15 +11,55 @@ interface OpsCenterProps {
 }
 
 // ═══════════════════════════════════════════════════
-// API USAGE TRACKING (in-memory for now, DB later)
+// DB METRICS SHAPE (from /api/ops)
 // ═══════════════════════════════════════════════════
-interface PlatformMetrics {
-  totalApiCalls: number;
-  gunnyTokensUsed: number;
-  avgResponseTime: number;
-  errorRate: number;
-  dbSize: string;
-  lastDeploy: string;
+interface DbMetrics {
+  timestamp: string;
+  operators: {
+    total: number;
+    trainers: number;
+    clients: number;
+    beta: number;
+    active7d: number;
+    profileComplete: number;
+    operatorStats: Array<{
+      id: string;
+      callsign: string;
+      name: string;
+      role: string;
+      tier: string;
+      betaUser: boolean;
+      workoutCount: number;
+      mealCount: number;
+      prCount: number;
+      injuryCount: number;
+      isActive: boolean;
+      hasProfile: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  };
+  platform: {
+    totalWorkouts: number;
+    totalMeals: number;
+    totalPRs: number;
+    totalInjuries: number;
+    activeWearables: number;
+  };
+  ai: {
+    totalChatSessions: number;
+    totalMessages: number;
+    gunnyChatSessions: number;
+    onboardingSessions: number;
+    panelSessions: number;
+    estTotalTokens: number;
+    estMonthlyCostUSD: number;
+  };
+  db: {
+    operatorRows: number;
+    chatRows: number;
+    estTotalRows: number;
+  };
 }
 
 interface MarketingPlatform {
@@ -42,6 +82,9 @@ const MARKETING_PLATFORMS: MarketingPlatform[] = [
 
 const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const [activeTab, setActiveTab] = useState<OpsTab>('REVENUE');
+  const [metrics, setMetrics] = useState<DbMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<string>('');
 
   // Verify access
   if (!OPS_CENTER_ACCESS.includes(currentUser.id)) {
@@ -52,14 +95,36 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     );
   }
 
-  // ═══════════════════════════════════════
-  // REVENUE CALCULATIONS
-  // ═══════════════════════════════════════
-  const trainers = operators.filter(op => op.role === 'trainer');
-  const clients = operators.filter(op => op.role === 'client');
+  // Fetch real metrics from DB
+  const fetchMetrics = async () => {
+    setMetricsLoading(true);
+    try {
+      const res = await fetch(`/api/ops?operatorId=${currentUser.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMetrics(data);
+        setLastRefresh(new Date().toLocaleTimeString());
+      }
+    } catch (err) {
+      console.error('Failed to fetch OPS metrics:', err);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchMetrics(); }, []);
+
+  // Use DB metrics when available, fall back to client-side operators array
+  const opStats = metrics?.operators.operatorStats || [];
+  const trainers = metrics ? opStats.filter(op => op.role === 'trainer') : operators.filter(op => op.role === 'trainer');
+  const clients = metrics ? opStats.filter(op => op.role === 'client') : operators.filter(op => op.role === 'client');
+
+  // ═══════════════════════════════════════
+  // REVENUE CALCULATIONS (always from operators + TIER_CONFIGS)
+  // ═══════════════════════════════════════
   const revenueByTier = (Object.keys(TIER_CONFIGS) as AiTier[]).reduce((acc, tier) => {
-    const count = clients.filter(c => c.tier === tier).length;
+    const count = operators.filter(c => c.role === 'client' && c.tier === tier).length;
     const config = TIER_CONFIGS[tier];
     acc[tier] = {
       count,
@@ -83,18 +148,36 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const netProfit = totalPlatformRevenue - totalApiCost - totalStripeFees - totalInfraCost;
 
   // ═══════════════════════════════════════
-  // USER ANALYTICS
+  // LIVE DATA BADGE
   // ═══════════════════════════════════════
-  const betaUsers = operators.filter(op => op.betaUser);
-  const activeUsers = operators.filter(op => {
-    const workoutDates = Object.keys(op.workouts || {});
-    if (workoutDates.length === 0) return false;
-    const latestDate = workoutDates.sort().reverse()[0];
-    const daysSinceLastWorkout = (Date.now() - new Date(latestDate).getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceLastWorkout <= 7;
-  });
-  const profileComplete = operators.filter(op =>
-    op.profile?.age && op.profile?.weight && op.profile?.goals?.length && op.preferences?.daysPerWeek
+  const LiveBadge = () => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '4px 10px', background: 'rgba(0,255,65,0.06)',
+        border: '1px solid rgba(0,255,65,0.15)', fontSize: '10px',
+        fontFamily: '"Share Tech Mono", monospace', color: '#00ff41',
+      }}>
+        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00ff41', boxShadow: '0 0 6px #00ff41' }} />
+        LIVE FROM DB
+      </div>
+      {lastRefresh && (
+        <span style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '10px' }}>
+          REFRESHED {lastRefresh}
+        </span>
+      )}
+      <button
+        onClick={fetchMetrics}
+        disabled={metricsLoading}
+        style={{
+          padding: '3px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+          color: '#555', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)',
+          cursor: 'pointer',
+        }}
+      >
+        {metricsLoading ? 'LOADING...' : 'REFRESH'}
+      </button>
+    </div>
   );
 
   // ═══════════════════════════════════════
@@ -102,6 +185,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   // ═══════════════════════════════════════
   const renderRevenue = () => (
     <div style={{ padding: '20px' }}>
+      <LiveBadge />
       {/* Top-level KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
         <KPICard label="MRR" value={`$${totalMRR.toFixed(2)}`} color="#00ff41" />
@@ -148,9 +232,9 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
 
       {/* Trainer Revenue Breakdown */}
       <SectionHeader title="TRAINER PAYOUT BREAKDOWN" />
-      {trainers.map(trainer => {
+      {operators.filter(op => op.role === 'trainer').map(trainer => {
         const trainerClients = operators.filter(op => op.trainerId === trainer.id);
-        const trainerMRR = trainerClients.reduce((sum, c) => sum + TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0, 0);
+        const trainerMRR = trainerClients.reduce((sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0), 0);
         return (
           <div key={trainer.id} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -185,153 +269,202 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     </div>
   );
 
-  const renderUsers = () => (
-    <div style={{ padding: '20px' }}>
-      {/* User KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-        <KPICard label="TOTAL OPERATORS" value={String(operators.length)} color="#00bcd4" />
-        <KPICard label="TRAINERS" value={String(trainers.length)} color="#ffb800" />
-        <KPICard label="CLIENTS" value={String(clients.length)} color="#00ff41" />
-        <KPICard label="ACTIVE (7D)" value={String(activeUsers.length)} color="#00ff41" />
-        <KPICard label="BETA USERS" value={String(betaUsers.length)} color="#ff00ff" />
-        <KPICard label="PROFILE DONE" value={`${profileComplete.length}/${operators.length}`} color="#00bcd4" />
-      </div>
-
-      {/* Tier Distribution */}
-      <SectionHeader title="TIER DISTRIBUTION" />
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        {(Object.keys(TIER_CONFIGS) as AiTier[]).map(tier => {
-          const count = operators.filter(op => op.tier === tier).length;
-          const pct = operators.length > 0 ? Math.round(count / operators.length * 100) : 0;
-          return (
-            <div key={tier} style={{ padding: '12px 16px', background: 'rgba(0,0,0,0.3)', border: `1px solid ${tierColor(tier)}20`, flex: '1 1 120px' }}>
-              <div style={{ color: tierColor(tier), fontFamily: '"Orbitron", sans-serif', fontSize: '11px', letterSpacing: '2px' }}>
-                {TIER_CONFIGS[tier].codename}
-              </div>
-              <div style={{ color: '#ddd', fontFamily: '"Orbitron", sans-serif', fontSize: '24px', fontWeight: 700 }}>{count}</div>
-              <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{pct}%</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Full User Roster */}
-      <SectionHeader title="ALL OPERATORS" />
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
-              {['CALLSIGN', 'NAME', 'ROLE', 'TIER', 'GOALS', 'PROFILE', 'BETA'].map(h => (
-                <th key={h} style={{ padding: '8px', color: '#555', textAlign: 'left', fontSize: '10px', letterSpacing: '1px' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {operators.map(op => {
-              const hasProfile = op.profile?.age && op.profile?.weight;
-              return (
-                <tr key={op.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                  <td style={{ padding: '8px', color: tierColor(op.tier as AiTier), fontWeight: 600 }}>{op.callsign}</td>
-                  <td style={{ padding: '8px', color: '#888' }}>{op.name}</td>
-                  <td style={{ padding: '8px', color: op.role === 'trainer' ? '#ffb800' : '#00bcd4' }}>{op.role.toUpperCase()}</td>
-                  <td style={{ padding: '8px', color: tierColor(op.tier as AiTier) }}>{TIER_CONFIGS[op.tier as AiTier]?.codename || op.tier}</td>
-                  <td style={{ padding: '8px', color: '#666', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{op.profile?.goals?.join(', ') || '—'}</td>
-                  <td style={{ padding: '8px', color: hasProfile ? '#00ff41' : '#ff4444' }}>{hasProfile ? 'YES' : 'NO'}</td>
-                  <td style={{ padding: '8px', color: op.betaUser ? '#ff00ff' : '#333' }}>{op.betaUser ? 'YES' : '—'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-
-  const renderPlatform = () => {
-    // Estimate metrics from operator data
-    const totalWorkouts = operators.reduce((sum, op) => sum + Object.keys(op.workouts || {}).length, 0);
-    const totalMeals = operators.reduce((sum, op) => {
-      const meals = op.nutrition?.meals || {};
-      return sum + Object.values(meals).reduce((s, dayMeals) => s + (Array.isArray(dayMeals) ? dayMeals.length : 0), 0);
-    }, 0);
-    const totalPRs = operators.reduce((sum, op) => sum + (op.prs?.length || 0), 0);
-    const totalInjuries = operators.reduce((sum, op) => sum + (op.injuries?.length || 0), 0);
-    const estTokensPerChat = 2000;
-    const estChatsPerDay = operators.length * 2;
-    const estDailyTokens = estChatsPerDay * estTokensPerChat;
-    const estMonthlyCost = (estDailyTokens * 30 / 1000000) * 3; // rough $3/MTok avg
+  const renderUsers = () => {
+    // Use DB stats when available for real activity data
+    const dbStats = metrics?.operators;
 
     return (
       <div style={{ padding: '20px' }}>
+        <LiveBadge />
+        {/* User KPIs — real from DB */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+          <KPICard label="TOTAL OPERATORS" value={String(dbStats?.total ?? operators.length)} color="#00bcd4" />
+          <KPICard label="TRAINERS" value={String(dbStats?.trainers ?? trainers.length)} color="#ffb800" />
+          <KPICard label="CLIENTS" value={String(dbStats?.clients ?? clients.length)} color="#00ff41" />
+          <KPICard label="ACTIVE (7D)" value={String(dbStats?.active7d ?? 0)} color={dbStats?.active7d ? '#00ff41' : '#ff4444'} />
+          <KPICard label="BETA USERS" value={String(dbStats?.beta ?? 0)} color="#ff00ff" />
+          <KPICard label="PROFILE DONE" value={`${dbStats?.profileComplete ?? 0}/${dbStats?.total ?? operators.length}`} color="#00bcd4" />
+        </div>
+
+        {/* Tier Distribution */}
+        <SectionHeader title="TIER DISTRIBUTION" />
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+          {(Object.keys(TIER_CONFIGS) as AiTier[]).map(tier => {
+            const count = (opStats.length > 0 ? opStats : operators).filter((op: { tier?: string }) => op.tier === tier).length;
+            const total = dbStats?.total ?? operators.length;
+            const pct = total > 0 ? Math.round(count / total * 100) : 0;
+            return (
+              <div key={tier} style={{ padding: '12px 16px', background: 'rgba(0,0,0,0.3)', border: `1px solid ${tierColor(tier)}20`, flex: '1 1 120px' }}>
+                <div style={{ color: tierColor(tier), fontFamily: '"Orbitron", sans-serif', fontSize: '11px', letterSpacing: '2px' }}>
+                  {TIER_CONFIGS[tier].codename}
+                </div>
+                <div style={{ color: '#ddd', fontFamily: '"Orbitron", sans-serif', fontSize: '24px', fontWeight: 700 }}>{count}</div>
+                <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{pct}%</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Full User Roster — use DB stats for workout/PR counts */}
+        <SectionHeader title="ALL OPERATORS" />
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
+                {['CALLSIGN', 'NAME', 'ROLE', 'TIER', 'WORKOUTS', 'PRs', 'ACTIVE', 'PROFILE', 'BETA'].map(h => (
+                  <th key={h} style={{ padding: '8px', color: '#555', textAlign: 'left', fontSize: '10px', letterSpacing: '1px' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(opStats.length > 0 ? opStats : operators.map(op => ({
+                id: op.id, callsign: op.callsign, name: op.name, role: op.role, tier: op.tier,
+                workoutCount: Object.keys(op.workouts || {}).length,
+                prCount: (op.prs || []).length,
+                isActive: false, hasProfile: !!(op.profile?.age && op.profile?.weight),
+                betaUser: op.betaUser || false,
+              }))).map(op => (
+                <tr key={op.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                  <td style={{ padding: '8px', color: tierColor(op.tier), fontWeight: 600 }}>{op.callsign}</td>
+                  <td style={{ padding: '8px', color: '#888' }}>{op.name}</td>
+                  <td style={{ padding: '8px', color: op.role === 'trainer' ? '#ffb800' : '#00bcd4' }}>{op.role.toUpperCase()}</td>
+                  <td style={{ padding: '8px', color: tierColor(op.tier) }}>{TIER_CONFIGS[op.tier as AiTier]?.codename || op.tier}</td>
+                  <td style={{ padding: '8px', color: op.workoutCount > 0 ? '#00ff41' : '#333' }}>{op.workoutCount}</td>
+                  <td style={{ padding: '8px', color: op.prCount > 0 ? '#00bcd4' : '#333' }}>{op.prCount}</td>
+                  <td style={{ padding: '8px' }}>
+                    <span style={{
+                      padding: '2px 6px', fontSize: '9px',
+                      background: op.isActive ? 'rgba(0,255,65,0.08)' : 'rgba(255,68,68,0.05)',
+                      color: op.isActive ? '#00ff41' : '#444',
+                      border: `1px solid ${op.isActive ? 'rgba(0,255,65,0.15)' : 'rgba(255,255,255,0.03)'}`,
+                    }}>
+                      {op.isActive ? 'ACTIVE' : 'INACTIVE'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '8px', color: op.hasProfile ? '#00ff41' : '#ff4444' }}>{op.hasProfile ? 'YES' : 'NO'}</td>
+                  <td style={{ padding: '8px', color: op.betaUser ? '#ff00ff' : '#333' }}>{op.betaUser ? 'YES' : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPlatform = () => {
+    const pm = metrics?.platform;
+    const ai = metrics?.ai;
+    const db = metrics?.db;
+
+    // Real counts from DB when available
+    const totalWorkouts = pm?.totalWorkouts ?? operators.reduce((sum, op) => sum + Object.keys(op.workouts || {}).length, 0);
+    const totalMeals = pm?.totalMeals ?? 0;
+    const totalPRs = pm?.totalPRs ?? operators.reduce((sum, op) => sum + (op.prs?.length || 0), 0);
+    const totalInjuries = pm?.totalInjuries ?? operators.reduce((sum, op) => sum + (op.injuries?.length || 0), 0);
+    const activeWearables = pm?.activeWearables ?? 0;
+
+    // Real AI usage from DB
+    const totalChatSessions = ai?.totalChatSessions ?? 0;
+    const totalMessages = ai?.totalMessages ?? 0;
+    const estTokens = ai?.estTotalTokens ?? 0;
+    const estCost = ai?.estMonthlyCostUSD ?? 0;
+
+    return (
+      <div style={{ padding: '20px' }}>
+        <LiveBadge />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
           <KPICard label="TOTAL WORKOUTS" value={String(totalWorkouts)} color="#00ff41" />
           <KPICard label="MEALS LOGGED" value={String(totalMeals)} color="#ffb800" />
           <KPICard label="PRs RECORDED" value={String(totalPRs)} color="#00bcd4" />
           <KPICard label="INJURIES TRACKED" value={String(totalInjuries)} color="#ff4444" />
-          <KPICard label="EST DAILY TOKENS" value={`${(estDailyTokens / 1000).toFixed(0)}K`} color="#ff00ff" />
-          <KPICard label="EST API COST/MO" value={`$${estMonthlyCost.toFixed(2)}`} color="#ff4444" />
+          <KPICard label="WEARABLE LINKS" value={String(activeWearables)} color="#ff00ff" />
+        </div>
+
+        {/* AI Usage — real from chat history DB */}
+        <SectionHeader title="GUNNY AI USAGE" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+          <KPICard label="CHAT SESSIONS" value={String(totalChatSessions)} color="#ffb800" />
+          <KPICard label="TOTAL MESSAGES" value={String(totalMessages)} color="#00bcd4" />
+          <KPICard label="GUNNY TAB" value={String(ai?.gunnyChatSessions ?? 0)} color="#00ff41" />
+          <KPICard label="ONBOARDING" value={String(ai?.onboardingSessions ?? 0)} color="#ff00ff" />
+          <KPICard label="SIDE PANEL" value={String(ai?.panelSessions ?? 0)} color="#ffb800" />
+          <KPICard label="EST TOKENS" value={estTokens > 1000000 ? `${(estTokens / 1000000).toFixed(1)}M` : estTokens > 1000 ? `${(estTokens / 1000).toFixed(0)}K` : String(estTokens)} color="#ff4444" />
+          <KPICard label="EST API COST" value={`$${estCost.toFixed(2)}`} color="#ff4444" />
         </div>
 
         <SectionHeader title="INFRASTRUCTURE STATUS" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
           <StatusRow label="RAILWAY DEPLOY" status="LIVE" color="#00ff41" />
-          <StatusRow label="POSTGRESQL" status="CONNECTED" color="#00ff41" />
+          <StatusRow label="POSTGRESQL" status={metrics ? 'CONNECTED' : 'CHECKING...'} color={metrics ? '#00ff41' : '#ffb800'} />
           <StatusRow label="ANTHROPIC API" status="ACTIVE" color="#00ff41" />
-          <StatusRow label="JUNCTION WEARABLES" status={process.env.NEXT_PUBLIC_VITAL_CONFIGURED ? 'ACTIVE' : 'PENDING CONFIG'} color={process.env.NEXT_PUBLIC_VITAL_CONFIGURED ? '#00ff41' : '#ffb800'} />
+          <StatusRow label="JUNCTION WEARABLES" status={activeWearables > 0 ? `${activeWearables} LINKED` : 'PENDING CONFIG'} color={activeWearables > 0 ? '#00ff41' : '#ffb800'} />
           <StatusRow label="PRISMA 7" status="v7.5.0" color="#00bcd4" />
           <StatusRow label="NEXT.JS" status="v14.2" color="#00bcd4" />
         </div>
 
-        <SectionHeader title="DATA VOLUME" />
+        <SectionHeader title="DATABASE VOLUME" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          <DataRow label="Operators in DB" value={String(operators.length)} />
+          <DataRow label="Operator rows" value={String(db?.operatorRows ?? operators.length)} />
+          <DataRow label="Chat history rows" value={String(db?.chatRows ?? 0)} />
           <DataRow label="Workouts stored" value={String(totalWorkouts)} />
           <DataRow label="Meal entries" value={String(totalMeals)} />
           <DataRow label="PR records" value={String(totalPRs)} />
           <DataRow label="Injury records" value={String(totalInjuries)} />
-          <DataRow label="Est. DB rows" value={`~${operators.length + totalWorkouts + totalMeals + totalPRs}`} />
+          <DataRow label="Wearable connections" value={String(activeWearables)} />
+          <DataRow label="Est. total DB rows" value={`~${db?.estTotalRows ?? operators.length}`} />
         </div>
       </div>
     );
   };
 
   const renderBeta = () => {
+    // Normalize beta operators into a common shape
+    const betaOps = (opStats.length > 0 ? opStats : operators.map(op => ({
+      id: op.id, callsign: op.callsign, name: op.name, role: op.role, tier: op.tier,
+      betaUser: op.betaUser || false, hasProfile: !!(op.profile?.age && op.profile?.weight),
+      workoutCount: 0, mealCount: 0, prCount: 0, injuryCount: 0, isActive: false,
+      createdAt: '', updatedAt: '',
+    }))).filter(op => op.betaUser);
+
     const allFeedback = operators.flatMap(op =>
       (op.betaFeedback || []).map(fb => ({ callsign: op.callsign, feedback: fb, tier: op.tier }))
     );
 
+    const dbBeta = metrics?.operators;
+
     return (
       <div style={{ padding: '20px' }}>
+        <LiveBadge />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="BETA USERS" value={String(betaUsers.length)} color="#ff00ff" />
+          <KPICard label="BETA USERS" value={String(dbBeta?.beta ?? betaOps.length)} color="#ff00ff" />
           <KPICard label="TOTAL FEEDBACK" value={String(allFeedback.length)} color="#00bcd4" />
-          <KPICard label="PROFILE COMPLETE" value={`${profileComplete.filter(op => op.betaUser).length}/${betaUsers.length}`} color="#00ff41" />
+          <KPICard label="PROFILE COMPLETE" value={`${betaOps.filter(op => op.hasProfile).length}/${betaOps.length}`} color="#00ff41" />
         </div>
 
         <SectionHeader title="BETA ROSTER" />
-        {betaUsers.map(op => {
-          const feedbackCount = op.betaFeedback?.length || 0;
-          const hasProfile = op.profile?.age && op.profile?.weight;
+        {betaOps.map(op => {
+          const fbCount = operators.find(o => o.id === op.id)?.betaFeedback?.length || 0;
           return (
             <div key={op.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.03)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ color: tierColor(op.tier as AiTier), fontWeight: 600, fontFamily: '"Chakra Petch", sans-serif' }}>{op.callsign}</span>
+                <span style={{ color: tierColor(op.tier), fontWeight: 600, fontFamily: '"Chakra Petch", sans-serif' }}>{op.callsign}</span>
                 <span style={{ color: '#555', fontSize: '12px' }}>{op.name}</span>
               </div>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <span style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>
-                  {feedbackCount} feedback{feedbackCount !== 1 ? 's' : ''}
+                  {fbCount} feedback{fbCount !== 1 ? 's' : ''}
                 </span>
                 <span style={{
                   padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
-                  background: hasProfile ? 'rgba(0,255,65,0.08)' : 'rgba(255,68,68,0.08)',
-                  color: hasProfile ? '#00ff41' : '#ff4444',
-                  border: `1px solid ${hasProfile ? 'rgba(0,255,65,0.15)' : 'rgba(255,68,68,0.15)'}`,
+                  background: op.hasProfile ? 'rgba(0,255,65,0.08)' : 'rgba(255,68,68,0.08)',
+                  color: op.hasProfile ? '#00ff41' : '#ff4444',
+                  border: `1px solid ${op.hasProfile ? 'rgba(0,255,65,0.15)' : 'rgba(255,68,68,0.15)'}`,
                 }}>
-                  {hasProfile ? 'PROFILED' : 'INCOMPLETE'}
+                  {op.hasProfile ? 'PROFILED' : 'INCOMPLETE'}
                 </span>
               </div>
             </div>
