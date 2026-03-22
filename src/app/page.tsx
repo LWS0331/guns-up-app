@@ -17,16 +17,37 @@ export default function Home() {
 
   // Load operators from database on mount
   useEffect(() => {
-    // Register service worker for PWA support
+    // Register service worker for PWA support with auto-update
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
           console.log('Service Worker registered:', registration);
+          // Check for updates every 60 seconds
+          setInterval(() => registration.update(), 60000);
+          // When a new SW is waiting, activate it
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'activated') {
+                  // New version available — reload to get fresh assets
+                  window.location.reload();
+                }
+              });
+            }
+          });
         })
         .catch((error) => {
           console.log('Service Worker registration failed:', error);
         });
+      // Listen for SW update messages
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'SW_UPDATED') {
+          console.log('App updated to version:', event.data.version);
+          window.location.reload();
+        }
+      });
     }
 
     const loadFromDB = async () => {

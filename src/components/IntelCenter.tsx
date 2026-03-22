@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator, Meal, PRRecord, Injury } from '@/lib/types';
+import { Operator, Meal, PRRecord, Injury, formatHeightInput } from '@/lib/types';
 import WearableConnect from '@/components/WearableConnect';
 
 // Local type aliases for internal state management
@@ -631,6 +631,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           type="text"
           value={state.profile.height}
           onChange={(e) => handleProfileChange('height', e.target.value)}
+          placeholder="511 → 5'11&quot;"
           style={{
             width: '100%',
             padding: '8px',
@@ -647,6 +648,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           }}
           onBlur={(e) => {
             e.target.style.borderColor = 'rgba(0,255,65,0.06)';
+            handleProfileChange('height', formatHeightInput(e.target.value));
           }}
         />
       </div>

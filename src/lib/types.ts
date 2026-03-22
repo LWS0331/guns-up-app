@@ -2,6 +2,67 @@
 export type UserRole = 'trainer' | 'client';
 export type AiTier = 'haiku' | 'sonnet' | 'opus' | 'white_glove';
 export type TrainerRank = 'recruit' | 'sergeant' | 'lieutenant' | 'captain' | 'general';
+export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced' | 'elite';
+export type AvatarStyle = 'male-1' | 'male-2' | 'male-3' | 'female-1' | 'female-2' | 'female-3' | 'custom';
+
+// Team system
+export interface Team {
+  id: string;
+  name: string;
+  trainerId: string;
+  memberIds: string[];
+}
+
+export const TEAMS: Team[] = [
+  { id: 'team-wolf-pack', name: 'WOLF PACK', trainerId: 'op-ruben', memberIds: ['op-ruben', 'op-rosa', 'op-erika', 'op-efrain', 'op-aldo', 'op-edgar', 'op-jasmine', 'op-patty'] },
+  { id: 'team-madheart', name: 'MADHEART', trainerId: 'op-britney', memberIds: ['op-britney', 'op-mary', 'op-harold', 'op-jonathan', 'op-natalie', 'op-arnold', 'op-lynette'] },
+];
+
+// Intake assessment types
+export interface IntakeAssessment {
+  completed: boolean;
+  completedDate?: string;
+  fitnessLevel: FitnessLevel;
+  experienceYears: number;
+  primaryGoal: string;
+  secondaryGoals: string[];
+  healthConditions: string[];
+  currentActivity: string; // sedentary, lightly_active, active, very_active, athlete
+  exerciseHistory: string; // none, sporadic, consistent_beginner, consistent_intermediate, advanced_athlete
+  movementScreenScore: number; // 1-10 based on self-reported mobility
+  injuryHistory: string[];
+  availableEquipment: string[];
+  preferredWorkoutTime: string;
+  motivationFactors: string[];
+  sleepQuality: number; // 1-10
+  stressLevel: number; // 1-10
+  nutritionHabits: string; // poor, fair, good, excellent
+  wearableDevice?: string;
+  startingPRs: { exercise: string; weight: number; reps: number }[];
+}
+
+// Leaderboard types
+export interface LeaderboardEntry {
+  operatorId: string;
+  callsign: string;
+  teamId: string;
+  points: number;
+  streak: number;
+  workoutsCompleted: number;
+  mealsLogged: number;
+  prsHit: number;
+  consistencyScore: number; // percentage of planned days completed
+}
+
+export const LEADERBOARD_POINTS = {
+  workoutCompleted: 10,
+  mealLogged: 3,
+  prHit: 25,
+  streakBonus7: 50,
+  streakBonus30: 200,
+  intakeCompleted: 100,
+  wearableConnected: 50,
+};
 
 export interface TierConfig {
   name: string;
@@ -62,6 +123,11 @@ export interface Operator {
   promoActive?: boolean; // true = currently on a promotional free month
   promoType?: string; // e.g. "free_month_recon", "free_month_operator"
   promoExpiry?: string; // ISO date when promo expires
+  teamId?: string; // team this operator belongs to
+  avatar?: AvatarStyle; // military-themed avatar
+  profileImageUrl?: string; // custom profile picture URL
+  intake?: IntakeAssessment; // fitness intake screening results
+  fitnessLevel?: FitnessLevel; // calculated from intake
   profile: OperatorProfile;
   nutrition: NutritionData;
   prs: PRRecord[];
@@ -131,8 +197,30 @@ export interface Workout {
   title: string;
   notes: string;
   warmup: string;
+  primer?: string; // activation/primer work after warmup, before main blocks
   blocks: WorkoutBlock[];
   cooldown: string;
+  completed: boolean;
+  // Workout mode tracking
+  results?: WorkoutResults;
+}
+
+export interface WorkoutResults {
+  startTime?: string;
+  endTime?: string;
+  blockResults: Record<string, BlockResult>; // keyed by block id
+}
+
+export interface BlockResult {
+  sets: SetResult[];
+  notes?: string;
+}
+
+export interface SetResult {
+  weight?: number;
+  reps?: number;
+  time?: string;
+  rpe?: number;
   completed: boolean;
 }
 
@@ -177,7 +265,68 @@ export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'ops';
 // Hardcoded admin access for OPS CENTER
 export const OPS_CENTER_ACCESS = ['op-ruben', 'op-britney'];
 export const BETA_DURATION_DAYS = 45;
-export type IntelTab = 'profile' | 'nutrition' | 'prs' | 'injuries' | 'preferences';
+export type IntelTab = 'profile' | 'nutrition' | 'prs' | 'injuries' | 'preferences' | 'wearables';
+
+// Fitness level calculation from intake
+export function calculateFitnessLevel(intake: IntakeAssessment): FitnessLevel {
+  const { experienceYears, exerciseHistory, movementScreenScore } = intake;
+  let score = 0;
+  // Experience years scoring
+  if (experienceYears >= 10) score += 4;
+  else if (experienceYears >= 5) score += 3;
+  else if (experienceYears >= 2) score += 2;
+  else if (experienceYears >= 0.5) score += 1;
+  // Exercise history scoring
+  if (exerciseHistory === 'advanced_athlete') score += 4;
+  else if (exerciseHistory === 'consistent_intermediate') score += 3;
+  else if (exerciseHistory === 'consistent_beginner') score += 2;
+  else if (exerciseHistory === 'sporadic') score += 1;
+  // Movement screen scoring
+  score += Math.round(movementScreenScore / 2.5);
+  // Map total score to fitness level
+  if (score >= 10) return 'elite';
+  if (score >= 7) return 'advanced';
+  if (score >= 4) return 'intermediate';
+  return 'beginner';
+}
+
+// Calculate training age from intake data
+export function calculateTrainingAge(intake: IntakeAssessment): string {
+  const years = intake.experienceYears;
+  if (years < 1) return `${Math.round(years * 12)} months`;
+  return `${years} year${years !== 1 ? 's' : ''}`;
+}
+
+// Calculate readiness score from intake data (1-10)
+export function calculateReadiness(intake: IntakeAssessment): number {
+  const sleepScore = intake.sleepQuality;
+  const stressScore = 10 - intake.stressLevel; // invert stress
+  const mobilityScore = intake.movementScreenScore;
+  const nutritionMap: Record<string, number> = { poor: 3, fair: 5, good: 7, excellent: 9 };
+  const nutritionScore = nutritionMap[intake.nutritionHabits] || 5;
+  return Math.round((sleepScore + stressScore + mobilityScore + nutritionScore) / 4);
+}
+
+// Auto-format height input: "511" → "5'11\""
+export function formatHeightInput(raw: string): string {
+  // If already formatted, return as-is
+  if (raw.includes("'") || raw.includes('"')) return raw;
+  // Remove non-numeric
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (digits.length === 2) {
+    // e.g. "59" → 5'9"
+    return `${digits[0]}'${digits[1]}"`;
+  }
+  if (digits.length === 3) {
+    // e.g. "511" → 5'11"
+    return `${digits[0]}'${digits.slice(1)}"`;
+  }
+  if (digits.length === 4) {
+    // e.g. "5011" → 5'0" + 11? Unlikely. Try feet=first, inches=rest
+    return `${digits[0]}'${digits.slice(1)}"`;
+  }
+  return raw;
+}
 
 export interface AuthState {
   isLoggedIn: boolean;

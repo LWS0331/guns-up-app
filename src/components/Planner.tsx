@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode } from '@/lib/types';
+import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
 import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 
 // ═══ Tooltip Tag Pill Component ═══
@@ -247,6 +247,30 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
   const [showExerciseAutocomplete, setShowExerciseAutocomplete] = useState(false);
   const [autocompleteFor, setAutocompleteFor] = useState<number | null>(null);
+  const [workoutMode, setWorkoutMode] = useState(false); // Workout execution mode
+  const [activeBlockIdx, setActiveBlockIdx] = useState(0);
+  const [restTimer, setRestTimer] = useState(0);
+  const [restRunning, setRestRunning] = useState(false);
+  const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[] }>>({});
+
+  // Keyboard shortcuts for workout builder
+  useEffect(() => {
+    if (!showWorkoutBuilder || workoutMode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+Enter = add exercise block
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleAddExerciseBlock();
+      }
+      // Cmd+Shift+Enter = add conditioning block
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Enter') {
+        e.preventDefault();
+        handleAddConditioningBlock();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showWorkoutBuilder, workoutMode, builderData.blocks.length]);
   const autocompleteRef = useRef<HTMLDivElement>(null);
 
   // ============================================================================
@@ -567,6 +591,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
       title: '',
       notes: '',
       warmup: '',
+      primer: '',
       blocks: [],
       cooldown: '',
       completed: false,
@@ -588,10 +613,21 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
       return;
     }
 
+    // Auto-populate video URLs for exercises that don't have one
+    const blocksWithVideos = builderData.blocks.map(block => {
+      if (block.type === 'exercise' && !block.videoUrl && block.exerciseName) {
+        const videoUrl = getVideoUrl(block.exerciseName);
+        if (videoUrl) return { ...block, videoUrl };
+      }
+      return block;
+    });
+
+    const workoutToSave = { ...builderData, blocks: blocksWithVideos };
     const updated = { ...operator };
-    updated.workouts[selectedDate] = builderData;
+    updated.workouts[selectedDate] = workoutToSave;
     onUpdateOperator(updated);
     setShowWorkoutBuilder(false);
+    setWorkoutMode(false);
     // Stay on day view so user can review the saved workout — don't clear selectedDate
   };
 
@@ -915,6 +951,174 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   };
 
   // ============================================================================
+  // WORKOUT MODE — Simplified execution view with rest timer + result logging
+  // ============================================================================
+  // Rest timer countdown
+  useEffect(() => {
+    if (!restRunning || restTimer <= 0) {
+      if (restTimer <= 0 && restRunning) setRestRunning(false);
+      return;
+    }
+    const interval = setInterval(() => setRestTimer(prev => prev - 1), 1000);
+    return () => clearInterval(interval);
+  }, [restRunning, restTimer]);
+
+  // Initialize workout results when entering workout mode
+  useEffect(() => {
+    if (!workoutMode) return;
+    const dateStr = selectedDate || formatDate(currentDate);
+    const workout = getWorkoutForDate(dateStr);
+    if (!workout) return;
+    if (Object.keys(workoutResults).length === 0) {
+      const initial = workout.results?.blockResults
+        ? Object.fromEntries(Object.entries(workout.results.blockResults).map(([k, v]) => [k, { sets: v.sets.map(s => ({ weight: s.weight || 0, reps: s.reps || 0, completed: s.completed })) }]))
+        : Object.fromEntries(workout.blocks.map(b => [b.id, { sets: [{ weight: 0, reps: 0, completed: false }] }]));
+      setWorkoutResults(initial);
+    }
+  }, [workoutMode, selectedDate]);
+
+  const renderWorkoutMode = () => {
+    const dateStr = selectedDate || formatDate(currentDate);
+    const workout = getWorkoutForDate(dateStr);
+    if (!workout) return null;
+
+    const results = workoutResults;
+    const setResults = setWorkoutResults;
+
+    const handleSaveResults = () => {
+      const savedResults: WorkoutResults = {
+        startTime: workout.results?.startTime || new Date().toISOString(),
+        endTime: new Date().toISOString(),
+        blockResults: Object.fromEntries(
+          Object.entries(results).map(([blockId, data]) => [
+            blockId,
+            { sets: data.sets.map(s => ({ weight: s.weight, reps: s.reps, completed: s.completed })) }
+          ])
+        ),
+      };
+      const updated = { ...operator };
+      updated.workouts[dateStr] = { ...workout, results: savedResults, completed: true };
+      onUpdateOperator(updated);
+      setWorkoutMode(false);
+      setWorkoutResults({});
+    };
+
+    // Smart weight logic: if user enters weight for first set, auto-fill rest
+    const handleWeightChange = (blockId: string, setIdx: number, weight: number) => {
+      setResults(prev => {
+        const blockData = { ...prev[blockId] };
+        const sets = [...blockData.sets];
+        sets[setIdx] = { ...sets[setIdx], weight };
+        // If it's the first set and other sets have no weight, fill them
+        if (setIdx === 0) {
+          for (let i = 1; i < sets.length; i++) {
+            if (sets[i].weight === 0) sets[i] = { ...sets[i], weight };
+          }
+        }
+        return { ...prev, [blockId]: { sets } };
+      });
+    };
+
+    return (
+      <div style={{ maxWidth: 500, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#e040fb', fontSize: 18, margin: 0 }}>WORKOUT MODE</h2>
+          <button onClick={() => setWorkoutMode(false)} style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer' }}>EXIT</button>
+        </div>
+        <h3 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: 16, margin: '0 0 20px 0' }}>{workout.title}</h3>
+
+        {/* Rest Timer */}
+        <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: restRunning ? '#1a0a1a' : '#0a0a0a', border: `1px solid ${restRunning ? '#e040fb' : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
+          <div style={{ fontFamily: 'Orbitron', fontSize: restRunning ? 48 : 24, color: restTimer <= 10 && restRunning ? '#ff4444' : '#e040fb', transition: 'all 0.3s' }}>
+            {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+            {[30, 60, 90, 120, 180].map(sec => (
+              <button key={sec} onClick={() => { setRestTimer(sec); setRestRunning(true); }}
+                style={{ padding: '4px 8px', background: '#1a1a1a', border: '1px solid #444', color: '#ccc', fontFamily: 'Share Tech Mono', fontSize: 11, cursor: 'pointer', borderRadius: 4 }}>
+                {sec < 60 ? `${sec}s` : `${sec / 60}m`}
+              </button>
+            ))}
+            {restRunning && (
+              <button onClick={() => { setRestRunning(false); setRestTimer(0); }}
+                style={{ padding: '4px 8px', background: '#ff4444', border: 'none', color: '#fff', fontFamily: 'Share Tech Mono', fontSize: 11, cursor: 'pointer', borderRadius: 4 }}>
+                STOP
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Exercise blocks in execution mode */}
+        {workout.blocks.map((block, idx) => {
+          if (block.type !== 'exercise') return (
+            <div key={block.id} style={{ padding: 12, marginBottom: 12, background: '#0a0a0a', border: '1px solid rgba(255, 184, 0, 0.3)', borderRadius: 4 }}>
+              <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: 13, fontWeight: 'bold' }}>CONDITIONING</div>
+              <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: 13, marginTop: 4 }}>{block.format}: {block.description}</div>
+            </div>
+          );
+
+          const blockResults = results[block.id] || { sets: [{ weight: 0, reps: 0, completed: false }] };
+          const parsedSets = parseInt(block.prescription?.match(/(\d+)\s*x/)?.[1] || '3');
+          // Ensure we have enough sets
+          while (blockResults.sets.length < parsedSets) {
+            blockResults.sets.push({ weight: 0, reps: 0, completed: false });
+          }
+
+          return (
+            <div key={block.id} style={{ padding: 12, marginBottom: 12, background: idx === activeBlockIdx ? '#0a1a0a' : '#0a0a0a', border: `1px solid ${idx === activeBlockIdx ? '#00ff41' : '#333'}`, borderRadius: 4, transition: 'all 0.2s' }}
+              onClick={() => setActiveBlockIdx(idx)}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: 14, fontWeight: 'bold' }}>{block.exerciseName}</div>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: 11 }}>{block.prescription}</div>
+              </div>
+              {block.videoUrl && (
+                <a href={block.videoUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: '#666', fontFamily: 'Share Tech Mono', textDecoration: 'none' }}>
+                  Form video
+                </a>
+              )}
+              <div style={{ marginTop: 8 }}>
+                {blockResults.sets.slice(0, parsedSets).map((set, si) => (
+                  <div key={si} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontFamily: 'Share Tech Mono', color: '#666', fontSize: 11, width: 30 }}>S{si + 1}</span>
+                    <input type="number" placeholder="lbs" value={set.weight || ''} onChange={e => handleWeightChange(block.id, si, parseFloat(e.target.value) || 0)}
+                      style={{ width: 60, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 13, textAlign: 'center' }} />
+                    <span style={{ color: '#444', fontSize: 11 }}>x</span>
+                    <input type="number" placeholder="reps" value={set.reps || ''} onChange={e => {
+                      setResults(prev => {
+                        const blockData = { ...prev[block.id] };
+                        const sets = [...blockData.sets];
+                        sets[si] = { ...sets[si], reps: parseInt(e.target.value) || 0 };
+                        return { ...prev, [block.id]: { sets } };
+                      });
+                    }}
+                      style={{ width: 50, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 13, textAlign: 'center' }} />
+                    <button onClick={() => {
+                      setResults(prev => {
+                        const blockData = { ...prev[block.id] };
+                        const sets = [...blockData.sets];
+                        sets[si] = { ...sets[si], completed: !sets[si].completed };
+                        return { ...prev, [block.id]: { sets } };
+                      });
+                    }}
+                      style={{ padding: '2px 8px', background: set.completed ? '#00ff41' : '#1a1a1a', border: `1px solid ${set.completed ? '#00ff41' : '#444'}`, color: set.completed ? '#000' : '#888', fontFamily: 'Share Tech Mono', fontSize: 11, cursor: 'pointer', borderRadius: 4 }}>
+                      {set.completed ? 'DONE' : 'LOG'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
+        <button onClick={handleSaveResults}
+          style={{ width: '100%', padding: 14, background: '#00ff41', color: '#000', border: 'none', fontFamily: 'Orbitron', fontSize: 14, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', borderRadius: 4, marginTop: 12 }}>
+          COMPLETE WORKOUT
+        </button>
+      </div>
+    );
+  };
+
+  // ============================================================================
   // RENDER DAY VIEW
   // ============================================================================
 
@@ -932,7 +1136,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
           </h2>
         </div>
 
-        {showWorkoutBuilder ? (
+        {workoutMode && workout ? (
+          renderWorkoutMode()
+        ) : showWorkoutBuilder ? (
           renderWorkoutBuilder()
         ) : workout ? (
           <div style={{ padding: '20px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 188, 212, 0.3)' }}>
@@ -953,6 +1159,24 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                   }}
                 >
                   Edit
+                </button>
+                <button
+                  onClick={() => {
+                    setWorkoutMode(true);
+                    setSelectedDate(dateStr);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#e040fb',
+                    color: '#000',
+                    border: 'none',
+                    fontFamily: 'Chakra Petch',
+                    cursor: 'pointer',
+                    fontSize: '15px',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Workout Mode
                 </button>
                 <button
                   onClick={() => handleDeleteWorkout(dateStr)}
@@ -990,6 +1214,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                 </div>
                 <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
                   {workout.warmup}
+                </div>
+              </div>
+            )}
+
+            {workout.primer && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#e040fb', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
+                  PRIMER
+                </div>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                  {workout.primer}
                 </div>
               </div>
             )}
@@ -1188,6 +1423,37 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
               boxSizing: 'border-box',
             }}
           />
+        </div>
+
+        {/* PRIMER */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#e040fb', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+            PRIMER (Activation)
+          </label>
+          <textarea
+            value={builderData.primer || ''}
+            onChange={e => setBuilderData({ ...builderData, primer: e.target.value })}
+            placeholder="e.g. 3x12 Band Pull-Aparts, 2x15 Glute Bridges, 2x10 Scap Push-ups"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: '#0a0a0a',
+              border: '1px solid rgba(224, 64, 251, 0.3)',
+              color: '#e040fb',
+              fontFamily: 'Chakra Petch',
+              fontSize: '16px',
+              minHeight: '50px',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ fontSize: '10px', color: '#666', marginTop: '4px', fontFamily: 'Share Tech Mono' }}>
+            Activation work after warmup, before main lifts
+          </div>
+        </div>
+
+        {/* KEYBOARD SHORTCUTS HINT */}
+        <div style={{ fontSize: '10px', color: '#444', marginBottom: '12px', fontFamily: 'Share Tech Mono', textAlign: 'right' }}>
+          ⌘+Enter = +Exercise | ⌘+Shift+Enter = +Conditioning
         </div>
 
         {/* WORKOUT BLOCKS */}

@@ -11,6 +11,7 @@ import COCDashboard from '@/components/COCDashboard';
 import Planner from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
+import IntakeForm from '@/components/IntakeForm';
 
 // ═══ Matrix Code Rain Background ═══
 const DataRain: React.FC = () => {
@@ -90,9 +91,12 @@ const AppShell: React.FC<AppShellProps> = ({
   onLogout,
 }) => {
   const { t, language } = useLanguage();
+  // Check if intake is completed
+  const intakeCompleted = currentUser.intake?.completed === true;
+  const [showIntake, setShowIntake] = useState(!intakeCompleted);
   // Auto-switch to Gunny tab if profile is incomplete (onboarding needed)
   const profileIncomplete = !currentUser.profile?.age || !currentUser.profile?.weight || !currentUser.profile?.goals?.length || !currentUser.preferences?.daysPerWeek;
-  const [activeTab, setActiveTab] = useState<AppTab>(profileIncomplete ? 'gunny' : 'coc');
+  const [activeTab, setActiveTab] = useState<AppTab>(profileIncomplete && intakeCompleted ? 'gunny' : 'coc');
   const [selectedOperator, setSelectedOperator] = useState<Operator>(currentUser);
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -348,12 +352,18 @@ const AppShell: React.FC<AppShellProps> = ({
       setGunnyMessages(prev => [...prev, gunnyReply]);
     } catch (error) {
       console.error('Gunny API error:', error);
-      const errorMessage: ChatMessage = {
-        role: 'gunny',
-        text: 'Systems temporarily offline. Stand by.',
-        timestamp: Date.now(),
-      };
-      setGunnyMessages(prev => [...prev, errorMessage]);
+      // Only add error message if the last message isn't already an error
+      setGunnyMessages(prev => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg?.role === 'gunny' && lastMsg.text.includes('temporarily offline')) {
+          return prev; // Don't duplicate error messages
+        }
+        return [...prev, {
+          role: 'gunny' as const,
+          text: `Comms disrupted, ${selectedOperator.callsign}. Check your connection and try again. If this persists, the API key may need attention.`,
+          timestamp: Date.now(),
+        }];
+      });
     } finally {
       setGunnyLoading(false);
     }
@@ -389,6 +399,25 @@ const AppShell: React.FC<AppShellProps> = ({
         return null;
     }
   };
+
+  // Show intake form if not completed
+  if (showIntake && !intakeCompleted) {
+    return (
+      <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
+        <DataRain />
+        <div style={{ position: 'relative', zIndex: 1, padding: '20px 0' }}>
+          <IntakeForm
+            operator={currentUser}
+            onComplete={(updated) => {
+              onUpdateOperator(updated);
+              setShowIntake(false);
+            }}
+            onSkip={() => setShowIntake(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
