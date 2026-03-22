@@ -98,11 +98,16 @@ interface OperatorContextData {
   exerciseHistory?: string;
   currentActivity?: string;
   availableEquipment?: string[];
+  equipmentDetailed?: Array<{ name: string; description?: string; category?: string }>;
   preferredWorkoutTime?: string;
   healthConditions?: string[];
   sleepQuality?: number;
   stressLevel?: number;
   nutritionHabits?: string;
+  currentDiet?: string;
+  macroTargets?: { calories: number; protein: number; carbs: number; fat: number };
+  dietaryRestrictions?: string[];
+  supplements?: string[];
   prs?: Array<{ exercise: string; weight: number }>;
   injuries?: Array<{ id: string; name: string; status: string; notes?: string; restrictions?: string[] }>;
   trainerNotes?: string;
@@ -414,11 +419,16 @@ const AppShell: React.FC<AppShellProps> = ({
       exerciseHistory: intake?.exerciseHistory || prof?.exerciseHistory,
       currentActivity: intake?.currentActivity || prof?.currentActivity,
       availableEquipment: intake?.availableEquipment || prefs?.equipment,
+      equipmentDetailed: prefs?.equipmentDetailed,
       preferredWorkoutTime: intake?.preferredWorkoutTime || prof?.preferredWorkoutTime,
       healthConditions: intake?.healthConditions || prof?.healthConditions,
       sleepQuality: intake?.sleepQuality || prof?.sleep,
       stressLevel: intake?.stressLevel || prof?.stress,
       nutritionHabits: intake?.nutritionHabits || prof?.nutritionHabits,
+      currentDiet: intake?.currentDiet,
+      macroTargets: op.nutrition?.targets,
+      dietaryRestrictions: intake?.dietaryRestrictions,
+      supplements: intake?.supplements,
       prs: op.prs?.map(pr => ({ exercise: pr.exercise, weight: pr.weight })),
       injuries: op.injuries?.map(inj => ({
         id: inj.id,

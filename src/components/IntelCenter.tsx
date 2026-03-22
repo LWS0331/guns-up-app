@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator, Meal, PRRecord, Injury, formatHeightInput } from '@/lib/types';
+import { Operator, Meal, PRRecord, Injury, formatHeightInput, FitnessLevel, MilestoneGoal } from '@/lib/types';
 import WearableConnect from '@/components/WearableConnect';
 import ProgressCharts from '@/components/ProgressCharts';
 import { FOOD_DB } from '@/data/foods';
@@ -1901,7 +1901,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     return intakePRs.find(p => p.exercise.toLowerCase().trim() === exerciseName.toLowerCase().trim());
   };
 
-  const [prViewMode, setPrViewMode] = useState<'tracker' | 'table'>('tracker');
+  const [prViewMode, setPrViewMode] = useState<'roadmap' | 'tracker' | 'table'>('roadmap');
 
   const renderPhaseLineTracker = (exerciseName: string, prs: PersonalRecord[]) => {
     const maxWeight = Math.max(...prs.map(p => p.weight), 0);
@@ -2035,6 +2035,260 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     );
   };
 
+  // Generate milestone roadmap based on fitness level
+  const generateMilestoneRoadmap = (): MilestoneGoal[] => {
+    const level: FitnessLevel = operator.fitnessLevel || operator.intake?.fitnessLevel || operator.profile?.fitnessLevel || 'beginner';
+    const milestones: MilestoneGoal[] = [];
+    let id = 0;
+
+    // Check if a milestone is achieved based on current data
+    const workoutCount = Object.values(operator.workouts || {}).filter(w => w.completed).length;
+    const streakDays = (() => {
+      const dates = Object.entries(operator.workouts || {}).filter(([, w]) => w.completed).map(([d]) => d).sort().reverse();
+      let streak = 0;
+      const today = new Date();
+      for (let i = 0; i < dates.length; i++) {
+        const d = new Date(dates[i]);
+        const diff = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+        if (diff <= streak + 2) streak = diff + 1; else break; // allow 1 rest day
+      }
+      return Math.min(streak, dates.length);
+    })();
+    const mealDays = Object.keys(operator.nutrition?.meals || {}).length;
+    const maxBench = Math.max(0, ...state.prBoard.filter(p => p.exercise.toLowerCase().includes('bench')).map(p => p.weight));
+    const maxSquat = Math.max(0, ...state.prBoard.filter(p => p.exercise.toLowerCase().includes('squat')).map(p => p.weight));
+    const maxDeadlift = Math.max(0, ...state.prBoard.filter(p => p.exercise.toLowerCase().includes('deadlift')).map(p => p.weight));
+    const bodyWeight = operator.profile?.weight || 170;
+
+    if (level === 'beginner') {
+      // PHASE 1: Build the Habit (Consistency)
+      milestones.push(
+        { id: `ms-${id++}`, phase: 1, phaseName: 'BUILD THE HABIT', title: 'First Workout Logged', description: 'Complete and log your very first workout', type: 'consistency', target: { count: 1, unit: 'workouts' }, achieved: workoutCount >= 1, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 1, phaseName: 'BUILD THE HABIT', title: '3 Workouts in One Week', description: 'Hit 3 training sessions in a single week', type: 'consistency', target: { count: 3, unit: 'workouts/week' }, achieved: workoutCount >= 3, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 1, phaseName: 'BUILD THE HABIT', title: 'Log Meals for 3 Days', description: 'Track your nutrition for 3 separate days', type: 'consistency', target: { count: 3, unit: 'meal days' }, achieved: mealDays >= 3, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 1, phaseName: 'BUILD THE HABIT', title: '2-Week Streak', description: 'Train consistently for 2 weeks (at least 6 sessions)', type: 'consistency', target: { count: 6, unit: 'workouts' }, achieved: workoutCount >= 6, achievedDate: undefined },
+      );
+      // PHASE 2: Foundation (Endurance + Consistency)
+      milestones.push(
+        { id: `ms-${id++}`, phase: 2, phaseName: 'FOUNDATION', title: '10 Workouts Completed', description: 'Reach double-digit training sessions', type: 'consistency', target: { count: 10, unit: 'workouts' }, achieved: workoutCount >= 10, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 2, phaseName: 'FOUNDATION', title: '30-Day Nutrition Log', description: 'Log meals for 30 different days', type: 'consistency', target: { count: 30, unit: 'meal days' }, achieved: mealDays >= 30, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 2, phaseName: 'FOUNDATION', title: '20-Minute Cardio Session', description: 'Complete 20 minutes of sustained cardio', type: 'endurance', achieved: false, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 2, phaseName: 'FOUNDATION', title: '4-Week Streak', description: 'Train for 4 consecutive weeks without missing a scheduled day', type: 'consistency', target: { count: 12, unit: 'workouts' }, achieved: workoutCount >= 12, achievedDate: undefined },
+      );
+      // PHASE 3: First PRs (Strength + Endurance)
+      milestones.push(
+        { id: `ms-${id++}`, phase: 3, phaseName: 'FIRST PRs', title: 'Bench Press 95 lbs', description: 'Hit a 95lb bench press for any reps', type: 'strength', target: { exercise: 'Bench Press', weight: 95 }, achieved: maxBench >= 95, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 3, phaseName: 'FIRST PRs', title: 'Squat 135 lbs', description: 'Hit one plate on squat', type: 'strength', target: { exercise: 'Squat', weight: 135 }, achieved: maxSquat >= 135, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 3, phaseName: 'FIRST PRs', title: 'Deadlift 135 lbs', description: 'Pull one plate from the floor', type: 'strength', target: { exercise: 'Deadlift', weight: 135 }, achieved: maxDeadlift >= 135, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 3, phaseName: 'FIRST PRs', title: '25 Workouts Completed', description: 'Quarter century of training sessions', type: 'consistency', target: { count: 25, unit: 'workouts' }, achieved: workoutCount >= 25, achievedDate: undefined },
+      );
+      // PHASE 4: Building Momentum
+      milestones.push(
+        { id: `ms-${id++}`, phase: 4, phaseName: 'BUILDING MOMENTUM', title: 'Bench Press 135 lbs', description: 'One plate bench — a major milestone', type: 'strength', target: { exercise: 'Bench Press', weight: 135 }, achieved: maxBench >= 135, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 4, phaseName: 'BUILDING MOMENTUM', title: 'Squat 185 lbs', description: 'Close to bodyweight squat for most', type: 'strength', target: { exercise: 'Squat', weight: 185 }, achieved: maxSquat >= 185, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 4, phaseName: 'BUILDING MOMENTUM', title: 'Deadlift 225 lbs', description: 'Two plates — you are strong', type: 'strength', target: { exercise: 'Deadlift', weight: 225 }, achieved: maxDeadlift >= 225, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 4, phaseName: 'BUILDING MOMENTUM', title: '50 Workouts Completed', description: 'Half century — training is a habit now', type: 'milestone', target: { count: 50, unit: 'workouts' }, achieved: workoutCount >= 50, achievedDate: undefined },
+      );
+      // PHASE 5: Graduation
+      milestones.push(
+        { id: `ms-${id++}`, phase: 5, phaseName: 'GRADUATION', title: 'Bench Bodyweight', description: `Bench press ${bodyWeight} lbs (your bodyweight)`, type: 'strength', target: { exercise: 'Bench Press', weight: bodyWeight }, achieved: maxBench >= bodyWeight, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 5, phaseName: 'GRADUATION', title: 'Squat 1.25x Bodyweight', description: `Squat ${Math.round(bodyWeight * 1.25)} lbs`, type: 'strength', target: { exercise: 'Squat', weight: Math.round(bodyWeight * 1.25) }, achieved: maxSquat >= bodyWeight * 1.25, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 5, phaseName: 'GRADUATION', title: 'Deadlift 1.5x Bodyweight', description: `Deadlift ${Math.round(bodyWeight * 1.5)} lbs`, type: 'strength', target: { exercise: 'Deadlift', weight: Math.round(bodyWeight * 1.5) }, achieved: maxDeadlift >= bodyWeight * 1.5, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 5, phaseName: 'GRADUATION', title: '100 Workouts Completed', description: 'Triple digits — you are an operator now', type: 'milestone', target: { count: 100, unit: 'workouts' }, achieved: workoutCount >= 100, achievedDate: undefined },
+      );
+    } else if (level === 'intermediate') {
+      milestones.push(
+        { id: `ms-${id++}`, phase: 1, phaseName: 'RECALIBRATE', title: 'Complete Intake Assessment', description: 'Establish baselines for all major lifts', type: 'milestone', achieved: !!(operator.intake?.completed), achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 1, phaseName: 'RECALIBRATE', title: '4-Week Consistency Streak', description: 'Hit all scheduled sessions for 4 straight weeks', type: 'consistency', target: { count: 16, unit: 'workouts' }, achieved: workoutCount >= 16, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 1, phaseName: 'RECALIBRATE', title: 'Log Nutrition for 2 Weeks', description: 'Track meals consistently for 14 days', type: 'consistency', target: { count: 14, unit: 'meal days' }, achieved: mealDays >= 14, achievedDate: undefined },
+      );
+      milestones.push(
+        { id: `ms-${id++}`, phase: 2, phaseName: 'PROGRESSIVE OVERLOAD', title: 'Bench Press 185 lbs', description: 'Push toward intermediate bench standards', type: 'strength', target: { exercise: 'Bench Press', weight: 185 }, achieved: maxBench >= 185, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 2, phaseName: 'PROGRESSIVE OVERLOAD', title: 'Squat 225 lbs', description: 'Two plates on squat — a real milestone', type: 'strength', target: { exercise: 'Squat', weight: 225 }, achieved: maxSquat >= 225, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 2, phaseName: 'PROGRESSIVE OVERLOAD', title: 'Deadlift 315 lbs', description: 'Three plates from the floor', type: 'strength', target: { exercise: 'Deadlift', weight: 315 }, achieved: maxDeadlift >= 315, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 2, phaseName: 'PROGRESSIVE OVERLOAD', title: '30 Workouts Completed', description: 'Building a solid training base', type: 'consistency', target: { count: 30, unit: 'workouts' }, achieved: workoutCount >= 30, achievedDate: undefined },
+      );
+      milestones.push(
+        { id: `ms-${id++}`, phase: 3, phaseName: 'STRENGTH STANDARDS', title: 'Bench Press 225 lbs', description: 'Two plate bench — intermediate strength', type: 'strength', target: { exercise: 'Bench Press', weight: 225 }, achieved: maxBench >= 225, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 3, phaseName: 'STRENGTH STANDARDS', title: 'Squat 315 lbs', description: 'Three plate squat — serious strength', type: 'strength', target: { exercise: 'Squat', weight: 315 }, achieved: maxSquat >= 315, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 3, phaseName: 'STRENGTH STANDARDS', title: 'Deadlift 405 lbs', description: 'Four plates — elite territory', type: 'strength', target: { exercise: 'Deadlift', weight: 405 }, achieved: maxDeadlift >= 405, achievedDate: undefined },
+      );
+      milestones.push(
+        { id: `ms-${id++}`, phase: 4, phaseName: 'OPERATOR CLASS', title: 'Bench 1.25x Bodyweight', description: `Bench ${Math.round(bodyWeight * 1.25)} lbs`, type: 'strength', target: { exercise: 'Bench Press', weight: Math.round(bodyWeight * 1.25) }, achieved: maxBench >= bodyWeight * 1.25, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 4, phaseName: 'OPERATOR CLASS', title: 'Squat 2x Bodyweight', description: `Squat ${Math.round(bodyWeight * 2)} lbs`, type: 'strength', target: { exercise: 'Squat', weight: Math.round(bodyWeight * 2) }, achieved: maxSquat >= bodyWeight * 2, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 4, phaseName: 'OPERATOR CLASS', title: '100 Workouts Completed', description: 'Triple digits — true commitment', type: 'milestone', target: { count: 100, unit: 'workouts' }, achieved: workoutCount >= 100, achievedDate: undefined },
+      );
+      milestones.push(
+        { id: `ms-${id++}`, phase: 5, phaseName: 'COMMANDER READY', title: '1000 lb Total', description: 'Bench + Squat + Deadlift ≥ 1000 lbs', type: 'milestone', target: { weight: 1000 }, achieved: (maxBench + maxSquat + maxDeadlift) >= 1000, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 5, phaseName: 'COMMANDER READY', title: '200 Workouts', description: 'Two hundred sessions of dedicated training', type: 'milestone', target: { count: 200, unit: 'workouts' }, achieved: workoutCount >= 200, achievedDate: undefined },
+      );
+    } else {
+      // Advanced / Elite
+      milestones.push(
+        { id: `ms-${id++}`, phase: 1, phaseName: 'ESTABLISH BASELINE', title: 'Set All Baseline PRs', description: 'Log current 1RM for bench, squat, and deadlift', type: 'milestone', achieved: maxBench > 0 && maxSquat > 0 && maxDeadlift > 0, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 1, phaseName: 'ESTABLISH BASELINE', title: 'Consistent 4-Day Split', description: 'Hit 4 sessions/week for 4 consecutive weeks', type: 'consistency', target: { count: 16, unit: 'workouts' }, achieved: workoutCount >= 16, achievedDate: undefined },
+      );
+      milestones.push(
+        { id: `ms-${id++}`, phase: 2, phaseName: 'PEAK PERFORMANCE', title: 'Bench 1.5x Bodyweight', description: `Bench ${Math.round(bodyWeight * 1.5)} lbs`, type: 'strength', target: { exercise: 'Bench Press', weight: Math.round(bodyWeight * 1.5) }, achieved: maxBench >= bodyWeight * 1.5, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 2, phaseName: 'PEAK PERFORMANCE', title: 'Squat 2.5x Bodyweight', description: `Squat ${Math.round(bodyWeight * 2.5)} lbs`, type: 'strength', target: { exercise: 'Squat', weight: Math.round(bodyWeight * 2.5) }, achieved: maxSquat >= bodyWeight * 2.5, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 2, phaseName: 'PEAK PERFORMANCE', title: 'Deadlift 3x Bodyweight', description: `Deadlift ${Math.round(bodyWeight * 3)} lbs`, type: 'strength', target: { exercise: 'Deadlift', weight: Math.round(bodyWeight * 3) }, achieved: maxDeadlift >= bodyWeight * 3, achievedDate: undefined },
+      );
+      milestones.push(
+        { id: `ms-${id++}`, phase: 3, phaseName: 'WARFIGHTER', title: '1200 lb Total', description: 'Bench + Squat + Deadlift ≥ 1200 lbs', type: 'milestone', target: { weight: 1200 }, achieved: (maxBench + maxSquat + maxDeadlift) >= 1200, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 3, phaseName: 'WARFIGHTER', title: '200 Workouts', description: 'Two hundred sessions — built different', type: 'milestone', target: { count: 200, unit: 'workouts' }, achieved: workoutCount >= 200, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 3, phaseName: 'WARFIGHTER', title: 'PR Every Lift +10%', description: 'Beat every intake baseline by at least 10%', type: 'milestone', achieved: false, achievedDate: undefined },
+      );
+      milestones.push(
+        { id: `ms-${id++}`, phase: 4, phaseName: 'ELITE OPS', title: '1500 lb Total', description: 'Bench + Squat + Deadlift ≥ 1500 lbs', type: 'milestone', target: { weight: 1500 }, achieved: (maxBench + maxSquat + maxDeadlift) >= 1500, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 4, phaseName: 'ELITE OPS', title: '365-Day Streak', description: 'A full year of consistent training', type: 'consistency', target: { count: 365, unit: 'days' }, achieved: streakDays >= 365, achievedDate: undefined },
+      );
+      milestones.push(
+        { id: `ms-${id++}`, phase: 5, phaseName: 'LEGEND', title: 'Competition Ready', description: 'All lifts meet competitive standards for your weight class', type: 'milestone', achieved: false, achievedDate: undefined },
+        { id: `ms-${id++}`, phase: 5, phaseName: 'LEGEND', title: '500 Workouts', description: 'Half a thousand. Living legend status.', type: 'milestone', target: { count: 500, unit: 'workouts' }, achieved: workoutCount >= 500, achievedDate: undefined },
+      );
+    }
+
+    return milestones;
+  };
+
+  const renderMilestoneRoadmap = () => {
+    const milestones = generateMilestoneRoadmap();
+    const phases = [...new Set(milestones.map(m => m.phase))].sort();
+    const totalAchieved = milestones.filter(m => m.achieved).length;
+    const totalMilestones = milestones.length;
+    const overallPct = totalMilestones > 0 ? Math.round((totalAchieved / totalMilestones) * 100) : 0;
+
+    // Determine current phase (first phase with incomplete milestones)
+    let currentPhase = phases[phases.length - 1];
+    for (const p of phases) {
+      const phaseMilestones = milestones.filter(m => m.phase === p);
+      if (phaseMilestones.some(m => !m.achieved)) { currentPhase = p; break; }
+    }
+
+    const typeColors: Record<string, string> = {
+      consistency: '#4ade80',
+      endurance: '#00bcd4',
+      strength: '#ff6b35',
+      milestone: '#facc15',
+    };
+
+    const typeIcons: Record<string, string> = {
+      consistency: '🔄',
+      endurance: '🫁',
+      strength: '💪',
+      milestone: '⭐',
+    };
+
+    return (
+      <div>
+        {/* Overall progress header */}
+        <div style={{ padding: 16, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 8, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#888', letterSpacing: 1 }}>MISSION PROGRESS</span>
+            <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: '#00ff41' }}>{totalAchieved}/{totalMilestones}</span>
+          </div>
+          <div style={{ height: 6, background: '#111', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${overallPct}%`, background: 'linear-gradient(90deg, #00ff41, #facc15)', borderRadius: 3, transition: 'width 0.5s ease' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+            {Object.entries(typeColors).map(([type, color]) => (
+              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
+                <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666', textTransform: 'uppercase' }}>{type}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Phase sections */}
+        {phases.map(phase => {
+          const phaseMilestones = milestones.filter(m => m.phase === phase);
+          const phaseAchieved = phaseMilestones.filter(m => m.achieved).length;
+          const phasePct = Math.round((phaseAchieved / phaseMilestones.length) * 100);
+          const isCurrentPhase = phase === currentPhase;
+          const isComplete = phaseAchieved === phaseMilestones.length;
+          const phaseName = phaseMilestones[0]?.phaseName || `PHASE ${phase}`;
+
+          return (
+            <div key={phase} style={{
+              marginBottom: 12,
+              border: `1px solid ${isCurrentPhase ? 'rgba(0,255,65,0.3)' : '#1a1a1a'}`,
+              borderRadius: 8,
+              overflow: 'hidden',
+              background: isCurrentPhase ? 'rgba(0,255,65,0.02)' : '#0a0a0a',
+            }}>
+              {/* Phase header */}
+              <div style={{
+                padding: '12px 16px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                background: isComplete ? 'rgba(0,255,65,0.08)' : 'transparent',
+                borderBottom: '1px solid rgba(255,255,255,0.04)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {isComplete ? (
+                    <span style={{ fontSize: 14 }}>✅</span>
+                  ) : isCurrentPhase ? (
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#00ff41', display: 'inline-block', boxShadow: '0 0 6px rgba(0,255,65,0.5)' }} />
+                  ) : (
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#333', display: 'inline-block' }} />
+                  )}
+                  <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: isComplete ? '#00ff41' : isCurrentPhase ? '#e0e0e0' : '#555', letterSpacing: 1 }}>
+                    PHASE {phase}: {phaseName}
+                  </span>
+                </div>
+                <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: isComplete ? '#00ff41' : '#666' }}>
+                  {phaseAchieved}/{phaseMilestones.length} {isComplete ? '✓' : `(${phasePct}%)`}
+                </span>
+              </div>
+
+              {/* Milestone items */}
+              <div style={{ padding: '8px 12px' }}>
+                {phaseMilestones.map(ms => (
+                  <div key={ms.id} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 4px',
+                    borderBottom: '1px solid rgba(255,255,255,0.02)',
+                    opacity: ms.achieved ? 0.7 : 1,
+                  }}>
+                    <div style={{
+                      width: 22, height: 22, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: ms.achieved ? typeColors[ms.type] || '#00ff41' : 'transparent',
+                      border: `2px solid ${ms.achieved ? typeColors[ms.type] || '#00ff41' : '#333'}`,
+                      fontSize: 10,
+                    }}>
+                      {ms.achieved ? '✓' : typeIcons[ms.type] || '○'}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontFamily: 'Share Tech Mono, monospace', fontSize: 12,
+                        color: ms.achieved ? '#888' : '#e0e0e0',
+                        textDecoration: ms.achieved ? 'line-through' : 'none',
+                      }}>
+                        {ms.title}
+                      </div>
+                      <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#555', marginTop: 2 }}>
+                        {ms.description}
+                      </div>
+                    </div>
+                    <div style={{
+                      padding: '2px 6px', borderRadius: 3, fontSize: 8,
+                      fontFamily: 'Share Tech Mono, monospace', textTransform: 'uppercase',
+                      background: `${typeColors[ms.type] || '#666'}20`,
+                      color: typeColors[ms.type] || '#666',
+                      letterSpacing: 0.5,
+                    }}>
+                      {ms.type}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderPRBoardTab = () => {
     const exerciseGroups = getExerciseGroups();
     const groupKeys = Object.keys(exerciseGroups);
@@ -2043,21 +2297,22 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       <div>
         {/* View toggle */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button onClick={() => setPrViewMode('tracker')} style={{
-            padding: '6px 14px', fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700,
-            background: prViewMode === 'tracker' ? '#00ff41' : '#0a0a0a',
-            color: prViewMode === 'tracker' ? '#000' : '#888',
-            border: `1px solid ${prViewMode === 'tracker' ? '#00ff41' : '#333'}`,
-            borderRadius: 4, cursor: 'pointer', letterSpacing: 1,
-          }}>PHASE TRACKER</button>
-          <button onClick={() => setPrViewMode('table')} style={{
-            padding: '6px 14px', fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700,
-            background: prViewMode === 'table' ? '#00ff41' : '#0a0a0a',
-            color: prViewMode === 'table' ? '#000' : '#888',
-            border: `1px solid ${prViewMode === 'table' ? '#00ff41' : '#333'}`,
-            borderRadius: 4, cursor: 'pointer', letterSpacing: 1,
-          }}>TABLE VIEW</button>
+          {(['roadmap', 'tracker', 'table'] as const).map(mode => {
+            const labels = { roadmap: 'MILESTONE ROADMAP', tracker: 'PHASE TRACKER', table: 'TABLE VIEW' };
+            return (
+              <button key={mode} onClick={() => setPrViewMode(mode)} style={{
+                padding: '6px 14px', fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700,
+                background: prViewMode === mode ? '#00ff41' : '#0a0a0a',
+                color: prViewMode === mode ? '#000' : '#888',
+                border: `1px solid ${prViewMode === mode ? '#00ff41' : '#333'}`,
+                borderRadius: 4, cursor: 'pointer', letterSpacing: 1,
+              }}>{labels[mode]}</button>
+            );
+          })}
         </div>
+
+        {/* Milestone Roadmap View */}
+        {prViewMode === 'roadmap' && renderMilestoneRoadmap()}
 
         {/* Phase Tracker View */}
         {prViewMode === 'tracker' && (
@@ -2516,105 +2771,67 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         />
       </div>
 
-      {/* Equipment - full width */}
+      {/* Equipment - full width — Smart Equipment System */}
       <div style={{ gridColumn: '1 / -1' }}>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '8px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Equipment
+        <label style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '15px', color: '#888', display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+          Equipment Arsenal
         </label>
+        <div style={{ fontSize: '11px', color: '#555', marginBottom: '12px', fontFamily: 'Share Tech Mono, monospace' }}>
+          Tap common gear below or type your own. Describe it however you want — Gunny will figure it out.
+        </div>
+
+        {/* Quick-add preset buttons */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
+          {['Full Commercial Gym', 'Barbell + Rack', 'Dumbbells', 'Kettlebells', 'Pull-up Bar', 'Resistance Bands', 'Cable Machine', 'Smith Machine', 'Bench (Flat/Incline)', 'Assault Bike / Rower', 'Treadmill', 'TRX / Suspension', 'Medicine Ball', 'Landmine Attachment', 'Leg Press', 'Hack Squat', 'Dip Station', 'Bodyweight Only'].map(preset => {
+            const alreadyAdded = state.preferences.equipment.some(e => e.toLowerCase() === preset.toLowerCase());
+            return (
+              <button key={preset} onClick={() => {
+                if (!alreadyAdded) {
+                  setState(prev => ({ ...prev, preferences: { ...prev.preferences, equipment: [...prev.preferences.equipment, preset] } }));
+                }
+              }} style={{
+                padding: '5px 10px', fontSize: '11px', fontFamily: 'Chakra Petch, sans-serif',
+                backgroundColor: alreadyAdded ? 'rgba(0,255,65,0.12)' : 'transparent',
+                border: `1px solid ${alreadyAdded ? '#00ff41' : 'rgba(0,255,65,0.12)'}`,
+                color: alreadyAdded ? '#00ff41' : '#666', cursor: alreadyAdded ? 'default' : 'pointer',
+                transition: 'all 0.2s', opacity: alreadyAdded ? 0.7 : 1,
+              }}
+              onMouseEnter={e => { if (!alreadyAdded) { e.currentTarget.style.borderColor = 'rgba(0,255,65,0.3)'; e.currentTarget.style.color = '#aaa'; } }}
+              onMouseLeave={e => { if (!alreadyAdded) { e.currentTarget.style.borderColor = 'rgba(0,255,65,0.12)'; e.currentTarget.style.color = '#666'; } }}
+              >{alreadyAdded ? '✓ ' : '+ '}{preset}</button>
+            );
+          })}
+        </div>
+
+        {/* Current equipment list */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
           {state.preferences.equipment.map((equip) => (
-            <div
-              key={equip}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 10px',
-                backgroundColor: 'transparent',
-                border: '1px solid #00ff41',
-                borderRadius: '4px',
-                fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '26px',
-                color: '#00ff41',
-              }}
-            >
+            <div key={equip} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px', backgroundColor: 'rgba(0,255,65,0.04)', border: '1px solid #00ff41', borderRadius: '4px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '12px', color: '#00ff41' }}>
               <span>{equip}</span>
-              <button
-                onClick={() => removeEquipment(equip)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#ff4444',
-                  cursor: 'pointer',
-                  fontSize: '26px',
-                  padding: 0,
-                }}
-              >
-                ×
-              </button>
+              <button onClick={() => removeEquipment(equip)} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '14px', padding: 0 }}>×</button>
             </div>
           ))}
         </div>
+
+        {/* Custom equipment input with description support */}
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
             type="text"
-            placeholder="Add equipment..."
+            placeholder="Type equipment name or describe it (e.g. 'the dual cable pulley machine')..."
             value={state.newEquipment}
             onChange={(e) => setState((prev) => ({ ...prev, newEquipment: e.target.value }))}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') addEquipment();
-            }}
-            style={{
-              flex: 1,
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
+            onKeyPress={(e) => { if (e.key === 'Enter') addEquipment(); }}
+            style={{ flex: 1, padding: '8px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '13px', backgroundColor: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)', color: '#ddd', boxSizing: 'border-box', transition: 'border-color 0.2s' }}
+            onFocus={(e) => { e.target.style.borderColor = 'rgba(0,255,65,0.2)'; }}
+            onBlur={(e) => { e.target.style.borderColor = 'rgba(0,255,65,0.06)'; }}
           />
-          <button
-            onClick={addEquipment}
-            style={{
-              padding: '8px 16px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
-              backgroundColor: 'transparent',
-              border: '1px solid #00ff41',
-              color: '#00ff41',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            + ADD
-          </button>
+          <button onClick={addEquipment} style={{ padding: '8px 16px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '13px', backgroundColor: 'transparent', border: '1px solid #00ff41', color: '#00ff41', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px', transition: 'all 0.2s' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.1)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+          >+ ADD</button>
+        </div>
+        <div style={{ fontSize: '10px', color: '#444', marginTop: '6px', fontFamily: 'Share Tech Mono, monospace' }}>
+          Don&apos;t know the name? Just describe it. &quot;The thing where you pull the bar down&quot; = Lat Pulldown. Gunny figures it out.
         </div>
       </div>
 

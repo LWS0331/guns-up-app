@@ -9,9 +9,32 @@ interface IntakeFormProps {
   onSkip: () => void;
 }
 
-type IntakeStep = 'welcome' | 'basics' | 'experience' | 'goals' | 'health' | 'lifestyle' | 'equipment' | 'prs' | 'review';
+type IntakeStep = 'welcome' | 'basics' | 'experience' | 'goals' | 'health' | 'lifestyle' | 'nutrition' | 'equipment' | 'prs' | 'review';
 
-const STEP_ORDER: IntakeStep[] = ['welcome', 'basics', 'experience', 'goals', 'health', 'lifestyle', 'equipment', 'prs', 'review'];
+const STEP_ORDER: IntakeStep[] = ['welcome', 'basics', 'experience', 'goals', 'health', 'lifestyle', 'nutrition', 'equipment', 'prs', 'review'];
+
+const DIET_OPTIONS = [
+  { id: 'no_plan', label: 'NO PLAN', desc: 'I eat whatever, no tracking' },
+  { id: 'basic_tracking', label: 'BASIC TRACKING', desc: 'I loosely count calories' },
+  { id: 'strict_macros', label: 'STRICT MACROS', desc: 'I hit protein/carb/fat targets daily' },
+  { id: 'meal_prep', label: 'MEAL PREP', desc: 'I batch cook and plan meals ahead' },
+  { id: 'keto', label: 'KETO / LOW CARB', desc: 'High fat, very low carb' },
+  { id: 'paleo', label: 'PALEO', desc: 'Whole foods, no processed' },
+  { id: 'vegan', label: 'VEGAN', desc: 'No animal products' },
+  { id: 'vegetarian', label: 'VEGETARIAN', desc: 'No meat, dairy OK' },
+  { id: 'mediterranean', label: 'MEDITERRANEAN', desc: 'Balanced, plant-forward' },
+  { id: 'other', label: 'OTHER', desc: 'Something custom' },
+];
+
+const SUPPLEMENT_OPTIONS = [
+  'Protein Powder', 'Creatine', 'Pre-Workout', 'BCAAs', 'Fish Oil / Omega-3',
+  'Multivitamin', 'Vitamin D', 'Magnesium', 'Caffeine', 'Collagen', 'None',
+];
+
+const DIETARY_RESTRICTIONS = [
+  'Gluten Free', 'Dairy Free', 'Nut Allergy', 'Soy Free', 'Shellfish Allergy',
+  'Egg Allergy', 'Halal', 'Kosher', 'Low Sodium', 'None',
+];
 
 const GOAL_OPTIONS = [
   { id: 'weight_loss', label: 'LOSE WEIGHT', desc: 'Drop body fat, get lean' },
@@ -60,6 +83,13 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
     sleepQuality: 7,
     stressLevel: 4,
     nutritionHabits: 'fair',
+    mealsPerDay: 3,
+    currentDiet: 'no_plan',
+    dailyWaterOz: 64,
+    supplements: [],
+    estimatedCalories: 2000,
+    proteinPriority: 'moderate',
+    dietaryRestrictions: [],
     startingPRs: [],
   });
 
@@ -82,7 +112,7 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
     if (idx > 0) setStep(STEP_ORDER[idx - 1]);
   };
 
-  const toggleArrayItem = (field: 'secondaryGoals' | 'healthConditions' | 'availableEquipment' | 'injuryHistory' | 'motivationFactors', item: string) => {
+  const toggleArrayItem = (field: 'secondaryGoals' | 'healthConditions' | 'availableEquipment' | 'injuryHistory' | 'motivationFactors' | 'supplements' | 'dietaryRestrictions', item: string) => {
     setIntake(prev => {
       const arr = (prev[field] as string[]) || [];
       if (item === 'None') return { ...prev, [field]: [] };
@@ -110,6 +140,13 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
       sleepQuality: intake.sleepQuality || 7,
       stressLevel: intake.stressLevel || 4,
       nutritionHabits: intake.nutritionHabits || 'fair',
+      mealsPerDay: intake.mealsPerDay || 3,
+      currentDiet: intake.currentDiet || 'no_plan',
+      dailyWaterOz: intake.dailyWaterOz || 64,
+      supplements: intake.supplements || [],
+      estimatedCalories: intake.estimatedCalories || 2000,
+      proteinPriority: intake.proteinPriority || 'moderate',
+      dietaryRestrictions: intake.dietaryRestrictions || [],
       wearableDevice: intake.wearableDevice,
       startingPRs: intake.startingPRs || [],
     };
@@ -119,6 +156,16 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
     const formattedHeight = formatHeightInput(heightRaw) || operator.profile.height;
     const trainingAge = calculateTrainingAge(fullIntake);
     const readiness = calculateReadiness(fullIntake);
+
+    // Calculate macro targets based on intake data
+    const wt = weight || 170; // fallback
+    const proteinMultiplier = fullIntake.proteinPriority === 'very_high' ? 1.2 : fullIntake.proteinPriority === 'high' ? 1.0 : fullIntake.proteinPriority === 'moderate' ? 0.8 : 0.6;
+    const calcProtein = Math.round(wt * proteinMultiplier);
+    const calcCalories = fullIntake.estimatedCalories || 2000;
+    const proteinCals = calcProtein * 4;
+    const fatCals = Math.round(calcCalories * 0.25);
+    const calcFat = Math.round(fatCals / 9);
+    const calcCarbs = Math.round((calcCalories - proteinCals - fatCals) / 4);
 
     // Build PRs from intake
     const prs = (fullIntake.startingPRs || [])
@@ -168,6 +215,15 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
         healthConditions: fullIntake.healthConditions,
         nutritionHabits: fullIntake.nutritionHabits,
         preferredWorkoutTime: fullIntake.preferredWorkoutTime,
+      },
+      nutrition: {
+        ...operator.nutrition,
+        targets: {
+          calories: calcCalories,
+          protein: calcProtein,
+          carbs: calcCarbs,
+          fat: calcFat,
+        },
       },
       prs: [...(operator.prs || []), ...prs],
       injuries: [...(operator.injuries || []), ...injuries],
@@ -422,6 +478,134 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
         </div>
       )}
 
+      {step === 'nutrition' && (
+        <div>
+          <div style={s.stepTitle}>NUTRITION INTEL</div>
+          <p style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>
+            This data calibrates your macro targets and lets Gunny AI build nutrition plans around your current habits.
+          </p>
+
+          <label style={s.label}>MEALS PER DAY</label>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <button key={n} style={{ ...s.optionBtn, flex: 1, ...(intake.mealsPerDay === n ? s.optionBtnActive : {}) }}
+                onClick={() => setIntake(prev => ({ ...prev, mealsPerDay: n }))}>
+                {n}
+              </button>
+            ))}
+          </div>
+
+          <label style={s.label}>CURRENT DIET APPROACH</label>
+          <div style={s.optionGrid}>
+            {DIET_OPTIONS.map(d => (
+              <button key={d.id} style={{ ...s.optionBtn, textAlign: 'left' as const, padding: '10px 12px', ...(intake.currentDiet === d.id ? s.optionBtnActive : {}) }}
+                onClick={() => setIntake(prev => ({ ...prev, currentDiet: d.id }))}>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>{d.label}</div>
+                <div style={{ fontSize: 9, color: intake.currentDiet === d.id ? '#00ff41' : '#666', marginTop: 2 }}>{d.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          <label style={s.label}>ESTIMATED DAILY CALORIES</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+            <input type="range" min={1200} max={5000} step={100}
+              value={intake.estimatedCalories || 2000}
+              style={s.slider}
+              onChange={e => setIntake(prev => ({ ...prev, estimatedCalories: parseInt(e.target.value) }))} />
+            <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', minWidth: 60, textAlign: 'right' as const }}>
+              {intake.estimatedCalories || 2000}
+            </span>
+          </div>
+          <p style={{ fontSize: 10, color: '#555', marginBottom: 16 }}>Rough estimate is fine — Gunny AI will refine this based on your goals and activity.</p>
+
+          <label style={s.label}>DAILY WATER INTAKE (OZ)</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <input type="range" min={16} max={200} step={8}
+              value={intake.dailyWaterOz || 64}
+              style={s.slider}
+              onChange={e => setIntake(prev => ({ ...prev, dailyWaterOz: parseInt(e.target.value) }))} />
+            <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', minWidth: 50, textAlign: 'right' as const }}>
+              {intake.dailyWaterOz || 64}oz
+            </span>
+          </div>
+
+          <label style={s.label}>PROTEIN PRIORITY</label>
+          <p style={{ fontSize: 10, color: '#555', marginBottom: 8 }}>How much protein should Gunny target? Higher = more muscle-building focus.</p>
+          <div style={s.optionGrid}>
+            {[
+              { id: 'low', label: 'LOW', desc: '0.6g/lb — general health' },
+              { id: 'moderate', label: 'MODERATE', desc: '0.8g/lb — balanced' },
+              { id: 'high', label: 'HIGH', desc: '1.0g/lb — muscle growth' },
+              { id: 'very_high', label: 'VERY HIGH', desc: '1.2g/lb — max hypertrophy' },
+            ].map(p => (
+              <button key={p.id} style={{ ...s.optionBtn, textAlign: 'left' as const, padding: '10px 12px', ...(intake.proteinPriority === p.id ? s.optionBtnActive : {}) }}
+                onClick={() => setIntake(prev => ({ ...prev, proteinPriority: p.id }))}>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>{p.label}</div>
+                <div style={{ fontSize: 9, color: intake.proteinPriority === p.id ? '#00ff41' : '#666', marginTop: 2 }}>{p.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          <label style={s.label}>SUPPLEMENTS (SELECT ALL THAT APPLY)</label>
+          <div style={s.optionGrid}>
+            {SUPPLEMENT_OPTIONS.map(sup => (
+              <button key={sup} style={{ ...s.optionBtn, ...(((intake.supplements || []).includes(sup)) ? s.optionBtnActive : {}) }}
+                onClick={() => toggleArrayItem('supplements', sup)}>
+                {sup.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <label style={s.label}>DIETARY RESTRICTIONS (SELECT ALL THAT APPLY)</label>
+          <div style={s.optionGrid}>
+            {DIETARY_RESTRICTIONS.map(r => (
+              <button key={r} style={{ ...s.optionBtn, ...(((intake.dietaryRestrictions || []).includes(r)) ? s.optionBtnActive : {}) }}
+                onClick={() => toggleArrayItem('dietaryRestrictions', r)}>
+                {r.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* Live macro preview */}
+          {(() => {
+            const wt = weight || 170;
+            const pm = intake.proteinPriority === 'very_high' ? 1.2 : intake.proteinPriority === 'high' ? 1.0 : intake.proteinPriority === 'moderate' ? 0.8 : 0.6;
+            const prot = Math.round(wt * pm);
+            const cal = intake.estimatedCalories || 2000;
+            const fat = Math.round((cal * 0.25) / 9);
+            const carbs = Math.round((cal - (prot * 4) - (fat * 9)) / 4);
+            return (
+              <div style={{ padding: 16, background: '#0a1a0a', border: '1px solid #00ff41', borderRadius: 8, marginBottom: 16 }}>
+                <div style={{ fontSize: 10, color: '#888', letterSpacing: 1, marginBottom: 8 }}>CALCULATED DAILY TARGETS</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, textAlign: 'center' as const }}>
+                  <div>
+                    <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00ff41' }}>{cal}</div>
+                    <div style={{ fontSize: 9, color: '#666' }}>CALORIES</div>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#4ade80' }}>{prot}g</div>
+                    <div style={{ fontSize: 9, color: '#666' }}>PROTEIN</div>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#facc15' }}>{carbs}g</div>
+                    <div style={{ fontSize: 9, color: '#666' }}>CARBS</div>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#ff6b35' }}>{fat}g</div>
+                    <div style={{ fontSize: 9, color: '#666' }}>FAT</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div style={s.navRow}>
+            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
+            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+          </div>
+        </div>
+      )}
+
       {step === 'equipment' && (
         <div>
           <div style={s.stepTitle}>AVAILABLE EQUIPMENT</div>
@@ -523,6 +707,17 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
           <div style={s.reviewSection}>
             <div style={s.reviewLabel}>LIFESTYLE</div>
             <div style={s.reviewValue}>Sleep: {intake.sleepQuality}/10, Stress: {intake.stressLevel}/10, Nutrition: {(intake.nutritionHabits || '').toUpperCase()}</div>
+          </div>
+          <div style={s.reviewSection}>
+            <div style={s.reviewLabel}>NUTRITION</div>
+            <div style={s.reviewValue}>
+              {intake.mealsPerDay} meals/day, {DIET_OPTIONS.find(d => d.id === intake.currentDiet)?.label || 'No plan'}, ~{intake.estimatedCalories || 2000} cal, {intake.dailyWaterOz || 64}oz water
+            </div>
+            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+              Protein priority: {(intake.proteinPriority || 'moderate').toUpperCase()}
+              {(intake.supplements || []).length > 0 && ` | Supps: ${(intake.supplements || []).join(', ')}`}
+              {(intake.dietaryRestrictions || []).length > 0 && ` | Restrictions: ${(intake.dietaryRestrictions || []).join(', ')}`}
+            </div>
           </div>
           {(intake.healthConditions || []).length > 0 && (
             <div style={s.reviewSection}>

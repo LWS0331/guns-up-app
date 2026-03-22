@@ -37,6 +37,14 @@ export interface IntakeAssessment {
   sleepQuality: number; // 1-10
   stressLevel: number; // 1-10
   nutritionHabits: string; // poor, fair, good, excellent
+  // Nutrition intake data
+  mealsPerDay?: number;
+  currentDiet?: string; // no_plan, basic_tracking, strict_macros, meal_prep, keto, paleo, vegan, vegetarian, mediterranean, other
+  dailyWaterOz?: number;
+  supplements?: string[];
+  estimatedCalories?: number;
+  proteinPriority?: string; // low, moderate, high, very_high
+  dietaryRestrictions?: string[];
   wearableDevice?: string;
   startingPRs: { exercise: string; weight: number; reps: number }[];
 }
@@ -176,6 +184,8 @@ export interface Meal {
   time: string;
 }
 
+export type PRType = 'strength' | 'consistency' | 'endurance' | 'milestone';
+
 export interface PRRecord {
   id: string;
   exercise: string;
@@ -183,6 +193,21 @@ export interface PRRecord {
   reps: number;
   date: string;
   notes: string;
+  type?: PRType; // defaults to 'strength' for backward compat
+  achieved?: boolean; // for milestone-type PRs
+}
+
+// Milestone roadmap — generated based on fitness level
+export interface MilestoneGoal {
+  id: string;
+  phase: number; // 1-5
+  phaseName: string;
+  title: string;
+  description: string;
+  type: PRType;
+  target?: { exercise?: string; weight?: number; reps?: number; count?: number; unit?: string };
+  achieved: boolean;
+  achievedDate?: string;
 }
 
 export interface Injury {
@@ -193,9 +218,16 @@ export interface Injury {
   restrictions: string[];
 }
 
+export interface EquipmentItem {
+  name: string;
+  description?: string; // user description for smart matching (e.g. "the cable thing with two pulleys")
+  category?: string; // auto-categorized: barbell, dumbbell, machine, cable, cardio, bodyweight, band, specialty
+}
+
 export interface TrainingPreferences {
   split: string;
-  equipment: string[];
+  equipment: string[]; // legacy simple list (kept for backward compat)
+  equipmentDetailed?: EquipmentItem[]; // rich equipment with descriptions
   sessionDuration: number;
   daysPerWeek: number;
   weakPoints: string[];

@@ -553,6 +553,7 @@ Exercise History: ${operatorContext.exerciseHistory || 'Unknown'}
 Activity Level: ${operatorContext.currentActivity || 'Unknown'}
 Preferred Workout Time: ${operatorContext.preferredWorkoutTime || 'Unknown'}
 Available Equipment: ${operatorContext.availableEquipment?.join(', ') || 'Unknown'}
+${operatorContext.equipmentDetailed?.length ? `Equipment Details: ${operatorContext.equipmentDetailed.map(e => e.description ? `${e.name} (${e.description})` : e.name).join(', ')}` : ''}
 
 WELLNESS:
 Goals: ${operatorContext.goals?.join(', ') || 'General fitness'}
@@ -560,6 +561,10 @@ Readiness: ${operatorContext.readiness || 'Unknown'}/10
 Sleep Quality: ${operatorContext.sleepQuality || 'Unknown'}/10
 Stress Level: ${operatorContext.stressLevel || 'Unknown'}/10
 Nutrition Habits: ${operatorContext.nutritionHabits || 'Unknown'}
+${operatorContext.currentDiet ? `Current Diet: ${operatorContext.currentDiet}` : ''}
+${operatorContext.macroTargets ? `Macro Targets: ${operatorContext.macroTargets.calories}cal / ${operatorContext.macroTargets.protein}g P / ${operatorContext.macroTargets.carbs}g C / ${operatorContext.macroTargets.fat}g F` : ''}
+${operatorContext.dietaryRestrictions?.length ? `Dietary Restrictions: ${operatorContext.dietaryRestrictions.join(', ')}` : ''}
+${operatorContext.supplements?.length ? `Supplements: ${operatorContext.supplements.join(', ')}` : ''}
 Health Conditions: ${operatorContext.healthConditions?.length ? operatorContext.healthConditions.join(', ') : 'None reported'}
 
 PRs: ${operatorContext.prs?.length ? JSON.stringify(operatorContext.prs) : 'None logged yet'}
