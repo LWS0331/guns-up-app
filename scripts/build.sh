@@ -8,7 +8,7 @@ npx prisma generate
 # Push schema to database if a real DATABASE_URL was provided
 if [ -n "$REAL_DB" ] || echo "$DATABASE_URL" | grep -qv "dummy"; then
   echo "DATABASE_URL detected, pushing schema..."
-  npx prisma db push --skip-generate --accept-data-loss || echo "WARNING: db push failed, continuing build"
+  npx prisma db push --accept-data-loss || echo "WARNING: db push failed, continuing build"
 else
   echo "No real DATABASE_URL, skipping db push"
 fi
