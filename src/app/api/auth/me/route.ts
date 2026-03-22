@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
         preferences: operatorData.preferences as Record<string, unknown>,
         workouts: operatorData.workouts as Record<string, unknown>,
         dayTags: operatorData.dayTags as Record<string, unknown>,
+        sitrep: operatorData.sitrep as Record<string, unknown>,
+        dailyBrief: operatorData.dailyBrief as Record<string, unknown>,
       },
     });
   } catch (error) {

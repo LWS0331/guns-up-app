@@ -39,6 +39,8 @@ model Operator {
   preferences Json      @default("{}")
   workouts    Json      @default("{}")  // Record<string, Workout>
   dayTags     Json      @default("{}")  // Record<string, DayTag>
+  sitrep      Json      @default("{}")  // Sitrep battle plan from Gunny AI
+  dailyBrief  Json      @default("{}")  // Today's adaptive daily brief
   billing     Json      @default("{}")  // Stripe billing data
 
   createdAt   DateTime  @default(now())

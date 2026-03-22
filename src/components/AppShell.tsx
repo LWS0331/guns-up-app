@@ -12,6 +12,8 @@ import Planner from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
+import SitrepView from '@/components/SitrepView';
+import DailyBriefComponent from '@/components/DailyBrief';
 import Leaderboard from '@/components/Leaderboard';
 import Achievements from '@/components/Achievements';
 import SocialFeed from '@/components/SocialFeed';
@@ -23,7 +25,12 @@ import {
   requestNotificationPermission,
   checkStreakWarning,
   notifyWorkoutReminder,
+  notifyHydration,
   loadNotificationPrefs,
+  runMorningComplianceCheck,
+  runMealCheck,
+  runEveningCheck,
+  ComplianceCheckData,
 } from '@/lib/notifications';
 
 // ═══ Matrix Code Rain Background (slowed & subtle) ═══
@@ -159,6 +166,9 @@ const AppShell: React.FC<AppShellProps> = ({
   const [showTrainerDashboard, setShowTrainerDashboard] = useState(false);
   const [showTOS, setShowTOS] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showSitrep, setShowSitrep] = useState(false);
+  const [sitrepLoading, setSitrepLoading] = useState(false);
+  const [pendingSitrep, setPendingSitrep] = useState<import('@/lib/types').Sitrep | null>(null);
 
   // Gunny AI panel state
   const [showGunnyPanel, setShowGunnyPanel] = useState(false);
@@ -185,69 +195,120 @@ const AppShell: React.FC<AppShellProps> = ({
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // ═══ Notification Setup ═══
+  // ═══ Compliance Notification Engine ═══
   useEffect(() => {
     // Request notification permission once on mount
     requestNotificationPermission().catch(() => {});
 
-    // Load preferences
     const prefs = loadNotificationPrefs(currentUser.id);
     const callsign = currentUser.callsign;
+    const timers: NodeJS.Timeout[] = [];
 
-    // Helper to calculate time until next reminder
-    const getTimeUntilReminder = (reminderTime: string): number => {
-      const [hours, minutes] = reminderTime.split(':').map(Number);
+    // Helper: ms until a specific HH:MM today (or tomorrow if passed)
+    const msUntilTime = (timeStr: string): number => {
+      const [hours, minutes] = timeStr.split(':').map(Number);
       const now = new Date();
-      const reminder = new Date();
-      reminder.setHours(hours, minutes, 0, 0);
-
-      // If reminder time has passed today, schedule for tomorrow
-      if (reminder <= now) {
-        reminder.setDate(reminder.getDate() + 1);
-      }
-
-      return Math.max(0, reminder.getTime() - now.getTime());
+      const target = new Date();
+      target.setHours(hours, minutes, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      return Math.max(0, target.getTime() - now.getTime());
     };
 
-    // Schedule daily workout reminder
-    let reminderTimeoutId: NodeJS.Timeout | null = null;
-    if (prefs.workoutReminders) {
-      const scheduleReminder = () => {
-        const timeUntil = getTimeUntilReminder(prefs.reminderTime);
-        reminderTimeoutId = setTimeout(() => {
-          // Only send if no workout completed today
-          const today = new Date().toISOString().split('T')[0];
-          const operatorData = operators.find(op => op.id === currentUser.id);
-          if (operatorData?.workouts?.[today]?.completed !== true) {
-            notifyWorkoutReminder(callsign);
-          }
-          // Schedule next day's reminder
-          scheduleReminder();
-        }, timeUntil);
+    // Build compliance data snapshot from current operator state
+    const getComplianceData = (): ComplianceCheckData => {
+      const op = operators.find(o => o.id === currentUser.id) || selectedOperator;
+      return {
+        callsign,
+        workouts: (op.workouts || {}) as Record<string, { completed?: boolean }>,
+        nutrition: (op.nutrition || {}) as ComplianceCheckData['nutrition'],
+        sitrep: (op.sitrep || null) as ComplianceCheckData['sitrep'],
+        dailyBrief: (op.dailyBrief || null) as ComplianceCheckData['dailyBrief'],
       };
-      scheduleReminder();
+    };
+
+    // ── Morning reminder: workout + daily brief + compliance score ──
+    if (prefs.workoutReminders || prefs.dailyBriefAlerts || prefs.complianceAlerts) {
+      const scheduleMorning = () => {
+        const delay = msUntilTime(prefs.reminderTime);
+        const id = setTimeout(() => {
+          const data = getComplianceData();
+          // Workout reminder (only if not completed)
+          if (prefs.workoutReminders) {
+            const today = new Date().toISOString().split('T')[0];
+            if (!data.workouts?.[today]?.completed) {
+              notifyWorkoutReminder(callsign);
+            }
+          }
+          // Morning compliance checks (daily brief ready, compliance score, rest day)
+          runMorningComplianceCheck(data, prefs);
+          // Reschedule for tomorrow
+          scheduleMorning();
+        }, delay);
+        timers.push(id);
+      };
+      scheduleMorning();
     }
 
-    // Schedule streak warning check every 4 hours
-    let streakCheckIntervalId: NodeJS.Timeout | null = null;
+    // ── Meal logging nudges at midday, afternoon, evening ──
+    if (prefs.mealReminders) {
+      const mealTimes = prefs.mealReminderTimes || ['12:00', '15:00', '18:00'];
+      mealTimes.forEach((time) => {
+        const scheduleMeal = () => {
+          const delay = msUntilTime(time);
+          const id = setTimeout(() => {
+            runMealCheck(getComplianceData(), prefs);
+            scheduleMeal();
+          }, delay);
+          timers.push(id);
+        };
+        scheduleMeal();
+      });
+    }
+
+    // ── Hydration reminders every N hours during waking hours (7am–10pm) ──
+    if (prefs.hydrationReminders && prefs.hydrationInterval > 0) {
+      const intervalMs = prefs.hydrationInterval * 60 * 60 * 1000;
+      const id = setInterval(() => {
+        const hour = new Date().getHours();
+        if (hour >= 7 && hour < 22) {
+          notifyHydration(callsign);
+        }
+      }, intervalMs);
+      timers.push(id as unknown as NodeJS.Timeout);
+    }
+
+    // ── Evening check-in ──
+    if (prefs.eveningCheckIn) {
+      const scheduleEvening = () => {
+        const delay = msUntilTime(prefs.eveningCheckInTime || '20:00');
+        const id = setTimeout(() => {
+          runEveningCheck(getComplianceData(), prefs);
+          scheduleEvening();
+        }, delay);
+        timers.push(id);
+      };
+      scheduleEvening();
+    }
+
+    // ── Streak warnings every 4 hours ──
     if (prefs.streakWarnings) {
       const checkStreak = () => {
-        const operatorData = operators.find(op => op.id === currentUser.id);
-        if (operatorData?.workouts) {
-          checkStreakWarning(callsign, operatorData.workouts);
-        }
+        const data = getComplianceData();
+        if (data.workouts) checkStreakWarning(callsign, data.workouts);
       };
-      // Run immediately and then every 4 hours
       checkStreak();
-      streakCheckIntervalId = setInterval(checkStreak, 4 * 60 * 60 * 1000);
+      const id = setInterval(checkStreak, 4 * 60 * 60 * 1000);
+      timers.push(id as unknown as NodeJS.Timeout);
     }
 
-    // Cleanup
+    // Cleanup all timers
     return () => {
-      if (reminderTimeoutId) clearTimeout(reminderTimeoutId);
-      if (streakCheckIntervalId) clearInterval(streakCheckIntervalId);
+      timers.forEach((id) => {
+        clearTimeout(id);
+        clearInterval(id as unknown as NodeJS.Timeout);
+      });
     };
-  }, [currentUser.id, operators]);
+  }, [currentUser.id, operators, selectedOperator]);
 
   // Auto-scroll messages to bottom
   useEffect(() => {
@@ -465,6 +526,43 @@ const AppShell: React.FC<AppShellProps> = ({
     };
   };
 
+  // Generate SITREP after intake completion
+  const generateSitrep = async (updatedOperator: Operator) => {
+    setSitrepLoading(true);
+    setShowSitrep(true);
+    try {
+      const res = await fetch('/api/gunny/sitrep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operatorContext: buildOperatorContext(),
+          tier: updatedOperator.tier,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.sitrep) {
+        setPendingSitrep(data.sitrep);
+      }
+    } catch (err) {
+      console.error('SITREP generation failed:', err);
+    }
+    setSitrepLoading(false);
+  };
+
+  const handleAcceptSitrep = () => {
+    if (!pendingSitrep) return;
+    const updated = { ...currentUser, sitrep: pendingSitrep };
+    onUpdateOperator(updated);
+    setShowSitrep(false);
+    setPendingSitrep(null);
+    setActiveTab('coc');
+  };
+
+  const handleRegenerateSitrep = () => {
+    setPendingSitrep(null);
+    generateSitrep(currentUser);
+  };
+
   // Send message to Gunny API (side panel — context-aware mode)
   const sendGunnyMessage = async () => {
     if (!gunnyInput.trim()) return;
@@ -556,6 +654,9 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'coc':
         return (
           <>
+            {currentSelectedOp.sitrep && (
+              <DailyBriefComponent operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
+            )}
             <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
             <Leaderboard operators={operators} currentUser={currentUser} />
             <div style={{ marginTop: 20 }}>
@@ -681,6 +782,50 @@ const AppShell: React.FC<AppShellProps> = ({
     }
   };
 
+  // Show SITREP view after intake completion
+  if (showSitrep) {
+    return (
+      <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
+        <DataRain />
+        <div style={{ position: 'relative', zIndex: 1, padding: '20px 0' }}>
+          {sitrepLoading && !pendingSitrep ? (
+            <div style={{ maxWidth: 640, margin: '0 auto', padding: 40, textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 20, color: '#00ff41', letterSpacing: 3, marginBottom: 16 }}>
+                ⚔️ BUILDING YOUR BATTLE PLAN
+              </div>
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 13, color: '#888', marginBottom: 24, lineHeight: 1.8 }}>
+                Gunny AI is analyzing your intake data and building a personalized training and nutrition plan...
+              </div>
+              <div style={{ width: 200, height: 4, background: '#1a1a1a', borderRadius: 2, margin: '0 auto', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', background: '#00ff41', borderRadius: 2,
+                  animation: 'sitrep-load 2s ease-in-out infinite',
+                  width: '60%',
+                }} />
+              </div>
+              <style>{`@keyframes sitrep-load { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }`}</style>
+            </div>
+          ) : pendingSitrep ? (
+            <SitrepView
+              sitrep={pendingSitrep}
+              callsign={currentUser.callsign}
+              onAccept={handleAcceptSitrep}
+              onRegenerate={handleRegenerateSitrep}
+              loading={sitrepLoading}
+            />
+          ) : (
+            <div style={{ maxWidth: 640, margin: '0 auto', padding: 40, textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: '#ff4444', marginBottom: 16 }}>SITREP GENERATION FAILED</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>Gunny AI encountered an error. Try again or skip for now.</div>
+              <button onClick={() => generateSitrep(currentUser)} style={{ padding: '10px 20px', background: '#00ff41', color: '#000', border: 'none', fontFamily: 'Orbitron, sans-serif', fontSize: 11, borderRadius: 4, cursor: 'pointer', marginRight: 8 }}>RETRY</button>
+              <button onClick={() => { setShowSitrep(false); setActiveTab('coc'); }} style={{ padding: '10px 20px', background: 'transparent', color: '#888', border: '1px solid #333', fontFamily: 'Share Tech Mono, monospace', fontSize: 11, borderRadius: 4, cursor: 'pointer' }}>SKIP</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Show intake form if not completed OR user requested to re-take it
   if (showIntake) {
     return (
@@ -692,6 +837,8 @@ const AppShell: React.FC<AppShellProps> = ({
             onComplete={(updated) => {
               onUpdateOperator(updated);
               setShowIntake(false);
+              // Auto-generate SITREP after intake
+              generateSitrep(updated);
             }}
             onSkip={() => setShowIntake(false)}
           />

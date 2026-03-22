@@ -36,6 +36,8 @@ export async function GET() {
       preferences: row.preferences as Record<string, unknown>,
       workouts: row.workouts as Record<string, unknown>,
       dayTags: row.dayTags as Record<string, unknown>,
+      sitrep: row.sitrep as Record<string, unknown>,
+      dailyBrief: row.dailyBrief as Record<string, unknown>,
     }));
 
     return NextResponse.json({ operators });

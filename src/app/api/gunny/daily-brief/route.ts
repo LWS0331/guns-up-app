@@ -1,0 +1,93 @@
+import { NextRequest, NextResponse } from 'next/server';
+import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || '',
+});
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { operatorContext, sitrep, yesterdayData, todayDateStr, tier } = body;
+
+    if (!operatorContext || !sitrep) {
+      return NextResponse.json({ error: 'Missing operator context or SITREP' }, { status: 400 });
+    }
+
+    // Use Haiku for daily briefs — fast + cheap, runs every login
+    const model = tier === 'opus' || tier === 'white_glove' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001';
+
+    const response = await client.messages.create({
+      model,
+      max_tokens: 2048,
+      messages: [
+        {
+          role: 'user',
+          content: `You are GUNNY — elite tactical AI fitness coach. Generate today's DAILY BRIEF for this operator.
+
+OPERATOR: ${operatorContext.callsign}
+FITNESS LEVEL: ${operatorContext.fitnessLevel || 'beginner'}
+TODAY: ${todayDateStr}
+
+ACTIVE SITREP (their current plan):
+${JSON.stringify(sitrep, null, 2)}
+
+YESTERDAY'S PERFORMANCE DATA:
+${JSON.stringify(yesterdayData, null, 2)}
+
+Generate today's adaptive daily brief. Adjust the plan based on yesterday's compliance.
+
+Return ONLY valid JSON:
+{
+  "greeting": "short Gunny greeting addressing operator by callsign — reference time of day, their streak, or yesterday's performance",
+  "todaysFocus": "one sentence: what today is about",
+  "workout": null (if rest day) OR {
+    "dayNumber": number,
+    "dayName": "day name",
+    "type": "training",
+    "title": "workout title",
+    "exercises": [
+      { "name": "exercise", "sets": number, "reps": "rep range", "weight": "weight", "rest": "rest", "notes": "notes", "superset": false }
+    ],
+    "warmup": "warmup",
+    "cooldown": "cooldown",
+    "duration": "duration"
+  },
+  "nutritionReminder": "specific nutrition action for today based on their plan and yesterday's compliance",
+  "adjustments": ["list of any changes from the original SITREP plan and why"],
+  "motivation": "Gunny-voice motivational message — short, punchy, personalized",
+  "complianceScore": number 0-100 (based on yesterday: did they train? log meals? hit macros?),
+  "streakDays": number (consecutive days of compliance)
+}
+
+ADAPTATION RULES:
+- If they MISSED yesterday's workout: don't shame, but adjust — offer to combine or reschedule
+- If they CRUSHED it: acknowledge, push slightly harder today
+- If they under-ate protein: remind them specifically about protein
+- If they logged zero meals: gentle nudge to track nutrition today
+- If it's a rest day: give recovery tips (stretch, hydrate, sleep)
+- Keep greeting and motivation SHORT — 1-2 sentences max
+- Always address operator by CALLSIGN`,
+        },
+      ],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    let parsed;
+    try {
+      const jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      return NextResponse.json({ error: 'Failed to parse daily brief', raw: text }, { status: 500 });
+    }
+
+    parsed.date = todayDateStr;
+
+    return NextResponse.json({ success: true, brief: parsed });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Daily brief error:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

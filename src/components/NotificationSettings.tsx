@@ -19,7 +19,8 @@ const ToggleSwitch: React.FC<{
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
-}> = ({ checked, onChange, label }) => {
+  description?: string;
+}> = ({ checked, onChange, label, description }) => {
   const toggleId = `toggle-${label.replace(/\s+/g, '-')}`;
   return (
     <div
@@ -27,22 +28,29 @@ const ToggleSwitch: React.FC<{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '12px 0',
+        padding: '10px 0',
         borderBottom: '1px solid rgba(0,255,65,0.08)',
       }}
     >
-      <label
-        htmlFor={toggleId}
-        style={{
-          fontFamily: 'Share Tech Mono, monospace',
-          fontSize: '14px',
-          color: '#e0e0e0',
-          cursor: 'pointer',
-          flex: 1,
-        }}
-      >
-        {label}
-      </label>
+      <div style={{ flex: 1 }}>
+        <label
+          htmlFor={toggleId}
+          style={{
+            fontFamily: 'Share Tech Mono, monospace',
+            fontSize: '13px',
+            color: '#e0e0e0',
+            cursor: 'pointer',
+            display: 'block',
+          }}
+        >
+          {label}
+        </label>
+        {description && (
+          <div style={{ fontSize: '10px', color: '#666', marginTop: 2 }}>
+            {description}
+          </div>
+        )}
+      </div>
       <input
         id={toggleId}
         type="checkbox"
@@ -59,6 +67,8 @@ const ToggleSwitch: React.FC<{
           outline: 'none',
           position: 'relative',
           transition: 'background-color 0.3s ease',
+          flexShrink: 0,
+          marginLeft: 12,
         }}
       />
     </div>
@@ -87,9 +97,16 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
     saveNotificationPrefs(operatorId, updated);
   };
 
-  const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTimeChange = (field: 'reminderTime' | 'eveningCheckInTime', value: string) => {
     if (!prefs) return;
-    const updated = { ...prefs, reminderTime: e.target.value };
+    const updated = { ...prefs, [field]: value };
+    setPrefs(updated);
+    saveNotificationPrefs(operatorId, updated);
+  };
+
+  const handleHydrationInterval = (value: number) => {
+    if (!prefs) return;
+    const updated = { ...prefs, hydrationInterval: value };
     setPrefs(updated);
     saveNotificationPrefs(operatorId, updated);
   };
@@ -106,6 +123,30 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
   };
 
   if (!prefs) return null;
+
+  const timeInputStyle: React.CSSProperties = {
+    padding: '6px 8px',
+    background: 'rgba(0,0,0,0.3)',
+    border: '1px solid rgba(0,255,65,0.2)',
+    borderRadius: '3px',
+    color: '#00ff41',
+    fontFamily: 'Share Tech Mono, monospace',
+    fontSize: '12px',
+    outline: 'none',
+    width: '100%',
+  };
+
+  const sectionLabelStyle: React.CSSProperties = {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '9px',
+    letterSpacing: '1.5px',
+    color: '#555',
+    textTransform: 'uppercase',
+    marginTop: 16,
+    marginBottom: 4,
+    paddingTop: 8,
+    borderTop: '1px solid rgba(0,255,65,0.05)',
+  };
 
   return (
     <div
@@ -133,7 +174,7 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
           gap: '8px',
         }}
       >
-        <span>📢</span> PUSH NOTIFICATIONS
+        <span>📢</span> COMPLIANCE REMINDERS
       </div>
 
       {/* Permission Status */}
@@ -194,66 +235,119 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
         )}
       </div>
 
-      {/* Toggles */}
-      <div style={{ marginBottom: '16px' }}>
-        <ToggleSwitch
-          checked={prefs.workoutReminders}
-          onChange={(val) => handleToggle('workoutReminders', val)}
-          label="Workout Reminders"
-        />
-        <ToggleSwitch
-          checked={prefs.streakWarnings}
-          onChange={(val) => handleToggle('streakWarnings', val)}
-          label="Streak Warnings"
-        />
-        <ToggleSwitch
-          checked={prefs.prAlerts}
-          onChange={(val) => handleToggle('prAlerts', val)}
-          label="PR Alerts"
-        />
-        <ToggleSwitch
-          checked={prefs.gunnyCheckIns}
-          onChange={(val) => handleToggle('gunnyCheckIns', val)}
-          label="Gunny Check-ins"
-        />
-      </div>
+      {/* Training Reminders */}
+      <div style={sectionLabelStyle}>TRAINING</div>
+      <ToggleSwitch
+        checked={prefs.workoutReminders}
+        onChange={(val) => handleToggle('workoutReminders', val)}
+        label="Workout Reminders"
+        description="Daily reminder at your set time if workout not logged"
+      />
+      <ToggleSwitch
+        checked={prefs.streakWarnings}
+        onChange={(val) => handleToggle('streakWarnings', val)}
+        label="Streak Warnings"
+        description="Alert when an active streak is at risk"
+      />
+      <ToggleSwitch
+        checked={prefs.prAlerts}
+        onChange={(val) => handleToggle('prAlerts', val)}
+        label="PR Alerts"
+        description="Celebrate new personal records"
+      />
 
-      {/* Reminder Time Picker */}
-      <div
-        style={{
-          paddingTop: '12px',
-          borderTop: '1px solid rgba(0,255,65,0.08)',
-        }}
-      >
-        <label
-          htmlFor="reminder-time"
-          style={{
-            fontFamily: 'Share Tech Mono, monospace',
-            fontSize: '13px',
-            color: '#e0e0e0',
-            display: 'block',
-            marginBottom: '8px',
-          }}
-        >
-          REMINDER TIME
+      {/* Nutrition Reminders */}
+      <div style={sectionLabelStyle}>NUTRITION</div>
+      <ToggleSwitch
+        checked={prefs.mealReminders}
+        onChange={(val) => handleToggle('mealReminders', val)}
+        label="Meal Logging Nudges"
+        description="Remind to log meals at midday, afternoon, evening"
+      />
+      <ToggleSwitch
+        checked={prefs.hydrationReminders}
+        onChange={(val) => handleToggle('hydrationReminders', val)}
+        label="Hydration Reminders"
+        description={`Every ${prefs.hydrationInterval}h during the day`}
+      />
+
+      {/* Compliance & Motivation */}
+      <div style={sectionLabelStyle}>COMPLIANCE</div>
+      <ToggleSwitch
+        checked={prefs.dailyBriefAlerts}
+        onChange={(val) => handleToggle('dailyBriefAlerts', val)}
+        label="Daily Brief Alerts"
+        description="Morning notification when your battle plan is ready"
+      />
+      <ToggleSwitch
+        checked={prefs.complianceAlerts}
+        onChange={(val) => handleToggle('complianceAlerts', val)}
+        label="Compliance Score"
+        description="Yesterday's compliance grade with motivational push"
+      />
+      <ToggleSwitch
+        checked={prefs.eveningCheckIn}
+        onChange={(val) => handleToggle('eveningCheckIn', val)}
+        label="Evening Check-In"
+        description="End-of-day summary of what's still outstanding"
+      />
+      <ToggleSwitch
+        checked={prefs.gunnyCheckIns}
+        onChange={(val) => handleToggle('gunnyCheckIns', val)}
+        label="Gunny Check-Ins"
+        description="Periodic motivational messages from Gunny AI"
+      />
+
+      {/* Time Settings */}
+      <div style={sectionLabelStyle}>SCHEDULE</div>
+      <div style={{ padding: '8px 0' }}>
+        <label style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', color: '#e0e0e0', display: 'block', marginBottom: 4 }}>
+          MORNING REMINDER
         </label>
         <input
-          id="reminder-time"
           type="time"
           value={prefs.reminderTime}
-          onChange={handleTimeChange}
-          style={{
-            width: '100%',
-            padding: '8px',
-            background: 'rgba(0,0,0,0.3)',
-            border: '1px solid rgba(0,255,65,0.2)',
-            borderRadius: '3px',
-            color: '#00ff41',
-            fontFamily: 'Share Tech Mono, monospace',
-            fontSize: '13px',
-            outline: 'none',
-          }}
+          onChange={(e) => handleTimeChange('reminderTime', e.target.value)}
+          style={timeInputStyle}
         />
+      </div>
+      <div style={{ padding: '8px 0' }}>
+        <label style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', color: '#e0e0e0', display: 'block', marginBottom: 4 }}>
+          EVENING CHECK-IN
+        </label>
+        <input
+          type="time"
+          value={prefs.eveningCheckInTime}
+          onChange={(e) => handleTimeChange('eveningCheckInTime', e.target.value)}
+          style={timeInputStyle}
+        />
+      </div>
+      <div style={{ padding: '8px 0' }}>
+        <label style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', color: '#e0e0e0', display: 'block', marginBottom: 4 }}>
+          HYDRATION INTERVAL (HOURS)
+        </label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[1, 2, 3, 4].map((h) => (
+            <button
+              key={h}
+              onClick={() => handleHydrationInterval(h)}
+              style={{
+                flex: 1,
+                padding: '6px',
+                background: prefs.hydrationInterval === h ? '#00ff41' : 'rgba(0,0,0,0.3)',
+                color: prefs.hydrationInterval === h ? '#000' : '#888',
+                border: `1px solid ${prefs.hydrationInterval === h ? '#00ff41' : 'rgba(0,255,65,0.15)'}`,
+                borderRadius: 3,
+                fontFamily: 'Share Tech Mono, monospace',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {h}h
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Note */}
@@ -261,12 +355,12 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
         style={{
           marginTop: '12px',
           fontFamily: 'Share Tech Mono, monospace',
-          fontSize: '11px',
-          color: '#666',
+          fontSize: '10px',
+          color: '#555',
           fontStyle: 'italic',
         }}
       >
-        Changes saved automatically. {callsign}, keep those notifications tuned.
+        Changes auto-saved. Stay compliant, {callsign}.
       </div>
     </div>
   );

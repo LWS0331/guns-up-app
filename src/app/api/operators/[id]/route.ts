@@ -39,6 +39,8 @@ export async function PUT(
         preferences: body.preferences ?? {},
         workouts: body.workouts ?? {},
         dayTags: body.dayTags ?? {},
+        sitrep: body.sitrep ?? {},
+        dailyBrief: body.dailyBrief ?? {},
       },
     });
 
@@ -53,6 +55,8 @@ export async function PUT(
         preferences: updated.preferences as Record<string, unknown>,
         workouts: updated.workouts as Record<string, unknown>,
         dayTags: updated.dayTags as Record<string, unknown>,
+        sitrep: updated.sitrep as Record<string, unknown>,
+        dailyBrief: updated.dailyBrief as Record<string, unknown>,
       },
     });
   } catch (error) {
