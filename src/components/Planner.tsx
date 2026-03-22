@@ -18,8 +18,12 @@ interface TagPillData {
 // Global singleton: only one tooltip open at a time
 let globalCloseTooltip: (() => void) | null = null;
 
+const TOOLTIP_WIDTH = 240;
+const TOOLTIP_MARGIN = 8; // min px from viewport edge
+
 const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
   const [showTip, setShowTip] = useState(false);
+  const [tipOffset, setTipOffset] = useState<{ left: string; arrowLeft: string }>({ left: '50%', arrowLeft: '50%' });
   const enterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
@@ -27,6 +31,31 @@ const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
   const open = () => {
     // Close any other open tooltip first
     if (globalCloseTooltip) globalCloseTooltip();
+
+    // Calculate viewport-safe position
+    if (pillRef.current) {
+      const rect = pillRef.current.getBoundingClientRect();
+      const pillCenterX = rect.left + rect.width / 2;
+      const halfTip = TOOLTIP_WIDTH / 2;
+      const vw = window.innerWidth;
+
+      // Default: centered on pill
+      let tipLeftPx = pillCenterX - halfTip;
+      // Clamp to viewport
+      if (tipLeftPx < TOOLTIP_MARGIN) tipLeftPx = TOOLTIP_MARGIN;
+      if (tipLeftPx + TOOLTIP_WIDTH > vw - TOOLTIP_MARGIN) tipLeftPx = vw - TOOLTIP_MARGIN - TOOLTIP_WIDTH;
+
+      // Convert to offset relative to the pill (since tooltip is position:absolute inside pill)
+      const offsetFromPill = tipLeftPx - rect.left;
+      // Arrow should point at pill center
+      const arrowFromTip = pillCenterX - tipLeftPx;
+
+      setTipOffset({
+        left: `${offsetFromPill}px`,
+        arrowLeft: `${arrowFromTip}px`,
+      });
+    }
+
     setShowTip(true);
     globalCloseTooltip = close;
   };
@@ -120,9 +149,8 @@ const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
         <div style={{
           position: 'absolute',
           bottom: 'calc(100% + 8px)',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: '240px',
+          left: tipOffset.left,
+          width: `${TOOLTIP_WIDTH}px`,
           padding: '10px 12px',
           background: 'rgba(10,10,10,0.97)',
           border: `1px solid ${tag.border}`,
@@ -152,11 +180,11 @@ const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
           }}>
             {tag.tooltip}
           </div>
-          {/* Arrow */}
+          {/* Arrow — tracks pill center */}
           <div style={{
             position: 'absolute',
             bottom: '-5px',
-            left: '50%',
+            left: tipOffset.arrowLeft,
             transform: 'translateX(-50%) rotate(45deg)',
             width: '8px',
             height: '8px',
