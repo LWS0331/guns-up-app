@@ -357,6 +357,32 @@ Warmup: ${trainerWorkout.warmup}
   return output;
 };
 
+// ═══ Chat persistence helpers ═══
+const CHAT_STORAGE_KEY = (opId: string) => `gunny-chat-${opId}`;
+
+const saveChatToStorage = (opId: string, msgs: Message[]) => {
+  try {
+    const serializable = msgs.map(m => ({ ...m, timestamp: new Date(m.timestamp).toISOString() }));
+    localStorage.setItem(CHAT_STORAGE_KEY(opId), JSON.stringify(serializable));
+  } catch { /* storage full or unavailable — degrade gracefully */ }
+};
+
+const loadChatFromStorage = (opId: string): Message[] | null => {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY(opId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Array<{ id: string; role: string; text: string; timestamp: string; isWorkout?: boolean }>;
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed.map(m => ({
+      id: m.id,
+      role: m.role as 'user' | 'gunny',
+      text: m.text,
+      timestamp: new Date(m.timestamp),
+      isWorkout: m.isWorkout,
+    }));
+  } catch { return null; }
+};
+
 export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, onUpdateOperator }) => {
   const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -365,13 +391,22 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Track which operator ID we've greeted — only reset chat on actual user switch
-  const greetedOperatorRef = useRef<string>('');
+  // Track which operator ID we've initialized — only reset chat on actual user switch
+  const initOperatorRef = useRef<string>('');
 
   useEffect(() => {
-    if (greetedOperatorRef.current === operator.id) return; // Same operator, don't reset
-    greetedOperatorRef.current = operator.id;
+    if (initOperatorRef.current === operator.id) return; // Same operator, don't reset
+    initOperatorRef.current = operator.id;
 
+    // Try to restore saved conversation first
+    const saved = loadChatFromStorage(operator.id);
+    if (saved && saved.length > 0) {
+      setMessages(saved);
+      inputRef.current?.focus();
+      return;
+    }
+
+    // No saved history — generate fresh greeting
     let greetingText = '';
 
     if (operator.role === 'trainer') {
@@ -392,6 +427,16 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     setMessages([greeting]);
     inputRef.current?.focus();
   }, [operator.id, operator.role, allOperators]);
+
+  // Persist messages to localStorage whenever they change
+  const prevMsgCountRef = useRef(0);
+  useEffect(() => {
+    // Only save when messages actually changed (not on initial empty state)
+    if (messages.length > 0 && messages.length !== prevMsgCountRef.current) {
+      prevMsgCountRef.current = messages.length;
+      saveChatToStorage(operator.id, messages);
+    }
+  }, [messages, operator.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

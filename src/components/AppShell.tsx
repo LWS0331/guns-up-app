@@ -103,6 +103,7 @@ const AppShell: React.FC<AppShellProps> = ({
   const [gunnyGreeted, setGunnyGreeted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
 
   // Initialize mounted state and responsive detection
   useEffect(() => {
@@ -124,17 +125,44 @@ const AppShell: React.FC<AppShellProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [gunnyMessages]);
 
-  // Add greeting when Gunny panel first opens
+  // Load saved panel chat or generate greeting when panel opens
   useEffect(() => {
-    if (showGunnyPanel && !gunnyGreeted && gunnyMessages.length === 0) {
-      setGunnyGreeted(true);
-      setGunnyMessages([{
-        role: 'gunny',
-        text: `Let's get to work. What are we hitting today, ${selectedOperator.callsign}?`,
-        timestamp: Date.now(),
-      }]);
+    if (!showGunnyPanel) return;
+    // Only initialize once per operator
+    if (panelInitRef.current === selectedOperator.id) return;
+    panelInitRef.current = selectedOperator.id;
+
+    // Try to restore from localStorage
+    try {
+      const key = `gunny-panel-${selectedOperator.id}`;
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const saved = JSON.parse(raw) as ChatMessage[];
+        if (Array.isArray(saved) && saved.length > 0) {
+          setGunnyMessages(saved);
+          setGunnyGreeted(true);
+          return;
+        }
+      }
+    } catch { /* ignore */ }
+
+    // No saved history — show greeting
+    setGunnyGreeted(true);
+    setGunnyMessages([{
+      role: 'gunny',
+      text: `Let's get to work. What are we hitting today, ${selectedOperator.callsign}?`,
+      timestamp: Date.now(),
+    }]);
+  }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign]);
+
+  // Persist panel messages to localStorage whenever they change
+  useEffect(() => {
+    if (gunnyMessages.length > 0) {
+      try {
+        localStorage.setItem(`gunny-panel-${selectedOperator.id}`, JSON.stringify(gunnyMessages));
+      } catch { /* storage full */ }
     }
-  }, [showGunnyPanel, gunnyGreeted, selectedOperator.callsign, gunnyMessages.length]);
+  }, [gunnyMessages, selectedOperator.id]);
 
   // Focus input when panel opens
   useEffect(() => {
