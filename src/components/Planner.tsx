@@ -253,6 +253,71 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
   const [restRunning, setRestRunning] = useState(false);
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[] }>>({});
 
+  // HR Zone Tracking state
+  const [currentHR, setCurrentHR] = useState<number | null>(null);
+  const [targetZone, setTargetZone] = useState<number>(3); // default Zone 3
+  const [hrSource, setHrSource] = useState<'wearable' | 'manual' | 'none'>('none');
+  const [showHrPanel, setShowHrPanel] = useState(true);
+  const [hrHistory, setHrHistory] = useState<{ hr: number; time: number }[]>([]);
+  const hrPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // HR Zone definitions based on max HR (220 - age)
+  const maxHR = 220 - (operator.profile?.age || 30);
+  const HR_ZONES = [
+    { zone: 1, name: 'RECOVERY', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00bcd4' },
+    { zone: 2, name: 'FAT BURN', min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
+    { zone: 3, name: 'CARDIO', min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
+    { zone: 4, name: 'THRESHOLD', min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
+    { zone: 5, name: 'MAX EFFORT', min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
+  ];
+
+  const getCurrentZone = (hr: number) => {
+    for (let i = HR_ZONES.length - 1; i >= 0; i--) {
+      if (hr >= HR_ZONES[i].min) return HR_ZONES[i];
+    }
+    return HR_ZONES[0];
+  };
+
+  // Poll wearable for HR data during workout mode
+  useEffect(() => {
+    if (!workoutMode) {
+      if (hrPollRef.current) clearInterval(hrPollRef.current);
+      setHrSource('none');
+      setCurrentHR(null);
+      setHrHistory([]);
+      return;
+    }
+
+    // Try to fetch HR from wearable API
+    const fetchHR = async () => {
+      try {
+        const res = await fetch('/api/wearables/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operatorId: operator.id }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const hr = data?.syncSnapshot?.activity?.heartRate?.avg;
+          if (hr && typeof hr === 'number') {
+            setCurrentHR(hr);
+            setHrSource('wearable');
+            setHrHistory(prev => [...prev.slice(-60), { hr, time: Date.now() }]);
+          }
+        }
+      } catch {
+        // Wearable not available — user can enter manually
+      }
+    };
+
+    fetchHR();
+    hrPollRef.current = setInterval(fetchHR, 30000); // poll every 30s
+
+    return () => {
+      if (hrPollRef.current) clearInterval(hrPollRef.current);
+    };
+  }, [workoutMode, operator.id]);
+
   // Keyboard shortcuts for workout builder
   useEffect(() => {
     if (!showWorkoutBuilder || workoutMode) return;
@@ -1047,6 +1112,151 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
             )}
           </div>
         </div>
+
+        {/* HR Zone Tracking Panel */}
+        {showHrPanel && (
+          <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: `1px solid ${currentHR ? getCurrentZone(currentHR).color : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontFamily: 'Orbitron', fontSize: 11, color: '#888', letterSpacing: 1 }}>HR ZONE TRACKER</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#555' }}>
+                  {hrSource === 'wearable' ? 'LIVE' : hrSource === 'manual' ? 'MANUAL' : 'NO DEVICE'}
+                </span>
+                <button onClick={() => setShowHrPanel(false)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
+              </div>
+            </div>
+
+            {/* Current HR display */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+              <div style={{ textAlign: 'center' }}>
+                {currentHR ? (
+                  <>
+                    <div style={{ fontFamily: 'Orbitron', fontSize: 36, color: getCurrentZone(currentHR).color, fontWeight: 700 }}>{currentHR}</div>
+                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: 10, color: '#666' }}>BPM</div>
+                  </>
+                ) : (
+                  <div style={{ fontFamily: 'Share Tech Mono', fontSize: 13, color: '#555' }}>
+                    <input type="number" placeholder="Enter HR"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const val = parseInt((e.target as HTMLInputElement).value);
+                          if (val > 0) {
+                            setCurrentHR(val);
+                            setHrSource('manual');
+                            setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
+                            (e.target as HTMLInputElement).value = '';
+                          }
+                        }
+                      }}
+                      style={{ width: 80, padding: '6px 8px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 16, textAlign: 'center', borderRadius: 4 }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {currentHR && (
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: 'Orbitron', fontSize: 13, color: getCurrentZone(currentHR).color, marginBottom: 4 }}>
+                    ZONE {getCurrentZone(currentHR).zone}: {getCurrentZone(currentHR).name}
+                  </div>
+                  {/* Zone alert — flash if outside target */}
+                  {getCurrentZone(currentHR).zone !== targetZone && (
+                    <div style={{
+                      fontFamily: 'Share Tech Mono', fontSize: 11,
+                      color: getCurrentZone(currentHR).zone > targetZone ? '#ff4444' : '#00bcd4',
+                      animation: 'pulse 1s infinite',
+                    }}>
+                      {getCurrentZone(currentHR).zone > targetZone ? 'ABOVE TARGET — SLOW DOWN' : 'BELOW TARGET — PUSH HARDER'}
+                    </div>
+                  )}
+                  {getCurrentZone(currentHR).zone === targetZone && (
+                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: 11, color: '#00ff41' }}>ON TARGET</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Zone bar visualization */}
+            <div style={{ display: 'flex', gap: 2, height: 24, borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+              {HR_ZONES.map(z => {
+                const isActive = currentHR ? getCurrentZone(currentHR).zone === z.zone : false;
+                const isTarget = z.zone === targetZone;
+                return (
+                  <div key={z.zone} onClick={() => setTargetZone(z.zone)} style={{
+                    flex: 1, background: isActive ? z.color : `${z.color}22`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                    border: isTarget ? `2px solid ${z.color}` : '2px solid transparent',
+                    transition: 'all 0.3s', position: 'relative',
+                  }}>
+                    <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: isActive ? '#000' : z.color, fontWeight: isActive ? 700 : 400 }}>
+                      Z{z.zone}
+                    </span>
+                    {isTarget && (
+                      <div style={{ position: 'absolute', bottom: -1, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: `4px solid ${z.color}` }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Zone range labels */}
+            <div style={{ display: 'flex', gap: 2 }}>
+              {HR_ZONES.map(z => (
+                <div key={z.zone} style={{ flex: 1, textAlign: 'center', fontFamily: 'Share Tech Mono', fontSize: 8, color: '#555' }}>
+                  {z.min}-{z.max}
+                </div>
+              ))}
+            </div>
+
+            {/* Manual HR update button when already has HR */}
+            {currentHR && hrSource === 'manual' && (
+              <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input type="number" placeholder="Update HR"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      const val = parseInt((e.target as HTMLInputElement).value);
+                      if (val > 0) {
+                        setCurrentHR(val);
+                        setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }
+                  }}
+                  style={{ width: 70, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 12, textAlign: 'center', borderRadius: 4 }}
+                />
+                <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#555' }}>press Enter</span>
+              </div>
+            )}
+
+            {/* Mini HR history sparkline */}
+            {hrHistory.length > 1 && (
+              <div style={{ marginTop: 8, height: 30, display: 'flex', alignItems: 'end', gap: 1 }}>
+                {hrHistory.slice(-20).map((h, i) => {
+                  const minH = Math.min(...hrHistory.slice(-20).map(x => x.hr));
+                  const maxH = Math.max(...hrHistory.slice(-20).map(x => x.hr));
+                  const range = maxH - minH || 1;
+                  const pct = ((h.hr - minH) / range) * 100;
+                  return (
+                    <div key={i} style={{
+                      flex: 1, height: `${Math.max(10, pct)}%`,
+                      background: getCurrentZone(h.hr).color,
+                      borderRadius: '1px 1px 0 0', opacity: 0.7,
+                      transition: 'height 0.3s',
+                    }} />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* HR panel toggle when hidden */}
+        {!showHrPanel && workoutMode && (
+          <button onClick={() => setShowHrPanel(true)} style={{
+            marginBottom: 12, padding: '4px 10px', background: '#0a0a0a', border: '1px solid #333',
+            color: '#888', fontFamily: 'Share Tech Mono', fontSize: 10, cursor: 'pointer', borderRadius: 4,
+          }}>SHOW HR TRACKER</button>
+        )}
 
         {/* Exercise blocks in execution mode */}
         {workout.blocks.map((block, idx) => {
