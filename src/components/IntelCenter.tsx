@@ -1790,244 +1790,338 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     </div>
   );
 
-  const renderPRBoardTab = () => (
-    <div>
-      <div
-        style={{
-          width: '100%',
-          overflowX: 'auto',
-          marginBottom: '16px',
-        }}
-      >
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontFamily: 'Chakra Petch, sans-serif',
-          }}
-        >
-          <thead>
-            <tr style={{ borderBottom: '2px solid rgba(0,255,65,0.15)' }}>
-              <th
-                style={{
-                  padding: '12px',
-                  textAlign: 'left',
-                  fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '15px',
-                  color: '#888',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  fontWeight: 'normal',
-                }}
-              >
-                EXERCISE
-              </th>
-              <th
-                style={{
-                  padding: '12px',
-                  textAlign: 'right',
-                  fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '15px',
-                  color: '#888',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  fontWeight: 'normal',
-                }}
-              >
-                WEIGHT
-              </th>
-              <th
-                style={{
-                  padding: '12px',
-                  textAlign: 'right',
-                  fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '15px',
-                  color: '#888',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  fontWeight: 'normal',
-                }}
-              >
-                REPS
-              </th>
-              <th
-                style={{
-                  padding: '12px',
-                  textAlign: 'right',
-                  fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '15px',
-                  color: '#888',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  fontWeight: 'normal',
-                }}
-              >
-                DATE
-              </th>
-              <th
-                style={{
-                  padding: '12px',
-                  textAlign: 'left',
-                  fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '15px',
-                  color: '#888',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  fontWeight: 'normal',
-                }}
-              >
-                NOTES
-              </th>
-              <th style={{ padding: '12px', width: '32px' }} />
-            </tr>
-          </thead>
-          <tbody>
-            {state.prBoard.map((pr, index) => {
-              const prDate = new Date(pr.date);
-              const isRecent =
-                (Date.now() - prDate.getTime()) / (1000 * 60 * 60 * 24) < 7;
+  // PR Board helpers
+  const getExerciseGroups = () => {
+    const groups: Record<string, PersonalRecord[]> = {};
+    state.prBoard.forEach(pr => {
+      const key = pr.exercise.toLowerCase().trim();
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(pr);
+    });
+    // Sort each group by date
+    Object.values(groups).forEach(g => g.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+    return groups;
+  };
 
-              return (
-                <tr
-                  key={pr.id}
-                  style={{
-                    borderBottom: '1px solid rgba(0,255,65,0.06)',
-                    borderLeft: isRecent ? '2px solid #00ff41' : '2px solid transparent',
-                  }}
-                >
-                  <td style={{ padding: '12px' }}>
-                    <input
-                      type="text"
-                      value={pr.exercise}
-                      onChange={(e) => updatePR(index, 'exercise', e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '6px',
-                        fontFamily: 'Chakra Petch, sans-serif',
-                        fontSize: '15px',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        color: '#ddd',
-                        outline: 'none',
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'right' }}>
-                    <input
-                      type="number"
-                      value={pr.weight}
-                      onChange={(e) => updatePR(index, 'weight', parseInt(e.target.value))}
-                      style={{
-                        width: '80px',
-                        padding: '6px',
-                        fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '15px',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        color: '#00ff41',
-                        textAlign: 'right',
-                        outline: 'none',
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'right' }}>
-                    <input
-                      type="number"
-                      value={pr.reps}
-                      onChange={(e) => updatePR(index, 'reps', parseInt(e.target.value))}
-                      style={{
-                        width: '60px',
-                        padding: '6px',
-                        fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '15px',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        color: '#00bcd4',
-                        textAlign: 'right',
-                        outline: 'none',
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'right' }}>
-                    <input
-                      type="date"
-                      value={pr.date}
-                      onChange={(e) => updatePR(index, 'date', e.target.value)}
-                      style={{
-                        padding: '6px',
-                        fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '26px',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        color: '#888',
-                        outline: 'none',
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <input
-                      type="text"
-                      value={pr.notes}
-                      onChange={(e) => updatePR(index, 'notes', e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '6px',
-                        fontFamily: 'Chakra Petch, sans-serif',
-                        fontSize: '26px',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        color: '#888',
-                        outline: 'none',
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <button
-                      onClick={() => removePR(pr.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#ff4444',
-                        cursor: 'pointer',
-                        fontSize: '26px',
-                        padding: 0,
-                      }}
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+  // Phase line milestones for common lifts (weight thresholds for 1RM)
+  const PHASE_LINES: Record<string, { label: string; weight: number }[]> = {
+    'bench press': [
+      { label: 'PHASE 1', weight: 135 }, { label: 'PHASE 2', weight: 185 },
+      { label: 'PHASE 3', weight: 225 }, { label: 'PHASE 4', weight: 275 },
+      { label: 'PHASE 5', weight: 315 },
+    ],
+    'squat': [
+      { label: 'PHASE 1', weight: 135 }, { label: 'PHASE 2', weight: 225 },
+      { label: 'PHASE 3', weight: 315 }, { label: 'PHASE 4', weight: 405 },
+      { label: 'PHASE 5', weight: 495 },
+    ],
+    'back squat': [
+      { label: 'PHASE 1', weight: 135 }, { label: 'PHASE 2', weight: 225 },
+      { label: 'PHASE 3', weight: 315 }, { label: 'PHASE 4', weight: 405 },
+      { label: 'PHASE 5', weight: 495 },
+    ],
+    'deadlift': [
+      { label: 'PHASE 1', weight: 135 }, { label: 'PHASE 2', weight: 225 },
+      { label: 'PHASE 3', weight: 315 }, { label: 'PHASE 4', weight: 405 },
+      { label: 'PHASE 5', weight: 495 },
+    ],
+    'overhead press': [
+      { label: 'PHASE 1', weight: 65 }, { label: 'PHASE 2', weight: 95 },
+      { label: 'PHASE 3', weight: 135 }, { label: 'PHASE 4', weight: 185 },
+      { label: 'PHASE 5', weight: 225 },
+    ],
+    'ohp': [
+      { label: 'PHASE 1', weight: 65 }, { label: 'PHASE 2', weight: 95 },
+      { label: 'PHASE 3', weight: 135 }, { label: 'PHASE 4', weight: 185 },
+      { label: 'PHASE 5', weight: 225 },
+    ],
+  };
+
+  // Generate dynamic phase lines for exercises without predefined ones
+  const getPhaseLines = (exerciseName: string, maxWeight: number) => {
+    const key = exerciseName.toLowerCase().trim();
+    if (PHASE_LINES[key]) return PHASE_LINES[key];
+    // Generate 5 phases based on max weight seen, rounding to nice numbers
+    const ceiling = Math.max(maxWeight * 1.5, 50);
+    const step = Math.ceil(ceiling / 5 / 5) * 5; // round to nearest 5
+    return Array.from({ length: 5 }, (_, i) => ({
+      label: `PHASE ${i + 1}`,
+      weight: step * (i + 1),
+    }));
+  };
+
+  // Get starting PR from intake for an exercise
+  const getIntakeBaseline = (exerciseName: string) => {
+    const intakePRs = operator.intake?.startingPRs || [];
+    return intakePRs.find(p => p.exercise.toLowerCase().trim() === exerciseName.toLowerCase().trim());
+  };
+
+  const [prViewMode, setPrViewMode] = useState<'tracker' | 'table'>('tracker');
+
+  const renderPhaseLineTracker = (exerciseName: string, prs: PersonalRecord[]) => {
+    const maxWeight = Math.max(...prs.map(p => p.weight), 0);
+    const phases = getPhaseLines(exerciseName, maxWeight);
+    const baseline = getIntakeBaseline(exerciseName);
+    const maxPhaseWeight = phases[phases.length - 1].weight;
+    const progressPct = maxPhaseWeight > 0 ? Math.min(100, (maxWeight / maxPhaseWeight) * 100) : 0;
+
+    // Find which phase they're in
+    let currentPhaseIdx = 0;
+    for (let i = phases.length - 1; i >= 0; i--) {
+      if (maxWeight >= phases[i].weight) { currentPhaseIdx = i + 1; break; }
+    }
+
+    return (
+      <div style={{ padding: '16px', background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 8, marginBottom: 12 }}>
+        {/* Exercise header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, textTransform: 'uppercase' }}>
+              {exerciseName}
+            </span>
+            {baseline && (
+              <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#666', marginLeft: 10 }}>
+                INTAKE: {baseline.weight}lbs x {baseline.reps}
+              </span>
+            )}
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 20, color: '#ffb800', fontWeight: 700 }}>{maxWeight}</span>
+            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: '#666', marginLeft: 4 }}>LBS</span>
+          </div>
+        </div>
+
+        {/* Phase line progress bar */}
+        <div style={{ position: 'relative', height: 32, background: '#111', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+          {/* Progress fill */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, bottom: 0,
+            width: `${progressPct}%`,
+            background: `linear-gradient(90deg, #00ff41 0%, ${currentPhaseIdx >= phases.length ? '#ffb800' : '#00ff41'} 100%)`,
+            opacity: 0.25, transition: 'width 0.5s ease',
+          }} />
+          {/* Phase line markers */}
+          {phases.map((phase, idx) => {
+            const pct = (phase.weight / maxPhaseWeight) * 100;
+            const passed = maxWeight >= phase.weight;
+            return (
+              <div key={phase.label} style={{
+                position: 'absolute', top: 0, bottom: 0, left: `${pct}%`,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'translateX(-50%)',
+              }}>
+                <div style={{
+                  width: 2, flex: 1,
+                  background: passed ? '#00ff41' : '#333',
+                }} />
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: passed ? '#00ff41' : '#333',
+                  border: passed ? '2px solid #00ff41' : '2px solid #555',
+                  position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+                }} />
+              </div>
+            );
+          })}
+          {/* Current position marker */}
+          <div style={{
+            position: 'absolute', top: '50%', transform: 'translate(-50%, -50%)',
+            left: `${progressPct}%`,
+            width: 14, height: 14, borderRadius: '50%',
+            background: '#ffb800', border: '2px solid #000',
+            boxShadow: '0 0 8px rgba(255,184,0,0.5)',
+            zIndex: 2,
+          }} />
+        </div>
+
+        {/* Phase labels */}
+        <div style={{ position: 'relative', height: 20, marginBottom: 8 }}>
+          {phases.map((phase, idx) => {
+            const pct = (phase.weight / maxPhaseWeight) * 100;
+            const passed = maxWeight >= phase.weight;
+            return (
+              <div key={phase.label} style={{
+                position: 'absolute', left: `${pct}%`, transform: 'translateX(-50%)',
+                fontFamily: 'Share Tech Mono, monospace', fontSize: 8,
+                color: passed ? '#00ff41' : '#555', textAlign: 'center', whiteSpace: 'nowrap',
+              }}>
+                <div>{phase.weight}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* PR history timeline */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+          {baseline && (
+            <div style={{
+              padding: '3px 8px', background: 'rgba(255,184,0,0.1)', border: '1px solid rgba(255,184,0,0.2)',
+              borderRadius: 3, fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
+            }}>
+              <span style={{ color: '#ffb800' }}>BASELINE</span>
+              <span style={{ color: '#888', marginLeft: 6 }}>{baseline.weight}x{baseline.reps}</span>
+            </div>
+          )}
+          {prs.map((pr, i) => {
+            const isPeak = pr.weight === maxWeight;
+            const isNew = (Date.now() - new Date(pr.date).getTime()) / (1000 * 60 * 60 * 24) < 7;
+            return (
+              <div key={pr.id} style={{
+                padding: '3px 8px',
+                background: isPeak ? 'rgba(0,255,65,0.1)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${isPeak ? 'rgba(0,255,65,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                borderRadius: 3, fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
+              }}>
+                <span style={{ color: isPeak ? '#00ff41' : '#888' }}>{pr.weight}x{pr.reps}</span>
+                <span style={{ color: '#555', marginLeft: 6 }}>{pr.date.slice(5)}</span>
+                {isNew && <span style={{ color: '#ffb800', marginLeft: 4 }}>NEW</span>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Gain from baseline */}
+        {baseline && maxWeight > baseline.weight && (
+          <div style={{ marginTop: 6, fontFamily: 'Share Tech Mono, monospace', fontSize: 11 }}>
+            <span style={{ color: '#00ff41' }}>+{maxWeight - baseline.weight} lbs</span>
+            <span style={{ color: '#555' }}> since intake ({Math.round(((maxWeight - baseline.weight) / baseline.weight) * 100)}% gain)</span>
+          </div>
+        )}
       </div>
+    );
+  };
 
-      <button
-        onClick={addPR}
-        style={{
-          padding: '10px 16px',
-          fontFamily: 'Chakra Petch, sans-serif',
-          fontSize: '26px',
-          backgroundColor: 'transparent',
-          border: '1px solid #00ff41',
-          color: '#00ff41',
-          cursor: 'pointer',
-          textTransform: 'uppercase',
-          letterSpacing: '1px',
-          transition: 'all 0.2s',
+  const renderPRBoardTab = () => {
+    const exerciseGroups = getExerciseGroups();
+    const groupKeys = Object.keys(exerciseGroups);
+
+    return (
+      <div>
+        {/* View toggle */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button onClick={() => setPrViewMode('tracker')} style={{
+            padding: '6px 14px', fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700,
+            background: prViewMode === 'tracker' ? '#00ff41' : '#0a0a0a',
+            color: prViewMode === 'tracker' ? '#000' : '#888',
+            border: `1px solid ${prViewMode === 'tracker' ? '#00ff41' : '#333'}`,
+            borderRadius: 4, cursor: 'pointer', letterSpacing: 1,
+          }}>PHASE TRACKER</button>
+          <button onClick={() => setPrViewMode('table')} style={{
+            padding: '6px 14px', fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700,
+            background: prViewMode === 'table' ? '#00ff41' : '#0a0a0a',
+            color: prViewMode === 'table' ? '#000' : '#888',
+            border: `1px solid ${prViewMode === 'table' ? '#00ff41' : '#333'}`,
+            borderRadius: 4, cursor: 'pointer', letterSpacing: 1,
+          }}>TABLE VIEW</button>
+        </div>
+
+        {/* Phase Tracker View */}
+        {prViewMode === 'tracker' && (
+          <div>
+            {groupKeys.length === 0 && (
+              <div style={{ padding: 24, textAlign: 'center', color: '#555', fontFamily: 'Share Tech Mono, monospace', fontSize: 13 }}>
+                No PRs logged yet. Add your first PR below.
+              </div>
+            )}
+            {groupKeys.map(key => renderPhaseLineTracker(
+              exerciseGroups[key][0].exercise, // Use original casing from first entry
+              exerciseGroups[key]
+            ))}
+
+            {/* Summary stats */}
+            {groupKeys.length > 0 && (
+              <div style={{
+                marginTop: 16, padding: 12, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 4,
+                display: 'flex', gap: 20, justifyContent: 'center',
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#ffb800' }}>{state.prBoard.length}</div>
+                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666' }}>TOTAL PRs</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00ff41' }}>{groupKeys.length}</div>
+                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666' }}>EXERCISES</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00bcd4' }}>
+                    {state.prBoard.filter(p => (Date.now() - new Date(p.date).getTime()) / (1000 * 60 * 60 * 24) < 30).length}
+                  </div>
+                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666' }}>LAST 30 DAYS</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Table View (original) */}
+        {prViewMode === 'table' && (
+          <div style={{ width: '100%', overflowX: 'auto', marginBottom: '16px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Chakra Petch, sans-serif' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid rgba(0,255,65,0.15)' }}>
+                  {['EXERCISE', 'WEIGHT', 'REPS', 'DATE', 'NOTES'].map((h, i) => (
+                    <th key={h} style={{
+                      padding: '12px', textAlign: i === 0 || i === 4 ? 'left' : 'right',
+                      fontFamily: 'Chakra Petch, sans-serif', fontSize: '13px', color: '#888',
+                      textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'normal',
+                    }}>{h}</th>
+                  ))}
+                  <th style={{ padding: '12px', width: '32px' }} />
+                </tr>
+              </thead>
+              <tbody>
+                {state.prBoard.map((pr, index) => {
+                  const isRecent = (Date.now() - new Date(pr.date).getTime()) / (1000 * 60 * 60 * 24) < 7;
+                  return (
+                    <tr key={pr.id} style={{
+                      borderBottom: '1px solid rgba(0,255,65,0.06)',
+                      borderLeft: isRecent ? '2px solid #00ff41' : '2px solid transparent',
+                    }}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <input type="text" value={pr.exercise} onChange={(e) => updatePR(index, 'exercise', e.target.value)}
+                          style={{ width: '100%', padding: '4px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#ddd', outline: 'none' }} />
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <input type="number" value={pr.weight} onChange={(e) => updatePR(index, 'weight', parseInt(e.target.value))}
+                          style={{ width: '70px', padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#00ff41', textAlign: 'right', outline: 'none' }} />
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <input type="number" value={pr.reps} onChange={(e) => updatePR(index, 'reps', parseInt(e.target.value))}
+                          style={{ width: '50px', padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#00bcd4', textAlign: 'right', outline: 'none' }} />
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <input type="date" value={pr.date} onChange={(e) => updatePR(index, 'date', e.target.value)}
+                          style={{ padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', backgroundColor: 'transparent', border: 'none', color: '#888', outline: 'none' }} />
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <input type="text" value={pr.notes} onChange={(e) => updatePR(index, 'notes', e.target.value)}
+                          style={{ width: '100%', padding: '4px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '12px', backgroundColor: 'transparent', border: 'none', color: '#888', outline: 'none' }} />
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <button onClick={() => removePR(pr.id)} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '16px', padding: 0 }}>×</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Add PR button */}
+        <button onClick={addPR} style={{
+          padding: '10px 16px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '13px',
+          backgroundColor: 'transparent', border: '1px solid #00ff41', color: '#00ff41',
+          cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px', transition: 'all 0.2s',
+          borderRadius: 4, marginTop: 8,
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.1)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
-      >
-        + ADD PR
-      </button>
-    </div>
-  );
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.1)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+        >
+          + ADD PR
+        </button>
+      </div>
+    );
+  };
 
   const renderInjuriesTab = () => (
     <div>
