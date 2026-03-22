@@ -13,7 +13,10 @@ function createVitalClient(): VitalClient {
     ? VitalEnvironment.Production
     : VitalEnvironment.Sandbox;
 
-  return new VitalClient({ apiKey, environment: env });
+  // Detect region from API key prefix (sk_us_ = US, sk_eu_ = EU)
+  const region = apiKey.startsWith('sk_eu_') ? 'eu' : 'us';
+
+  return new VitalClient({ apiKey, environment: env, region });
 }
 
 // Lazy getter — only creates client when first accessed at runtime (not at import/build time)
