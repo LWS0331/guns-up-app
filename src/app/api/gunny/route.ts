@@ -625,9 +625,43 @@ Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeri
   } catch (error: unknown) {
     console.error('Gunny API error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
+
+    // Classify the error for better diagnostics
+    let errorType = 'unknown';
+    let userMessage = 'Gunny AI temporarily offline. Stand by.';
+    let statusCode = 500;
+
+    if (message.includes('401') || message.includes('authentication') || message.includes('invalid x-api-key') || message.includes('Invalid API Key')) {
+      errorType = 'auth';
+      userMessage = 'API key is invalid or expired. Check ANTHROPIC_API_KEY in Railway environment variables.';
+      statusCode = 401;
+    } else if (message.includes('429') || message.includes('rate_limit') || message.includes('Rate limit')) {
+      errorType = 'rate_limit';
+      userMessage = 'Rate limit hit. Gunny needs a breather — try again in 30 seconds.';
+      statusCode = 429;
+    } else if (message.includes('529') || message.includes('overloaded') || message.includes('Overloaded')) {
+      errorType = 'overloaded';
+      userMessage = 'Anthropic API is overloaded. Try again in a minute.';
+      statusCode = 529;
+    } else if (message.includes('insufficient') || message.includes('billing') || message.includes('credit') || message.includes('spend')) {
+      errorType = 'billing';
+      userMessage = 'API credits exhausted. Top up at console.anthropic.com.';
+      statusCode = 402;
+    } else if (message.includes('model') || message.includes('not_found') || message.includes('does not exist')) {
+      errorType = 'model';
+      userMessage = 'Requested AI model unavailable. Falling back.';
+      statusCode = 404;
+    } else if (message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('fetch failed') || message.includes('network')) {
+      errorType = 'network';
+      userMessage = 'Cannot reach Anthropic API. Check network/DNS on Railway.';
+      statusCode = 503;
+    }
+
+    console.error(`Gunny error classified as: ${errorType} | ${message}`);
+
     return NextResponse.json(
-      { error: 'Gunny AI temporarily offline', details: message },
-      { status: 500 }
+      { error: userMessage, errorType, details: message },
+      { status: statusCode }
     );
   }
 }

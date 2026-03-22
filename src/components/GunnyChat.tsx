@@ -1110,11 +1110,15 @@ ${mealSuggestion}`;
         }),
       });
 
-      if (!res.ok) throw new Error('API error');
       const data = await res.json();
+      if (!res.ok) {
+        // Return the specific error from the API so the user sees what's wrong
+        const errMsg = data?.error || 'Gunny AI temporarily offline.';
+        return { response: errMsg };
+      }
       return { response: data.response, workoutData: data.workoutData, profileData: data.profileData };
     } catch {
-      return null;
+      return { response: 'Network error — check your internet connection and try again.' };
     }
   };
 

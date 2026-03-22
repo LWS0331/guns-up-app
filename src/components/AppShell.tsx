@@ -440,26 +440,32 @@ const AppShell: React.FC<AppShellProps> = ({
         }),
       });
 
-      if (!response.ok) throw new Error('Gunny API error');
-
       const data = await response.json();
-      const gunnyReply: ChatMessage = {
-        role: 'gunny',
-        text: data.response || data.message || data.text || 'Copy that, soldier.',
-        timestamp: Date.now(),
-      };
-      setGunnyMessages(prev => [...prev, gunnyReply]);
+
+      if (!response.ok) {
+        // Use the specific error message from the API
+        const errMsg = data?.error || 'Gunny AI temporarily offline.';
+        setGunnyMessages(prev => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg?.role === 'gunny' && lastMsg.text === errMsg) return prev;
+          return [...prev, { role: 'gunny' as const, text: errMsg, timestamp: Date.now() }];
+        });
+      } else {
+        const gunnyReply: ChatMessage = {
+          role: 'gunny',
+          text: data.response || data.message || data.text || 'Copy that, soldier.',
+          timestamp: Date.now(),
+        };
+        setGunnyMessages(prev => [...prev, gunnyReply]);
+      }
     } catch (error) {
-      console.error('Gunny API error:', error);
-      // Only add error message if the last message isn't already an error
+      console.error('Gunny panel error:', error);
       setGunnyMessages(prev => {
         const lastMsg = prev[prev.length - 1];
-        if (lastMsg?.role === 'gunny' && lastMsg.text.includes('temporarily offline')) {
-          return prev; // Don't duplicate error messages
-        }
+        if (lastMsg?.role === 'gunny' && lastMsg.text.includes('connection')) return prev;
         return [...prev, {
           role: 'gunny' as const,
-          text: `Comms disrupted, ${selectedOperator.callsign}. Check your connection and try again. If this persists, the API key may need attention.`,
+          text: `Network error, ${selectedOperator.callsign}. Check your internet connection.`,
           timestamp: Date.now(),
         }];
       });
