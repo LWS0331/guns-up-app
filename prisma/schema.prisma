@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Operator {
+  id          String   @id           // e.g. "op-ruben"
+  name        String
+  callsign    String
+  pin         String
+  role        String                  // "trainer" | "client"
+  tier        String                  // "haiku" | "sonnet" | "opus" | "white_glove"
+  coupleWith  String?
+  trainerId   String?
+  clientIds   String[]  @default([])
+  trainerNotes String?
+  betaUser    Boolean   @default(false)
+  betaFeedback String[] @default([])
+
+  // Complex nested data stored as JSONB
+  profile     Json      @default("{}")
+  nutrition   Json      @default("{}")
+  prs         Json      @default("[]")
+  injuries    Json      @default("[]")
+  preferences Json      @default("{}")
+  workouts    Json      @default("{}")  // Record<string, Workout>
+  dayTags     Json      @default("{}")  // Record<string, DayTag>
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ChatHistory {
+  id          String   @id @default(cuid())
+  operatorId  String
+  chatType    String                  // "gunny-tab" | "gunny-panel"
+  messages    Json     @default("[]") // Array of chat messages
+  updatedAt   DateTime @updatedAt
+
+  @@unique([operatorId, chatType])
+}

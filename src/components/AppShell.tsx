@@ -132,43 +132,75 @@ const AppShell: React.FC<AppShellProps> = ({
     if (panelInitRef.current === selectedOperator.id) return;
     panelInitRef.current = selectedOperator.id;
 
-    // Try to restore from localStorage
-    try {
-      const key = `gunny-panel-${selectedOperator.id}`;
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const saved = JSON.parse(raw) as ChatMessage[];
-        if (Array.isArray(saved) && saved.length > 0) {
-          setGunnyMessages(saved);
-          setGunnyGreeted(true);
-          return;
+    const loadPanelChat = async () => {
+      // Try API first
+      try {
+        const res = await fetch(`/api/chat?operatorId=${selectedOperator.id}&chatType=gunny-panel`);
+        if (res.ok) {
+          const data = await res.json();
+          const msgs = data.messages as ChatMessage[];
+          if (Array.isArray(msgs) && msgs.length > 0) {
+            setGunnyMessages(msgs);
+            setGunnyGreeted(true);
+            return;
+          }
         }
-      }
-    } catch { /* ignore */ }
+      } catch { /* API unavailable */ }
 
-    // No saved history — show context-aware greeting
-    setGunnyGreeted(true);
-    const tab = activeTab;
-    let greeting = '';
-    if (tab === 'coc') {
-      greeting = `Eyes on your dashboard, ${selectedOperator.callsign}. Need help reading your stats, planning today's session, or adjusting anything?`;
-    } else if (tab === 'planner') {
-      greeting = `I can see your planner, ${selectedOperator.callsign}. Need to modify a workout, swap an exercise, adjust volume, or build something new?`;
-    } else if (tab === 'intel') {
-      greeting = `Reviewing your Intel, ${selectedOperator.callsign}. Want to update your profile, adjust targets, log a new PR, or check your injury status?`;
-    } else {
-      greeting = `Standing by, ${selectedOperator.callsign}. I can see what you're working on — what do you need?`;
-    }
-    setGunnyMessages([{
-      role: 'gunny',
-      text: greeting,
-      timestamp: Date.now(),
-    }]);
+      // Fallback to localStorage
+      try {
+        const key = `gunny-panel-${selectedOperator.id}`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const saved = JSON.parse(raw) as ChatMessage[];
+          if (Array.isArray(saved) && saved.length > 0) {
+            setGunnyMessages(saved);
+            setGunnyGreeted(true);
+            // Migrate to API
+            fetch('/api/chat', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: saved }),
+            }).catch(() => {});
+            return;
+          }
+        }
+      } catch { /* ignore */ }
+
+      // No saved history — show context-aware greeting
+      setGunnyGreeted(true);
+      const tab = activeTab;
+      let greeting = '';
+      if (tab === 'coc') {
+        greeting = `Eyes on your dashboard, ${selectedOperator.callsign}. Need help reading your stats, planning today's session, or adjusting anything?`;
+      } else if (tab === 'planner') {
+        greeting = `I can see your planner, ${selectedOperator.callsign}. Need to modify a workout, swap an exercise, adjust volume, or build something new?`;
+      } else if (tab === 'intel') {
+        greeting = `Reviewing your Intel, ${selectedOperator.callsign}. Want to update your profile, adjust targets, log a new PR, or check your injury status?`;
+      } else {
+        greeting = `Standing by, ${selectedOperator.callsign}. I can see what you're working on — what do you need?`;
+      }
+      setGunnyMessages([{
+        role: 'gunny',
+        text: greeting,
+        timestamp: Date.now(),
+      }]);
+    };
+    loadPanelChat();
   }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign]);
 
-  // Persist panel messages to localStorage whenever they change
+  // Persist panel messages (API + localStorage fallback)
+  const prevPanelMsgCountRef = useRef(0);
   useEffect(() => {
-    if (gunnyMessages.length > 0) {
+    if (gunnyMessages.length > 0 && gunnyMessages.length !== prevPanelMsgCountRef.current) {
+      prevPanelMsgCountRef.current = gunnyMessages.length;
+      // Save to API (non-blocking)
+      fetch('/api/chat', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: gunnyMessages }),
+      }).catch(() => {});
+      // Also save to localStorage as fallback
       try {
         localStorage.setItem(`gunny-panel-${selectedOperator.id}`, JSON.stringify(gunnyMessages));
       } catch { /* storage full */ }

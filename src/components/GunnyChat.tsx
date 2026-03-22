@@ -357,19 +357,41 @@ Warmup: ${trainerWorkout.warmup}
   return output;
 };
 
-// ═══ Chat persistence helpers ═══
-const CHAT_STORAGE_KEY = (opId: string) => `gunny-chat-${opId}`;
-
-const saveChatToStorage = (opId: string, msgs: Message[]) => {
+// ═══ Chat persistence helpers (API-first, localStorage fallback) ═══
+const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
+  const serializable = msgs.map(m => ({ ...m, timestamp: new Date(m.timestamp).toISOString() }));
+  // Save to API (non-blocking)
+  fetch('/api/chat', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operatorId: opId, chatType, messages: serializable }),
+  }).catch(() => { /* API unavailable — localStorage will cover it */ });
+  // Also save to localStorage as immediate fallback
   try {
-    const serializable = msgs.map(m => ({ ...m, timestamp: new Date(m.timestamp).toISOString() }));
-    localStorage.setItem(CHAT_STORAGE_KEY(opId), JSON.stringify(serializable));
-  } catch { /* storage full or unavailable — degrade gracefully */ }
+    localStorage.setItem(`gunny-chat-${opId}`, JSON.stringify(serializable));
+  } catch { /* storage full */ }
 };
 
-const loadChatFromStorage = (opId: string): Message[] | null => {
+const loadChatFromAPI = async (opId: string, chatType: string): Promise<Message[] | null> => {
   try {
-    const raw = localStorage.getItem(CHAT_STORAGE_KEY(opId));
+    const res = await fetch(`/api/chat?operatorId=${opId}&chatType=${chatType}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const msgs = data.messages as Array<{ id: string; role: string; text: string; timestamp: string; isWorkout?: boolean }>;
+    if (!Array.isArray(msgs) || msgs.length === 0) return null;
+    return msgs.map(m => ({
+      id: m.id,
+      role: m.role as 'user' | 'gunny',
+      text: m.text,
+      timestamp: new Date(m.timestamp),
+      isWorkout: m.isWorkout,
+    }));
+  } catch { return null; }
+};
+
+const loadChatFromLocalStorage = (opId: string): Message[] | null => {
+  try {
+    const raw = localStorage.getItem(`gunny-chat-${opId}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Array<{ id: string; role: string; text: string; timestamp: string; isWorkout?: boolean }>;
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
@@ -395,46 +417,53 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   const initOperatorRef = useRef<string>('');
 
   useEffect(() => {
-    if (initOperatorRef.current === operator.id) return; // Same operator, don't reset
+    if (initOperatorRef.current === operator.id) return;
     initOperatorRef.current = operator.id;
 
-    // Try to restore saved conversation first
-    const saved = loadChatFromStorage(operator.id);
-    if (saved && saved.length > 0) {
-      setMessages(saved);
+    // Try API first, then localStorage, then generate greeting
+    const loadChat = async () => {
+      const apiMessages = await loadChatFromAPI(operator.id, 'gunny-tab');
+      if (apiMessages && apiMessages.length > 0) {
+        setMessages(apiMessages);
+        inputRef.current?.focus();
+        return;
+      }
+      const localMessages = loadChatFromLocalStorage(operator.id);
+      if (localMessages && localMessages.length > 0) {
+        setMessages(localMessages);
+        // Migrate localStorage data to API
+        saveChatToStorage(operator.id, 'gunny-tab', localMessages);
+        inputRef.current?.focus();
+        return;
+      }
+      // No saved history — generate fresh greeting
+      let greetingText = '';
+      if (operator.role === 'trainer') {
+        const clientCount = getTrainerClients(operator.id, allOperators).length;
+        greetingText = `War room is open, Coach. You have ${clientCount} active clients. This is your gameplan hub — BUILD A WORKOUT, plan a WEEKLY SPLIT, deep-dive GOAL PATHS, or review MY CLIENTS.`;
+      } else {
+        const trainer = getClientTrainer(operator.id, allOperators);
+        const trainerName = trainer ? trainer.callsign : 'your trainer';
+        greetingText = `Welcome to the war room, ${operator.callsign}. Your trainer is ${trainerName}. This is where we go deep — BUILD A WORKOUT, plan your WEEKLY SPLIT, review GOAL PATHS, or ask me anything about your programming.`;
+      }
+      const greeting: Message = {
+        id: 'greeting-' + Date.now(),
+        role: 'gunny',
+        text: greetingText,
+        timestamp: new Date(),
+      };
+      setMessages([greeting]);
       inputRef.current?.focus();
-      return;
-    }
-
-    // No saved history — generate fresh greeting
-    let greetingText = '';
-
-    if (operator.role === 'trainer') {
-      const clientCount = getTrainerClients(operator.id, allOperators).length;
-      greetingText = `War room is open, Coach. You have ${clientCount} active clients. This is your gameplan hub — BUILD A WORKOUT, plan a WEEKLY SPLIT, deep-dive GOAL PATHS, or review MY CLIENTS.`;
-    } else {
-      const trainer = getClientTrainer(operator.id, allOperators);
-      const trainerName = trainer ? trainer.callsign : 'your trainer';
-      greetingText = `Welcome to the war room, ${operator.callsign}. Your trainer is ${trainerName}. This is where we go deep — BUILD A WORKOUT, plan your WEEKLY SPLIT, review GOAL PATHS, or ask me anything about your programming.`;
-    }
-
-    const greeting: Message = {
-      id: 'greeting-' + Date.now(),
-      role: 'gunny',
-      text: greetingText,
-      timestamp: new Date(),
     };
-    setMessages([greeting]);
-    inputRef.current?.focus();
+    loadChat();
   }, [operator.id, operator.role, allOperators]);
 
-  // Persist messages to localStorage whenever they change
+  // Persist messages whenever they change (API + localStorage)
   const prevMsgCountRef = useRef(0);
   useEffect(() => {
-    // Only save when messages actually changed (not on initial empty state)
     if (messages.length > 0 && messages.length !== prevMsgCountRef.current) {
       prevMsgCountRef.current = messages.length;
-      saveChatToStorage(operator.id, messages);
+      saveChatToStorage(operator.id, 'gunny-tab', messages);
     }
   }, [messages, operator.id]);
 
