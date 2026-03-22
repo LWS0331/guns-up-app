@@ -1,6 +1,6 @@
 // Auto-versioned cache — changes every build via build timestamp
 // BUILD_VERSION gets replaced by build script, or defaults to timestamp
-const APP_VERSION = '__BUILD_TIMESTAMP__';
+const APP_VERSION = '1774171484';
 const CACHE_NAME = `guns-up-cache-${APP_VERSION}`;
 const STATIC_ASSETS = [
   '/manifest.json',
@@ -93,4 +93,23 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// Handle notification clicks — focus app or open new window
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then((clientList) => {
+      // Look for an existing window
+      for (const client of clientList) {
+        if (client.url.includes('/') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // No window found, open a new one
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
 });

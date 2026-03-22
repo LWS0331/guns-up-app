@@ -19,6 +19,12 @@ import BetaFeedback from '@/components/BetaFeedback';
 import TrainerDashboard from '@/components/TrainerDashboard';
 import { TermsOfService, PrivacyPolicy } from '@/components/LegalPages';
 import { trackEvent, EVENTS } from '@/lib/analytics';
+import {
+  requestNotificationPermission,
+  checkStreakWarning,
+  notifyWorkoutReminder,
+  loadNotificationPrefs,
+} from '@/lib/notifications';
 
 // ═══ Matrix Code Rain Background (slowed & subtle) ═══
 const DataRain: React.FC = () => {
@@ -144,6 +150,70 @@ const AppShell: React.FC<AppShellProps> = ({
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  // ═══ Notification Setup ═══
+  useEffect(() => {
+    // Request notification permission once on mount
+    requestNotificationPermission().catch(() => {});
+
+    // Load preferences
+    const prefs = loadNotificationPrefs(currentUser.id);
+    const callsign = currentUser.callsign;
+
+    // Helper to calculate time until next reminder
+    const getTimeUntilReminder = (reminderTime: string): number => {
+      const [hours, minutes] = reminderTime.split(':').map(Number);
+      const now = new Date();
+      const reminder = new Date();
+      reminder.setHours(hours, minutes, 0, 0);
+
+      // If reminder time has passed today, schedule for tomorrow
+      if (reminder <= now) {
+        reminder.setDate(reminder.getDate() + 1);
+      }
+
+      return Math.max(0, reminder.getTime() - now.getTime());
+    };
+
+    // Schedule daily workout reminder
+    let reminderTimeoutId: NodeJS.Timeout | null = null;
+    if (prefs.workoutReminders) {
+      const scheduleReminder = () => {
+        const timeUntil = getTimeUntilReminder(prefs.reminderTime);
+        reminderTimeoutId = setTimeout(() => {
+          // Only send if no workout completed today
+          const today = new Date().toISOString().split('T')[0];
+          const operatorData = operators.find(op => op.id === currentUser.id);
+          if (operatorData?.workouts?.[today]?.completed !== true) {
+            notifyWorkoutReminder(callsign);
+          }
+          // Schedule next day's reminder
+          scheduleReminder();
+        }, timeUntil);
+      };
+      scheduleReminder();
+    }
+
+    // Schedule streak warning check every 4 hours
+    let streakCheckIntervalId: NodeJS.Timeout | null = null;
+    if (prefs.streakWarnings) {
+      const checkStreak = () => {
+        const operatorData = operators.find(op => op.id === currentUser.id);
+        if (operatorData?.workouts) {
+          checkStreakWarning(callsign, operatorData.workouts);
+        }
+      };
+      // Run immediately and then every 4 hours
+      checkStreak();
+      streakCheckIntervalId = setInterval(checkStreak, 4 * 60 * 60 * 1000);
+    }
+
+    // Cleanup
+    return () => {
+      if (reminderTimeoutId) clearTimeout(reminderTimeoutId);
+      if (streakCheckIntervalId) clearInterval(streakCheckIntervalId);
+    };
+  }, [currentUser.id, operators]);
 
   // Auto-scroll messages to bottom
   useEffect(() => {

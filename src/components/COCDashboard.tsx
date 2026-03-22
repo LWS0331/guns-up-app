@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, TIER_CONFIGS } from '@/lib/types';
+import NotificationSettings from '@/components/NotificationSettings';
 
 interface COCDashboardProps {
   operator: Operator;
@@ -670,6 +671,12 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
               />
             </div>
           </div>
+
+          {/* Notification Settings */}
+          <NotificationSettings
+            operatorId={operator.id}
+            callsign={operator.callsign}
+          />
         </div>
       </div>
     </div>

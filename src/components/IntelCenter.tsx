@@ -6,6 +6,7 @@ import { Operator, Meal, PRRecord, Injury, formatHeightInput } from '@/lib/types
 import WearableConnect from '@/components/WearableConnect';
 import ProgressCharts from '@/components/ProgressCharts';
 import { FOOD_DB } from '@/data/foods';
+import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
 
 // Local type aliases for internal state management
 interface Goal {
@@ -289,6 +290,25 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       ...prev,
       prBoard: [...prev.prBoard, newPR],
     }));
+  };
+
+  // Trigger PR notification when a PR is updated with real data
+  const handlePRChange = (index: number, field: keyof PersonalRecord, value: any) => {
+    updatePR(index, field, value);
+
+    // Send notification if weight or exercise is being set to meaningful values
+    if ((field === 'weight' || field === 'exercise') && value && Number(value) > 0 && value !== 'New Exercise') {
+      // Use setTimeout to allow state to update before checking
+      setTimeout(() => {
+        const prefs = loadNotificationPrefs(operator.id);
+        if (prefs.prAlerts) {
+          const pr = state.prBoard[index];
+          if (pr && pr.exercise && Number(pr.weight) > 0) {
+            notifyPRAlert(operator.callsign, pr.exercise, Number(pr.weight));
+          }
+        }
+      }, 100);
+    }
   };
 
   const removePR = (prId: string) => {
@@ -2058,23 +2078,23 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                       borderLeft: isRecent ? '2px solid #00ff41' : '2px solid transparent',
                     }}>
                       <td style={{ padding: '10px 12px' }}>
-                        <input type="text" value={pr.exercise} onChange={(e) => updatePR(index, 'exercise', e.target.value)}
+                        <input type="text" value={pr.exercise} onChange={(e) => handlePRChange(index, 'exercise', e.target.value)}
                           style={{ width: '100%', padding: '4px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#ddd', outline: 'none' }} />
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        <input type="number" value={pr.weight} onChange={(e) => updatePR(index, 'weight', parseInt(e.target.value))}
+                        <input type="number" value={pr.weight} onChange={(e) => handlePRChange(index, 'weight', parseInt(e.target.value))}
                           style={{ width: '70px', padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#00ff41', textAlign: 'right', outline: 'none' }} />
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        <input type="number" value={pr.reps} onChange={(e) => updatePR(index, 'reps', parseInt(e.target.value))}
+                        <input type="number" value={pr.reps} onChange={(e) => handlePRChange(index, 'reps', parseInt(e.target.value))}
                           style={{ width: '50px', padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#00bcd4', textAlign: 'right', outline: 'none' }} />
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        <input type="date" value={pr.date} onChange={(e) => updatePR(index, 'date', e.target.value)}
+                        <input type="date" value={pr.date} onChange={(e) => handlePRChange(index, 'date', e.target.value)}
                           style={{ padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', backgroundColor: 'transparent', border: 'none', color: '#888', outline: 'none' }} />
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <input type="text" value={pr.notes} onChange={(e) => updatePR(index, 'notes', e.target.value)}
+                        <input type="text" value={pr.notes} onChange={(e) => handlePRChange(index, 'notes', e.target.value)}
                           style={{ width: '100%', padding: '4px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '12px', backgroundColor: 'transparent', border: 'none', color: '#888', outline: 'none' }} />
                       </td>
                       <td style={{ padding: '10px 12px' }}>
