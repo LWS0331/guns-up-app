@@ -5,6 +5,118 @@ import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode } from '@/lib/types';
 import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 
+// ═══ Tooltip Tag Pill Component ═══
+interface TagPillData {
+  icon: string;
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+  tooltip: string;
+}
+
+const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
+  const [showTip, setShowTip] = useState(false);
+  const [touchActive, setTouchActive] = useState(false);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleEnter = () => {
+    tipTimer.current = setTimeout(() => setShowTip(true), 200);
+  };
+  const handleLeave = () => {
+    if (tipTimer.current) clearTimeout(tipTimer.current);
+    setShowTip(false);
+    setTouchActive(false);
+  };
+  const handleTouch = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (touchActive) {
+      setShowTip(false);
+      setTouchActive(false);
+    } else {
+      setShowTip(true);
+      setTouchActive(true);
+    }
+  };
+
+  return (
+    <span
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onTouchStart={handleTouch}
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '3px 8px',
+        borderRadius: '3px',
+        fontFamily: 'Share Tech Mono, monospace',
+        fontSize: '12px',
+        fontWeight: 600,
+        background: tag.bg,
+        color: tag.color,
+        border: `1px solid ${tag.border}`,
+        letterSpacing: '0.3px',
+        cursor: 'help',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      <span style={{ fontSize: '10px', opacity: 0.7 }}>{tag.icon}</span>
+      {tag.label}
+      {showTip && tag.tooltip && (
+        <div style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 8px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '240px',
+          padding: '10px 12px',
+          background: 'rgba(10,10,10,0.97)',
+          border: `1px solid ${tag.border}`,
+          borderRadius: '6px',
+          boxShadow: `0 8px 32px rgba(0,0,0,0.6), 0 0 12px ${tag.bg}`,
+          zIndex: 10000,
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '9px',
+            fontWeight: 700,
+            color: tag.color,
+            letterSpacing: '1.5px',
+            marginBottom: '6px',
+            textTransform: 'uppercase',
+          }}>
+            {tag.label}
+          </div>
+          <div style={{
+            fontFamily: 'Share Tech Mono, monospace',
+            fontSize: '11px',
+            color: '#ccc',
+            lineHeight: '1.5',
+            fontWeight: 400,
+          }}>
+            {tag.tooltip}
+          </div>
+          {/* Arrow */}
+          <div style={{
+            position: 'absolute',
+            bottom: '-5px',
+            left: '50%',
+            transform: 'translateX(-50%) rotate(45deg)',
+            width: '8px',
+            height: '8px',
+            background: 'rgba(10,10,10,0.97)',
+            borderRight: `1px solid ${tag.border}`,
+            borderBottom: `1px solid ${tag.border}`,
+          }} />
+        </div>
+      )}
+    </span>
+  );
+};
+
 interface PlannerProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
@@ -180,70 +292,122 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     return labels;
   };
 
+  // ═══ Prescription Tag Type ═══
+  interface PrescriptionTag {
+    icon: string;
+    label: string;
+    color: string;
+    bg: string;
+    border: string;
+    tooltip: string;
+  }
+
+  // ═══ RPE Explanation Helper ═══
+  const getRpeExplanation = (rpe: string): string => {
+    const val = parseInt(rpe.split('-')[0]);
+    const rpeDescriptions: Record<number, string> = {
+      5: 'Easy effort — could do 5+ more reps. Good for warmups and deload work.',
+      6: 'Moderate effort — about 4 reps left in the tank. Light working weight.',
+      7: 'Challenging — roughly 3 reps left in reserve. Solid working sets.',
+      8: 'Hard — about 2 reps left before failure. Heavy working sets.',
+      9: 'Very hard — only 1 rep left in the tank. Near-max effort.',
+      10: 'Max effort — absolute failure, no reps left. Use sparingly.',
+    };
+    return rpeDescriptions[val] || `Intensity level ${rpe}/10 — higher = closer to failure.`;
+  };
+
+  // ═══ Tempo Explanation Helper ═══
+  const getTempoExplanation = (tempo: string): string => {
+    const parts = tempo.split('-').map(Number);
+    if (parts.length === 4) {
+      const labels = ['Eccentric (lowering)', 'Pause at bottom', 'Concentric (lifting)', 'Pause at top'];
+      const details = parts.map((sec, i) => `${sec}s ${labels[i]}`).join(' → ');
+      const totalTUT = parts.reduce((a, b) => a + b, 0);
+      return `${details}. Total time under tension: ${totalTUT}s per rep.`;
+    }
+    return `Tempo controls rep speed — each number is seconds for each phase of the lift.`;
+  };
+
   // ═══ Smart Prescription Parser ═══
-  // Parses strings like "4x8-10 @ RPE 7, Tempo 2-1-1-1, Rest 2:00" into structured tags
-  const parsePrescription = (rx: string): Array<{ icon: string; label: string; color: string; bg: string; border: string }> => {
+  const parsePrescription = (rx: string): PrescriptionTag[] => {
     if (!rx || !rx.trim()) return [];
-    const tags: Array<{ icon: string; label: string; color: string; bg: string; border: string }> = [];
+    const tags: PrescriptionTag[] = [];
     const str = rx.trim();
 
     // Sets x Reps pattern: "4x8-10", "3x20", "4x12-15 each arm"
     const setsMatch = str.match(/(\d+)\s*x\s*(\d+(?:-\d+)?(?:\s*(?:each\s*(?:arm|side|leg)?))?)/i);
     if (setsMatch) {
-      tags.push({ icon: '◆', label: setsMatch[0].trim(), color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)' });
+      const parts = setsMatch[0].trim().match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i);
+      const sets = parts ? parts[1] : '?';
+      const reps = parts ? parts[2] : '?';
+      tags.push({ icon: '◆', label: setsMatch[0].trim(), color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)',
+        tooltip: `${sets} sets of ${reps} reps. Complete all sets with the prescribed weight before moving to the next exercise.` });
     }
 
     // "Work up to" pattern
     const workUpMatch = str.match(/work\s*up\s*to\s+([^,@]+)/i);
     if (workUpMatch) {
-      tags.push({ icon: '▲', label: workUpMatch[0].trim(), color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)' });
+      tags.push({ icon: '▲', label: workUpMatch[0].trim(), color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)',
+        tooltip: 'Ramp up weight each set until you hit the target. Warm-up sets don\'t count toward working sets.' });
     }
 
     // Sets standalone: "3-5 sets"
     const setsStandalone = str.match(/(\d+(?:-\d+)?)\s*sets/i);
     if (setsStandalone && !setsMatch) {
-      tags.push({ icon: '◆', label: `${setsStandalone[1]} sets`, color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)' });
+      tags.push({ icon: '◆', label: `${setsStandalone[1]} sets`, color: '#00ff41', bg: 'rgba(0,255,65,0.08)', border: 'rgba(0,255,65,0.2)',
+        tooltip: `Perform ${setsStandalone[1]} working sets. Adjust based on how you feel — stay in the range.` });
     }
 
     // RPE
     const rpeMatch = str.match(/(?:@\s*)?RPE\s*(\d+(?:-\d+)?)/i);
     if (rpeMatch) {
-      tags.push({ icon: '⚡', label: `RPE ${rpeMatch[1]}`, color: '#ff6b6b', bg: 'rgba(255,107,107,0.08)', border: 'rgba(255,107,107,0.2)' });
+      tags.push({ icon: '⚡', label: `RPE ${rpeMatch[1]}`, color: '#ff6b6b', bg: 'rgba(255,107,107,0.08)', border: 'rgba(255,107,107,0.2)',
+        tooltip: `Rate of Perceived Exertion — ${getRpeExplanation(rpeMatch[1])}` });
     }
 
     // Tempo
     const tempoMatch = str.match(/tempo\s*([\d]-[\d]-[\d]-[\d])/i);
     if (tempoMatch) {
-      tags.push({ icon: '◷', label: `Tempo ${tempoMatch[1]}`, color: '#ba68c8', bg: 'rgba(186,104,200,0.08)', border: 'rgba(186,104,200,0.2)' });
+      tags.push({ icon: '◷', label: `Tempo ${tempoMatch[1]}`, color: '#ba68c8', bg: 'rgba(186,104,200,0.08)', border: 'rgba(186,104,200,0.2)',
+        tooltip: getTempoExplanation(tempoMatch[1]) });
     }
 
     // Rest
     const restMatch = str.match(/rest\s*([\d:]+\s*(?:min|sec|s)?)/i);
     if (restMatch) {
-      tags.push({ icon: '⏱', label: `Rest ${restMatch[1]}`, color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)', border: 'rgba(79,195,247,0.2)' });
+      tags.push({ icon: '⏱', label: `Rest ${restMatch[1]}`, color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)', border: 'rgba(79,195,247,0.2)',
+        tooltip: `Rest ${restMatch[1]} between sets. Stick to this — rest periods control fatigue accumulation and training stimulus.` });
     }
 
     // RIR
     const rirMatch = str.match(/(\d+)\s*RIR/i);
     if (rirMatch) {
-      tags.push({ icon: '◇', label: `${rirMatch[1]} RIR`, color: '#ffb800', bg: 'rgba(255,184,0,0.08)', border: 'rgba(255,184,0,0.2)' });
+      const rir = parseInt(rirMatch[1]);
+      const rirDesc = rir === 0 ? 'Go to absolute failure — no reps left.' :
+        rir === 1 ? 'Stop with 1 rep left before failure. Very high intensity.' :
+        rir === 2 ? 'Stop with 2 reps left. Hard but sustainable.' :
+        `Stop with ${rir} reps left before failure.`;
+      tags.push({ icon: '◇', label: `${rirMatch[1]} RIR`, color: '#ffb800', bg: 'rgba(255,184,0,0.08)', border: 'rgba(255,184,0,0.2)',
+        tooltip: `Reps In Reserve — ${rirDesc} Similar to RPE but counts remaining reps instead.` });
     }
 
     // % / percentage
     const pctMatch = str.match(/(\d+(?:-\d+)?)\s*%/);
     if (pctMatch) {
-      tags.push({ icon: '%', label: `${pctMatch[1]}%`, color: '#ffb800', bg: 'rgba(255,184,0,0.08)', border: 'rgba(255,184,0,0.2)' });
+      tags.push({ icon: '%', label: `${pctMatch[1]}%`, color: '#ffb800', bg: 'rgba(255,184,0,0.08)', border: 'rgba(255,184,0,0.2)',
+        tooltip: `${pctMatch[1]}% of your 1-rep max (1RM). Calculate from your PR board or estimated max.` });
     }
 
-    // "each arm/side/leg" standalone (if not already captured with sets)
+    // "each arm/side/leg" standalone
     const eachMatch = str.match(/each\s*(arm|side|leg)/i);
     if (eachMatch && !setsMatch?.[0]?.toLowerCase().includes('each')) {
-      tags.push({ icon: '↔', label: `each ${eachMatch[1]}`, color: '#aaa', bg: 'rgba(170,170,170,0.08)', border: 'rgba(170,170,170,0.2)' });
+      tags.push({ icon: '↔', label: `each ${eachMatch[1]}`, color: '#aaa', bg: 'rgba(170,170,170,0.08)', border: 'rgba(170,170,170,0.2)',
+        tooltip: `Unilateral — perform the prescribed reps on each ${eachMatch[1]} separately. Total volume is doubled.` });
     }
 
-    // If nothing was parsed, show the raw prescription as a single neutral tag
+    // Fallback
     if (tags.length === 0) {
-      tags.push({ icon: '•', label: str, color: '#aaa', bg: 'rgba(170,170,170,0.06)', border: 'rgba(170,170,170,0.15)' });
+      tags.push({ icon: '•', label: str, color: '#aaa', bg: 'rgba(170,170,170,0.06)', border: 'rgba(170,170,170,0.15)', tooltip: str });
     }
 
     return tags;
@@ -779,23 +943,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                           {parsed.map((tag, ti) => (
-                            <span key={ti} style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '3px 8px',
-                              borderRadius: '3px',
-                              fontFamily: 'Share Tech Mono, monospace',
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              background: tag.bg,
-                              color: tag.color,
-                              border: `1px solid ${tag.border}`,
-                              letterSpacing: '0.3px',
-                            }}>
-                              <span style={{ fontSize: '10px', opacity: 0.7 }}>{tag.icon}</span>
-                              {tag.label}
-                            </span>
+                            <TagPill key={ti} tag={tag} />
                           ))}
                         </div>
                       </div>
