@@ -592,7 +592,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
     updated.workouts[selectedDate] = builderData;
     onUpdateOperator(updated);
     setShowWorkoutBuilder(false);
-    setSelectedDate(null);
+    // Stay on day view so user can review the saved workout — don't clear selectedDate
   };
 
   const handleCancelWorkout = () => {

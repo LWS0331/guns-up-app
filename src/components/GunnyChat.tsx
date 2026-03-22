@@ -411,11 +411,11 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
 
     if (operator.role === 'trainer') {
       const clientCount = getTrainerClients(operator.id, allOperators).length;
-      greetingText = `Gunny reporting for duty, Coach. You have ${clientCount} active clients. Ready to BUILD YOUR WORKOUT, check MY CLIENTS, or review GOAL PATHS.`;
+      greetingText = `War room is open, Coach. You have ${clientCount} active clients. This is your gameplan hub — BUILD A WORKOUT, plan a WEEKLY SPLIT, deep-dive GOAL PATHS, or review MY CLIENTS.`;
     } else {
       const trainer = getClientTrainer(operator.id, allOperators);
       const trainerName = trainer ? trainer.callsign : 'your trainer';
-      greetingText = `Gunny reporting for duty, champ. Your trainer is ${trainerName}. Ask me to show TRAINER WOD, BUILD A WORKOUT, or check your READINESS.`;
+      greetingText = `Welcome to the war room, ${operator.callsign}. Your trainer is ${trainerName}. This is where we go deep — BUILD A WORKOUT, plan your WEEKLY SPLIT, review GOAL PATHS, or ask me anything about your programming.`;
     }
 
     const greeting: Message = {

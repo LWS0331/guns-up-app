@@ -146,11 +146,22 @@ const AppShell: React.FC<AppShellProps> = ({
       }
     } catch { /* ignore */ }
 
-    // No saved history — show greeting
+    // No saved history — show context-aware greeting
     setGunnyGreeted(true);
+    const tab = activeTab;
+    let greeting = '';
+    if (tab === 'coc') {
+      greeting = `Eyes on your dashboard, ${selectedOperator.callsign}. Need help reading your stats, planning today's session, or adjusting anything?`;
+    } else if (tab === 'planner') {
+      greeting = `I can see your planner, ${selectedOperator.callsign}. Need to modify a workout, swap an exercise, adjust volume, or build something new?`;
+    } else if (tab === 'intel') {
+      greeting = `Reviewing your Intel, ${selectedOperator.callsign}. Want to update your profile, adjust targets, log a new PR, or check your injury status?`;
+    } else {
+      greeting = `Standing by, ${selectedOperator.callsign}. I can see what you're working on — what do you need?`;
+    }
     setGunnyMessages([{
       role: 'gunny',
-      text: `Let's get to work. What are we hitting today, ${selectedOperator.callsign}?`,
+      text: greeting,
       timestamp: Date.now(),
     }]);
   }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign]);
@@ -170,6 +181,76 @@ const AppShell: React.FC<AppShellProps> = ({
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [showGunnyPanel]);
+
+  // ═══ Screen Context for Side-Panel Gunny ═══
+  // Reads what the user is currently looking at and builds a text summary
+  const getScreenContext = (): string => {
+    const op = currentSelectedOp;
+    const today = new Date().toISOString().split('T')[0];
+    const todayWorkout = op.workouts?.[today];
+
+    let context = `CURRENT SCREEN: ${activeTab.toUpperCase()} tab\n`;
+
+    if (activeTab === 'coc') {
+      // COC Dashboard — show summary stats
+      const totalWorkouts = Object.keys(op.workouts || {}).length;
+      const thisWeekWorkouts = Object.keys(op.workouts || {}).filter(d => {
+        const diff = (new Date().getTime() - new Date(d).getTime()) / (1000 * 60 * 60 * 24);
+        return diff >= 0 && diff < 7;
+      }).length;
+      context += `The operator is viewing their Command Center dashboard.\n`;
+      context += `Total workouts logged: ${totalWorkouts}\n`;
+      context += `Workouts this week: ${thisWeekWorkouts}\n`;
+      context += `Readiness: ${op.profile?.readiness || 'unknown'}/10\n`;
+      if (todayWorkout) {
+        context += `Today's workout: "${todayWorkout.title}" — ${todayWorkout.blocks.length} blocks\n`;
+      } else {
+        context += `No workout scheduled for today.\n`;
+      }
+    } else if (activeTab === 'planner') {
+      // Planner — show today's workout details if exists
+      context += `The operator is viewing their workout planner.\n`;
+      if (todayWorkout) {
+        context += `Today's workout: "${todayWorkout.title}"\n`;
+        if (todayWorkout.warmup) context += `Warmup: ${todayWorkout.warmup}\n`;
+        todayWorkout.blocks.forEach((block, i) => {
+          if (block.type === 'exercise') {
+            context += `  ${String.fromCharCode(65 + i)}) ${block.exerciseName} — ${block.prescription}\n`;
+          } else {
+            context += `  ${String.fromCharCode(65 + i)}) [Conditioning] ${block.format}: ${block.description}\n`;
+          }
+        });
+        if (todayWorkout.cooldown) context += `Cooldown: ${todayWorkout.cooldown}\n`;
+        if (todayWorkout.notes) context += `Coach's Notes: ${todayWorkout.notes}\n`;
+      } else {
+        context += `No workout scheduled for today. The operator may be browsing other days.\n`;
+      }
+      // Recent workout history
+      const recentDates = Object.keys(op.workouts || {}).sort().reverse().slice(0, 5);
+      if (recentDates.length > 0) {
+        context += `Recent workouts: ${recentDates.map(d => `${d}: "${op.workouts[d].title}"`).join(', ')}\n`;
+      }
+    } else if (activeTab === 'intel') {
+      // Intel Center — profile, nutrition, PRs, injuries
+      context += `The operator is viewing their Intel Center (profile/data hub).\n`;
+      context += `Profile: ${op.profile?.age}yo, ${op.profile?.height}, ${op.profile?.weight}lbs, ${op.profile?.bodyFat}% BF, Training age: ${op.profile?.trainingAge}\n`;
+      context += `Goals: ${op.profile?.goals?.join(', ') || 'none set'}\n`;
+      if (op.prs?.length > 0) {
+        context += `PRs: ${op.prs.map(pr => `${pr.exercise}: ${pr.weight}lbs`).join(', ')}\n`;
+      }
+      if (op.injuries?.length > 0) {
+        context += `Injuries: ${op.injuries.map(inj => `${inj.name} (${inj.status})${inj.restrictions?.length ? ' — avoid: ' + inj.restrictions.join(', ') : ''}`).join('; ')}\n`;
+      }
+      const nutri = op.nutrition?.targets;
+      if (nutri) {
+        context += `Nutrition targets: ${nutri.calories} cal, ${nutri.protein}g protein, ${nutri.carbs}g carbs, ${nutri.fat}g fat\n`;
+      }
+    } else if (activeTab === 'gunny') {
+      context += `The operator has the full Gunny AI tab open (gameplan/programming mode). They opened the side panel for quick contextual help.\n`;
+    }
+
+    return context;
+  };
 
   // Build operator context for API
   const buildOperatorContext = (): OperatorContextData => {
@@ -194,7 +275,7 @@ const AppShell: React.FC<AppShellProps> = ({
     };
   };
 
-  // Send message to Gunny API
+  // Send message to Gunny API (side panel — context-aware mode)
   const sendGunnyMessage = async () => {
     if (!gunnyInput.trim()) return;
 
@@ -216,6 +297,8 @@ const AppShell: React.FC<AppShellProps> = ({
           messages: [...gunnyMessages, userMessage],
           operatorContext: buildOperatorContext(),
           tier: selectedOperator.tier || 'standard',
+          mode: 'assistant',
+          screenContext: getScreenContext(),
         }),
       });
 
@@ -830,7 +913,7 @@ const AppShell: React.FC<AppShellProps> = ({
                 color: '#ffb800',
                 letterSpacing: '2px',
               }}>
-                GUNNY AI
+                GUNNY ASSIST
               </span>
             </div>
             <button
@@ -886,7 +969,7 @@ const AppShell: React.FC<AppShellProps> = ({
               ref={inputRef}
               type="text"
               className="gunny-input"
-              placeholder="Your orders, sergeant..."
+              placeholder="Ask about what you see..."
               value={gunnyInput}
               onChange={(e) => setGunnyInput(e.target.value)}
               onKeyPress={(e) => {
