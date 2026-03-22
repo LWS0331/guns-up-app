@@ -365,7 +365,13 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Track which operator ID we've greeted — only reset chat on actual user switch
+  const greetedOperatorRef = useRef<string>('');
+
   useEffect(() => {
+    if (greetedOperatorRef.current === operator.id) return; // Same operator, don't reset
+    greetedOperatorRef.current = operator.id;
+
     let greetingText = '';
 
     if (operator.role === 'trainer') {
@@ -385,7 +391,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     };
     setMessages([greeting]);
     inputRef.current?.focus();
-  }, [operator, allOperators]);
+  }, [operator.id, operator.role, allOperators]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -851,6 +857,22 @@ ${mealSuggestion}`;
     }
   };
 
+  // Normalize conditioning descriptions: ensure newlines are real, split "+" joined movements
+  const normalizeDescription = (desc: string): string => {
+    if (!desc) return '';
+    let normalized = desc
+      .replace(/\\n/g, '\n')           // Convert literal \n to real newlines
+      .replace(/\r\n/g, '\n');         // Normalize Windows line endings
+
+    // If the description is a single line with " + " separators (common AI format),
+    // split into separate lines for readability
+    if (!normalized.includes('\n') && (normalized.match(/\s\+\s/g) || []).length >= 2) {
+      normalized = normalized.split(/\s\+\s/).join('\n');
+    }
+
+    return normalized.trim();
+  };
+
   // Save workout to planner
   const saveWorkoutToPlanner = (workoutData: Record<string, unknown>) => {
     if (!onUpdateOperator) return;
@@ -864,7 +886,7 @@ ${mealSuggestion}`;
           id: `block-ai-${Date.now()}-${i}`,
           sortOrder: i + 1,
           format: (block.format as string) || '',
-          description: (block.description as string) || '',
+          description: normalizeDescription((block.description as string) || ''),
           isLinkedToNext: false,
         };
       }
@@ -885,10 +907,10 @@ ${mealSuggestion}`;
         id: `wk-ai-${Date.now()}`,
         date: today,
         title: (workoutData.title as string) || 'AI Generated Workout',
-        notes: (workoutData.notes as string) || '',
-        warmup: (workoutData.warmup as string) || '',
+        notes: normalizeDescription((workoutData.notes as string) || ''),
+        warmup: normalizeDescription((workoutData.warmup as string) || ''),
         blocks,
-        cooldown: (workoutData.cooldown as string) || '',
+        cooldown: normalizeDescription((workoutData.cooldown as string) || ''),
         completed: false,
       },
     };

@@ -974,10 +974,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
             {workout.notes && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
                   COACH'S NOTES
                 </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '15px', marginTop: '4px' }}>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
                   {workout.notes}
                 </div>
               </div>
@@ -985,10 +985,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
             {workout.warmup && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 'bold' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
                   WARMUP
                 </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '15px', marginTop: '4px' }}>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
                   {workout.warmup}
                 </div>
               </div>
@@ -1059,10 +1059,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
             {workout.cooldown && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 'bold' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
                   COOLDOWN
                 </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '15px', marginTop: '4px' }}>
+                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
                   {workout.cooldown}
                 </div>
               </div>

@@ -104,18 +104,27 @@ When you mention an exercise, include a YouTube search link formatted EXACTLY li
 Do this for the main compound movements and any exercise where form is critical. Use "+" instead of spaces in the URL.
 
 WORKOUT JSON:
-When you build a complete workout, ALWAYS include a JSON block at the very end of your response wrapped in <workout_json> tags. This allows the app to save the workout to the planner. Format:
+When you build a complete workout, ALWAYS include a JSON block at the very end of your response wrapped in <workout_json> tags. This allows the app to save the workout to the planner.
+
+IMPORTANT FORMATTING RULES FOR JSON:
+- For conditioning "description" fields with multiple movements, put each movement on its own line using \\n (e.g. "10 Burpees\\n15 KB Swings\\n200m Run")
+- For "warmup" and "cooldown", use \\n to separate each movement/stretch onto its own line
+- For "notes", use \\n to separate paragraphs or bullet points
+- For exercise "prescription", keep it as a SINGLE SHORT LINE (e.g. "4x8 @ RPE 8, Rest 2:00") — do NOT put multi-line content here
+- If a metcon has multiple rounds or time sections, put EACH section on its own line in the description using \\n
+
+Format:
 
 <workout_json>
 {
   "title": "Workout Title",
-  "warmup": "warmup description",
+  "warmup": "Band Pull-Aparts 3x20\\nProne Y-T-W Raises 3x10 each\\nDead Hangs 3x20-30 sec",
   "blocks": [
     {"type": "exercise", "exerciseName": "Exercise Name", "prescription": "4x8 @ RPE 8", "videoUrl": "https://www.youtube.com/results?search_query=exercise+name+form"},
-    {"type": "exercise", "exerciseName": "Exercise Name 2", "prescription": "3x12", "videoUrl": "https://www.youtube.com/results?search_query=exercise+name+2+form"},
-    {"type": "conditioning", "format": "AMRAP 8 min", "description": "10 Burpees + 15 KB Swings + 200m Run"}
+    {"type": "exercise", "exerciseName": "Exercise Name 2", "prescription": "3x12, Tempo 3-1-2-0, Rest 2:00", "videoUrl": "https://www.youtube.com/results?search_query=exercise+name+2+form"},
+    {"type": "conditioning", "format": "AMRAP 8 min", "description": "10 Burpees\\n15 KB Swings\\n200m Run"}
   ],
-  "cooldown": "cooldown description",
+  "cooldown": "Foam Roll Lats 60s each\\nPec Stretch 45s each\\nChild's Pose 60s",
   "notes": "coaching notes"
 }
 </workout_json>
