@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, PRRecord, Injury, formatHeightInput } from '@/lib/types';
 import WearableConnect from '@/components/WearableConnect';
+import ProgressCharts from '@/components/ProgressCharts';
+import { FOOD_DB } from '@/data/foods';
 
 // Local type aliases for internal state management
 interface Goal {
@@ -19,7 +21,7 @@ interface IntelCenterProps {
   onUpdateOperator: (updated: Operator) => void;
 }
 
-type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES';
+type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES';
 
 interface LocalState {
   profile: {
@@ -999,28 +1001,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
   );
 
   // ═══ QUICK NUTRITION CHAT LOG ═══
-  const FOOD_DB: Record<string, { calories: number; protein: number; carbs: number; fat: number }> = {
-    'chicken breast': { calories: 165, protein: 31, carbs: 0, fat: 3.6 }, 'chicken': { calories: 165, protein: 31, carbs: 0, fat: 3.6 },
-    'steak': { calories: 271, protein: 36, carbs: 0, fat: 13 }, 'beef': { calories: 271, protein: 36, carbs: 0, fat: 13 },
-    'salmon': { calories: 280, protein: 25, carbs: 0, fat: 17 }, 'fish': { calories: 200, protein: 22, carbs: 0, fat: 12 },
-    'tuna': { calories: 144, protein: 30, carbs: 0, fat: 1 }, 'shrimp': { calories: 99, protein: 24, carbs: 0, fat: 0.3 },
-    'turkey': { calories: 189, protein: 29, carbs: 0, fat: 7.4 }, 'pork': { calories: 242, protein: 27, carbs: 0, fat: 14 },
-    'ground beef': { calories: 217, protein: 23, carbs: 0, fat: 13 }, 'greek yogurt': { calories: 100, protein: 17, carbs: 7, fat: 0.5 },
-    'egg': { calories: 78, protein: 6, carbs: 0.6, fat: 5.3 }, 'eggs': { calories: 78, protein: 6, carbs: 0.6, fat: 5.3 },
-    'protein shake': { calories: 120, protein: 25, carbs: 2, fat: 1 }, 'milk': { calories: 61, protein: 3.2, carbs: 4.8, fat: 3.3 },
-    'rice': { calories: 206, protein: 4.3, carbs: 45, fat: 0.3 }, 'pasta': { calories: 214, protein: 7.5, carbs: 43, fat: 1.1 },
-    'bread': { calories: 79, protein: 2.7, carbs: 14, fat: 1 }, 'oatmeal': { calories: 389, protein: 17, carbs: 67, fat: 7 },
-    'sweet potato': { calories: 86, protein: 1.6, carbs: 20, fat: 0.1 }, 'potato': { calories: 77, protein: 2, carbs: 17, fat: 0.1 },
-    'banana': { calories: 89, protein: 1.1, carbs: 23, fat: 0.3 }, 'apple': { calories: 52, protein: 0.3, carbs: 14, fat: 0.2 },
-    'avocado': { calories: 160, protein: 2, carbs: 9, fat: 15 }, 'peanut butter': { calories: 188, protein: 8, carbs: 7, fat: 16 },
-    'cheese': { calories: 115, protein: 7, carbs: 0.4, fat: 9.5 }, 'almonds': { calories: 579, protein: 21, carbs: 21, fat: 50 },
-    'pizza': { calories: 285, protein: 12, carbs: 36, fat: 10 }, 'burger': { calories: 540, protein: 30, carbs: 41, fat: 28 },
-    'burrito': { calories: 450, protein: 18, carbs: 51, fat: 20 }, 'sandwich': { calories: 350, protein: 15, carbs: 40, fat: 15 },
-    'salad': { calories: 150, protein: 8, carbs: 12, fat: 8 }, 'tacos': { calories: 200, protein: 10, carbs: 20, fat: 9 },
-    'protein bar': { calories: 200, protein: 20, carbs: 20, fat: 5 }, 'coffee': { calories: 2, protein: 0, carbs: 0, fat: 0 },
-    'tortilla': { calories: 52, protein: 1.5, carbs: 11, fat: 0.5 }, 'bagel': { calories: 289, protein: 11, carbs: 56, fat: 1.5 },
-    'pancakes': { calories: 175, protein: 5, carbs: 26, fat: 6 }, 'granola': { calories: 471, protein: 13, carbs: 61, fat: 20 },
-  };
+  // FOOD_DB imported from @/data/foods (200+ foods with serving sizes)
 
   const [quickFoodInput, setQuickFoodInput] = useState('');
   const [quickFoodResult, setQuickFoodResult] = useState<{ name: string; calories: number; protein: number; carbs: number; fat: number } | null>(null);
@@ -2787,6 +2768,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         return renderNutritionTab();
       case 'PR_BOARD':
         return renderPRBoardTab();
+      case 'ANALYTICS':
+        return <ProgressCharts operator={operator} />;
       case 'INJURIES':
         return renderInjuriesTab();
       case 'PREFERENCES':
@@ -2802,6 +2785,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PROFILE: '◆',
     NUTRITION: '◈',
     PR_BOARD: '▶',
+    ANALYTICS: '◉',
     INJURIES: '▦',
     PREFERENCES: '◇',
     WEARABLES: '◎',
@@ -2811,6 +2795,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PROFILE: t('intel.profile'),
     NUTRITION: t('intel.nutrition'),
     PR_BOARD: t('intel.pr_board'),
+    ANALYTICS: 'ANALYTICS',
     INJURIES: t('intel.injuries'),
     PREFERENCES: t('intel.preferences'),
     WEARABLES: 'WEARABLES',
@@ -2855,7 +2840,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           scrollbarWidth: 'none',
           gap: '0px',
         }}>
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -2900,7 +2885,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </div>
           </div>
 
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
