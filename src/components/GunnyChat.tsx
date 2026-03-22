@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
+import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 
 interface GunnyChatProps {
@@ -1784,6 +1785,9 @@ ${mealSuggestion}`;
           placeholder="What's the mission, champ?"
           className="chat-input"
         />
+        <VoiceInput onTranscript={(text) => {
+          setInputValue(prev => prev ? prev + ' ' + text : text);
+        }} />
         <button onClick={handleSendMessage} className="send-btn" disabled={!inputValue.trim()}>
           SEND
         </button>

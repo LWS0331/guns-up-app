@@ -15,6 +15,7 @@ import IntakeForm from '@/components/IntakeForm';
 import Leaderboard from '@/components/Leaderboard';
 import Achievements from '@/components/Achievements';
 import SocialFeed from '@/components/SocialFeed';
+import BetaFeedback from '@/components/BetaFeedback';
 
 // ═══ Matrix Code Rain Background ═══
 const DataRain: React.FC = () => {
@@ -412,6 +413,12 @@ const AppShell: React.FC<AppShellProps> = ({
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00bcd4', letterSpacing: 1, marginBottom: 12 }}>SQUAD FEED</h3>
               <SocialFeed operators={operators} currentOperator={currentSelectedOp} />
             </div>
+            {currentSelectedOp.betaUser && (
+              <div style={{ marginTop: 20 }}>
+                <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff4444', letterSpacing: 1, marginBottom: 12 }}>BETA FEEDBACK</h3>
+                <BetaFeedback operatorId={currentSelectedOp.id} callsign={currentSelectedOp.callsign} />
+              </div>
+            )}
           </>
         );
       case 'planner':
