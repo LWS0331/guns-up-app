@@ -1053,11 +1053,11 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           }}
         >
           <span style={{ fontSize: '16px' }}>↻</span>
-          {operator.intake?.completed ? 'UPDATE FITNESS ASSESSMENT' : 'COMPLETE FITNESS ASSESSMENT'}
+          {(operator.intake?.completed || operator.profile?.intakeCompleted) ? 'UPDATE FITNESS ASSESSMENT' : 'COMPLETE FITNESS ASSESSMENT'}
         </button>
-        {operator.intake?.completedDate && (
+        {(operator.intake?.completedDate || operator.profile?.intakeCompletedDate) && (
           <div style={{ fontSize: '11px', color: '#555', textAlign: 'center', marginTop: '6px', fontFamily: 'Share Tech Mono, monospace' }}>
-            Last completed: {new Date(operator.intake.completedDate).toLocaleDateString()}
+            Last completed: {new Date(operator.intake?.completedDate || operator.profile?.intakeCompletedDate).toLocaleDateString()}
           </div>
         )}
       </div>

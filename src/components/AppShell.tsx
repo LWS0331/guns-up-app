@@ -125,8 +125,8 @@ const AppShell: React.FC<AppShellProps> = ({
   onLogout,
 }) => {
   const { t, language } = useLanguage();
-  // Check if intake is completed
-  const intakeCompleted = currentUser.intake?.completed === true;
+  // Check if intake is completed (check both intake column AND profile fallback flag)
+  const intakeCompleted = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true;
   const [showIntake, setShowIntake] = useState(!intakeCompleted);
   // Auto-switch to Gunny tab if profile is incomplete (onboarding needed)
   const profileIncomplete = !currentUser.profile?.age || !currentUser.profile?.weight || !currentUser.profile?.goals?.length || !currentUser.preferences?.daysPerWeek;
@@ -393,29 +393,32 @@ const AppShell: React.FC<AppShellProps> = ({
   };
 
   // Build operator context for API (includes intake assessment data for Gunny)
+  // Reads from intake column first, falls back to profile/preferences fields (which always persist)
   const buildOperatorContext = (): OperatorContextData => {
     const op = selectedOperator;
     const intake = op.intake;
+    const prof = op.profile;
+    const prefs = op.preferences;
     return {
       callsign: op.callsign,
       name: op.name,
       role: op.role || 'operator',
-      weight: op.profile?.weight,
-      height: op.profile?.height,
-      age: op.profile?.age,
-      bodyFat: op.profile?.bodyFat,
-      goals: op.profile?.goals,
-      readiness: op.profile?.readiness,
-      fitnessLevel: op.fitnessLevel || intake?.fitnessLevel,
-      experienceYears: intake?.experienceYears,
-      exerciseHistory: intake?.exerciseHistory,
-      currentActivity: intake?.currentActivity,
-      availableEquipment: intake?.availableEquipment,
-      preferredWorkoutTime: intake?.preferredWorkoutTime,
-      healthConditions: intake?.healthConditions,
-      sleepQuality: intake?.sleepQuality || op.profile?.sleep,
-      stressLevel: intake?.stressLevel || op.profile?.stress,
-      nutritionHabits: intake?.nutritionHabits,
+      weight: prof?.weight,
+      height: prof?.height,
+      age: prof?.age,
+      bodyFat: prof?.bodyFat,
+      goals: prof?.goals,
+      readiness: prof?.readiness,
+      fitnessLevel: op.fitnessLevel || intake?.fitnessLevel || prof?.fitnessLevel,
+      experienceYears: intake?.experienceYears ?? prof?.experienceYears,
+      exerciseHistory: intake?.exerciseHistory || prof?.exerciseHistory,
+      currentActivity: intake?.currentActivity || prof?.currentActivity,
+      availableEquipment: intake?.availableEquipment || prefs?.equipment,
+      preferredWorkoutTime: intake?.preferredWorkoutTime || prof?.preferredWorkoutTime,
+      healthConditions: intake?.healthConditions || prof?.healthConditions,
+      sleepQuality: intake?.sleepQuality || prof?.sleep,
+      stressLevel: intake?.stressLevel || prof?.stress,
+      nutritionHabits: intake?.nutritionHabits || prof?.nutritionHabits,
       prs: op.prs?.map(pr => ({ exercise: pr.exercise, weight: pr.weight })),
       injuries: op.injuries?.map(inj => ({
         id: inj.id,

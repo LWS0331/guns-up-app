@@ -149,6 +149,16 @@ export interface OperatorProfile {
   readiness: number;
   sleep: number;
   stress: number;
+  // Intake assessment data mirrored here for persistence fallback
+  intakeCompleted?: boolean;
+  intakeCompletedDate?: string;
+  fitnessLevel?: FitnessLevel;
+  experienceYears?: number;
+  exerciseHistory?: string;
+  currentActivity?: string;
+  healthConditions?: string[];
+  nutritionHabits?: string;
+  preferredWorkoutTime?: string;
 }
 
 export interface NutritionData {
