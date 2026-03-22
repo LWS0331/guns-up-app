@@ -134,6 +134,7 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
       exerciseHistory: intake.exerciseHistory || 'none',
       movementScreenScore: intake.movementScreenScore || 5,
       injuryHistory: intake.injuryHistory || [],
+      injuryNotes: intake.injuryNotes || '',
       availableEquipment: intake.availableEquipment || [],
       preferredWorkoutTime: intake.preferredWorkoutTime || 'morning',
       motivationFactors: intake.motivationFactors || [],
@@ -179,16 +180,40 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
         notes: 'Set during intake',
       }));
 
-    // Build injuries from intake
+    // Build injuries from intake — parse free-text into structured data
     const injuries = (fullIntake.injuryHistory || [])
       .filter(x => x && x !== 'None')
-      .map((name, i) => ({
-        id: `injury-intake-${i}`,
-        name,
-        status: 'active' as const,
-        notes: 'Reported during intake',
-        restrictions: [],
-      }));
+      .map((raw, i) => {
+        // Split on dash/hyphen to separate injury name from details
+        const parts = raw.split(/\s*[-–—]\s*/);
+        const injuryName = parts[0]?.trim() || raw.trim();
+        const details = parts.slice(1).join(' — ').trim();
+
+        // Extract restrictions from details (keywords that indicate limits)
+        const restrictionKeywords = /\b(no |avoid |can't |cannot |don't |limit |cautious|careful|only |never )/i;
+        const restrictions: string[] = [];
+        const notes: string[] = [];
+
+        if (details) {
+          // Split details by commas/semicolons to find individual clauses
+          const clauses = details.split(/[,;]+/).map(c => c.trim()).filter(Boolean);
+          clauses.forEach(clause => {
+            if (restrictionKeywords.test(clause)) {
+              restrictions.push(clause);
+            } else {
+              notes.push(clause);
+            }
+          });
+        }
+
+        return {
+          id: `injury-intake-${i}`,
+          name: injuryName,
+          status: 'active' as const,
+          notes: notes.length > 0 ? notes.join('; ') : (details || 'Reported during intake'),
+          restrictions,
+        };
+      });
 
     const updated: Operator = {
       ...operator,
@@ -410,12 +435,18 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
               </button>
             ))}
           </div>
-          <label style={s.label}>CURRENT INJURIES (describe, or leave blank)</label>
-          <textarea style={{ ...s.input, height: 80, resize: 'vertical' as const }} placeholder="e.g. Right knee ACL recovery, lower back tightness..."
+          <label style={s.label}>CURRENT INJURIES (one per line — include any restrictions or notes)</label>
+          <textarea style={{ ...s.input, height: 100, resize: 'vertical' as const }}
+            placeholder={"e.g.\nRight shoulder labrum - cautious of overuse, no heavy overhead\nLower back sciatic - hex bar OK, no conventional deadlifts back to back weeks"}
+            value={intake.injuryNotes || ''}
             onChange={e => {
-              const injuries = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-              setIntake(prev => ({ ...prev, injuryHistory: injuries }));
+              const raw = e.target.value;
+              const injuries = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+              setIntake(prev => ({ ...prev, injuryNotes: raw, injuryHistory: injuries }));
             }} />
+          <div style={{ fontSize: 9, color: '#555', marginTop: -12, marginBottom: 12, fontFamily: 'Share Tech Mono, monospace' }}>
+            Be specific — Gunny AI reads this to avoid aggravating injuries and program around restrictions.
+          </div>
           <div style={s.navRow}>
             <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
             <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>

@@ -110,6 +110,7 @@ interface OperatorContextData {
   supplements?: string[];
   prs?: Array<{ exercise: string; weight: number }>;
   injuries?: Array<{ id: string; name: string; status: string; notes?: string; restrictions?: string[] }>;
+  injuryNotes?: string;
   trainerNotes?: string;
   language?: string;
 }
@@ -446,6 +447,7 @@ const AppShell: React.FC<AppShellProps> = ({
         notes: inj.notes,
         restrictions: inj.restrictions,
       })),
+      injuryNotes: intake?.injuryNotes,
       trainerNotes: op.trainerNotes,
       language: language || 'en',
     };

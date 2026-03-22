@@ -567,13 +567,23 @@ ${operatorContext.dietaryRestrictions?.length ? `Dietary Restrictions: ${operato
 ${operatorContext.supplements?.length ? `Supplements: ${operatorContext.supplements.join(', ')}` : ''}
 Health Conditions: ${operatorContext.healthConditions?.length ? operatorContext.healthConditions.join(', ') : 'None reported'}
 
-PRs: ${operatorContext.prs?.length ? JSON.stringify(operatorContext.prs) : 'None logged yet'}
-Injuries/Restrictions: ${operatorContext.injuries?.length ? JSON.stringify(operatorContext.injuries) : 'None — all clear'}
+PRs: ${operatorContext.prs?.length ? operatorContext.prs.map(pr => `${pr.exercise}: ${pr.weight}lbs`).join(', ') : 'None logged yet'}
+
+INJURIES & RESTRICTIONS:
+${operatorContext.injuries?.length ? operatorContext.injuries.map((inj: { name: string; status: string; notes?: string; restrictions?: string[] }, idx: number) => {
+  let entry = `${idx + 1}. ${inj.name} (${(inj.status || 'active').toUpperCase()})`;
+  if (inj.notes && inj.notes !== 'Reported during intake') entry += `\n   Notes: ${inj.notes}`;
+  if (inj.restrictions?.length) entry += `\n   Restrictions: ${inj.restrictions.join('; ')}`;
+  return entry;
+}).join('\n') : 'None — all clear'}
+${operatorContext.injuryNotes ? `\nRAW INJURY NOTES FROM OPERATOR (verbatim — use these for full context):\n${operatorContext.injuryNotes}` : ''}
+
 Trainer Notes: ${operatorContext.trainerNotes || 'No special directives'}
 Preferred Language: ${operatorContext.language || 'en'}
 Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
 
-IMPORTANT: Use ALL of the above data to personalize workouts, nutrition advice, and coaching. Account for their equipment access, injuries, experience level, goals, and schedule preferences when programming.`;
+IMPORTANT: Use ALL of the above data to personalize workouts, nutrition advice, and coaching. Account for their equipment access, injuries, experience level, goals, and schedule preferences when programming.
+CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator's listed restrictions. Always reference their specific injury notes when selecting movements. If an exercise could aggravate a listed injury, substitute it and explain why. When in doubt, choose the safer option.`;
     }
 
     // Add trainer programming dataset

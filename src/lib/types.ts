@@ -31,6 +31,7 @@ export interface IntakeAssessment {
   exerciseHistory: string; // none, sporadic, consistent_beginner, consistent_intermediate, advanced_athlete
   movementScreenScore: number; // 1-10 based on self-reported mobility
   injuryHistory: string[];
+  injuryNotes?: string; // raw free-text injury descriptions from intake
   availableEquipment: string[];
   preferredWorkoutTime: string;
   motivationFactors: string[];
