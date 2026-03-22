@@ -17,6 +17,7 @@
     "@anthropic-ai/sdk": "^0.80.0",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
+    "@tryvital/vital-node": "^3.1.551",
     "dotenv": "^17.3.1",
     "next": "^14.2.35",
     "pg": "^8.20.0",

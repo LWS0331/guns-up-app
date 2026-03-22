@@ -58,9 +58,39 @@ export async function POST() {
       ON "ChatHistory"("operatorId", "chatType");
     `);
 
+    // Create WearableConnection table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "WearableConnection" (
+        "id" TEXT NOT NULL,
+        "operatorId" TEXT NOT NULL,
+        "vitalUserId" TEXT NOT NULL,
+        "provider" TEXT NOT NULL,
+        "providerName" TEXT NOT NULL,
+        "connectedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "lastSyncAt" TIMESTAMP(3),
+        "syncData" JSONB NOT NULL DEFAULT '{}',
+        "active" BOOLEAN NOT NULL DEFAULT true,
+        CONSTRAINT "WearableConnection_pkey" PRIMARY KEY ("id")
+      );
+    `);
+
+    // Create indexes for WearableConnection
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "WearableConnection_operatorId_provider_key"
+      ON "WearableConnection"("operatorId", "provider");
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "WearableConnection_operatorId_idx"
+      ON "WearableConnection"("operatorId");
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "WearableConnection_vitalUserId_idx"
+      ON "WearableConnection"("vitalUserId");
+    `);
+
     await pool.end();
 
-    return NextResponse.json({ ok: true, message: 'Tables created successfully' });
+    return NextResponse.json({ ok: true, message: 'Tables created successfully (Operator, ChatHistory, WearableConnection)' });
   } catch (error) {
     await pool.end();
     console.error('Migration error:', error);

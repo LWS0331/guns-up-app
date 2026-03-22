@@ -37,9 +37,25 @@ model Operator {
 model ChatHistory {
   id          String   @id @default(cuid())
   operatorId  String
-  chatType    String                  // "gunny-tab" | "gunny-panel"
+  chatType    String                  // "gunny-tab" | "gunny-panel" | "gunny-onboarding"
   messages    Json     @default("[]") // Array of chat messages
   updatedAt   DateTime @updatedAt
 
   @@unique([operatorId, chatType])
+}
+
+model WearableConnection {
+  id              String   @id @default(cuid())
+  operatorId      String
+  vitalUserId     String                  // Junction/Vital user UUID
+  provider        String                  // e.g. "oura", "whoop_v2", "garmin", "fitbit"
+  providerName    String                  // Display name e.g. "Oura Ring"
+  connectedAt     DateTime @default(now())
+  lastSyncAt      DateTime?
+  syncData        Json     @default("{}") // Latest health metrics snapshot
+  active          Boolean  @default(true)
+
+  @@unique([operatorId, provider])
+  @@index([operatorId])
+  @@index([vitalUserId])
 }

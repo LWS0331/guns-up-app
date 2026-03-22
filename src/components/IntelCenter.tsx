@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, PRRecord, Injury } from '@/lib/types';
+import WearableConnect from '@/components/WearableConnect';
 
 // Local type aliases for internal state management
 interface Goal {
@@ -18,7 +19,7 @@ interface IntelCenterProps {
   onUpdateOperator: (updated: Operator) => void;
 }
 
-type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'INJURIES' | 'PREFERENCES';
+type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES';
 
 interface LocalState {
   profile: {
@@ -2541,6 +2542,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         return renderInjuriesTab();
       case 'PREFERENCES':
         return renderPreferencesTab();
+      case 'WEARABLES':
+        return <WearableConnect operator={operator} onUpdateOperator={onUpdateOperator} />;
       default:
         return null;
     }
@@ -2552,6 +2555,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PR_BOARD: '▶',
     INJURIES: '▦',
     PREFERENCES: '◇',
+    WEARABLES: '◎',
   };
 
   const getTabLabels = (): Record<SubTab, string> => ({
@@ -2560,6 +2564,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PR_BOARD: t('intel.pr_board'),
     INJURIES: t('intel.injuries'),
     PREFERENCES: t('intel.preferences'),
+    WEARABLES: 'WEARABLES',
   });
 
   const [isMobile, setIsMobile] = useState(false);
@@ -2601,7 +2606,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           scrollbarWidth: 'none',
           gap: '0px',
         }}>
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -2646,7 +2651,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </div>
           </div>
 
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
