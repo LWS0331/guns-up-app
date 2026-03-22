@@ -89,7 +89,9 @@ const AppShell: React.FC<AppShellProps> = ({
   onLogout,
 }) => {
   const { t, language } = useLanguage();
-  const [activeTab, setActiveTab] = useState<AppTab>('coc');
+  // Auto-switch to Gunny tab if profile is incomplete (onboarding needed)
+  const profileIncomplete = !currentUser.profile?.age || !currentUser.profile?.weight || !currentUser.profile?.goals?.length || !currentUser.preferences?.daysPerWeek;
+  const [activeTab, setActiveTab] = useState<AppTab>(profileIncomplete ? 'gunny' : 'coc');
   const [selectedOperator, setSelectedOperator] = useState<Operator>(currentUser);
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);

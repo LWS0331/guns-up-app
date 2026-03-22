@@ -405,38 +405,208 @@ const loadChatFromLocalStorage = (opId: string): Message[] | null => {
   } catch { return null; }
 };
 
+// Check if operator needs onboarding (empty/incomplete profile)
+const needsOnboarding = (op: Operator): boolean => {
+  const p = op.profile;
+  // If no age, no weight, or no goals set — needs onboarding
+  if (!p?.age || !p?.weight || !p?.goals?.length) return true;
+  // If no training preferences set
+  if (!op.preferences?.daysPerWeek || !op.preferences?.sessionDuration) return true;
+  return false;
+};
+
 export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, onUpdateOperator }) => {
   const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isOnboarding, setIsOnboarding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Track which operator ID we've initialized — only reset chat on actual user switch
   const initOperatorRef = useRef<string>('');
 
+  // Apply profile data from onboarding AI response
+  const applyProfileData = (profileData: Record<string, unknown>) => {
+    if (!onUpdateOperator) return;
+    const updated = { ...operator };
+
+    if (profileData.profile && typeof profileData.profile === 'object') {
+      const p = profileData.profile as Record<string, unknown>;
+      updated.profile = {
+        ...updated.profile,
+        ...(p.age && { age: Number(p.age) }),
+        ...(p.height && { height: String(p.height) }),
+        ...(p.weight && { weight: Number(p.weight) }),
+        ...(p.bodyFat && { bodyFat: Number(p.bodyFat) }),
+        ...(p.trainingAge && { trainingAge: String(p.trainingAge) }),
+        ...(p.goals && Array.isArray(p.goals) && { goals: p.goals as string[] }),
+        ...(p.readiness && { readiness: Number(p.readiness) }),
+        ...(p.sleep && { sleep: Number(p.sleep) }),
+        ...(p.stress && { stress: Number(p.stress) }),
+      };
+    }
+
+    if (profileData.preferences && typeof profileData.preferences === 'object') {
+      const pref = profileData.preferences as Record<string, unknown>;
+      updated.preferences = {
+        ...updated.preferences,
+        ...(pref.split && { split: String(pref.split) }),
+        ...(pref.equipment && Array.isArray(pref.equipment) && { equipment: pref.equipment as string[] }),
+        ...(pref.sessionDuration && { sessionDuration: Number(pref.sessionDuration) }),
+        ...(pref.daysPerWeek && { daysPerWeek: Number(pref.daysPerWeek) }),
+        ...(pref.weakPoints && Array.isArray(pref.weakPoints) && { weakPoints: pref.weakPoints as string[] }),
+        ...(pref.avoidMovements && Array.isArray(pref.avoidMovements) && { avoidMovements: pref.avoidMovements as string[] }),
+      };
+    }
+
+    if (profileData.injuries && Array.isArray(profileData.injuries)) {
+      const injuries = (profileData.injuries as Array<Record<string, unknown>>).map((inj, i) => ({
+        id: `inj-onboard-${Date.now()}-${i}`,
+        name: String(inj.name || ''),
+        status: (inj.status as 'active' | 'recovering' | 'cleared') || 'active',
+        notes: String(inj.notes || ''),
+        restrictions: Array.isArray(inj.restrictions) ? inj.restrictions as string[] : [],
+      }));
+      if (injuries.length > 0) {
+        updated.injuries = [...(updated.injuries || []), ...injuries];
+      }
+    }
+
+    if (profileData.nutrition && typeof profileData.nutrition === 'object') {
+      const n = profileData.nutrition as Record<string, unknown>;
+      if (n.targets && typeof n.targets === 'object') {
+        const t = n.targets as Record<string, unknown>;
+        updated.nutrition = {
+          ...updated.nutrition,
+          targets: {
+            calories: Number(t.calories) || updated.nutrition?.targets?.calories || 2500,
+            protein: Number(t.protein) || updated.nutrition?.targets?.protein || 150,
+            carbs: Number(t.carbs) || updated.nutrition?.targets?.carbs || 250,
+            fat: Number(t.fat) || updated.nutrition?.targets?.fat || 70,
+          },
+        };
+      }
+    }
+
+    if (profileData.prs && Array.isArray(profileData.prs)) {
+      const prs = (profileData.prs as Array<Record<string, unknown>>).map((pr, i) => ({
+        id: `pr-onboard-${Date.now()}-${i}`,
+        exercise: String(pr.exercise || ''),
+        weight: Number(pr.weight) || 0,
+        reps: Number(pr.reps) || 1,
+        date: new Date().toISOString().split('T')[0],
+        notes: String(pr.notes || 'Set during onboarding'),
+      }));
+      if (prs.length > 0) {
+        updated.prs = [...(updated.prs || []), ...prs];
+      }
+    }
+
+    onUpdateOperator(updated);
+
+    // If onboarding is complete, exit onboarding mode
+    if (profileData.onboardingComplete) {
+      setIsOnboarding(false);
+    }
+  };
+
   useEffect(() => {
     if (initOperatorRef.current === operator.id) return;
     initOperatorRef.current = operator.id;
 
+    const shouldOnboard = needsOnboarding(operator);
+    setIsOnboarding(shouldOnboard);
+
     // Try API first, then localStorage, then generate greeting
     const loadChat = async () => {
+      // If onboarding needed, check for existing onboarding chat first
+      if (shouldOnboard) {
+        const onboardMessages = await loadChatFromAPI(operator.id, 'gunny-onboarding');
+        if (onboardMessages && onboardMessages.length > 0) {
+          setMessages(onboardMessages);
+          inputRef.current?.focus();
+          return;
+        }
+      }
+
       const apiMessages = await loadChatFromAPI(operator.id, 'gunny-tab');
       if (apiMessages && apiMessages.length > 0) {
-        setMessages(apiMessages);
+        // If we have chat history but still need onboarding, don't load old chat — start onboarding
+        if (shouldOnboard) {
+          // Fall through to onboarding greeting below
+        } else {
+          setMessages(apiMessages);
+          inputRef.current?.focus();
+          return;
+        }
+      }
+
+      if (!shouldOnboard) {
+        const localMessages = loadChatFromLocalStorage(operator.id);
+        if (localMessages && localMessages.length > 0) {
+          setMessages(localMessages);
+          saveChatToStorage(operator.id, 'gunny-tab', localMessages);
+          inputRef.current?.focus();
+          return;
+        }
+      }
+
+      if (shouldOnboard) {
+        // Start onboarding — send initial message to Gunny API
+        setIsTyping(true);
+        try {
+          const res = await fetch('/api/gunny', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{ role: 'user', text: 'I just signed up. Start my intake assessment.' }],
+              tier: operator.tier,
+              mode: 'onboarding',
+              operatorContext: {
+                callsign: operator.callsign,
+                name: operator.name,
+                role: operator.role,
+                weight: operator.profile?.weight || 0,
+                goals: operator.profile?.goals || [],
+                readiness: operator.profile?.readiness || 0,
+                prs: 'None',
+                injuries: 'None',
+                trainerNotes: operator.trainerNotes || 'None',
+                language: 'en',
+              },
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const greeting: Message = {
+              id: 'onboard-greeting-' + Date.now(),
+              role: 'gunny',
+              text: data.response,
+              timestamp: new Date(),
+            };
+            setMessages([greeting]);
+            if (data.profileData) applyProfileData(data.profileData);
+          } else {
+            throw new Error('API error');
+          }
+        } catch {
+          // Fallback onboarding greeting
+          const greeting: Message = {
+            id: 'onboard-greeting-' + Date.now(),
+            role: 'gunny',
+            text: `Listen up, ${operator.callsign}. Before I can build you a program that actually works, I need to know what I'm working with. Let's run a quick intake.\n\nFirst — how old are you, what's your height and weight, and how long have you been training?`,
+            timestamp: new Date(),
+          };
+          setMessages([greeting]);
+        }
+        setIsTyping(false);
         inputRef.current?.focus();
         return;
       }
-      const localMessages = loadChatFromLocalStorage(operator.id);
-      if (localMessages && localMessages.length > 0) {
-        setMessages(localMessages);
-        // Migrate localStorage data to API
-        saveChatToStorage(operator.id, 'gunny-tab', localMessages);
-        inputRef.current?.focus();
-        return;
-      }
-      // No saved history — generate fresh greeting
+
+      // No saved history, no onboarding — generate fresh greeting
       let greetingText = '';
       if (operator.role === 'trainer') {
         const clientCount = getTrainerClients(operator.id, allOperators).length;
@@ -463,9 +633,10 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   useEffect(() => {
     if (messages.length > 0 && messages.length !== prevMsgCountRef.current) {
       prevMsgCountRef.current = messages.length;
-      saveChatToStorage(operator.id, 'gunny-tab', messages);
+      const chatType = isOnboarding ? 'gunny-onboarding' : 'gunny-tab';
+      saveChatToStorage(operator.id, chatType, messages);
     }
-  }, [messages, operator.id]);
+  }, [messages, operator.id, isOnboarding]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -893,7 +1064,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[]): Promise<{ response: string; workoutData?: Record<string, unknown> } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; profileData?: Record<string, unknown> } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -913,6 +1084,8 @@ ${mealSuggestion}`;
         language: 'en',
       };
 
+      const apiMode = forceMode || (isOnboarding ? 'onboarding' : undefined);
+
       const res = await fetch('/api/gunny', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -920,12 +1093,13 @@ ${mealSuggestion}`;
           messages: recentMessages,
           tier: operator.tier,
           operatorContext,
+          ...(apiMode && { mode: apiMode }),
         }),
       });
 
       if (!res.ok) throw new Error('API error');
       const data = await res.json();
-      return { response: data.response, workoutData: data.workoutData };
+      return { response: data.response, workoutData: data.workoutData, profileData: data.profileData };
     } catch {
       return null;
     }
@@ -1001,6 +1175,29 @@ ${mealSuggestion}`;
     setMessages(updatedMessages);
     setInputValue('');
     setIsTyping(true);
+
+    // ═══ ONBOARDING MODE — always use API with onboarding prompt ═══
+    if (isOnboarding) {
+      const apiResult = await callGunnyAPI(updatedMessages, 'onboarding');
+      const responseText = apiResult?.response || 'Copy that. Tell me more about your training background and goals.';
+
+      // Apply any profile data extracted from the response
+      if (apiResult?.profileData) {
+        applyProfileData(apiResult.profileData);
+      }
+
+      const gunnyResponse: Message = {
+        id: 'gunny-' + Date.now(), role: 'gunny',
+        text: responseText,
+        timestamp: new Date(),
+      };
+      setIsTyping(false);
+      setMessages((prev) => [...prev, gunnyResponse]);
+      inputRef.current?.focus();
+      return;
+    }
+
+    // ═══ NORMAL MODE ═══
 
     // Check for "add it" / "save it" / "I like it" — save last workout to planner
     const isSaveCommand = /\b(add it|save it|i like it|lock it in|add to planner|save to planner|add that|save that|add this|log it)\b/i.test(lower);
@@ -1253,7 +1450,7 @@ ${mealSuggestion}`;
             textTransform: 'uppercase',
             marginTop: '2px',
           }}>
-            FUNCTIONAL BODYBUILDER TRAINER
+            {isOnboarding ? 'INTAKE ASSESSMENT' : 'FUNCTIONAL BODYBUILDER TRAINER'}
           </div>
         </div>
 
@@ -1307,21 +1504,43 @@ ${mealSuggestion}`;
         </div>
       </div>
 
-      {/* Quick Action Buttons */}
-      <div style={{
-        display: 'flex',
-        gap: '6px',
-        padding: '10px 20px',
-        borderBottom: '1px solid rgba(0,255,65,0.05)',
-        backgroundColor: 'rgba(0,255,65,0.01)',
-      }}>
-        {quickActions.map((action) => (
-          <button key={action.id} className="quick-btn" onClick={() => handleQuickActionById(action.id)}>
-            <span style={{ color: '#00ff41', fontSize: '15px', opacity: 0.6 }}>{action.icon}</span>
-            {action.label}
-          </button>
-        ))}
-      </div>
+      {/* Quick Action Buttons — hidden during onboarding */}
+      {isOnboarding ? (
+        <div style={{
+          padding: '10px 20px',
+          borderBottom: '1px solid rgba(255,184,0,0.1)',
+          backgroundColor: 'rgba(255,184,0,0.03)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}>
+          <div style={{
+            width: '8px', height: '8px', borderRadius: '50%',
+            background: '#ffb800', animation: 'typingDot 1.5s infinite',
+          }} />
+          <span style={{
+            fontFamily: '"Share Tech Mono", monospace',
+            fontSize: '13px', color: '#ffb800', letterSpacing: '1.5px',
+          }}>
+            PROFILE INTAKE IN PROGRESS — Answer Gunny&apos;s questions to unlock full features
+          </span>
+        </div>
+      ) : (
+        <div style={{
+          display: 'flex',
+          gap: '6px',
+          padding: '10px 20px',
+          borderBottom: '1px solid rgba(0,255,65,0.05)',
+          backgroundColor: 'rgba(0,255,65,0.01)',
+        }}>
+          {quickActions.map((action) => (
+            <button key={action.id} className="quick-btn" onClick={() => handleQuickActionById(action.id)}>
+              <span style={{ color: '#00ff41', fontSize: '15px', opacity: 0.6 }}>{action.icon}</span>
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Messages Area */}
       <div style={{
