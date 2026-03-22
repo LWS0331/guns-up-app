@@ -199,8 +199,8 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
           50% { filter: brightness(1.15) drop-shadow(0 0 20px rgba(0,255,65,0.5)); }
         }
         @keyframes pinBoxIdle {
-          0%, 100% { border-color: rgba(0,255,65,0.08); }
-          50% { border-color: rgba(0,255,65,0.15); }
+          0%, 100% { border-color: rgba(0,255,65,0.15); }
+          50% { border-color: rgba(0,255,65,0.3); }
         }
         @keyframes operatorSlideIn {
           0% { opacity: 0; transform: translateY(20px) scale(0.9); filter: blur(8px); }
@@ -450,8 +450,8 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
                 const filled = index < pin.length;
                 const isActive = index === pin.length;
 
-                let borderColor = 'rgba(0,255,65,0.06)';
-                let bgColor = 'rgba(0,255,65,0.01)';
+                let borderColor = 'rgba(0,255,65,0.2)';
+                let bgColor = 'rgba(0,255,65,0.03)';
                 let shadow = 'none';
                 let anim = 'pinBoxIdle 4s ease-in-out infinite';
 
@@ -489,15 +489,15 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
                     <div style={{
                       position: 'absolute', top: -1, left: -1,
                       width: '6px', height: '6px',
-                      borderTop: `1px solid ${filled ? 'rgba(0,255,65,0.5)' : 'rgba(0,255,65,0.15)'}`,
-                      borderLeft: `1px solid ${filled ? 'rgba(0,255,65,0.5)' : 'rgba(0,255,65,0.15)'}`,
+                      borderTop: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
+                      borderLeft: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
                       transition: 'border-color 0.15s ease',
                     }} />
                     <div style={{
                       position: 'absolute', bottom: -1, right: -1,
                       width: '6px', height: '6px',
-                      borderBottom: `1px solid ${filled ? 'rgba(0,255,65,0.5)' : 'rgba(0,255,65,0.15)'}`,
-                      borderRight: `1px solid ${filled ? 'rgba(0,255,65,0.5)' : 'rgba(0,255,65,0.15)'}`,
+                      borderBottom: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
+                      borderRight: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
                       transition: 'border-color 0.15s ease',
                     }} />
 
@@ -882,22 +882,19 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
           </div>
         )}
 
-        {/* Legal Footer */}
+        {/* Legal Footer — positioned at bottom of viewport, outside content flow */}
         <div style={{
-          position: 'absolute',
-          bottom: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
+          marginTop: '40px',
           textAlign: 'center',
-          fontSize: '12px',
-          color: '#666',
+          fontSize: '11px',
+          color: '#555',
           fontFamily: 'Chakra Petch, sans-serif',
           maxWidth: '90%',
         }}>
-          <p style={{ margin: 0, marginBottom: '8px' }}>
+          <p style={{ margin: 0 }}>
             By logging in, you agree to our{' '}
             <button
-              onClick={() => setShowTOS(true)}
+              onClick={(e) => { e.stopPropagation(); setShowTOS(true); }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -905,13 +902,14 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
                 cursor: 'pointer',
                 textDecoration: 'underline',
                 font: 'inherit',
+                padding: 0,
               }}
             >
               Terms of Service
             </button>
             {' '}and{' '}
             <button
-              onClick={() => setShowPrivacy(true)}
+              onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -919,6 +917,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
                 cursor: 'pointer',
                 textDecoration: 'underline',
                 font: 'inherit',
+                padding: 0,
               }}
             >
               Privacy Policy
