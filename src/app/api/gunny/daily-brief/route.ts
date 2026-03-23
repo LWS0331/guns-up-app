@@ -91,7 +91,7 @@ ADAPTATION RULES:
     let parsed;
     try {
       let jsonStr = text;
-      const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+      const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]+)\n?\s*```/);
       if (fenceMatch) {
         jsonStr = fenceMatch[1].trim();
       } else {

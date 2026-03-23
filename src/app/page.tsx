@@ -129,13 +129,26 @@ export default function Home() {
 
   // Persist operator updates to database
   const persistOperator = useCallback(async (updated: Operator) => {
-    if (!dbReady) return;
+    // Always save intake completion to localStorage as bulletproof backup
+    if (updated.intake?.completed) {
+      try {
+        localStorage.setItem(`guns-up-intake-done-${updated.id}`, 'true');
+      } catch { /* localStorage unavailable */ }
+    }
+
+    // Attempt DB save even if dbReady is false — the DB may have come back online
     try {
-      await fetch(`/api/operators/${updated.id}`, {
+      const res = await fetch(`/api/operators/${updated.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
       });
+      if (!res.ok) {
+        console.error('DB save failed:', res.status, await res.text().catch(() => ''));
+      } else if (!dbReady) {
+        // DB recovered — mark as ready
+        setDbReady(true);
+      }
     } catch (err) {
       console.warn('Failed to persist operator to DB:', err);
     }

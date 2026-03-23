@@ -144,17 +144,19 @@ const AppShell: React.FC<AppShellProps> = ({
   onLogout,
 }) => {
   const { t, language } = useLanguage();
-  // Check if intake is completed (check both intake column AND profile fallback flag)
-  const intakeCompleted = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true;
+  // Check if intake is completed — 3-layer check: intake column, profile flag, localStorage backup
+  const lsIntakeDone = (() => { try { return localStorage.getItem(`guns-up-intake-done-${currentUser.id}`) === 'true'; } catch { return false; } })();
+  const intakeCompleted = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true || lsIntakeDone;
   const [showIntake, setShowIntake] = useState(!intakeCompleted);
 
   // Sync showIntake when currentUser data updates (e.g. after save completes and re-fetch)
   useEffect(() => {
-    const completed = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true;
+    const lsDone = (() => { try { return localStorage.getItem(`guns-up-intake-done-${currentUser.id}`) === 'true'; } catch { return false; } })();
+    const completed = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true || lsDone;
     if (completed) {
       setShowIntake(false);
     }
-  }, [currentUser.intake?.completed, currentUser.profile?.intakeCompleted]);
+  }, [currentUser.id, currentUser.intake?.completed, currentUser.profile?.intakeCompleted]);
 
   // Auto-switch to Gunny tab if profile is incomplete (onboarding needed)
   const profileIncomplete = !currentUser.profile?.age || !currentUser.profile?.weight || !currentUser.profile?.goals?.length || !currentUser.preferences?.daysPerWeek;

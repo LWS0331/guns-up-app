@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     const response = await client.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: 16384,
       messages: [
         {
           role: 'user',
@@ -98,9 +98,9 @@ CRITICAL RULES:
 2. Match training volume and intensity to their fitness level — beginners get 3-4 exercises per session, advanced get 5-7
 3. Use ONLY equipment they have access to — if they only have dumbbells, program dumbbell movements
 4. Nutrition must align with their stated goals, dietary restrictions, and current diet approach
-5. If operator is sedentary/beginner, first 2 weeks should be conservative — build the habit before building intensity
+5. If operator is sedentary/beginner, keep volume conservative — build the habit before building intensity
 6. Include REST DAYS — beginners need more rest, advanced can train more frequently
-7. Generate exactly 2 weeks of programming (Week 1 = foundation, Week 2 = slight progression)
+7. Generate exactly 1 week of programming (7 days). The plan adapts weekly via DailyBrief — no need to pre-generate multiple weeks
 8. Each week must have exactly 7 days (including rest days)
 9. Sample nutrition day must total close to the daily calorie target
 10. Address the operator by their CALLSIGN in the summary and gunnyMessage`,
@@ -115,8 +115,8 @@ CRITICAL RULES:
       // Try multiple extraction strategies
       let jsonStr = text;
 
-      // Strategy 1: Extract from ```json ... ``` code fence
-      const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+      // Strategy 1: Extract from ```json ... ``` code fence (greedy to capture full JSON)
+      const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]+)\n?\s*```/);
       if (fenceMatch) {
         jsonStr = fenceMatch[1].trim();
       } else {
