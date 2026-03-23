@@ -298,12 +298,18 @@ export default function VoiceInput({
     );
   }
 
+  const showTranscript = interimTranscript || commandFeedback || error;
+
   return (
     <>
       <style>{`
         @keyframes voicePulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(255, 32, 32, 0.6); }
           50% { box-shadow: 0 0 0 8px rgba(255, 32, 32, 0); }
+        }
+        @keyframes commsGlow {
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 1; }
         }
         @keyframes scanline {
           0% { transform: translateX(-100%); }
@@ -315,76 +321,123 @@ export default function VoiceInput({
           85% { opacity: 1; transform: translateY(0); }
           100% { opacity: 0; transform: translateY(-4px); }
         }
+        @keyframes transcriptFadeIn {
+          0% { opacity: 0; transform: translateY(6px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
 
-      <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 0 }}>
-        {/* Radio comms transcript bar — horizontal, appears left of mic */}
-        {(interimTranscript || commandFeedback) && (
+      <div style={{
+        position: 'relative',
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 0,
+      }}>
+        {/* Transcript bubble — positioned above mic */}
+        {showTranscript && (
           <div style={{
             position: 'absolute',
-            right: compact ? '100%' : '100%',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            marginRight: 8,
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginBottom: 6,
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            background: commandFeedback ? 'rgba(0,255,65,0.08)' : 'rgba(255,140,0,0.06)',
-            border: `1px solid ${commandFeedback ? 'rgba(0,255,65,0.4)' : 'rgba(255,140,0,0.3)'}`,
+            gap: 5,
+            background: error
+              ? 'rgba(255,32,32,0.1)'
+              : commandFeedback
+                ? 'rgba(0,255,65,0.08)'
+                : 'rgba(255,140,0,0.06)',
+            border: `1px solid ${
+              error
+                ? 'rgba(255,32,32,0.4)'
+                : commandFeedback
+                  ? 'rgba(0,255,65,0.4)'
+                  : 'rgba(255,140,0,0.3)'
+            }`,
             borderRadius: 4,
-            padding: '4px 10px 4px 8px',
+            padding: '3px 8px',
             whiteSpace: 'nowrap',
-            maxWidth: compact ? 200 : 320,
+            maxWidth: compact ? 180 : 260,
             overflow: 'hidden',
-            zIndex: 10,
-            animation: commandFeedback ? 'feedbackFlash 3s ease-in-out' : undefined,
+            zIndex: 20,
+            animation: commandFeedback
+              ? 'feedbackFlash 3s ease-in-out'
+              : 'transcriptFadeIn 0.15s ease-out',
+            pointerEvents: 'none',
           }}>
-            {/* Signal indicator */}
+            {/* Signal dot */}
             <div style={{
-              width: 6,
-              height: 6,
+              width: 5,
+              height: 5,
               borderRadius: '50%',
-              background: commandFeedback ? '#00ff41' : '#FF8C00',
+              background: error ? '#ff2020' : commandFeedback ? '#00ff41' : '#FF8C00',
               flexShrink: 0,
-              boxShadow: commandFeedback
-                ? '0 0 4px rgba(0,255,65,0.8)'
-                : '0 0 4px rgba(255,140,0,0.8)',
+              boxShadow: `0 0 4px ${error ? 'rgba(255,32,32,0.8)' : commandFeedback ? 'rgba(0,255,65,0.8)' : 'rgba(255,140,0,0.8)'}`,
             }} />
-            {/* Scanline effect inside bar */}
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              overflow: 'hidden',
-              borderRadius: 4,
-              pointerEvents: 'none',
-            }}>
-              {!commandFeedback && (
+            {/* Scanline overlay */}
+            {!commandFeedback && !error && (
+              <div style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                overflow: 'hidden',
+                borderRadius: 4,
+                pointerEvents: 'none',
+              }}>
                 <div style={{
                   width: '30%',
                   height: '100%',
                   background: 'linear-gradient(90deg, transparent, rgba(255,140,0,0.08), transparent)',
                   animation: 'scanline 2s linear infinite',
                 }} />
-              )}
-            </div>
-            {/* Transcript text */}
+              </div>
+            )}
+            {/* Text */}
             <span style={{
               fontFamily: 'Share Tech Mono, monospace',
-              fontSize: 11,
-              color: commandFeedback ? '#00ff41' : '#FF8C00',
+              fontSize: 10,
+              color: error ? '#ff2020' : commandFeedback ? '#00ff41' : '#FF8C00',
               letterSpacing: 0.5,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
+              textTransform: 'uppercase',
             }}>
-              {commandFeedback || interimTranscript}
+              {error || commandFeedback || interimTranscript}
             </span>
+            {/* Bottom notch/arrow pointing down to mic */}
+            <div style={{
+              position: 'absolute',
+              bottom: -4,
+              left: '50%',
+              transform: 'translateX(-50%) rotate(45deg)',
+              width: 7,
+              height: 7,
+              background: error
+                ? 'rgba(255,32,32,0.1)'
+                : commandFeedback
+                  ? 'rgba(0,255,65,0.08)'
+                  : 'rgba(255,140,0,0.06)',
+              borderRight: `1px solid ${
+                error
+                  ? 'rgba(255,32,32,0.4)'
+                  : commandFeedback
+                    ? 'rgba(0,255,65,0.4)'
+                    : 'rgba(255,140,0,0.3)'
+              }`,
+              borderBottom: `1px solid ${
+                error
+                  ? 'rgba(255,32,32,0.4)'
+                  : commandFeedback
+                    ? 'rgba(0,255,65,0.4)'
+                    : 'rgba(255,140,0,0.3)'
+              }`,
+            }} />
           </div>
         )}
 
-        {/* Mic button */}
+        {/* Comms button — military radio icon */}
         <button
           onClick={toggleListening}
           disabled={disabled}
@@ -393,13 +446,12 @@ export default function VoiceInput({
           style={{
             width: compact ? 36 : 44,
             height: compact ? 36 : 44,
-            borderRadius: '50%',
+            borderRadius: compact ? 6 : 8,
             background: isListening
               ? 'radial-gradient(circle, rgba(255,32,32,0.15) 0%, rgba(255,32,32,0.05) 100%)'
               : 'rgba(0,255,65,0.05)',
-            border: `2px solid ${isListening ? '#ff2020' : 'rgba(0,255,65,0.4)'}`,
+            border: `1.5px solid ${isListening ? '#ff2020' : 'rgba(0,255,65,0.35)'}`,
             color: isListening ? '#ff2020' : '#00ff41',
-            fontSize: compact ? 16 : 20,
             cursor: disabled ? 'not-allowed' : 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -408,50 +460,62 @@ export default function VoiceInput({
             opacity: disabled ? 0.4 : 1,
             animation: isListening ? 'voicePulse 1.5s infinite' : undefined,
             flexShrink: 0,
+            position: 'relative',
           }}
         >
-          {isListening ? '●' : '🎙'}
+          {/* Military radio/comms SVG icon */}
+          <svg
+            width={compact ? 16 : 20}
+            height={compact ? 16 : 20}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              animation: isListening ? 'commsGlow 1s ease-in-out infinite' : undefined,
+            }}
+          >
+            {isListening ? (
+              /* Active: radio signal waves */
+              <>
+                <path d="M12 18v-6" />
+                <path d="M12 6V4" />
+                <circle cx="12" cy="12" r="2" fill="currentColor" />
+                <path d="M7.5 7.5a6.36 6.36 0 0 1 9 0" />
+                <path d="M5.1 5.1a10 10 0 0 1 13.8 0" />
+                <path d="M16.5 16.5a6.36 6.36 0 0 1-9 0" />
+                <path d="M18.9 18.9a10 10 0 0 1-13.8 0" />
+              </>
+            ) : (
+              /* Idle: tactical radio handset */
+              <>
+                <rect x="6" y="4" width="12" height="16" rx="2" />
+                <line x1="10" y1="8" x2="14" y2="8" />
+                <line x1="10" y1="11" x2="14" y2="11" />
+                <circle cx="12" cy="16" r="1.5" />
+                <line x1="12" y1="2" x2="12" y2="4" />
+                <line x1="9" y1="1" x2="12" y2="2" />
+              </>
+            )}
+          </svg>
+
+          {/* Active listening badge */}
+          {activeListening && isListening && (
+            <div style={{
+              position: 'absolute',
+              top: -3,
+              right: -3,
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#00ff41',
+              border: '1.5px solid #0a0a0a',
+              boxShadow: '0 0 6px rgba(0,255,65,0.8)',
+            }} />
+          )}
         </button>
-
-        {/* Active listening indicator */}
-        {activeListening && isListening && (
-          <div style={{
-            position: 'absolute',
-            top: -2,
-            right: -2,
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: '#00ff41',
-            border: '1px solid #0a0a0a',
-            boxShadow: '0 0 4px rgba(0,255,65,0.8)',
-          }} />
-        )}
-
-        {/* Error */}
-        {error && (
-          <div style={{
-            position: 'absolute',
-            right: '100%',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            marginRight: 8,
-            background: 'rgba(255,32,32,0.08)',
-            border: '1px solid rgba(255,32,32,0.3)',
-            borderRadius: 4,
-            padding: '4px 8px',
-            whiteSpace: 'nowrap',
-            zIndex: 10,
-          }}>
-            <span style={{
-              fontFamily: 'Share Tech Mono, monospace',
-              fontSize: 10,
-              color: '#ff2020',
-            }}>
-              {error}
-            </span>
-          </div>
-        )}
       </div>
     </>
   );
