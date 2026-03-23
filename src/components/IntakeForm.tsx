@@ -255,6 +255,9 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
       preferences: {
         ...operator.preferences,
         equipment: fullIntake.availableEquipment,
+        daysPerWeek: fullIntake.daysPerWeek || 4,
+        sessionDuration: fullIntake.sessionDuration || 60,
+        split: fullIntake.preferredSplit || 'No Preference',
       },
     };
 
@@ -380,6 +383,40 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
             onChange={e => setIntake(prev => ({ ...prev, movementScreenScore: parseInt(e.target.value) }))} />
           <div style={{ fontSize: 11, color: '#666', marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
             <span>Limited</span><span>Average</span><span>Excellent</span>
+          </div>
+          <label style={s.label}>TRAINING DAYS PER WEEK</label>
+          <div style={s.optionGrid}>
+            {[2, 3, 4, 5, 6, 7].map(d => (
+              <button key={d} style={{ ...s.optionBtn, ...(intake.daysPerWeek === d ? s.optionBtnActive : {}) }}
+                onClick={() => setIntake(prev => ({ ...prev, daysPerWeek: d }))}>
+                {d}
+              </button>
+            ))}
+          </div>
+          <label style={s.label}>SESSION DURATION (minutes)</label>
+          <div style={s.optionGrid}>
+            {[30, 45, 60, 75, 90, 120].map(m => (
+              <button key={m} style={{ ...s.optionBtn, ...(intake.sessionDuration === m ? s.optionBtnActive : {}) }}
+                onClick={() => setIntake(prev => ({ ...prev, sessionDuration: m }))}>
+                {m}
+              </button>
+            ))}
+          </div>
+          <label style={s.label}>PREFERRED TRAINING SPLIT</label>
+          <div style={{ ...s.optionGrid, gridTemplateColumns: '1fr' }}>
+            {[
+              { val: 'Push/Pull/Legs', desc: 'Push day, pull day, legs day rotation' },
+              { val: 'Upper/Lower', desc: 'Alternate upper and lower body days' },
+              { val: 'Full Body', desc: 'Hit everything each session' },
+              { val: 'Bro Split', desc: 'One muscle group per day' },
+              { val: 'No Preference', desc: 'Let Gunny decide based on my goals' },
+            ].map(opt => (
+              <button key={opt.val} style={{ ...s.optionBtn, textAlign: 'left', ...(intake.preferredSplit === opt.val ? s.optionBtnActive : {}) }}
+                onClick={() => setIntake(prev => ({ ...prev, preferredSplit: opt.val }))}>
+                <div style={{ fontWeight: 700 }}>{opt.val.toUpperCase()}</div>
+                <div style={{ fontSize: 10, marginTop: 4, color: intake.preferredSplit === opt.val ? '#00ff4199' : '#666' }}>{opt.desc}</div>
+              </button>
+            ))}
           </div>
           <div style={{ padding: 12, background: '#0a1a0a', border: '1px solid #1a3a1a', borderRadius: 4, marginBottom: 16 }}>
             <span style={{ fontSize: 10, color: '#888' }}>PROJECTED LEVEL: </span>

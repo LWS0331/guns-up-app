@@ -47,6 +47,9 @@ export interface IntakeAssessment {
   proteinPriority?: string; // low, moderate, high, very_high
   dietaryRestrictions?: string[];
   wearableDevice?: string;
+  daysPerWeek?: number; // training days per week (2-7)
+  sessionDuration?: number; // minutes per session
+  preferredSplit?: string; // PPL, Upper/Lower, Full Body, Bro Split, etc.
   startingPRs: { exercise: string; weight: number; reps: number }[];
 }
 

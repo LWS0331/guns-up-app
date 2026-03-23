@@ -651,6 +651,33 @@ const AppShell: React.FC<AppShellProps> = ({
           timestamp: Date.now(),
         };
         setGunnyMessages(prev => [...prev, gunnyReply]);
+
+        // If Gunny Assist built a workout, save it to the planner
+        if (data.workoutData) {
+          const today = new Date().toISOString().split('T')[0];
+          const workout = {
+            id: `workout-assist-${Date.now()}`,
+            date: today,
+            title: data.workoutData.title || 'Gunny Assist Workout',
+            notes: data.workoutData.notes || '',
+            warmup: data.workoutData.warmup || '',
+            blocks: (data.workoutData.blocks || []).map((b: Record<string, unknown>, i: number) => ({
+              type: b.type || 'exercise',
+              id: `block-assist-${i}`,
+              sortOrder: i,
+              exerciseName: b.exerciseName || '',
+              prescription: b.prescription || '',
+              isLinkedToNext: false,
+              ...(b.type === 'conditioning' ? { format: b.format, description: b.description } : {}),
+              ...(b.videoUrl ? { videoUrl: b.videoUrl } : {}),
+            })),
+            cooldown: data.workoutData.cooldown || '',
+            completed: false,
+          };
+          const updated = { ...currentSelectedOp };
+          updated.workouts = { ...updated.workouts, [today]: workout };
+          onUpdateOperator(updated);
+        }
       }
     } catch (error) {
       console.error('Gunny panel error:', error);

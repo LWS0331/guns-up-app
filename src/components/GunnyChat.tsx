@@ -409,6 +409,8 @@ const loadChatFromLocalStorage = (opId: string): Message[] | null => {
 
 // Check if operator needs onboarding (empty/incomplete profile)
 const needsOnboarding = (op: Operator): boolean => {
+  // If intake form was completed, never show onboarding — intake is the new flow
+  if (op.intake?.completed || (op.profile as unknown as Record<string, unknown>)?.intakeCompleted) return false;
   const p = op.profile;
   // If no age, no weight, or no goals set — needs onboarding
   if (!p?.age || !p?.weight || !p?.goals?.length) return true;
