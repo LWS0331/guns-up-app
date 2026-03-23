@@ -8,6 +8,7 @@ import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import VoiceInput, { VoiceCommand } from '@/components/VoiceInput';
 import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice } from '@/lib/tts';
+import { requestDeviceMotionPermission } from '@/lib/useShakeToTalk';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -1307,7 +1308,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             }}
           >
             {activeListening
-              ? `● COMMS ACTIVE — "${operator.callsign || 'GUNNY'}" to talk, "OVER" to send`
+              ? `● COMMS ACTIVE — "${operator.callsign || 'GUNNY'}" to talk, "OVER" to send | SHAKE for PTT`
               : 'TAP TO ENABLE VOICE COMMS'}
           </button>
           {activeListening && (
@@ -1709,6 +1710,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <button
                   onClick={() => {
                     unlockAudioContext(); // Pre-warm iOS audio on user gesture
+                    requestDeviceMotionPermission(); // iOS shake-to-talk permission (must be user gesture)
                     setWorkoutMode(true);
                     setActiveListening(true);
                     setSelectedDate(dateStr);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useShakeToTalk } from '@/lib/useShakeToTalk';
 
 // Web Speech API TypeScript declarations
 interface SpeechRecognitionEvent extends Event {
@@ -206,6 +207,29 @@ export default function VoiceInput({
     if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
     feedbackTimeoutRef.current = setTimeout(() => setCommandFeedback(null), 3000);
   }, []);
+
+  // ═══ SHAKE-TO-TALK ═══
+  // On mobile: double-shake activates the mic (push-to-talk)
+  // Works with headphones + music — no audio session conflict
+  useShakeToTalk({
+    enabled: isMobile && activeListening && !internalListening, // Only when standby on mobile
+    onShake: () => {
+      if (!recognitionRef.current || internalListening) return;
+      showFeedback('SHAKE DETECTED — MIC ON');
+      finalTranscriptRef.current = '';
+      setError(null);
+      updateCommsState('standby');
+      updateBuffer('');
+      try {
+        recognitionRef.current.start();
+      } catch {
+        // Already started
+      }
+    },
+    threshold: 22,   // Tuned: sharp phone shake, not barbell movement
+    shakeWindow: 800, // 2 shakes within 800ms
+    cooldown: 2000,   // 2s cooldown between triggers
+  });
 
   // Initialize speech recognition
   useEffect(() => {
