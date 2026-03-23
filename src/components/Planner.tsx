@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
 import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
+import BattlePlanRef from '@/components/BattlePlanRef';
+import DailyBriefRef from '@/components/DailyBriefRef';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -2189,6 +2191,16 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
           EXPORT
         </button>
       </div>
+
+      {/* ACTIVE BATTLE PLAN — Training Reference */}
+      {operator.sitrep && operator.sitrep.generatedDate && (
+        <BattlePlanRef sitrep={operator.sitrep} focus="training" compact={true} />
+      )}
+
+      {/* TODAY'S BRIEF — Training for Today */}
+      {operator.dailyBrief && operator.dailyBrief.date && (
+        <DailyBriefRef brief={operator.dailyBrief} focus="training" compact={true} />
+      )}
 
       {/* VIEW MODE + NAVIGATION */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', position: 'relative' }}>

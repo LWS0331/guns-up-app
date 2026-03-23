@@ -7,6 +7,8 @@ import WearableConnect from '@/components/WearableConnect';
 import ProgressCharts from '@/components/ProgressCharts';
 import { FOOD_DB } from '@/data/foods';
 import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
+import BattlePlanRef from '@/components/BattlePlanRef';
+import DailyBriefRef from '@/components/DailyBriefRef';
 
 // Local type aliases for internal state management
 interface Goal {
@@ -1267,6 +1269,16 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
   const renderNutritionTab = () => (
     <div>
+      {/* BATTLE PLAN — Nutrition Targets */}
+      {operator.sitrep && operator.sitrep.generatedDate && (
+        <BattlePlanRef sitrep={operator.sitrep} focus="nutrition" compact={true} />
+      )}
+
+      {/* DAILY BRIEF — Today's Nutrition */}
+      {operator.dailyBrief && operator.dailyBrief.date && (
+        <DailyBriefRef brief={operator.dailyBrief} focus="nutrition" compact={true} />
+      )}
+
       {/* ACCURACY TIER KEY */}
       <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 8 }}>
         <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#888', letterSpacing: 1, marginBottom: 8 }}>TRACKING ACCURACY TIERS</div>

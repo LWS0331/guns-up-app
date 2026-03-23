@@ -14,6 +14,8 @@ import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
 import SitrepView from '@/components/SitrepView';
 import DailyBriefComponent from '@/components/DailyBrief';
+import BattlePlanRef from '@/components/BattlePlanRef';
+import DailyBriefRef from '@/components/DailyBriefRef';
 import Leaderboard from '@/components/Leaderboard';
 import Achievements from '@/components/Achievements';
 import SocialFeed from '@/components/SocialFeed';
@@ -752,6 +754,16 @@ const AppShell: React.FC<AppShellProps> = ({
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Battle Plan Reference — dedicated section */}
+            {currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate && (
+              <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true} />
+            )}
+
+            {/* Daily Brief Reference — dedicated section */}
+            {currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date && (
+              <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} />
             )}
 
             <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
