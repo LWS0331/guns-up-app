@@ -7,7 +7,7 @@ import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import VoiceInput, { VoiceCommand } from '@/components/VoiceInput';
-import { speak } from '@/lib/tts';
+import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice } from '@/lib/tts';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -212,11 +212,13 @@ interface PlannerProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
   onOpenGunny?: () => void;
-  onSendGunnyMessage?: (text: string) => void; // Voice "over" trigger — sends directly to Gunny
+  onSendGunnyMessage?: (text: string) => void;
+  gunnyVoiceResponse?: string | null; // Gunny's spoken response — show as overlay
+  onDismissGunnyResponse?: () => void;
   onWorkoutModeChange?: (state: WorkoutModeState) => void;
 }
 
-const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, onWorkoutModeChange }) => {
+const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, gunnyVoiceResponse, onDismissGunnyResponse, onWorkoutModeChange }) => {
   const { t } = useLanguage();
   // ============================================================================
   // STATE
@@ -269,6 +271,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // Voice command state
   const [activeListening, setActiveListening] = useState(false);
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState<GunnyVoice>('onyx');
+  const [showVoiceSelect, setShowVoiceSelect] = useState(false);
+
+  // Load preferred voice on mount
+  useEffect(() => {
+    setSelectedVoice(getPreferredVoice());
+  }, []);
   const voiceFeedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
   const showVoiceFeedback = useCallback((msg: string) => {
@@ -1271,8 +1280,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }
             }}
             onWakeGunny={() => {
-              // Call sign detected — open Gunny panel
-              if (onOpenGunny) onOpenGunny();
+              // Call sign detected — DON'T open panel, just acknowledge
+              // Panel stays closed, response shows as overlay on workout screen
             }}
             callSign={operator.callsign}
             activeListening={activeListening}
@@ -1320,6 +1329,94 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             color: '#00ff41', letterSpacing: 1, fontWeight: 700,
           }}>
             {voiceFeedback}
+          </div>
+        )}
+
+        {/* ═══ GUNNY VOICE RESPONSE OVERLAY ═══ */}
+        {gunnyVoiceResponse && (
+          <div
+            onClick={onDismissGunnyResponse}
+            style={{
+              marginBottom: 12, padding: '12px 14px',
+              background: 'rgba(255,140,0,0.06)',
+              border: '1px solid rgba(255,140,0,0.35)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              position: 'relative',
+            }}
+          >
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4,
+            }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%', background: '#FF8C00',
+                boxShadow: '0 0 4px rgba(255,140,0,0.8)',
+              }} />
+              <span style={{
+                fontFamily: 'Orbitron, sans-serif', fontSize: 8, fontWeight: 700,
+                color: '#FF8C00', letterSpacing: 1.5, textTransform: 'uppercase',
+              }}>
+                GUNNY
+              </span>
+              <span style={{
+                fontFamily: 'Share Tech Mono, monospace', fontSize: 8,
+                color: '#6B7B6B', marginLeft: 'auto',
+              }}>
+                tap to dismiss
+              </span>
+            </div>
+            <p style={{
+              fontFamily: 'Share Tech Mono, monospace', fontSize: 12,
+              color: '#D0D8C8', margin: 0, lineHeight: 1.5,
+              maxHeight: 120, overflow: 'auto',
+            }}>
+              {gunnyVoiceResponse}
+            </p>
+          </div>
+        )}
+
+        {/* ═══ VOICE SELECTOR (inline toggle) ═══ */}
+        {workoutMode && (
+          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              onClick={() => setShowVoiceSelect(!showVoiceSelect)}
+              style={{
+                padding: '2px 8px', background: 'transparent',
+                border: '1px solid #2A3A2A', borderRadius: 4,
+                color: '#6B7B6B', fontFamily: 'Share Tech Mono, monospace',
+                fontSize: 9, cursor: 'pointer', letterSpacing: 0.5,
+              }}
+            >
+              VOICE: {selectedVoice.toUpperCase()}
+            </button>
+            {showVoiceSelect && (
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {VOICE_OPTIONS.map(v => (
+                  <button
+                    key={v.id}
+                    onClick={() => {
+                      setSelectedVoice(v.id);
+                      setPreferredVoice(v.id);
+                      setShowVoiceSelect(false);
+                      // Play a preview
+                      speak('Copy that.', v.id);
+                    }}
+                    style={{
+                      padding: '2px 6px',
+                      background: v.id === selectedVoice ? 'rgba(0,255,65,0.1)' : 'transparent',
+                      border: `1px solid ${v.id === selectedVoice ? '#00ff41' : '#2A3A2A'}`,
+                      borderRadius: 3,
+                      color: v.id === selectedVoice ? '#00ff41' : '#6B7B6B',
+                      fontFamily: 'Share Tech Mono, monospace',
+                      fontSize: 8, cursor: 'pointer',
+                    }}
+                    title={v.desc}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1611,8 +1708,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 </button>
                 <button
                   onClick={() => {
+                    unlockAudioContext(); // Pre-warm iOS audio on user gesture
                     setWorkoutMode(true);
-                    setActiveListening(true); // Auto-start voice comms
+                    setActiveListening(true);
                     setSelectedDate(dateStr);
                   }}
                   style={{

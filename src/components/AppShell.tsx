@@ -626,9 +626,8 @@ const AppShell: React.FC<AppShellProps> = ({
     generateSitrep(currentUser);
   };
 
-  // TTS — Gunny speaks back during workout mode
+  // TTS — Gunny speaks back
   const speakGunny = (text: string) => {
-    if (!workoutModeState.active) return; // Only speak during workouts
     gunnySpeak(text);
   };
 
@@ -735,14 +734,22 @@ const AppShell: React.FC<AppShellProps> = ({
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
 
+  // Gunny voice response — shown as overlay on workout screen, NOT in chat panel
+  const [gunnyVoiceResponse, setGunnyVoiceResponse] = useState<string | null>(null);
+  const gunnyVoiceResponseTimer = useRef<NodeJS.Timeout | null>(null);
+  const showGunnyVoiceResponse = useCallback((text: string) => {
+    setGunnyVoiceResponse(text);
+    if (gunnyVoiceResponseTimer.current) clearTimeout(gunnyVoiceResponseTimer.current);
+    // Auto-dismiss after 8s (or when next response comes)
+    gunnyVoiceResponseTimer.current = setTimeout(() => setGunnyVoiceResponse(null), 8000);
+  }, []);
+
   // Voice "over" trigger — sends directly to Gunny without touching the phone
+  // Does NOT open the Gunny panel — response shows as overlay on workout screen
   const sendGunnyVoiceMessage = useCallback((text: string) => {
     if (!text.trim()) return;
-    // Open Gunny panel if not already open
-    setShowGunnyPanel(true);
-    // Set the input and trigger send on next tick
-    setGunnyInput(text);
-    // Use a small timeout to let state update, then auto-send
+    // DON'T open Gunny panel — keep workout screen focused
+    // Still log to chat history so user can review later
     setTimeout(() => {
       const userMessage: ChatMessage = {
         role: 'user',
@@ -784,7 +791,8 @@ const AppShell: React.FC<AppShellProps> = ({
           } else {
             const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
             setGunnyMessages(prev => [...prev, { role: 'gunny' as const, text: replyText, timestamp: Date.now() }]);
-            // Always speak back during voice comms
+            // Show response on workout screen + speak it
+            showGunnyVoiceResponse(replyText);
             gunnySpeak(replyText);
 
             if (data.workoutData) {
@@ -825,7 +833,7 @@ const AppShell: React.FC<AppShellProps> = ({
       };
       doSend();
     }, 50);
-  }, [gunnyMessages, selectedOperator, operators, buildOperatorContext, getScreenContext, currentSelectedOp, onUpdateOperator]);
+  }, [gunnyMessages, selectedOperator, operators, buildOperatorContext, getScreenContext, currentSelectedOp, onUpdateOperator, showGunnyVoiceResponse]);
 
   const baseTabs: { id: AppTab; label: string; labelKey: string; icon: string }[] = [
     { id: 'coc', label: t('nav.coc_short'), labelKey: 'nav.coc_short', icon: '◆' },
@@ -974,7 +982,7 @@ const AppShell: React.FC<AppShellProps> = ({
           </>
         );
       case 'planner':
-        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} onSendGunnyMessage={sendGunnyVoiceMessage} onWorkoutModeChange={setWorkoutModeState} />;
+        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} />;
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'gunny':

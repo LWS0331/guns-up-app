@@ -59,7 +59,6 @@ export interface VoiceCommand {
 export function parseVoiceCommand(text: string): VoiceCommand {
   const lower = text.toLowerCase().trim();
 
-  // LOG SET patterns
   const logPatterns = [
     /(?:log|done|finished|completed|hit|got|did)\s.*?(\d+)\s*(?:lbs?|pounds?)?\s*(?:for|by|times|x|at)\s*(\d+)\s*(?:reps?)?/i,
     /(\d+)\s*(?:lbs?|pounds?)?\s*(?:for|by|times|x)\s*(\d+)\s*(?:reps?)?/i,
@@ -101,11 +100,8 @@ export function parseVoiceCommand(text: string): VoiceCommand {
 }
 
 // ═══ COMMS PROTOCOL ═══
-// Detects "over" at the end of speech to trigger send
-// Detects call sign to wake Gunny from standby
 function stripOverFromEnd(text: string): { cleaned: string; hasOver: boolean } {
   const trimmed = text.trim();
-  // Match "over" or "over and out" at end of phrase
   const overPattern = /\s*(?:over\s*(?:and\s*out)?|copy\s*that)\s*$/i;
   if (overPattern.test(trimmed)) {
     return { cleaned: trimmed.replace(overPattern, '').trim(), hasOver: true };
@@ -117,7 +113,6 @@ function detectCallSign(text: string, callSign: string): boolean {
   if (!callSign) return false;
   const lower = text.toLowerCase();
   const cs = callSign.toLowerCase();
-  // Match call sign or "gunny" or "hey gunny" at start of phrase
   return lower.includes(cs) || /\b(?:hey\s+)?gunny\b/i.test(lower);
 }
 
@@ -131,18 +126,20 @@ function stripCallSign(text: string, callSign: string): string {
   return cleaned.trim();
 }
 
-// ═══ COMMS STATE ═══
+// Detect mobile (iOS/Android) — these need push-to-talk instead of continuous
+function isMobileDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 type CommsState = 'standby' | 'hot' | 'buffering';
-// standby = mic on, listening for call sign or direct commands
-// hot = call sign detected, buffering speech until "over"
-// buffering = collecting transcript, waiting for "over" to send
 
 interface VoiceInputProps {
   onTranscript: (text: string) => void;
   onVoiceCommand?: (command: VoiceCommand) => void;
-  onSendMessage?: (text: string) => void; // "Over" triggers this — sends to Gunny without hitting send
-  onWakeGunny?: () => void; // Call sign detected — wake up Gunny panel
-  callSign?: string; // Operator's call sign for wake word
+  onSendMessage?: (text: string) => void;
+  onWakeGunny?: () => void;
+  callSign?: string;
   activeListening?: boolean;
   isListening?: boolean;
   disabled?: boolean;
@@ -167,6 +164,7 @@ export default function VoiceInput({
   const [commandFeedback, setCommandFeedback] = useState<string | null>(null);
   const [commsState, setCommsState] = useState<CommsState>('standby');
   const [messageBuffer, setMessageBuffer] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -185,6 +183,11 @@ export default function VoiceInput({
   onSendMessageRef.current = onSendMessage;
   onWakeGunnyRef.current = onWakeGunny;
   onVoiceCommandRef.current = onVoiceCommand;
+
+  // Detect mobile on mount
+  useEffect(() => {
+    setIsMobile(isMobileDevice());
+  }, []);
 
   const updateCommsState = useCallback((state: CommsState) => {
     commsStateRef.current = state;
@@ -240,19 +243,15 @@ export default function VoiceInput({
           if (!phrase) continue;
 
           // ═══ COMMS PROTOCOL PROCESSING ═══
-
-          // In active listening (workout mode), check for commands first
           if (activeListeningRef.current && onVoiceCommandRef.current) {
-            // Check for "over" — send buffered message to Gunny
             const { cleaned, hasOver } = stripOverFromEnd(phrase);
 
+            // In HOT/BUFFERING — collecting message for Gunny
             if (commsStateRef.current === 'hot' || commsStateRef.current === 'buffering') {
-              // We're in a conversation with Gunny
               const newBuffer = messageBufferRef.current + (messageBufferRef.current ? ' ' : '') + cleaned;
               updateBuffer(newBuffer);
 
               if (hasOver && onSendMessageRef.current) {
-                // "OVER" detected — transmit the full buffered message
                 const finalMsg = stripCallSign(newBuffer, callSignRef.current);
                 if (finalMsg) {
                   showFeedback('TRANSMITTED');
@@ -261,6 +260,10 @@ export default function VoiceInput({
                 updateBuffer('');
                 updateCommsState('standby');
                 finalTranscriptRef.current = '';
+                // On mobile push-to-talk: stop mic after transmit
+                if (isMobileDevice()) {
+                  setTimeout(() => recognitionRef.current?.stop(), 200);
+                }
                 continue;
               }
 
@@ -269,14 +272,13 @@ export default function VoiceInput({
               continue;
             }
 
-            // STANDBY mode — check for call sign wake word
+            // STANDBY — check for call sign wake word
             if (detectCallSign(phrase, callSignRef.current)) {
-              // Call sign detected — go HOT
               updateCommsState('hot');
               showFeedback('COMMS OPEN');
+              // DON'T open Gunny panel — just go hot, stay on workout screen
               if (onWakeGunnyRef.current) onWakeGunnyRef.current();
 
-              // Check if there's already a message after the call sign
               const afterCallSign = stripCallSign(phrase, callSignRef.current);
               const { cleaned: afterCleaned, hasOver: afterHasOver } = stripOverFromEnd(afterCallSign);
 
@@ -287,6 +289,9 @@ export default function VoiceInput({
                   updateBuffer('');
                   updateCommsState('standby');
                   showFeedback('TRANSMITTED');
+                  if (isMobileDevice()) {
+                    setTimeout(() => recognitionRef.current?.stop(), 200);
+                  }
                 } else {
                   updateCommsState('buffering');
                 }
@@ -295,7 +300,7 @@ export default function VoiceInput({
               continue;
             }
 
-            // Not in comms mode — try parsing as a direct workout command
+            // STANDBY — check for direct workout commands (no call sign needed)
             const command = parseVoiceCommand(phrase);
             if (command.type !== 'text') {
               if (command.type === 'log_set' && command.weight) {
@@ -309,16 +314,19 @@ export default function VoiceInput({
               }
               onVoiceCommandRef.current(command);
               finalTranscriptRef.current = '';
+              // On mobile: stop mic after command
+              if (isMobileDevice()) {
+                setTimeout(() => recognitionRef.current?.stop(), 200);
+              }
               continue;
             }
 
-            // Unrecognized speech in standby — ignore (don't spam Gunny)
+            // Unrecognized speech in standby — ignore
             finalTranscriptRef.current = '';
           } else {
-            // Not in active listening — legacy behavior (append to transcript)
+            // Not in active listening — legacy behavior
             finalTranscriptRef.current += transcript + ' ';
 
-            // Check for "over" in non-active-listening too (Gunny Assist panel)
             if (onSendMessageRef.current) {
               const { cleaned, hasOver } = stripOverFromEnd(finalTranscriptRef.current.trim());
               if (hasOver && cleaned) {
@@ -336,12 +344,19 @@ export default function VoiceInput({
 
       setInterimTranscript(interim);
 
-      // Reset silence timeout
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
       }
 
-      if (!activeListeningRef.current) {
+      // On mobile push-to-talk: auto-stop after 8s silence
+      // On desktop continuous: only auto-stop in non-active mode
+      if (isMobileDevice() && activeListeningRef.current) {
+        silenceTimeoutRef.current = setTimeout(() => {
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+          }
+        }, 8000);
+      } else if (!activeListeningRef.current) {
         silenceTimeoutRef.current = setTimeout(() => {
           if (recognitionRef.current) {
             recognitionRef.current.stop();
@@ -352,11 +367,11 @@ export default function VoiceInput({
 
     recognition.onerror = (event: Event & { error: string }) => {
       if (event.error === 'no-speech') {
-        if (activeListeningRef.current) {
+        if (activeListeningRef.current && !isMobileDevice()) {
           setError(null);
           return;
         }
-        setError('No speech detected');
+        setError(null); // Don't show error on mobile either
       } else if (event.error === 'network') {
         setError('Network error');
       } else if (event.error === 'aborted') {
@@ -375,8 +390,9 @@ export default function VoiceInput({
         onTranscript(finalTranscriptRef.current.trim());
       }
 
-      // In active listening mode, auto-restart
-      if (activeListeningRef.current) {
+      // Auto-restart: only on DESKTOP in active listening mode
+      // On mobile: do NOT auto-restart (push-to-talk — user taps again)
+      if (activeListeningRef.current && !isMobileDevice()) {
         setTimeout(() => {
           try {
             finalTranscriptRef.current = '';
@@ -431,7 +447,6 @@ export default function VoiceInput({
     );
   }
 
-  // Determine what to show in the transcript bubble
   const displayText = error
     || commandFeedback
     || (commsState === 'buffering' && messageBuffer ? messageBuffer : null)
@@ -439,7 +454,6 @@ export default function VoiceInput({
     || interimTranscript
     || null;
 
-  // Color states
   const isHot = commsState === 'hot' || commsState === 'buffering';
   const bubbleColor = error ? '#ff2020'
     : commandFeedback ? '#00ff41'
@@ -496,7 +510,7 @@ export default function VoiceInput({
         alignItems: 'center',
         gap: 0,
       }}>
-        {/* Transcript bubble — positioned above mic */}
+        {/* Transcript bubble — above mic */}
         {displayText && (
           <div style={{
             position: 'absolute',
@@ -520,54 +534,35 @@ export default function VoiceInput({
               : 'transcriptFadeIn 0.15s ease-out',
             pointerEvents: 'none',
           }}>
-            {/* Signal dot */}
             <div style={{
-              width: 5,
-              height: 5,
-              borderRadius: '50%',
-              background: bubbleColor,
-              flexShrink: 0,
+              width: 5, height: 5, borderRadius: '50%',
+              background: bubbleColor, flexShrink: 0,
               boxShadow: `0 0 4px ${bubbleColor}`,
               animation: isHot && !commandFeedback ? 'hotBlink 1s infinite' : undefined,
             }} />
-            {/* Scanline overlay */}
             {!commandFeedback && !error && (
               <div style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                overflow: 'hidden',
-                borderRadius: 4,
-                pointerEvents: 'none',
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                overflow: 'hidden', borderRadius: 4, pointerEvents: 'none',
               }}>
                 <div style={{
-                  width: '30%',
-                  height: '100%',
+                  width: '30%', height: '100%',
                   background: `linear-gradient(90deg, transparent, ${bubbleBg}, transparent)`,
                   animation: 'scanline 2s linear infinite',
                 }} />
               </div>
             )}
-            {/* Text */}
             <span style={{
-              fontFamily: 'Share Tech Mono, monospace',
-              fontSize: 10,
-              color: bubbleColor,
-              letterSpacing: 0.5,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              textTransform: 'uppercase',
+              fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
+              color: bubbleColor, letterSpacing: 0.5,
+              overflow: 'hidden', textOverflow: 'ellipsis', textTransform: 'uppercase',
             }}>
               {displayText}
             </span>
-            {/* Bottom arrow */}
             <div style={{
-              position: 'absolute',
-              bottom: -4,
-              left: '50%',
+              position: 'absolute', bottom: -4, left: '50%',
               transform: 'translateX(-50%) rotate(45deg)',
-              width: 7,
-              height: 7,
-              background: bubbleBg,
+              width: 7, height: 7, background: bubbleBg,
               borderRight: `1px solid ${bubbleBorder}`,
               borderBottom: `1px solid ${bubbleBorder}`,
             }} />
@@ -603,14 +598,12 @@ export default function VoiceInput({
             opacity: disabled ? 0.4 : 1,
             animation: isHot
               ? 'commsHot 1.5s infinite'
-              : isListening && activeListening
-                ? undefined // standby — calm, no pulse
-                : isListening ? 'voicePulse 1.5s infinite' : undefined,
+              : isListening && !activeListening
+                ? 'voicePulse 1.5s infinite' : undefined,
             flexShrink: 0,
             position: 'relative',
           }}
         >
-          {/* Military radio SVG icon */}
           <svg
             width={compact ? 16 : 20}
             height={compact ? 16 : 20}
@@ -625,7 +618,6 @@ export default function VoiceInput({
             }}
           >
             {isHot ? (
-              /* HOT: transmitting — signal waves */
               <>
                 <path d="M12 18v-6" />
                 <path d="M12 6V4" />
@@ -635,20 +627,7 @@ export default function VoiceInput({
                 <path d="M16.5 16.5a6.36 6.36 0 0 1-9 0" />
                 <path d="M18.9 18.9a10 10 0 0 1-13.8 0" />
               </>
-            ) : isListening && activeListening ? (
-              /* STANDBY: listening but idle — radio with small signal */
-              <>
-                <rect x="6" y="4" width="12" height="16" rx="2" />
-                <line x1="10" y1="8" x2="14" y2="8" />
-                <line x1="10" y1="11" x2="14" y2="11" />
-                <circle cx="12" cy="16" r="1.5" />
-                <line x1="12" y1="2" x2="12" y2="4" />
-                <line x1="9" y1="1" x2="12" y2="2" />
-                {/* Small signal indicator — standby */}
-                <circle cx="18" cy="6" r="1" fill="currentColor" opacity="0.5" />
-              </>
             ) : (
-              /* OFF: idle radio */
               <>
                 <rect x="6" y="4" width="12" height="16" rx="2" />
                 <line x1="10" y1="8" x2="14" y2="8" />
@@ -656,55 +635,45 @@ export default function VoiceInput({
                 <circle cx="12" cy="16" r="1.5" />
                 <line x1="12" y1="2" x2="12" y2="4" />
                 <line x1="9" y1="1" x2="12" y2="2" />
+                {isListening && activeListening && (
+                  <circle cx="18" cy="6" r="1" fill="currentColor" opacity="0.5" />
+                )}
               </>
             )}
           </svg>
 
-          {/* Active listening standby badge — green dot when on standby */}
           {activeListening && isListening && !isHot && (
             <div style={{
-              position: 'absolute',
-              top: -3,
-              right: -3,
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: '#00ff41',
-              border: '1.5px solid #0a0a0a',
+              position: 'absolute', top: -3, right: -3,
+              width: 8, height: 8, borderRadius: '50%',
+              background: '#00ff41', border: '1.5px solid #0a0a0a',
               boxShadow: '0 0 6px rgba(0,255,65,0.8)',
             }} />
           )}
-          {/* HOT badge — amber dot when buffering */}
           {isHot && (
             <div style={{
-              position: 'absolute',
-              top: -3,
-              right: -3,
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: '#FF8C00',
-              border: '1.5px solid #0a0a0a',
+              position: 'absolute', top: -3, right: -3,
+              width: 8, height: 8, borderRadius: '50%',
+              background: '#FF8C00', border: '1.5px solid #0a0a0a',
               boxShadow: '0 0 6px rgba(255,140,0,0.8)',
               animation: 'hotBlink 1s infinite',
             }} />
           )}
         </button>
 
-        {/* Comms state label below button (only in workout active listening) */}
+        {/* State label */}
         {activeListening && isListening && (
           <div style={{
             marginTop: 2,
             fontFamily: 'Share Tech Mono, monospace',
-            fontSize: 7,
-            letterSpacing: 1,
+            fontSize: 7, letterSpacing: 1,
             color: isHot ? '#FF8C00' : '#00ff41',
             opacity: isHot ? 1 : 0.5,
             textTransform: 'uppercase',
             textAlign: 'center',
             whiteSpace: 'nowrap',
           }}>
-            {isHot ? 'HOT' : 'STANDBY'}
+            {isHot ? 'HOT' : isMobile ? 'PTT' : 'STANDBY'}
           </div>
         )}
       </div>

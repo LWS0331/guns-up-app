@@ -1,11 +1,49 @@
 // GUNS UP — Text-to-Speech utility
 // Uses OpenAI TTS API with fallback to browser speechSynthesis
-// Voices: "onyx" (male, deep, authoritative) | "nova" (female, clear, confident)
+// Voices: onyx (deep male), nova (clear female), echo (warm male), fable (british), shimmer (soft female), alloy (neutral)
 
 let audioQueue: HTMLAudioElement[] = [];
 let isPlaying = false;
+let audioContextUnlocked = false;
 
-export type GunnyVoice = 'onyx' | 'nova';
+export type GunnyVoice = 'onyx' | 'nova' | 'echo' | 'fable' | 'shimmer' | 'alloy';
+
+export const VOICE_OPTIONS: { id: GunnyVoice; label: string; desc: string }[] = [
+  { id: 'onyx', label: 'ONYX', desc: 'Deep male — drill sergeant' },
+  { id: 'echo', label: 'ECHO', desc: 'Warm male — coach' },
+  { id: 'fable', label: 'FABLE', desc: 'British male — officer' },
+  { id: 'alloy', label: 'ALLOY', desc: 'Neutral — tactical' },
+  { id: 'nova', label: 'NOVA', desc: 'Clear female — operator' },
+  { id: 'shimmer', label: 'SHIMMER', desc: 'Soft female — medic' },
+];
+
+// Get/set preferred voice from localStorage
+export function getPreferredVoice(): GunnyVoice {
+  if (typeof window === 'undefined') return 'onyx';
+  return (localStorage.getItem('gunny-voice') as GunnyVoice) || 'onyx';
+}
+
+export function setPreferredVoice(voice: GunnyVoice) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('gunny-voice', voice);
+  }
+}
+
+// Pre-warm audio context — call on a user gesture (e.g., START workout button)
+// iOS requires a user-initiated play() to unlock the audio context
+export function unlockAudioContext() {
+  if (audioContextUnlocked) return;
+  try {
+    const audio = new Audio();
+    // Create a tiny silent audio data URI
+    audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+    audio.volume = 0.01;
+    const p = audio.play();
+    if (p) p.then(() => { audio.pause(); audioContextUnlocked = true; }).catch(() => {});
+  } catch {
+    // Ignore — we tried
+  }
+}
 
 // Play next audio in queue
 function playNext() {
@@ -17,18 +55,23 @@ function playNext() {
   const audio = audioQueue.shift()!;
   audio.onended = () => playNext();
   audio.onerror = () => playNext();
-  audio.play().catch(() => playNext());
+  audio.play().catch(() => {
+    // If play fails (iOS autoplay block), try browser TTS fallback
+    playNext();
+  });
 }
 
 // Speak text using OpenAI TTS (with browser fallback)
-export async function speak(text: string, voice: GunnyVoice = 'onyx') {
+export async function speak(text: string, voice?: GunnyVoice) {
   if (!text || typeof window === 'undefined') return;
+
+  const selectedVoice = voice || getPreferredVoice();
 
   try {
     const res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice, speed: 1.1 }),
+      body: JSON.stringify({ text, voice: selectedVoice, speed: 1.1 }),
     });
 
     // Check if we got audio back (not a JSON fallback response)
@@ -45,10 +88,10 @@ export async function speak(text: string, voice: GunnyVoice = 'onyx') {
     }
 
     // Fallback to browser TTS
-    browserSpeak(text, voice);
+    browserSpeak(text, selectedVoice);
   } catch {
     // Network error — fallback to browser TTS
-    browserSpeak(text, voice);
+    browserSpeak(text, selectedVoice);
   }
 }
 
@@ -64,11 +107,11 @@ function browserSpeak(text: string, voice: GunnyVoice) {
   const short = clean.length > 200 ? clean.slice(0, 200) + '...' : clean;
   const utterance = new SpeechSynthesisUtterance(short);
   utterance.rate = 1.1;
-  utterance.pitch = voice === 'onyx' ? 0.85 : 1.0;
+  utterance.pitch = (voice === 'onyx' || voice === 'echo' || voice === 'fable') ? 0.85 : 1.0;
   utterance.volume = 0.9;
 
   const voices = window.speechSynthesis.getVoices();
-  if (voice === 'onyx') {
+  if (voice === 'onyx' || voice === 'echo' || voice === 'fable') {
     const preferred = voices.find(v =>
       v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Google US English')
     );
