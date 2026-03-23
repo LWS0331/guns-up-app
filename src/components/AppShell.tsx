@@ -14,6 +14,7 @@ import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
 import SitrepView from '@/components/SitrepView';
 import VoiceInput from '@/components/VoiceInput';
+import { speak as gunnySpeak } from '@/lib/tts';
 import DailyBriefComponent from '@/components/DailyBrief';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
@@ -627,20 +628,8 @@ const AppShell: React.FC<AppShellProps> = ({
 
   // TTS — Gunny speaks back during workout mode
   const speakGunny = (text: string) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
     if (!workoutModeState.active) return; // Only speak during workouts
-    // Truncate long responses for speech
-    const short = text.length > 200 ? text.slice(0, 200) + '...' : text;
-    // Strip markdown-ish chars
-    const clean = short.replace(/[*_#━═\-]{2,}/g, '').replace(/\n+/g, '. ').trim();
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.rate = 1.05;
-    utterance.pitch = 0.85;
-    utterance.volume = 0.9;
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v => v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Google US English'));
-    if (preferred) utterance.voice = preferred;
-    window.speechSynthesis.speak(utterance);
+    gunnySpeak(text);
   };
 
   // Send message to Gunny API (side panel — context-aware mode)

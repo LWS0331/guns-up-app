@@ -7,6 +7,7 @@ import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import VoiceInput, { VoiceCommand } from '@/components/VoiceInput';
+import { speak } from '@/lib/tts';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -358,20 +359,6 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       if (onOpenGunny) onOpenGunny();
     }
   }, [workoutMode, selectedDate, operator.workouts, workoutResults, showVoiceFeedback, onOpenGunny]);
-
-  // TTS — Gunny speaks back
-  const speak = useCallback((text: string) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.1;
-    utterance.pitch = 0.85;
-    utterance.volume = 0.9;
-    // Prefer a deeper male voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v => v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Google US English'));
-    if (preferred) utterance.voice = preferred;
-    window.speechSynthesis.speak(utterance);
-  }, []);
 
   // HR Zone Tracking state
   const [currentHR, setCurrentHR] = useState<number | null>(null);
