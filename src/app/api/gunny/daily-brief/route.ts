@@ -31,6 +31,23 @@ export async function POST(req: NextRequest) {
     };
     const model = modelMap[tier] || 'claude-haiku-4-5-20251001';
 
+    // Compact SITREP context — only send what the AI needs for workout generation
+    const sitrepContext = {
+      trainingPlan: sitrep.trainingPlan,
+      nutritionPlan: sitrep.nutritionPlan ? {
+        dailyCalories: sitrep.nutritionPlan.dailyCalories,
+        protein: sitrep.nutritionPlan.protein,
+        carbs: sitrep.nutritionPlan.carbs,
+        fat: sitrep.nutritionPlan.fat,
+        mealsPerDay: sitrep.nutritionPlan.mealsPerDay,
+        hydrationOz: sitrep.nutritionPlan.hydrationOz,
+        approach: sitrep.nutritionPlan.approach,
+      } : null,
+      today: sitrep.today, // Day 1 reference workout
+      priorityFocus: sitrep.priorityFocus,
+      restrictions: sitrep.restrictions,
+    };
+
     const response = await client.messages.create({
       model,
       max_tokens: 2048,
@@ -42,24 +59,44 @@ export async function POST(req: NextRequest) {
 OPERATOR: ${operatorContext.callsign}
 FITNESS LEVEL: ${operatorContext.fitnessLevel || 'beginner'}
 TODAY: ${todayDateStr}
+INJURIES: ${JSON.stringify(operatorContext.injuries || [])}
+EQUIPMENT: ${operatorContext.availableEquipment || 'full gym'}
 
-ACTIVE SITREP (their current plan):
-${JSON.stringify(sitrep, null, 2)}
+═══ ACTIVE BATTLE PLAN (SITREP) ═══
+This is the operator's APPROVED battle plan. You MUST follow this plan's training structure:
+- Split: ${sitrepContext.trainingPlan?.split || 'TBD'}
+- Days/week: ${sitrepContext.trainingPlan?.daysPerWeek || 4}
+- Session duration: ${sitrepContext.trainingPlan?.sessionDuration || '45-60 min'}
+- Progression: ${sitrepContext.trainingPlan?.progressionStrategy || 'linear'}
+- Deload: ${sitrepContext.trainingPlan?.deloadProtocol || 'every 4th week'}
 
-YESTERDAY'S PERFORMANCE DATA:
-${JSON.stringify(yesterdayData, null, 2)}
+NUTRITION TARGETS: ${JSON.stringify(sitrepContext.nutritionPlan || {})}
+PRIORITY FOCUS: ${JSON.stringify(sitrepContext.priorityFocus || [])}
+RESTRICTIONS: ${JSON.stringify(sitrepContext.restrictions || [])}
 
-Generate today's adaptive daily brief. Adjust the plan based on yesterday's compliance.
+DAY 1 REFERENCE WORKOUT (from SITREP):
+${JSON.stringify(sitrepContext.today || {}, null, 1)}
+
+═══ YESTERDAY'S PERFORMANCE ═══
+${JSON.stringify(yesterdayData, null, 1)}
+
+═══ INSTRUCTIONS ═══
+Generate today's workout BASED ON the battle plan above. The workout MUST:
+1. Follow the SITREP's training split (e.g. if it's Upper/Lower, alternate correctly)
+2. Use the same exercise selection style, rep ranges, and progression approach from the SITREP
+3. Respect all restrictions and injuries listed in the SITREP
+4. Progress logically from yesterday's session — the next day in the split rotation
+5. Adjust intensity based on yesterday's compliance data
 
 Return ONLY valid JSON:
 {
-  "greeting": "short Gunny greeting addressing operator by callsign — reference time of day, their streak, or yesterday's performance",
+  "greeting": "short Gunny greeting addressing operator by callsign",
   "todaysFocus": "one sentence: what today is about",
   "workout": null (if rest day) OR {
     "dayNumber": number,
     "dayName": "day name",
     "type": "training",
-    "title": "workout title",
+    "title": "workout title matching the split pattern",
     "exercises": [
       { "name": "exercise", "sets": number, "reps": "rep range", "weight": "weight", "rest": "rest", "notes": "notes", "superset": false }
     ],
@@ -68,18 +105,19 @@ Return ONLY valid JSON:
     "duration": "duration"
   },
   "nutritionReminder": "specific nutrition action for today based on their plan and yesterday's compliance",
-  "adjustments": ["list of any changes from the original SITREP plan and why"],
-  "motivation": "Gunny-voice motivational message — short, punchy, personalized",
-  "complianceScore": number 0-100 (based on yesterday: did they train? log meals? hit macros?),
+  "adjustments": ["list of any changes from the SITREP plan and why"],
+  "motivation": "Gunny-voice motivational message — short, punchy",
+  "complianceScore": number 0-100 (based on yesterday),
   "streakDays": number (consecutive days of compliance)
 }
 
 ADAPTATION RULES:
-- If they MISSED yesterday's workout: don't shame, but adjust — offer to combine or reschedule
-- If they CRUSHED it: acknowledge, push slightly harder today
-- If they under-ate protein: remind them specifically about protein
-- If they logged zero meals: gentle nudge to track nutrition today
-- If it's a rest day: give recovery tips (stretch, hydrate, sleep)
+- ALWAYS follow the SITREP battle plan's split and exercise philosophy
+- If they MISSED yesterday: don't shame, adjust — offer to combine or reschedule
+- If they CRUSHED it: acknowledge, push slightly harder
+- If they under-ate protein: remind them specifically
+- If they logged zero meals: gentle nudge to track today
+- If it's a rest day per the split: give recovery tips
 - Keep greeting and motivation SHORT — 1-2 sentences max
 - Always address operator by CALLSIGN`,
         },

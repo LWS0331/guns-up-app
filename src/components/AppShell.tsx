@@ -171,6 +171,7 @@ const AppShell: React.FC<AppShellProps> = ({
   const [showSitrep, setShowSitrep] = useState(false);
   const [sitrepLoading, setSitrepLoading] = useState(false);
   const [pendingSitrep, setPendingSitrep] = useState<import('@/lib/types').Sitrep | null>(null);
+  const [showNewPlanConfirm, setShowNewPlanConfirm] = useState(false);
 
   // Gunny AI panel state
   const [showGunnyPanel, setShowGunnyPanel] = useState(false);
@@ -574,6 +575,14 @@ const AppShell: React.FC<AppShellProps> = ({
     generateSitrep(currentUser);
   };
 
+  const handleNewBattlePlan = () => {
+    setShowNewPlanConfirm(false);
+    // Clear existing SITREP and daily brief so fresh generation starts clean
+    const updated = { ...currentUser, sitrep: undefined, dailyBrief: undefined };
+    onUpdateOperator(updated, true);
+    generateSitrep(currentUser);
+  };
+
   // Send message to Gunny API (side panel — context-aware mode)
   const sendGunnyMessage = async () => {
     if (!gunnyInput.trim()) return;
@@ -668,6 +677,72 @@ const AppShell: React.FC<AppShellProps> = ({
             {currentSelectedOp.sitrep && (
               <DailyBriefComponent operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
             )}
+
+            {/* New Battle Plan button — only show for own profile when SITREP exists */}
+            {currentSelectedOp.id === currentUser.id && currentSelectedOp.sitrep && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+                <button
+                  onClick={() => setShowNewPlanConfirm(true)}
+                  style={{
+                    padding: '8px 20px', background: 'transparent', color: '#888',
+                    border: '1px solid #333', borderRadius: 4, cursor: 'pointer',
+                    fontFamily: 'Share Tech Mono, monospace', fontSize: 11, letterSpacing: 0.5,
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#ff6b35'; e.currentTarget.style.color = '#ff6b35'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#888'; }}
+                >
+                  ⚔️ NEW BATTLE PLAN
+                </button>
+              </div>
+            )}
+
+            {/* New Battle Plan Confirmation Modal */}
+            {showNewPlanConfirm && (
+              <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 9999, padding: 20,
+              }}>
+                <div style={{
+                  background: '#0a0a0a', border: '1px solid rgba(255,107,53,0.4)', borderRadius: 8,
+                  padding: 24, maxWidth: 400, width: '100%', textAlign: 'center',
+                }}>
+                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff6b35', letterSpacing: 1, marginBottom: 12 }}>
+                    ⚠️ NEW BATTLE PLAN
+                  </div>
+                  <div style={{ fontSize: 13, color: '#ccc', lineHeight: 1.6, marginBottom: 8 }}>
+                    This will replace your current SITREP and generate a brand new battle plan from scratch.
+                  </div>
+                  <div style={{ fontSize: 11, color: '#888', marginBottom: 20 }}>
+                    Your workout history and progress data will be preserved — only the plan changes.
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      onClick={() => setShowNewPlanConfirm(false)}
+                      style={{
+                        flex: 1, padding: 12, background: 'transparent', color: '#888',
+                        border: '1px solid #333', borderRadius: 4, cursor: 'pointer',
+                        fontFamily: 'Share Tech Mono, monospace', fontSize: 12,
+                      }}
+                    >
+                      CANCEL
+                    </button>
+                    <button
+                      onClick={handleNewBattlePlan}
+                      style={{
+                        flex: 1, padding: 12, background: '#ff6b35', color: '#000',
+                        border: 'none', borderRadius: 4, cursor: 'pointer',
+                        fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 1,
+                      }}
+                    >
+                      GENERATE NEW PLAN
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
             <Leaderboard operators={operators} currentUser={currentUser} />
             <div style={{ marginTop: 20 }}>
