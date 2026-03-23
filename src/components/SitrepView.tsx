@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sitrep, SitrepDay, SitrepExercise } from '@/lib/types';
+import { Sitrep, SitrepExercise } from '@/lib/types';
 
 interface SitrepViewProps {
   sitrep: Sitrep;
@@ -13,8 +13,6 @@ interface SitrepViewProps {
 
 export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, loading }: SitrepViewProps) {
   const [activeSection, setActiveSection] = useState<'overview' | 'nutrition' | 'training'>('overview');
-  const [expandedWeek, setExpandedWeek] = useState<number>(1);
-  const [expandedDay, setExpandedDay] = useState<number | null>(null);
 
   const s = {
     container: { width: '100%', maxWidth: 640, margin: '0 auto', padding: '20px', color: '#e0e0e0', fontFamily: "'Share Tech Mono', monospace" } as React.CSSProperties,
@@ -40,32 +38,19 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
     }),
     macroLabel: { fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#555', marginTop: 2 },
     exerciseRow: (superset: boolean) => ({
-      padding: '8px 12px', background: superset ? 'rgba(0,188,212,0.05)' : 'transparent',
-      borderLeft: superset ? '2px solid #00bcd4' : '2px solid transparent',
+      padding: '10px 12px', background: superset ? 'rgba(0,188,212,0.05)' : 'transparent',
+      borderLeft: superset ? '3px solid #00bcd4' : '3px solid #00ff4130',
       borderBottom: '1px solid #111', display: 'flex' as const, justifyContent: 'space-between' as const,
       alignItems: 'center' as const,
-    }),
-    dayCard: (type: string, expanded: boolean) => ({
-      padding: '12px 16px', background: type === 'rest' ? '#0a0808' : type === 'active_recovery' ? '#0a0a08' : '#0a0a0a',
-      border: `1px solid ${expanded ? 'rgba(0,255,65,0.3)' : '#1a1a1a'}`,
-      borderRadius: 6, marginBottom: 6, cursor: 'pointer', transition: 'border-color 0.2s',
     }),
     btnPrimary: { width: '100%', padding: '14px', background: '#00ff41', color: '#030303', border: 'none', fontFamily: 'Orbitron, sans-serif', fontSize: 13, fontWeight: 700 as const, letterSpacing: 2, borderRadius: 4, cursor: 'pointer', marginBottom: 8 } as React.CSSProperties,
     btnSecondary: { width: '100%', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', fontFamily: 'Share Tech Mono, monospace', fontSize: 12, borderRadius: 4, cursor: 'pointer' } as React.CSSProperties,
   };
 
-  const typeColors: Record<string, string> = {
-    training: '#00ff41', rest: '#ff6b35', active_recovery: '#facc15', conditioning: '#00bcd4',
-  };
-
-  const typeLabels: Record<string, string> = {
-    training: 'TRAINING', rest: 'REST DAY', active_recovery: 'ACTIVE RECOVERY', conditioning: 'CONDITIONING',
-  };
-
   const renderExercise = (ex: SitrepExercise, i: number) => (
     <div key={i} style={s.exerciseRow(!!ex.superset)}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, color: '#e0e0e0' }}>{ex.name}</div>
+        <div style={{ fontSize: 13, color: '#e0e0e0', fontWeight: 600 }}>{i + 1}. {ex.name}</div>
         {ex.notes && <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>{ex.notes}</div>}
       </div>
       <div style={{ textAlign: 'right' as const, fontFamily: 'Share Tech Mono, monospace', fontSize: 11 }}>
@@ -76,54 +61,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
     </div>
   );
 
-  const renderDay = (day: SitrepDay, weekNum: number) => {
-    const isExpanded = expandedDay === day.dayNumber + (weekNum * 10);
-    const color = typeColors[day.type] || '#888';
-
-    return (
-      <div key={`${weekNum}-${day.dayNumber}`} style={s.dayCard(day.type, isExpanded)}
-        onClick={() => setExpandedDay(isExpanded ? null : day.dayNumber + (weekNum * 10))}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color, letterSpacing: 0.5 }}>
-              {day.dayName.toUpperCase()}
-            </span>
-            <span style={{ fontSize: 12, color: '#e0e0e0', marginLeft: 10 }}>{day.title}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {day.duration && <span style={{ fontSize: 9, color: '#555' }}>{day.duration}</span>}
-            <span style={{ fontSize: 8, color, padding: '2px 6px', border: `1px solid ${color}40`, borderRadius: 3 }}>
-              {typeLabels[day.type] || day.type.toUpperCase()}
-            </span>
-          </div>
-        </div>
-
-        {isExpanded && day.type !== 'rest' && (
-          <div style={{ marginTop: 12, borderTop: '1px solid #1a1a1a', paddingTop: 10 }}
-            onClick={e => e.stopPropagation()}>
-            {day.warmup && (
-              <div style={{ marginBottom: 8 }}>
-                <div style={s.label}>WARMUP</div>
-                <div style={{ fontSize: 11, color: '#888' }}>{day.warmup}</div>
-              </div>
-            )}
-            {day.exercises.map((ex, i) => renderExercise(ex, i))}
-            {day.cooldown && (
-              <div style={{ marginTop: 8 }}>
-                <div style={s.label}>COOLDOWN</div>
-                <div style={{ fontSize: 11, color: '#888' }}>{day.cooldown}</div>
-              </div>
-            )}
-            {day.notes && (
-              <div style={{ marginTop: 8, padding: 8, background: '#111', borderRadius: 4, fontSize: 10, color: '#facc15' }}>
-                {day.notes}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const today = sitrep.today;
 
   return (
     <div style={s.container}>
@@ -149,7 +87,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {(['overview', 'nutrition', 'training'] as const).map(sec => (
           <button key={sec} onClick={() => setActiveSection(sec)} style={s.sectionBtn(activeSection === sec)}>
-            {sec === 'overview' ? '📋 OVERVIEW' : sec === 'nutrition' ? '🍽️ NUTRITION' : '🏋️ TRAINING'}
+            {sec === 'overview' ? '📋 OVERVIEW' : sec === 'nutrition' ? '🍽️ NUTRITION' : '🏋️ TODAY'}
           </button>
         ))}
       </div>
@@ -272,7 +210,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
         </div>
       )}
 
-      {/* TRAINING SECTION */}
+      {/* TRAINING SECTION — Today's Workout */}
       {activeSection === 'training' && (
         <div>
           {/* Progression + Deload */}
@@ -283,31 +221,84 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
             <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>{sitrep.trainingPlan?.deloadProtocol || ''}</div>
           </div>
 
-          {/* Week Tabs */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-            {(sitrep.trainingPlan?.weeks || []).map(week => (
-              <button key={week.weekNumber} onClick={() => { setExpandedWeek(week.weekNumber); setExpandedDay(null); }}
-                style={{
-                  flex: 1, padding: '8px', fontFamily: 'Orbitron, sans-serif', fontSize: 10,
-                  background: expandedWeek === week.weekNumber ? '#00ff4120' : '#0a0a0a',
-                  color: expandedWeek === week.weekNumber ? '#00ff41' : '#555',
-                  border: `1px solid ${expandedWeek === week.weekNumber ? '#00ff41' : '#222'}`,
-                  borderRadius: 4, cursor: 'pointer',
-                }}>
-                WEEK {week.weekNumber}
-              </button>
-            ))}
-          </div>
-
-          {/* Week Content */}
-          {(sitrep.trainingPlan?.weeks || []).filter(w => w.weekNumber === expandedWeek).map(week => (
-            <div key={week.weekNumber}>
-              <div style={{ fontSize: 11, color: '#facc15', marginBottom: 8, fontFamily: 'Orbitron, sans-serif', letterSpacing: 0.5 }}>
-                FOCUS: {week.focus}
+          {/* Today's Workout */}
+          {today ? (
+            <div>
+              {/* Day Header */}
+              <div style={{ ...s.cardHighlight, borderColor: 'rgba(0,255,65,0.4)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00ff41', letterSpacing: 1 }}>
+                      DAY {today.dayNumber} — {(today.dayName || '').toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: 15, color: '#e0e0e0', fontWeight: 600, marginTop: 4 }}>
+                      {today.title}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' as const }}>
+                    {today.duration && (
+                      <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>{today.duration}</div>
+                    )}
+                    <span style={{
+                      fontSize: 9, color: '#00ff41', padding: '3px 8px',
+                      border: '1px solid rgba(0,255,65,0.3)', borderRadius: 3,
+                      fontFamily: 'Orbitron, sans-serif', letterSpacing: 0.5,
+                    }}>
+                      {today.type === 'rest' ? 'REST DAY' : today.type === 'active_recovery' ? 'ACTIVE RECOVERY' : today.type === 'conditioning' ? 'CONDITIONING' : 'TRAINING'}
+                    </span>
+                  </div>
+                </div>
               </div>
-              {(week.days || []).map(day => renderDay(day, week.weekNumber))}
+
+              {/* Warmup */}
+              {today.warmup && (
+                <div style={s.card}>
+                  <div style={{ ...s.label, color: '#facc15' }}>🔥 WARMUP</div>
+                  <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>{today.warmup}</div>
+                </div>
+              )}
+
+              {/* Exercises */}
+              {today.exercises && today.exercises.length > 0 && (
+                <div style={{ ...s.card, padding: 0, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid #1a1a1a' }}>
+                    <div style={s.label}>EXERCISES — {today.exercises.length} MOVEMENTS</div>
+                  </div>
+                  {today.exercises.map((ex, i) => renderExercise(ex, i))}
+                </div>
+              )}
+
+              {/* Cooldown */}
+              {today.cooldown && (
+                <div style={s.card}>
+                  <div style={{ ...s.label, color: '#00bcd4' }}>❄️ COOLDOWN</div>
+                  <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>{today.cooldown}</div>
+                </div>
+              )}
+
+              {/* Day Notes */}
+              {today.notes && (
+                <div style={{ padding: '10px 14px', background: '#111', borderRadius: 6, fontSize: 11, color: '#facc15', marginBottom: 12 }}>
+                  {today.notes}
+                </div>
+              )}
+
+              {/* Next Day Info */}
+              <div style={{ ...s.card, borderColor: 'rgba(0,188,212,0.2)', background: 'rgba(0,188,212,0.03)', textAlign: 'center' as const }}>
+                <div style={{ fontSize: 10, color: '#00bcd4', fontFamily: 'Orbitron, sans-serif', letterSpacing: 1, marginBottom: 4 }}>
+                  ADAPTIVE PROGRAMMING
+                </div>
+                <div style={{ fontSize: 11, color: '#888', lineHeight: 1.5 }}>
+                  Tomorrow&apos;s workout will be auto-generated based on today&apos;s results.
+                  Log your workout and Gunny adapts in real time.
+                </div>
+              </div>
             </div>
-          ))}
+          ) : (
+            <div style={{ ...s.card, textAlign: 'center' as const, color: '#666' }}>
+              No workout data available. Try regenerating your battle plan.
+            </div>
+          )}
         </div>
       )}
 

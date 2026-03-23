@@ -18,11 +18,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing operator context' }, { status: 400 });
     }
 
-    // Tier-based model selection for SITREP generation
-    // RECON (haiku): Haiku — fast, solid plans for entry-level operators
-    // OPERATOR (sonnet): Sonnet — smarter programming, better periodization
-    // COMMANDER (opus): Opus — elite-tier precision, deep personalization
-    // WARFIGHTER (white_glove): Opus — premier white-glove service
     const modelMap: Record<string, string> = {
       haiku: 'claude-haiku-4-5-20251001',
       sonnet: 'claude-sonnet-4-6',
@@ -31,79 +26,70 @@ export async function POST(req: NextRequest) {
     };
     const model = modelMap[tier] || 'claude-sonnet-4-6';
 
+    // Compact operator data — strip nulls to reduce prompt size
+    const compactContext = JSON.stringify(operatorContext);
+
     const response = await client.messages.create({
       model,
-      max_tokens: 16384,
+      max_tokens: 4096,
       messages: [
         {
           role: 'user',
-          content: `You are GUNNY — elite tactical AI fitness coach. Generate a comprehensive SITREP (situation report) battle plan for this operator based on their intake data.
+          content: `You are GUNNY — elite tactical AI fitness coach. Generate an initial SITREP battle plan for this operator. This is their FIRST DAY. Tomorrow's workout will be auto-generated based on today's results.
 
-OPERATOR DATA:
-${JSON.stringify(operatorContext, null, 2)}
+OPERATOR: ${compactContext}
 
-Generate a COMPLETE training and nutrition battle plan. Return ONLY valid JSON — no markdown, no backticks, no explanation.
+Return ONLY valid JSON — no markdown, no backticks, no text before or after the JSON.
 
-The JSON must match this EXACT structure:
 {
-  "summary": "2-3 sentence Gunny-voice assessment of where this operator stands and the game plan",
+  "summary": "2-3 sentence Gunny assessment + game plan",
   "nutritionPlan": {
     "dailyCalories": number,
-    "protein": number (grams),
-    "carbs": number (grams),
-    "fat": number (grams),
+    "protein": number,
+    "carbs": number,
+    "fat": number,
     "mealsPerDay": number,
     "hydrationOz": number,
-    "approach": "brief nutrition strategy description",
+    "approach": "brief strategy",
     "sampleDay": [
-      { "time": "7:00 AM", "name": "Meal 1 — Breakfast", "description": "food items", "calories": number, "protein": number, "carbs": number, "fat": number }
+      { "time": "7:00 AM", "name": "Meal 1", "description": "foods", "calories": number, "protein": number, "carbs": number, "fat": number }
     ],
-    "notes": "Gunny nutrition notes and tips"
+    "notes": "tips"
   },
   "trainingPlan": {
-    "split": "training split name (e.g. Upper/Lower 4-Day)",
+    "split": "training split name",
     "daysPerWeek": number,
     "sessionDuration": "45-60 min",
-    "weeks": [
-      {
-        "weekNumber": 1,
-        "focus": "week focus theme",
-        "days": [
-          {
-            "dayNumber": 1,
-            "dayName": "Monday",
-            "type": "training" | "rest" | "active_recovery" | "conditioning",
-            "title": "workout title",
-            "exercises": [
-              { "name": "exercise name", "sets": number, "reps": "rep range", "weight": "weight suggestion", "rest": "rest period", "notes": "form cues or substitutions", "superset": false }
-            ],
-            "warmup": "warmup description",
-            "cooldown": "cooldown description",
-            "duration": "estimated duration"
-          }
-        ]
-      }
-    ],
-    "progressionStrategy": "how to progress week over week",
-    "deloadProtocol": "when and how to deload"
+    "progressionStrategy": "how to progress",
+    "deloadProtocol": "when to deload"
   },
-  "restrictions": ["injury-based movement restrictions"],
-  "priorityFocus": ["top 3 priorities for this operator"],
-  "milestones30Day": ["4-5 realistic 30-day targets"],
-  "gunnyMessage": "motivational closing message in Gunny voice — address operator by callsign"
+  "today": {
+    "dayNumber": 1,
+    "dayName": "${new Date().toLocaleDateString('en-US', { weekday: 'long' })}",
+    "type": "training",
+    "title": "workout title",
+    "exercises": [
+      { "name": "exercise", "sets": number, "reps": "rep range", "weight": "suggestion", "rest": "rest", "notes": "cues", "superset": false }
+    ],
+    "warmup": "warmup",
+    "cooldown": "cooldown",
+    "duration": "est duration"
+  },
+  "restrictions": ["injury restrictions"],
+  "priorityFocus": ["top 3 priorities"],
+  "milestones30Day": ["4-5 targets"],
+  "gunnyMessage": "motivational close — use callsign"
 }
 
-CRITICAL RULES:
-1. ALWAYS respect injuries and restrictions — NEVER program movements that could aggravate listed injuries
-2. Match training volume and intensity to their fitness level — beginners get 3-4 exercises per session, advanced get 5-7
-3. Use ONLY equipment they have access to — if they only have dumbbells, program dumbbell movements
-4. Nutrition must align with their stated goals, dietary restrictions, and current diet approach
-5. If operator is sedentary/beginner, keep volume conservative — build the habit before building intensity
-6. Include REST DAYS — beginners need more rest, advanced can train more frequently
-7. Generate exactly 1 week of programming (7 days). The plan adapts weekly via DailyBrief — no need to pre-generate multiple weeks
-8. Each week must have exactly 7 days (including rest days)
-9. Sample nutrition day must total close to the daily calorie target
-10. Address the operator by their CALLSIGN in the summary and gunnyMessage`,
+RULES:
+1. Respect injuries — never program aggravating movements
+2. Match volume to fitness level (beginners: 3-4 exercises, advanced: 5-7)
+3. Use ONLY their available equipment
+4. Nutrition aligns with goals and dietary restrictions
+5. Beginners get conservative volume
+6. Today's workout must be appropriate for Day 1
+7. Sample nutrition day totals must match calorie target
+8. Address operator by CALLSIGN`,
         },
       ],
     });
@@ -112,25 +98,22 @@ CRITICAL RULES:
 
     let parsed;
     try {
-      // Try multiple extraction strategies
       let jsonStr = text;
-
-      // Strategy 1: Extract from ```json ... ``` code fence (greedy to capture full JSON)
+      // Extract from code fence if present
       const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]+)\n?\s*```/);
       if (fenceMatch) {
         jsonStr = fenceMatch[1].trim();
       } else {
-        // Strategy 2: Find the first { and last } to extract JSON object
+        // Find first { and last }
         const firstBrace = text.indexOf('{');
         const lastBrace = text.lastIndexOf('}');
         if (firstBrace !== -1 && lastBrace > firstBrace) {
           jsonStr = text.substring(firstBrace, lastBrace + 1);
         }
       }
-
       parsed = JSON.parse(jsonStr);
     } catch (parseErr) {
-      console.error('SITREP parse error:', parseErr, 'Raw text (first 200):', text.substring(0, 200));
+      console.error('SITREP parse error:', parseErr, 'Raw (first 300):', text.substring(0, 300));
       return NextResponse.json({ error: 'Failed to parse SITREP', raw: text.substring(0, 500) }, { status: 500 });
     }
 
