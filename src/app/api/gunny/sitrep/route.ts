@@ -29,6 +29,21 @@ export async function POST(req: NextRequest) {
     // Compact operator data — strip nulls to reduce prompt size
     const compactContext = JSON.stringify(operatorContext);
 
+    // Extract pre-calculated macro targets from intake — these are the source of truth
+    const macros = operatorContext.macroTargets;
+    const macroBlock = macros ? `
+═══ OPERATOR'S CALCULATED MACRO TARGETS (from intake) ═══
+These are the operator's ACTUAL targets calculated from their intake form. Use these EXACT numbers as your nutrition plan baseline:
+- Daily Calories: ${macros.calories}
+- Protein: ${macros.protein}g
+- Carbs: ${macros.carbs}g
+- Fat: ${macros.fat}g
+- Meals/Day: ${operatorContext.mealsPerDay || 3}
+- Daily Water: ${operatorContext.dailyWaterOz || 64}oz
+- Estimated Current Intake: ${operatorContext.estimatedCalories || macros.calories} cal
+DO NOT default to 2000 calories. Use the numbers above.
+` : '';
+
     const response = await client.messages.create({
       model,
       max_tokens: 4096,
@@ -38,7 +53,7 @@ export async function POST(req: NextRequest) {
           content: `You are GUNNY — elite tactical AI fitness coach. Generate an initial SITREP battle plan for this operator. This is their FIRST DAY. Tomorrow's workout will be auto-generated based on today's results.
 
 OPERATOR: ${compactContext}
-
+${macroBlock}
 Return ONLY valid JSON — no markdown, no backticks, no text before or after the JSON.
 
 {
@@ -85,11 +100,12 @@ RULES:
 1. Respect injuries — never program aggravating movements
 2. Match volume to fitness level (beginners: 3-4 exercises, advanced: 5-7)
 3. Use ONLY their available equipment
-4. Nutrition aligns with goals and dietary restrictions
+4. NUTRITION: Use the operator's CALCULATED MACRO TARGETS above as your dailyCalories, protein, carbs, and fat values. Do NOT invent your own numbers. The intake form already calculated these from their weight, goals, and protein priority.
 5. Beginners get conservative volume
 6. Today's workout must be appropriate for Day 1
-7. Sample nutrition day totals must match calorie target
-8. Address operator by CALLSIGN`,
+7. Sample nutrition day meal totals MUST add up to the dailyCalories target
+8. Address operator by CALLSIGN
+9. mealsPerDay must match the operator's intake preference`,
         },
       ],
     });

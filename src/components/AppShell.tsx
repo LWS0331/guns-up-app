@@ -122,6 +122,7 @@ interface OperatorContextData {
   motivationFactors?: string[];
   mealsPerDay?: number;
   dailyWaterOz?: number;
+  estimatedCalories?: number;
   proteinPriority?: string;
   wearableDevice?: string;
   trainerNotes?: string;
@@ -523,6 +524,7 @@ const AppShell: React.FC<AppShellProps> = ({
       motivationFactors: intake?.motivationFactors,
       mealsPerDay: intake?.mealsPerDay,
       dailyWaterOz: intake?.dailyWaterOz,
+      estimatedCalories: intake?.estimatedCalories,
       proteinPriority: intake?.proteinPriority,
       wearableDevice: intake?.wearableDevice,
       trainerNotes: op.trainerNotes,
