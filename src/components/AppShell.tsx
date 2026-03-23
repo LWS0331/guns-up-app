@@ -13,6 +13,7 @@ import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
 import SitrepView from '@/components/SitrepView';
+import VoiceInput from '@/components/VoiceInput';
 import DailyBriefComponent from '@/components/DailyBrief';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
@@ -624,6 +625,24 @@ const AppShell: React.FC<AppShellProps> = ({
     generateSitrep(currentUser);
   };
 
+  // TTS — Gunny speaks back during workout mode
+  const speakGunny = (text: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (!workoutModeState.active) return; // Only speak during workouts
+    // Truncate long responses for speech
+    const short = text.length > 200 ? text.slice(0, 200) + '...' : text;
+    // Strip markdown-ish chars
+    const clean = short.replace(/[*_#━═\-]{2,}/g, '').replace(/\n+/g, '. ').trim();
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.rate = 1.05;
+    utterance.pitch = 0.85;
+    utterance.volume = 0.9;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Google US English'));
+    if (preferred) utterance.voice = preferred;
+    window.speechSynthesis.speak(utterance);
+  };
+
   // Send message to Gunny API (side panel — context-aware mode)
   const sendGunnyMessage = async () => {
     if (!gunnyInput.trim()) return;
@@ -673,12 +692,14 @@ const AppShell: React.FC<AppShellProps> = ({
           return [...prev, { role: 'gunny' as const, text: errMsg, timestamp: Date.now() }];
         });
       } else {
+        const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
         const gunnyReply: ChatMessage = {
           role: 'gunny',
-          text: data.response || data.message || data.text || 'Copy that, soldier.',
+          text: replyText,
           timestamp: Date.now(),
         };
         setGunnyMessages(prev => [...prev, gunnyReply]);
+        speakGunny(replyText);
 
         // If Gunny Assist built a workout, save it to the planner
         if (data.workoutData) {
@@ -1655,6 +1676,12 @@ const AppShell: React.FC<AppShellProps> = ({
                 }
               }}
               disabled={gunnyLoading}
+            />
+            <VoiceInput
+              onTranscript={(text) => {
+                setGunnyInput(prev => prev ? prev + ' ' + text : text);
+              }}
+              compact
             />
             <button
               className="gunny-send-btn"

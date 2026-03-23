@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
 import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
+import VoiceInput, { VoiceCommand } from '@/components/VoiceInput';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -262,6 +263,115 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [restTimer, setRestTimer] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[] }>>({});
+
+  // Voice command state
+  const [activeListening, setActiveListening] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
+  const voiceFeedbackTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const showVoiceFeedback = useCallback((msg: string) => {
+    setVoiceFeedback(msg);
+    if (voiceFeedbackTimer.current) clearTimeout(voiceFeedbackTimer.current);
+    voiceFeedbackTimer.current = setTimeout(() => setVoiceFeedback(null), 3000);
+  }, []);
+
+  // Handle voice commands during workout mode
+  const handleVoiceCommand = useCallback((command: VoiceCommand) => {
+    if (!workoutMode) return;
+    const dateStr = selectedDate || new Date().toISOString().split('T')[0];
+    const workout = operator.workouts?.[dateStr];
+    if (!workout) return;
+
+    const exerciseBlocks = workout.blocks.filter(b => b.type === 'exercise');
+
+    if (command.type === 'log_set') {
+      // Find current active exercise (first one with incomplete sets)
+      let targetBlockId: string | null = null;
+      let targetSetIdx = -1;
+
+      for (const block of exerciseBlocks) {
+        const blockData = workoutResults[block.id];
+        if (!blockData) { targetBlockId = block.id; targetSetIdx = 0; break; }
+        const nextIncomplete = blockData.sets.findIndex(s => !s.completed);
+        if (nextIncomplete >= 0) {
+          targetBlockId = block.id;
+          targetSetIdx = nextIncomplete;
+          break;
+        }
+      }
+
+      if (targetBlockId && targetSetIdx >= 0) {
+        const weight = command.weight || 0;
+        const reps = command.reps || 0;
+        setWorkoutResults(prev => {
+          const blockData = prev[targetBlockId] ? { ...prev[targetBlockId] } : { sets: [] as { weight: number; reps: number; completed: boolean }[] };
+          const sets = [...(blockData.sets || [])];
+          // Ensure we have enough sets
+          while (sets.length <= targetSetIdx) {
+            sets.push({ weight: 0, reps: 0, completed: false });
+          }
+          sets[targetSetIdx] = { weight, reps, completed: true };
+          // Auto-fill weight for remaining sets if this was set 1
+          if (targetSetIdx === 0 && weight > 0) {
+            for (let i = 1; i < sets.length; i++) {
+              if (sets[i].weight === 0) sets[i] = { ...sets[i], weight };
+            }
+          }
+          return { ...prev, [targetBlockId]: { sets } };
+        });
+
+        const block = exerciseBlocks.find(b => b.id === targetBlockId);
+        const exName = (block as ExerciseBlock)?.exerciseName || 'Exercise';
+        if (weight && reps) {
+          showVoiceFeedback(`LOGGED: ${exName} — ${weight}lbs x ${reps}`);
+          speak(`Logged. ${weight} pounds, ${reps} reps.`);
+        } else {
+          showVoiceFeedback(`SET ${targetSetIdx + 1} COMPLETE`);
+          speak('Set logged.');
+        }
+      }
+    } else if (command.type === 'start_timer') {
+      const secs = command.duration || 90;
+      setRestTimer(secs);
+      setRestRunning(true);
+      showVoiceFeedback(`TIMER: ${secs}s`);
+      speak(`Rest timer. ${secs} seconds.`);
+    } else if (command.type === 'next_exercise') {
+      // Find next exercise with incomplete sets
+      for (let i = 0; i < exerciseBlocks.length; i++) {
+        const blockData = workoutResults[exerciseBlocks[i].id];
+        if (!blockData || blockData.sets.some(s => !s.completed)) {
+          setActiveBlockIdx(i);
+          const exName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName || 'Next exercise';
+          showVoiceFeedback(`NEXT: ${exName}`);
+          speak(`Moving to ${exName}.`);
+          break;
+        }
+      }
+    } else if (command.type === 'complete_workout') {
+      showVoiceFeedback('COMPLETING WORKOUT');
+      speak('Workout complete. Good work.');
+      // Trigger save — same as the COMPLETE WORKOUT button
+      // Will be handled by the existing save handler
+    } else if (command.type === 'ask_gunny') {
+      // Open Gunny with the voice text
+      if (onOpenGunny) onOpenGunny();
+    }
+  }, [workoutMode, selectedDate, operator.workouts, workoutResults, showVoiceFeedback, onOpenGunny]);
+
+  // TTS — Gunny speaks back
+  const speak = useCallback((text: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.1;
+    utterance.pitch = 0.85;
+    utterance.volume = 0.9;
+    // Prefer a deeper male voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Google US English'));
+    if (preferred) utterance.voice = preferred;
+    window.speechSynthesis.speak(utterance);
+  }, []);
 
   // HR Zone Tracking state
   const [currentHR, setCurrentHR] = useState<number | null>(null);
@@ -1120,32 +1230,93 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
     return (
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontFamily: 'Orbitron', color: '#FF8C00', fontSize: 18, margin: 0 }}>WORKOUT MODE</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {onOpenGunny && (
               <button
                 onClick={onOpenGunny}
                 style={{
-                  padding: '4px 12px',
+                  padding: '4px 10px',
                   background: 'linear-gradient(135deg, rgba(255,184,0,0.2), rgba(255,184,0,0.1))',
                   border: '1px solid rgba(255,184,0,0.5)',
                   color: '#ffb800',
                   fontFamily: 'Orbitron, sans-serif',
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: 700,
                   letterSpacing: 1,
                   cursor: 'pointer',
                   borderRadius: 4,
                 }}
               >
-                ⚡ ASK GUNNY
+                ⚡ GUNNY
               </button>
             )}
-            <button onClick={() => setWorkoutMode(false)} style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer' }}>EXIT</button>
+            <button onClick={() => setWorkoutMode(false)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer', fontSize: 11 }}>EXIT</button>
           </div>
         </div>
-        <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 16, margin: '0 0 20px 0' }}>{workout.title}</h3>
+        <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 16, margin: '0 0 12px 0' }}>{workout.title}</h3>
+
+        {/* ═══ VOICE COMMAND BAR ═══ */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
+          padding: '8px 12px',
+          background: activeListening ? 'rgba(0,255,65,0.04)' : 'rgba(255,255,255,0.02)',
+          border: `1px solid ${activeListening ? 'rgba(0,255,65,0.25)' : '#1C2E1C'}`,
+          borderRadius: 6,
+          transition: 'all 0.3s',
+        }}>
+          <VoiceInput
+            onTranscript={(text) => {
+              // Non-command voice goes to Gunny Assist
+              if (onOpenGunny) onOpenGunny();
+            }}
+            onVoiceCommand={handleVoiceCommand}
+            activeListening={activeListening}
+            compact
+          />
+          <button
+            onClick={() => setActiveListening(!activeListening)}
+            style={{
+              flex: 1,
+              padding: '6px 0',
+              background: activeListening
+                ? 'linear-gradient(90deg, rgba(0,255,65,0.1), rgba(0,255,65,0.05))'
+                : 'transparent',
+              border: 'none',
+              color: activeListening ? '#00ff41' : '#6B7B6B',
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 1.5,
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.2s',
+            }}
+          >
+            {activeListening ? '● LISTENING — Say "log 135 for 10" or "rest 90 seconds"' : 'TAP TO ENABLE VOICE COMMANDS'}
+          </button>
+          {activeListening && (
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%', background: '#00ff41',
+              boxShadow: '0 0 6px rgba(0,255,65,0.8)',
+              animation: 'voicePulse 2s infinite',
+              flexShrink: 0,
+            }} />
+          )}
+        </div>
+
+        {/* Voice command feedback toast */}
+        {voiceFeedback && (
+          <div style={{
+            marginBottom: 12, padding: '8px 12px', textAlign: 'center',
+            background: 'rgba(0,255,65,0.06)', border: '1px solid rgba(0,255,65,0.3)',
+            borderRadius: 4, fontFamily: 'Orbitron, sans-serif', fontSize: 12,
+            color: '#00ff41', letterSpacing: 1, fontWeight: 700,
+          }}>
+            {voiceFeedback}
+          </div>
+        )}
 
         {/* Rest Timer */}
         <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: restRunning ? '#1a1a0a' : '#0a0a0a', border: `1px solid ${restRunning ? '#FF8C00' : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
