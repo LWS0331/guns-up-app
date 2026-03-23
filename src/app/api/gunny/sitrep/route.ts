@@ -8,7 +8,7 @@ const client = new Anthropic({
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { operatorContext, tier } = body;
+    const { operatorContext, tier, clientDayName, clientDate, clientTimezone } = body;
 
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured on server' }, { status: 500 });
@@ -54,6 +54,9 @@ DO NOT default to 2000 calories. Use the numbers above.
 
 OPERATOR: ${compactContext}
 ${macroBlock}
+TODAY IS: ${clientDayName || 'Sunday'}, ${clientDate || new Date().toLocaleDateString('en-US')}
+TIMEZONE: ${clientTimezone || 'America/Chicago'}
+
 Return ONLY valid JSON — no markdown, no backticks, no text before or after the JSON.
 
 {
@@ -80,7 +83,7 @@ Return ONLY valid JSON — no markdown, no backticks, no text before or after th
   },
   "today": {
     "dayNumber": 1,
-    "dayName": "${new Date().toLocaleDateString('en-US', { weekday: 'long' })}",
+    "dayName": "${clientDayName || new Date().toLocaleDateString('en-US', { weekday: 'long' })}",
     "type": "training",
     "title": "workout title",
     "exercises": [

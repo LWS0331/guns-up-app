@@ -124,6 +124,9 @@ interface OperatorContextData {
   dailyWaterOz?: number;
   estimatedCalories?: number;
   proteinPriority?: string;
+  daysPerWeek?: number;
+  sessionDuration?: number;
+  preferredSplit?: string;
   wearableDevice?: string;
   trainerNotes?: string;
   language?: string;
@@ -526,6 +529,9 @@ const AppShell: React.FC<AppShellProps> = ({
       dailyWaterOz: intake?.dailyWaterOz,
       estimatedCalories: intake?.estimatedCalories,
       proteinPriority: intake?.proteinPriority,
+      daysPerWeek: prefs?.daysPerWeek,
+      sessionDuration: prefs?.sessionDuration,
+      preferredSplit: prefs?.split,
       wearableDevice: intake?.wearableDevice,
       trainerNotes: op.trainerNotes,
       language: language || 'en',
@@ -546,6 +552,9 @@ const AppShell: React.FC<AppShellProps> = ({
         body: JSON.stringify({
           operatorContext: buildOperatorContext(updatedOperator),
           tier: updatedOperator.tier,
+          clientDayName: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+          clientDate: new Date().toLocaleDateString('en-US'),
+          clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       });
       const data = await res.json();

@@ -99,6 +99,8 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
           sitrep: operator.sitrep,
           yesterdayData,
           todayDateStr: todayStr,
+          todayDayName: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+          clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           tier: operator.tier,
         }),
       });

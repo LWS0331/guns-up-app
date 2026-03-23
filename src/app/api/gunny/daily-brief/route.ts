@@ -8,7 +8,7 @@ const client = new Anthropic({
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { operatorContext, sitrep, yesterdayData, todayDateStr, tier } = body;
+    const { operatorContext, sitrep, yesterdayData, todayDateStr, todayDayName, clientTimezone, tier } = body;
 
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured on server' }, { status: 500 });
@@ -58,9 +58,16 @@ export async function POST(req: NextRequest) {
 
 OPERATOR: ${operatorContext.callsign}
 FITNESS LEVEL: ${operatorContext.fitnessLevel || 'beginner'}
-TODAY: ${todayDateStr}
+TODAY: ${todayDayName || 'Sunday'}, ${todayDateStr}
+TIMEZONE: ${clientTimezone || 'America/Chicago'}
+WEIGHT: ${operatorContext.weight || 'unknown'}lbs | AGE: ${operatorContext.age || 'unknown'} | HEIGHT: ${operatorContext.height || 'unknown'}
+GOALS: ${JSON.stringify(operatorContext.goals || [])}
 INJURIES: ${JSON.stringify(operatorContext.injuries || [])}
-EQUIPMENT: ${operatorContext.availableEquipment || 'full gym'}
+EQUIPMENT: ${JSON.stringify(operatorContext.availableEquipment || ['full gym'])}
+DIET: ${operatorContext.currentDiet || 'no plan'} | PROTEIN PRIORITY: ${operatorContext.proteinPriority || 'moderate'}
+SLEEP: ${operatorContext.sleepQuality || '?'}/10 | STRESS: ${operatorContext.stressLevel || '?'}/10
+SUPPLEMENTS: ${JSON.stringify(operatorContext.supplements || [])}
+DIETARY RESTRICTIONS: ${JSON.stringify(operatorContext.dietaryRestrictions || [])}
 
 ═══ ACTIVE BATTLE PLAN (SITREP) ═══
 This is the operator's APPROVED battle plan. You MUST follow this plan's training structure:
