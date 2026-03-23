@@ -23,6 +23,7 @@ export async function POST(req: Request) {
       await prisma.operator.update({
         where: { id: op.id },
         data: {
+          intake: {},
           profile: {},
           nutrition: { targets: { calories: 0, protein: 0, carbs: 0, fat: 0 }, meals: {} },
           prs: [],
@@ -30,6 +31,8 @@ export async function POST(req: Request) {
           workouts: {},
           dayTags: {},
           preferences: {},
+          sitrep: {},
+          dailyBrief: {},
           betaFeedback: [],
         },
       });
