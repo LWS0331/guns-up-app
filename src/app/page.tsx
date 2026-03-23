@@ -160,17 +160,26 @@ export default function Home() {
     setCurrentUser(null);
   };
 
-  const handleUpdateOperator = useCallback((updated: Operator) => {
+  const handleUpdateOperator = useCallback((updated: Operator, immediate?: boolean) => {
     setOperators(prev => prev.map(op => op.id === updated.id ? updated : op));
 
     // Also update currentUser if it's the same operator
     setCurrentUser(prev => prev?.id === updated.id ? updated : prev);
 
-    // Debounced persist to database (300ms)
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
+    // Intake completion and sitrep acceptance are critical saves — persist immediately
+    const isCritical = immediate || updated.intake?.completed === true;
+
+    if (isCritical) {
+      // Cancel any pending debounced save and persist NOW
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       persistOperator(updated);
-    }, 300);
+    } else {
+      // Debounced persist to database (300ms) for routine updates
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        persistOperator(updated);
+      }, 300);
+    }
   }, [persistOperator]);
 
   if (!isLoaded) {

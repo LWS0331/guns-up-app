@@ -132,7 +132,7 @@ interface AppShellProps {
   currentUser: Operator;
   accessibleUsers: Operator[];
   operators: Operator[];
-  onUpdateOperator: (updated: Operator) => void;
+  onUpdateOperator: (updated: Operator, immediate?: boolean) => void;
   onLogout: () => void;
 }
 
@@ -528,8 +528,11 @@ const AppShell: React.FC<AppShellProps> = ({
   };
 
   // Generate SITREP after intake completion
+  const [sitrepError, setSitrepError] = useState<string | null>(null);
+
   const generateSitrep = async (updatedOperator: Operator) => {
     setSitrepLoading(true);
+    setSitrepError(null);
     setShowSitrep(true);
     try {
       const res = await fetch('/api/gunny/sitrep', {
@@ -543,9 +546,13 @@ const AppShell: React.FC<AppShellProps> = ({
       const data = await res.json();
       if (data.success && data.sitrep) {
         setPendingSitrep(data.sitrep);
+      } else {
+        console.error('SITREP API error:', data.error || data);
+        setSitrepError(data.error || 'Failed to generate SITREP. Check API key configuration.');
       }
     } catch (err) {
       console.error('SITREP generation failed:', err);
+      setSitrepError('Network error generating SITREP. Please retry.');
     }
     setSitrepLoading(false);
   };
@@ -553,7 +560,7 @@ const AppShell: React.FC<AppShellProps> = ({
   const handleAcceptSitrep = () => {
     if (!pendingSitrep) return;
     const updated = { ...currentUser, sitrep: pendingSitrep };
-    onUpdateOperator(updated);
+    onUpdateOperator(updated, true); // immediate save — critical data
     setShowSitrep(false);
     setPendingSitrep(null);
     setActiveTab('coc');
@@ -561,6 +568,7 @@ const AppShell: React.FC<AppShellProps> = ({
 
   const handleRegenerateSitrep = () => {
     setPendingSitrep(null);
+    setSitrepError(null);
     generateSitrep(currentUser);
   };
 
@@ -818,6 +826,11 @@ const AppShell: React.FC<AppShellProps> = ({
             <div style={{ maxWidth: 640, margin: '0 auto', padding: 40, textAlign: 'center' }}>
               <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: '#ff4444', marginBottom: 16 }}>SITREP GENERATION FAILED</div>
               <div style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>Gunny AI encountered an error. Try again or skip for now.</div>
+              {sitrepError && (
+                <div style={{ fontSize: 10, color: '#ff6b6b', marginBottom: 16, padding: 8, background: 'rgba(255,0,0,0.05)', border: '1px solid rgba(255,0,0,0.15)', borderRadius: 4, fontFamily: 'Share Tech Mono, monospace', wordBreak: 'break-word' }}>
+                  {sitrepError}
+                </div>
+              )}
               <button onClick={() => generateSitrep(currentUser)} style={{ padding: '10px 20px', background: '#00ff41', color: '#000', border: 'none', fontFamily: 'Orbitron, sans-serif', fontSize: 11, borderRadius: 4, cursor: 'pointer', marginRight: 8 }}>RETRY</button>
               <button onClick={() => { setShowSitrep(false); setActiveTab('coc'); }} style={{ padding: '10px 20px', background: 'transparent', color: '#888', border: '1px solid #333', fontFamily: 'Share Tech Mono, monospace', fontSize: 11, borderRadius: 4, cursor: 'pointer' }}>SKIP</button>
             </div>

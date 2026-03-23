@@ -38,6 +38,7 @@ export async function GET() {
       dayTags: row.dayTags as Record<string, unknown>,
       sitrep: row.sitrep as Record<string, unknown>,
       dailyBrief: row.dailyBrief as Record<string, unknown>,
+      billing: row.billing as Record<string, unknown>,
     }));
 
     return NextResponse.json({ operators });

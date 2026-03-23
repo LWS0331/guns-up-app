@@ -10,6 +10,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { operatorContext, sitrep, yesterdayData, todayDateStr, tier } = body;
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured on server' }, { status: 500 });
+    }
+
     if (!operatorContext || !sitrep) {
       return NextResponse.json({ error: 'Missing operator context or SITREP' }, { status: 400 });
     }
