@@ -27,6 +27,11 @@ interface BillingData {
 
 // GET /api/financials — aggregate subscription/revenue data for Accountant agent
 export async function GET(req: NextRequest) {
+  // Health check: no auth params = return status only (no financial data)
+  const hasAuthAttempt = req.headers.get('x-api-key') || req.nextUrl.searchParams.get('operatorId');
+  if (!hasAuthAttempt) {
+    return NextResponse.json({ status: 'ok', endpoint: '/api/financials', auth: 'required', hint: 'Pass x-api-key header or operatorId query param' });
+  }
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'ACCESS DENIED' }, { status: 403 });
   }

@@ -21,6 +21,10 @@ interface BillingData {
 
 // GET /api/financials/forecast — project MRR growth for Accountant agent monthly reconciliation
 export async function GET(req: NextRequest) {
+  const hasAuthAttempt = req.headers.get('x-api-key') || req.nextUrl.searchParams.get('operatorId');
+  if (!hasAuthAttempt) {
+    return NextResponse.json({ status: 'ok', endpoint: '/api/financials/forecast', auth: 'required', hint: 'Pass x-api-key header or operatorId query param' });
+  }
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'ACCESS DENIED' }, { status: 403 });
   }
