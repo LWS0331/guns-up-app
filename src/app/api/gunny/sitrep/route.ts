@@ -112,10 +112,26 @@ CRITICAL RULES:
 
     let parsed;
     try {
-      const jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      // Try multiple extraction strategies
+      let jsonStr = text;
+
+      // Strategy 1: Extract from ```json ... ``` code fence
+      const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+      if (fenceMatch) {
+        jsonStr = fenceMatch[1].trim();
+      } else {
+        // Strategy 2: Find the first { and last } to extract JSON object
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          jsonStr = text.substring(firstBrace, lastBrace + 1);
+        }
+      }
+
       parsed = JSON.parse(jsonStr);
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse SITREP', raw: text }, { status: 500 });
+    } catch (parseErr) {
+      console.error('SITREP parse error:', parseErr, 'Raw text (first 200):', text.substring(0, 200));
+      return NextResponse.json({ error: 'Failed to parse SITREP', raw: text.substring(0, 500) }, { status: 500 });
     }
 
     // Add metadata

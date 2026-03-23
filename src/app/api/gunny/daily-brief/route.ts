@@ -90,10 +90,20 @@ ADAPTATION RULES:
 
     let parsed;
     try {
-      const jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      let jsonStr = text;
+      const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+      if (fenceMatch) {
+        jsonStr = fenceMatch[1].trim();
+      } else {
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          jsonStr = text.substring(firstBrace, lastBrace + 1);
+        }
+      }
       parsed = JSON.parse(jsonStr);
     } catch {
-      return NextResponse.json({ error: 'Failed to parse daily brief', raw: text }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to parse daily brief', raw: text.substring(0, 500) }, { status: 500 });
     }
 
     parsed.date = todayDateStr;
