@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Operator, AppTab, OPS_CENTER_ACCESS } from '@/lib/types';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
@@ -735,6 +735,98 @@ const AppShell: React.FC<AppShellProps> = ({
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
 
+  // Voice "over" trigger — sends directly to Gunny without touching the phone
+  const sendGunnyVoiceMessage = useCallback((text: string) => {
+    if (!text.trim()) return;
+    // Open Gunny panel if not already open
+    setShowGunnyPanel(true);
+    // Set the input and trigger send on next tick
+    setGunnyInput(text);
+    // Use a small timeout to let state update, then auto-send
+    setTimeout(() => {
+      const userMessage: ChatMessage = {
+        role: 'user',
+        text: text,
+        timestamp: Date.now(),
+      };
+      setGunnyMessages(prev => [...prev, userMessage]);
+      setGunnyInput('');
+      setGunnyLoading(true);
+
+      const doSend = async () => {
+        try {
+          const trainer = selectedOperator.trainerId ? operators.find(op => op.id === selectedOperator.trainerId) : null;
+          const trainerData = trainer ? {
+            workouts: trainer.workouts,
+            preferences: trainer.preferences,
+            prs: trainer.prs,
+            profile: trainer.profile,
+            trainerNotes: selectedOperator.trainerNotes,
+          } : null;
+
+          const response = await fetch('/api/gunny', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [...gunnyMessages, userMessage],
+              operatorContext: buildOperatorContext(),
+              tier: selectedOperator.tier || 'standard',
+              mode: 'assistant',
+              screenContext: getScreenContext(),
+              ...(trainerData && { trainerData }),
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            const errMsg = data?.error || 'Gunny AI temporarily offline.';
+            setGunnyMessages(prev => [...prev, { role: 'gunny' as const, text: errMsg, timestamp: Date.now() }]);
+          } else {
+            const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
+            setGunnyMessages(prev => [...prev, { role: 'gunny' as const, text: replyText, timestamp: Date.now() }]);
+            // Always speak back during voice comms
+            gunnySpeak(replyText);
+
+            if (data.workoutData) {
+              const today = new Date().toISOString().split('T')[0];
+              const workout = {
+                id: `workout-assist-${Date.now()}`,
+                date: today,
+                title: data.workoutData.title || 'Gunny Assist Workout',
+                notes: data.workoutData.notes || '',
+                warmup: data.workoutData.warmup || '',
+                blocks: (data.workoutData.blocks || []).map((b: Record<string, unknown>, i: number) => ({
+                  type: b.type || 'exercise',
+                  id: `block-assist-${i}`,
+                  sortOrder: i,
+                  exerciseName: b.exerciseName || '',
+                  prescription: b.prescription || '',
+                  isLinkedToNext: false,
+                  ...(b.type === 'conditioning' ? { format: b.format, description: b.description } : {}),
+                  ...(b.videoUrl ? { videoUrl: b.videoUrl } : {}),
+                })),
+                cooldown: data.workoutData.cooldown || '',
+                completed: false,
+              };
+              const updated = { ...currentSelectedOp };
+              updated.workouts = { ...updated.workouts, [today]: workout };
+              onUpdateOperator(updated);
+            }
+          }
+        } catch {
+          setGunnyMessages(prev => [...prev, {
+            role: 'gunny' as const,
+            text: `Network error, ${selectedOperator.callsign}. Check your connection.`,
+            timestamp: Date.now(),
+          }]);
+        } finally {
+          setGunnyLoading(false);
+        }
+      };
+      doSend();
+    }, 50);
+  }, [gunnyMessages, selectedOperator, operators, buildOperatorContext, getScreenContext, currentSelectedOp, onUpdateOperator]);
+
   const baseTabs: { id: AppTab; label: string; labelKey: string; icon: string }[] = [
     { id: 'coc', label: t('nav.coc_short'), labelKey: 'nav.coc_short', icon: '◆' },
     { id: 'planner', label: t('nav.planner'), labelKey: 'nav.planner', icon: '▦' },
@@ -882,7 +974,7 @@ const AppShell: React.FC<AppShellProps> = ({
           </>
         );
       case 'planner':
-        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} onWorkoutModeChange={setWorkoutModeState} />;
+        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} onSendGunnyMessage={sendGunnyVoiceMessage} onWorkoutModeChange={setWorkoutModeState} />;
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'gunny':
@@ -1670,6 +1762,8 @@ const AppShell: React.FC<AppShellProps> = ({
               onTranscript={(text) => {
                 setGunnyInput(prev => prev ? prev + ' ' + text : text);
               }}
+              onSendMessage={sendGunnyVoiceMessage}
+              callSign={selectedOperator.callsign}
               compact
             />
             <button

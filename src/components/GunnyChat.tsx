@@ -1799,9 +1799,20 @@ ${mealSuggestion}`;
           placeholder="What's the mission, champ?"
           className="chat-input"
         />
-        <VoiceInput onTranscript={(text) => {
-          setInputValue(prev => prev ? prev + ' ' + text : text);
-        }} />
+        <VoiceInput
+          onTranscript={(text) => {
+            setInputValue(prev => prev ? prev + ' ' + text : text);
+          }}
+          onSendMessage={(text) => {
+            // "Over" trigger — auto-send without hitting button
+            setInputValue(text);
+            setTimeout(() => {
+              const sendBtn = document.querySelector('.send-btn') as HTMLButtonElement;
+              if (sendBtn) sendBtn.click();
+            }, 100);
+          }}
+          callSign={operator.callsign}
+        />
         <button onClick={handleSendMessage} className="send-btn" disabled={!inputValue.trim()}>
           SEND
         </button>

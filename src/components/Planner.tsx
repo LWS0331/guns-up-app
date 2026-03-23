@@ -212,10 +212,11 @@ interface PlannerProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
   onOpenGunny?: () => void;
+  onSendGunnyMessage?: (text: string) => void; // Voice "over" trigger — sends directly to Gunny
   onWorkoutModeChange?: (state: WorkoutModeState) => void;
 }
 
-const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onWorkoutModeChange }) => {
+const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, onWorkoutModeChange }) => {
   const { t } = useLanguage();
   // ============================================================================
   // STATE
@@ -824,6 +825,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     onUpdateOperator(updated);
     setShowWorkoutBuilder(false);
     setWorkoutMode(false);
+    setActiveListening(false);
     // Stay on day view so user can review the saved workout — don't clear selectedDate
   };
 
@@ -1196,6 +1198,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       updated.workouts[dateStr] = { ...workout, results: savedResults, completed: true };
       onUpdateOperator(updated);
       setWorkoutMode(false);
+      setActiveListening(false);
       setWorkoutResults({});
     };
 
@@ -1239,12 +1242,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 ⚡ GUNNY
               </button>
             )}
-            <button onClick={() => setWorkoutMode(false)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer', fontSize: 11 }}>EXIT</button>
+            <button onClick={() => { setWorkoutMode(false); setActiveListening(false); }} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer', fontSize: 11 }}>EXIT</button>
           </div>
         </div>
         <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 16, margin: '0 0 12px 0' }}>{workout.title}</h3>
 
-        {/* ═══ VOICE COMMAND BAR ═══ */}
+        {/* ═══ VOICE COMMS BAR ═══ */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
           padding: '8px 12px',
@@ -1255,10 +1258,23 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         }}>
           <VoiceInput
             onTranscript={(text) => {
-              // Non-command voice goes to Gunny Assist
+              // Non-command voice in non-active mode goes to Gunny Assist
               if (onOpenGunny) onOpenGunny();
             }}
             onVoiceCommand={handleVoiceCommand}
+            onSendMessage={(text) => {
+              // "Over" trigger — send to Gunny without touching the phone
+              if (onSendGunnyMessage) {
+                onSendGunnyMessage(text);
+              } else if (onOpenGunny) {
+                onOpenGunny();
+              }
+            }}
+            onWakeGunny={() => {
+              // Call sign detected — open Gunny panel
+              if (onOpenGunny) onOpenGunny();
+            }}
+            callSign={operator.callsign}
             activeListening={activeListening}
             compact
           />
@@ -1273,15 +1289,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               border: 'none',
               color: activeListening ? '#00ff41' : '#6B7B6B',
               fontFamily: 'Orbitron, sans-serif',
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: 700,
-              letterSpacing: 1.5,
+              letterSpacing: 1.2,
               cursor: 'pointer',
               textAlign: 'left',
               transition: 'all 0.2s',
             }}
           >
-            {activeListening ? '● LISTENING — Say "log 135 for 10" or "rest 90 seconds"' : 'TAP TO ENABLE VOICE COMMANDS'}
+            {activeListening
+              ? `● COMMS ACTIVE — "${operator.callsign || 'GUNNY'}" to talk, "OVER" to send`
+              : 'TAP TO ENABLE VOICE COMMS'}
           </button>
           {activeListening && (
             <div style={{
@@ -1594,6 +1612,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <button
                   onClick={() => {
                     setWorkoutMode(true);
+                    setActiveListening(true); // Auto-start voice comms
                     setSelectedDate(dateStr);
                   }}
                   style={{
