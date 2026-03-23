@@ -21,7 +21,7 @@ export default function DailyBriefRef({ brief, focus = 'all', compact = false }:
 
   const s = {
     container: {
-      background: '#0a0a0a', border: '1px solid rgba(0,188,212,0.15)', borderRadius: 8,
+      background: '#0a0a0a', border: '1px solid rgba(0,255,65,0.15)', borderRadius: 8,
       marginBottom: 16, overflow: 'hidden',
     } as React.CSSProperties,
     header: {
@@ -48,7 +48,7 @@ export default function DailyBriefRef({ brief, focus = 'all', compact = false }:
         <span style={{ fontSize: 12, color: '#ddd' }}>{i + 1}. {ex.name}</span>
         {ex.notes && <div style={{ fontSize: 9, color: '#555', marginTop: 1 }}>{ex.notes}</div>}
       </div>
-      <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#00bcd4' }}>
+      <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#00ff41' }}>
         {ex.sets}x{ex.reps}{ex.weight ? ` @ ${ex.weight}` : ''}
       </span>
     </div>
@@ -59,7 +59,7 @@ export default function DailyBriefRef({ brief, focus = 'all', compact = false }:
       {/* Header */}
       <div style={s.header} onClick={() => compact && setExpanded(!expanded)}>
         <div>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00bcd4', letterSpacing: 1 }}>
+          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00ff41', letterSpacing: 1 }}>
             📋 TODAY&apos;S DAILY BRIEF
           </div>
           <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#555', marginTop: 2 }}>
@@ -119,8 +119,8 @@ export default function DailyBriefRef({ brief, focus = 'all', compact = false }:
 
           {/* Nutrition Reminder */}
           {showNutrition && brief.nutritionReminder && (
-            <div style={{ ...s.card, borderColor: 'rgba(0,188,212,0.15)' }}>
-              <div style={{ ...s.label, color: '#00bcd4' }}>NUTRITION</div>
+            <div style={{ ...s.card, borderColor: 'rgba(0,255,65,0.15)' }}>
+              <div style={{ ...s.label, color: '#00ff41' }}>NUTRITION</div>
               <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.5 }}>{brief.nutritionReminder}</div>
             </div>
           )}

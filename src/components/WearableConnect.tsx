@@ -48,7 +48,7 @@ interface SyncData {
 
 const PROVIDERS = [
   { slug: 'whoop_v2', name: 'WHOOP', color: '#00ff41' },
-  { slug: 'garmin', name: 'Garmin', color: '#00bcd4' },
+  { slug: 'garmin', name: 'Garmin', color: '#00ff41' },
   { slug: 'fitbit', name: 'Fitbit', color: '#ffb800' },
   { slug: 'oura', name: 'Oura Ring', color: '#ff4444' },
   { slug: 'polar', name: 'Polar', color: '#ff00ff' },
@@ -275,7 +275,7 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
                 {/* Sync Data Display */}
                 {sync?.sleep && (
                   <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                    <MetricBadge label="SLEEP" value={`${sync.sleep.duration}h`} color="#00bcd4" />
+                    <MetricBadge label="SLEEP" value={`${sync.sleep.duration}h`} color="#00ff41" />
                     <MetricBadge label="DEEP" value={`${sync.sleep.deep}h`} color="#6a1b9a" />
                     <MetricBadge label="REM" value={`${sync.sleep.rem}h`} color="#ff9800" />
                     {sync.sleep.efficiency !== null && <MetricBadge label="EFFICIENCY" value={`${sync.sleep.efficiency}%`} color="#00ff41" />}
@@ -293,7 +293,7 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
 
                 {sync?.body && (sync.body.weight || sync.body.bodyFat) && (
                   <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                    {sync.body.weight && <MetricBadge label="WEIGHT" value={`${sync.body.weight}lbs`} color="#00bcd4" />}
+                    {sync.body.weight && <MetricBadge label="WEIGHT" value={`${sync.body.weight}lbs`} color="#00ff41" />}
                     {sync.body.bodyFat && <MetricBadge label="BODY FAT" value={`${sync.body.bodyFat}%`} color="#ffb800" />}
                   </div>
                 )}

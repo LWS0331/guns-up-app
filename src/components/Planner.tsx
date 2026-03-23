@@ -267,7 +267,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // HR Zone definitions based on max HR (220 - age)
   const maxHR = 220 - (operator.profile?.age || 30);
   const HR_ZONES = [
-    { zone: 1, name: 'RECOVERY', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00bcd4' },
+    { zone: 1, name: 'RECOVERY', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
     { zone: 2, name: 'FAT BURN', min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
     { zone: 3, name: 'CARDIO', min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
     { zone: 4, name: 'THRESHOLD', min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
@@ -611,7 +611,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       case 'red':
         return '#ff4444';
       case 'cyan':
-        return '#00bcd4';
+        return '#00ff41';
       default:
         return '#00ff41';
     }
@@ -911,13 +911,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     <div style={{
                       fontFamily: 'Chakra Petch',
                       fontSize: '15px',
-                      color: '#00bcd4',
+                      color: '#00ff41',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       marginBottom: '4px',
                       paddingLeft: '6px',
-                      borderLeft: '1px solid rgba(0,188,212,0.3)',
+                      borderLeft: '1px solid rgba(0,255,65,0.3)',
                     }}>
                       {workout.title}
                     </div>
@@ -996,7 +996,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
                 {workout ? (
                   <div>
-                    <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '15px', fontWeight: 'bold', marginBottom: '2px' }}>
+                    <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', marginBottom: '2px' }}>
                       {workout.title}
                     </div>
                     <div style={{ fontFamily: 'Share Tech Mono', fontSize: '12px', color: '#aaa' }}>
@@ -1090,7 +1090,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     return (
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#e040fb', fontSize: 18, margin: 0 }}>WORKOUT MODE</h2>
+          <h2 style={{ fontFamily: 'Orbitron', color: '#FF8C00', fontSize: 18, margin: 0 }}>WORKOUT MODE</h2>
           <div style={{ display: 'flex', gap: 8 }}>
             {onOpenGunny && (
               <button
@@ -1114,11 +1114,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             <button onClick={() => setWorkoutMode(false)} style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer' }}>EXIT</button>
           </div>
         </div>
-        <h3 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: 16, margin: '0 0 20px 0' }}>{workout.title}</h3>
+        <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 16, margin: '0 0 20px 0' }}>{workout.title}</h3>
 
         {/* Rest Timer */}
-        <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: restRunning ? '#1a0a1a' : '#0a0a0a', border: `1px solid ${restRunning ? '#e040fb' : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
-          <div style={{ fontFamily: 'Orbitron', fontSize: restRunning ? 48 : 24, color: restTimer <= 10 && restRunning ? '#ff4444' : '#e040fb', transition: 'all 0.3s' }}>
+        <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: restRunning ? '#1a1a0a' : '#0a0a0a', border: `1px solid ${restRunning ? '#FF8C00' : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
+          <div style={{ fontFamily: 'Orbitron', fontSize: restRunning ? 48 : 24, color: restTimer <= 10 && restRunning ? '#ff4444' : '#FF8C00', transition: 'all 0.3s' }}>
             {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8 }}>
@@ -1187,7 +1187,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   {getCurrentZone(currentHR).zone !== targetZone && (
                     <div style={{
                       fontFamily: 'Share Tech Mono', fontSize: 11,
-                      color: getCurrentZone(currentHR).zone > targetZone ? '#ff4444' : '#00bcd4',
+                      color: getCurrentZone(currentHR).zone > targetZone ? '#ff4444' : '#00ff41',
                       animation: 'pulse 1s infinite',
                     }}>
                       {getCurrentZone(currentHR).zone > targetZone ? 'ABOVE TARGET — SLOW DOWN' : 'BELOW TARGET — PUSH HARDER'}
@@ -1302,7 +1302,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             <div key={block.id} style={{ padding: 12, marginBottom: 12, background: idx === activeBlockIdx ? '#0a1a0a' : '#0a0a0a', border: `1px solid ${idx === activeBlockIdx ? '#00ff41' : '#333'}`, borderRadius: 4, transition: 'all 0.2s' }}
               onClick={() => setActiveBlockIdx(idx)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: 14, fontWeight: 'bold' }}>{block.exerciseName}</div>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 14, fontWeight: 'bold' }}>{block.exerciseName}</div>
                 <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: 11 }}>{block.prescription}</div>
               </div>
               {block.videoUrl && (
@@ -1383,9 +1383,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         ) : showWorkoutBuilder ? (
           renderWorkoutBuilder()
         ) : workout ? (
-          <div style={{ padding: '20px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 188, 212, 0.3)' }}>
+          <div style={{ padding: '20px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 255, 65, 0.3)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', margin: 0 }}>{workout.title}</h3>
+              <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', margin: 0 }}>{workout.title}</h3>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   onClick={() => handleEditWorkout(workout)}
@@ -1409,7 +1409,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   }}
                   style={{
                     padding: '6px 12px',
-                    backgroundColor: '#e040fb',
+                    backgroundColor: '#00ff41',
                     color: '#000',
                     border: 'none',
                     fontFamily: 'Chakra Petch',
@@ -1418,7 +1418,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     fontWeight: 'bold',
                   }}
                 >
-                  Workout Mode
+                  START
                 </button>
                 <button
                   onClick={() => handleDeleteWorkout(dateStr)}
@@ -1462,7 +1462,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
             {workout.primer && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#e040fb', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
+                <div style={{ fontFamily: 'Chakra Petch', color: '#FF8C00', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
                   PRIMER
                 </div>
                 <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
@@ -1485,12 +1485,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                       <div key={block.id} style={{
                         marginBottom: '8px',
                         padding: '10px 12px',
-                        borderLeft: '3px solid #00bcd4',
-                        background: 'rgba(0,188,212,0.04)',
+                        borderLeft: '3px solid #00ff41',
+                        background: 'rgba(0,255,65,0.04)',
                         borderRadius: '0 4px 4px 0',
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                          <div style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: '15px', fontWeight: 700 }}>
+                          <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 700 }}>
                             {label}) {block.exerciseName}
                           </div>
                           {vidUrl && (
@@ -1581,13 +1581,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         style={{
           padding: '24px',
           backgroundColor: 'rgba(5,5,5,0.8)',
-          border: '1px solid rgba(0,188,212,0.15)',
+          border: '1px solid rgba(0,255,65,0.15)',
           maxWidth: '900px',
           position: 'relative',
         }}
       >
         {/* Top accent */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, rgba(0,188,212,0.4), transparent)' }} />
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, rgba(0,255,65,0.4), transparent)' }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div style={{ fontFamily: 'Orbitron', color: '#00ff41', fontSize: '26px', fontWeight: 900, letterSpacing: '2px' }}>
@@ -1669,7 +1669,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
         {/* PRIMER */}
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ fontFamily: 'Chakra Petch', color: '#e040fb', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+          <label style={{ fontFamily: 'Chakra Petch', color: '#FF8C00', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
             PRIMER (Activation)
           </label>
           <textarea
@@ -1680,8 +1680,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               width: '100%',
               padding: '8px 12px',
               backgroundColor: '#0a0a0a',
-              border: '1px solid rgba(224, 64, 251, 0.3)',
-              color: '#e040fb',
+              border: '1px solid rgba(255, 140, 0, 0.3)',
+              color: '#FF8C00',
               fontFamily: 'Chakra Petch',
               fontSize: '16px',
               minHeight: '50px',
@@ -1700,8 +1700,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
         {/* WORKOUT BLOCKS */}
         {builderData.blocks.length > 0 && (
-          <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 188, 212, 0.2)', borderRadius: '4px' }}>
-            <h4 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', margin: '0 0 16px 0', fontSize: '26px' }}>
+          <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: '4px' }}>
+            <h4 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', margin: '0 0 16px 0', fontSize: '26px' }}>
               WORKOUT BLOCKS
             </h4>
 
@@ -1735,7 +1735,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     <>
                       {/* Exercise Name */}
                       <div style={{ marginBottom: '12px', position: 'relative' }}>
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
                           Exercise Name
                         </label>
                         <input
@@ -1752,8 +1752,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                             width: '100%',
                             padding: '6px 8px',
                             backgroundColor: '#0a0a0a',
-                            border: '1px solid rgba(0, 188, 212, 0.4)',
-                            color: '#00bcd4',
+                            border: '1px solid rgba(0, 255, 65, 0.4)',
+                            color: '#00ff41',
                             fontFamily: 'Share Tech Mono',
                             fontSize: '16px',
                             boxSizing: 'border-box',
@@ -1769,7 +1769,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                               left: 0,
                               right: 0,
                               backgroundColor: '#0a0a0a',
-                              border: '1px solid #00bcd4',
+                              border: '1px solid #00ff41',
                               zIndex: 100,
                               maxHeight: '150px',
                               overflowY: 'auto',
@@ -1782,13 +1782,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                                 style={{
                                   padding: '8px',
                                   cursor: 'pointer',
-                                  borderBottom: '1px solid rgba(0, 188, 212, 0.2)',
+                                  borderBottom: '1px solid rgba(0, 255, 65, 0.2)',
                                   fontFamily: 'Share Tech Mono',
                                   fontSize: '26px',
-                                  color: '#00bcd4',
+                                  color: '#00ff41',
                                 }}
                                 onMouseEnter={e => {
-                                  (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0, 188, 212, 0.1)';
+                                  (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0, 255, 65, 0.1)';
                                 }}
                                 onMouseLeave={e => {
                                   (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
@@ -1812,7 +1812,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
                       {/* Prescription */}
                       <div style={{ marginBottom: '12px' }}>
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
                           Prescription
                         </label>
                         <textarea
@@ -1823,8 +1823,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                             width: '100%',
                             padding: '6px 8px',
                             backgroundColor: '#0a0a0a',
-                            border: '1px solid rgba(0, 188, 212, 0.4)',
-                            color: '#00bcd4',
+                            border: '1px solid rgba(0, 255, 65, 0.4)',
+                            color: '#00ff41',
                             fontFamily: 'Share Tech Mono',
                             fontSize: '26px',
                             minHeight: '40px',
@@ -1877,7 +1877,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                           onChange={e => handleUpdateBlock(idx, { isLinkedToNext: e.target.checked })}
                           style={{ cursor: 'pointer' }}
                         />
-                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00bcd4', fontSize: '15px', cursor: 'pointer' }}>
+                        <label style={{ fontFamily: 'Share Tech Mono', color: '#00ff41', fontSize: '15px', cursor: 'pointer' }}>
                           Superset to next exercise
                         </label>
                       </div>
@@ -1943,7 +1943,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             onClick={handleAddExerciseBlock}
             style={{
               padding: '8px 12px',
-              backgroundColor: '#00bcd4',
+              backgroundColor: '#00ff41',
               color: '#000',
               border: 'none',
               fontFamily: 'Chakra Petch',
@@ -2078,12 +2078,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 padding: '10px 12px',
                 backgroundColor: 'transparent',
                 border: 'none',
-                color: '#00bcd4',
+                color: '#00ff41',
                 fontFamily: 'Chakra Petch',
                 fontSize: '15px',
                 cursor: 'pointer',
                 textAlign: 'left',
-                borderBottom: '1px solid rgba(0, 188, 212, 0.2)',
+                borderBottom: '1px solid rgba(0, 255, 65, 0.2)',
               }}
             >
               Rest Day
@@ -2208,8 +2208,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           style={{
             padding: '6px 14px',
             backgroundColor: 'transparent',
-            color: '#00bcd4',
-            border: '1px solid rgba(0,188,212,0.2)',
+            color: '#00ff41',
+            border: '1px solid rgba(0,255,65,0.2)',
             fontFamily: 'Share Tech Mono',
             cursor: 'pointer',
             fontSize: '15px',

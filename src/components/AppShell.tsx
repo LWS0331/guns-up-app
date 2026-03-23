@@ -797,11 +797,11 @@ const AppShell: React.FC<AppShellProps> = ({
             <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
             <Leaderboard operators={operators} currentUser={currentUser} />
             <div style={{ marginTop: 20 }}>
-              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#e040fb', letterSpacing: 1, marginBottom: 12 }}>ACHIEVEMENTS</h3>
+              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>ACHIEVEMENTS</h3>
               <Achievements operator={currentSelectedOp} />
             </div>
             <div style={{ marginTop: 20 }}>
-              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00bcd4', letterSpacing: 1, marginBottom: 12 }}>SQUAD FEED</h3>
+              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>SQUAD FEED</h3>
               <SocialFeed operators={operators} currentOperator={currentSelectedOp} />
             </div>
             {currentSelectedOp.betaUser && (

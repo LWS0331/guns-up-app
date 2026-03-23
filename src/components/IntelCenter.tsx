@@ -1360,7 +1360,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               </div>
               <div style={{ display: 'flex', gap: 16, fontFamily: 'Share Tech Mono', fontSize: 12 }}>
                 <span style={{ color: '#ffb800' }}>{quickFoodResult.calories} cal</span>
-                <span style={{ color: '#00bcd4' }}>{quickFoodResult.protein}g P</span>
+                <span style={{ color: '#00ff41' }}>{quickFoodResult.protein}g P</span>
                 <span style={{ color: '#4ade80' }}>{quickFoodResult.carbs}g C</span>
                 <span style={{ color: '#f97316' }}>{quickFoodResult.fat}g F</span>
               </div>
@@ -1412,7 +1412,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                   </div>
                   <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, display: 'flex', gap: 8 }}>
                     <span style={{ color: '#ffb800' }}>{item.calories}</span>
-                    <span style={{ color: '#00bcd4' }}>{item.protein}P</span>
+                    <span style={{ color: '#00ff41' }}>{item.protein}P</span>
                     <span style={{ color: '#4ade80' }}>{item.carbs}C</span>
                     <span style={{ color: '#f97316' }}>{item.fat}F</span>
                   </div>
@@ -1423,7 +1423,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                   <span style={{ color: '#ff6b35' }}>TOTALS</span>
                   <div style={{ display: 'flex', gap: 12, fontFamily: 'Share Tech Mono, monospace', fontSize: 12 }}>
                     <span style={{ color: '#ffb800' }}>{photoResult.totals.calories} cal</span>
-                    <span style={{ color: '#00bcd4' }}>{photoResult.totals.protein}g P</span>
+                    <span style={{ color: '#00ff41' }}>{photoResult.totals.protein}g P</span>
                     <span style={{ color: '#4ade80' }}>{photoResult.totals.carbs}g C</span>
                     <span style={{ color: '#f97316' }}>{photoResult.totals.fat}g F</span>
                   </div>
@@ -1491,7 +1491,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                   </div>
                   <div style={{ display: 'flex', gap: 12, fontFamily: 'Share Tech Mono, monospace', fontSize: 11 }}>
                     <span style={{ color: '#ffb800' }}>{food.macros.calories} cal</span>
-                    <span style={{ color: '#00bcd4' }}>{food.macros.protein}g P</span>
+                    <span style={{ color: '#00ff41' }}>{food.macros.protein}g P</span>
                     <span style={{ color: '#4ade80' }}>{food.macros.carbs}g C</span>
                     <span style={{ color: '#f97316' }}>{food.macros.fat}g F</span>
                     <span style={{ color: '#555' }}>per {food.servingSize}{food.servingUnit}</span>
@@ -1785,7 +1785,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             }}
           >
             <span style={{ color: '#ddd' }}>PROTEIN</span>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#00bcd4' }}>
+            <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#00ff41' }}>
               {mealTotals.protein} / {state.nutrition.proteinTarget}g
             </span>
           </div>
@@ -1800,7 +1800,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             <div
               style={{
                 height: '100%',
-                backgroundColor: '#00bcd4',
+                backgroundColor: '#00ff41',
                 width: `${Math.min(
                   (mealTotals.protein / state.nutrition.proteinTarget) * 100,
                   100
@@ -2491,7 +2491,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
     const typeColors: Record<string, string> = {
       consistency: '#4ade80',
-      endurance: '#00bcd4',
+      endurance: '#00ff41',
       strength: '#ff6b35',
       milestone: '#facc15',
     };
@@ -2666,7 +2666,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                   <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666' }}>EXERCISES</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00bcd4' }}>
+                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00ff41' }}>
                     {state.prBoard.filter(p => (Date.now() - new Date(p.date).getTime()) / (1000 * 60 * 60 * 24) < 30).length}
                   </div>
                   <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666' }}>LAST 30 DAYS</div>
@@ -2710,7 +2710,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                         <input type="number" value={pr.reps} onChange={(e) => handlePRChange(index, 'reps', parseInt(e.target.value))}
-                          style={{ width: '50px', padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#00bcd4', textAlign: 'right', outline: 'none' }} />
+                          style={{ width: '50px', padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#00ff41', textAlign: 'right', outline: 'none' }} />
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                         <input type="date" value={pr.date} onChange={(e) => handlePRChange(index, 'date', e.target.value)}

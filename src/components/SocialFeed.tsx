@@ -90,7 +90,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ operators, currentOperator }) =
 
   const getTeamBadge = (teamId?: string) => {
     if (teamId === 'team-wolf-pack') return { name: 'WOLF PACK', color: '#00ff41' };
-    if (teamId === 'team-madheart') return { name: 'MADHEART', color: '#e040fb' };
+    if (teamId === 'team-madheart') return { name: 'MADHEART', color: '#FF8C00' };
     return null;
   };
 
@@ -106,11 +106,11 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ operators, currentOperator }) =
   };
 
   const typeColors: Record<string, string> = {
-    workout: '#00bcd4',
+    workout: '#00ff41',
     pr: '#ffb800',
     streak: '#ff6600',
     intake: '#00ff41',
-    badge: '#e040fb',
+    badge: '#FF8C00',
   };
 
   return (

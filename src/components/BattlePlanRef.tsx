@@ -130,7 +130,7 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
                   <div style={{ fontSize: 8, color: '#555' }}>DAYS/WK</div>
                 </div>
                 <div style={{ textAlign: 'center', padding: 8, background: '#050505', borderRadius: 4, border: '1px solid #1a1a1a' }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00bcd4' }}>{tp?.split || 'TBD'}</div>
+                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00ff41' }}>{tp?.split || 'TBD'}</div>
                   <div style={{ fontSize: 8, color: '#555' }}>SPLIT</div>
                 </div>
                 <div style={{ textAlign: 'center', padding: 8, background: '#050505', borderRadius: 4, border: '1px solid #1a1a1a' }}>
@@ -201,8 +201,8 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
                   <div style={s.macroNum('#ffb800')}>{np.dailyCalories}</div>
                   <div style={s.macroLabel}>CAL</div>
                 </div>
-                <div style={s.macroBox('#00bcd4')}>
-                  <div style={s.macroNum('#00bcd4')}>{np.protein}g</div>
+                <div style={s.macroBox('#00ff41')}>
+                  <div style={s.macroNum('#00ff41')}>{np.protein}g</div>
                   <div style={s.macroLabel}>PROTEIN</div>
                 </div>
                 <div style={s.macroBox('#4ade80')}>
@@ -220,7 +220,7 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
                 <div style={s.label}>NUTRITION STRATEGY</div>
                 <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.5, marginBottom: 6 }}>{np.approach}</div>
                 <div style={{ display: 'flex', gap: 12, fontSize: 10 }}>
-                  <span style={{ color: '#00bcd4' }}>💧 {np.hydrationOz}oz/day</span>
+                  <span style={{ color: '#00ff41' }}>💧 {np.hydrationOz}oz/day</span>
                   <span style={{ color: '#facc15' }}>🍽️ {np.mealsPerDay} meals/day</span>
                 </div>
               </div>
@@ -237,7 +237,7 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
                       </div>
                       <div style={{ fontSize: 10, color: '#aaa', marginBottom: 2 }}>{meal.description}</div>
                       <div style={{ display: 'flex', gap: 8, fontSize: 9 }}>
-                        <span style={{ color: '#00bcd4' }}>{meal.protein}g P</span>
+                        <span style={{ color: '#00ff41' }}>{meal.protein}g P</span>
                         <span style={{ color: '#4ade80' }}>{meal.carbs}g C</span>
                         <span style={{ color: '#ff6b35' }}>{meal.fat}g F</span>
                       </div>

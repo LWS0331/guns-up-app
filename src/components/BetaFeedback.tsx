@@ -40,15 +40,15 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: '#00FF41',
-  REVIEWING: '#00BCD4',
-  FIXED: '#E040FB',
+  REVIEWING: '#00ff41',
+  FIXED: '#FF8C00',
   WONTFIX: '#555555',
 };
 
 const TYPE_COLORS: Record<string, string> = {
   BUG: '#FF4444',
-  RECOMMENDATION: '#00BCD4',
-  'UI/UX': '#E040FB',
+  RECOMMENDATION: '#00ff41',
+  'UI/UX': '#FF8C00',
   PERFORMANCE: '#FFD700',
 };
 
@@ -162,7 +162,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 140 }}>
-          <div style={{ fontSize: 10, color: '#00bcd4', marginBottom: 4, letterSpacing: 1 }}>TYPE</div>
+          <div style={{ fontSize: 10, color: '#00ff41', marginBottom: 4, letterSpacing: 1 }}>TYPE</div>
           <select value={feedbackType} onChange={(e) => setFeedbackType(e.target.value as typeof feedbackType)} style={selectStyle}>
             <option value="BUG">BUG</option>
             <option value="RECOMMENDATION">RECOMMENDATION</option>
@@ -171,13 +171,13 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
           </select>
         </div>
         <div style={{ flex: 0 }}>
-          <div style={{ fontSize: 10, color: '#00bcd4', marginBottom: 4, letterSpacing: 1 }}>SEVERITY</div>
+          <div style={{ fontSize: 10, color: '#00ff41', marginBottom: 4, letterSpacing: 1 }}>SEVERITY</div>
           {badge(category, CATEGORY_COLORS[category])}
         </div>
       </div>
 
       <div>
-        <div style={{ fontSize: 10, color: '#00bcd4', marginBottom: 4, letterSpacing: 1 }}>DESCRIPTION ({description.length}/1000)</div>
+        <div style={{ fontSize: 10, color: '#00ff41', marginBottom: 4, letterSpacing: 1 }}>DESCRIPTION ({description.length}/1000)</div>
         <textarea
           value={description}
           onChange={(e) => handleDescriptionChange(e.target.value)}

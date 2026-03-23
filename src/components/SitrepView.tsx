@@ -38,8 +38,8 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
     }),
     macroLabel: { fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#555', marginTop: 2 },
     exerciseRow: (superset: boolean) => ({
-      padding: '10px 12px', background: superset ? 'rgba(0,188,212,0.05)' : 'transparent',
-      borderLeft: superset ? '3px solid #00bcd4' : '3px solid #00ff4130',
+      padding: '10px 12px', background: superset ? 'rgba(0,255,65,0.05)' : 'transparent',
+      borderLeft: superset ? '3px solid #00ff41' : '3px solid #00ff4130',
       borderBottom: '1px solid #111', display: 'flex' as const, justifyContent: 'space-between' as const,
       alignItems: 'center' as const,
     }),
@@ -136,7 +136,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
                 <div style={{ fontSize: 9, color: '#555' }}>DAYS/WEEK</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00bcd4' }}>{sitrep.trainingPlan?.split || 'TBD'}</div>
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41' }}>{sitrep.trainingPlan?.split || 'TBD'}</div>
                 <div style={{ fontSize: 9, color: '#555' }}>SPLIT</div>
               </div>
               <div style={{ textAlign: 'center' }}>
@@ -157,8 +157,8 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
               <div style={s.macroNum('#ffb800')}>{sitrep.nutritionPlan?.dailyCalories || 0}</div>
               <div style={s.macroLabel}>CALORIES</div>
             </div>
-            <div style={s.macroBox('#00bcd4')}>
-              <div style={s.macroNum('#00bcd4')}>{sitrep.nutritionPlan?.protein || 0}g</div>
+            <div style={s.macroBox('#00ff41')}>
+              <div style={s.macroNum('#00ff41')}>{sitrep.nutritionPlan?.protein || 0}g</div>
               <div style={s.macroLabel}>PROTEIN</div>
             </div>
             <div style={s.macroBox('#4ade80')}>
@@ -176,7 +176,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
             <div style={s.label}>NUTRITION STRATEGY</div>
             <div style={s.value}>{sitrep.nutritionPlan?.approach || ''}</div>
             <div style={{ marginTop: 8, display: 'flex', gap: 12 }}>
-              <span style={{ fontSize: 11, color: '#00bcd4' }}>💧 {sitrep.nutritionPlan?.hydrationOz || 0}oz water/day</span>
+              <span style={{ fontSize: 11, color: '#00ff41' }}>💧 {sitrep.nutritionPlan?.hydrationOz || 0}oz water/day</span>
               <span style={{ fontSize: 11, color: '#facc15' }}>🍽️ {sitrep.nutritionPlan?.mealsPerDay || 0} meals/day</span>
             </div>
           </div>
@@ -192,7 +192,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
                 </div>
                 <div style={{ fontSize: 12, color: '#ccc', marginBottom: 4 }}>{meal.description}</div>
                 <div style={{ display: 'flex', gap: 10, fontSize: 10 }}>
-                  <span style={{ color: '#00bcd4' }}>{meal.protein}g P</span>
+                  <span style={{ color: '#00ff41' }}>{meal.protein}g P</span>
                   <span style={{ color: '#4ade80' }}>{meal.carbs}g C</span>
                   <span style={{ color: '#ff6b35' }}>{meal.fat}g F</span>
                 </div>
@@ -271,7 +271,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
               {/* Cooldown */}
               {today.cooldown && (
                 <div style={s.card}>
-                  <div style={{ ...s.label, color: '#00bcd4' }}>❄️ COOLDOWN</div>
+                  <div style={{ ...s.label, color: '#00ff41' }}>❄️ COOLDOWN</div>
                   <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>{today.cooldown}</div>
                 </div>
               )}
@@ -284,8 +284,8 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
               )}
 
               {/* Next Day Info */}
-              <div style={{ ...s.card, borderColor: 'rgba(0,188,212,0.2)', background: 'rgba(0,188,212,0.03)', textAlign: 'center' as const }}>
-                <div style={{ fontSize: 10, color: '#00bcd4', fontFamily: 'Orbitron, sans-serif', letterSpacing: 1, marginBottom: 4 }}>
+              <div style={{ ...s.card, borderColor: 'rgba(0,255,65,0.2)', background: 'rgba(0,255,65,0.03)', textAlign: 'center' as const }}>
+                <div style={{ fontSize: 10, color: '#00ff41', fontFamily: 'Orbitron, sans-serif', letterSpacing: 1, marginBottom: 4 }}>
                   ADAPTIVE PROGRAMMING
                 </div>
                 <div style={{ fontSize: 11, color: '#888', lineHeight: 1.5 }}>

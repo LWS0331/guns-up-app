@@ -229,7 +229,7 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator }) => {
       {/* Frequency Chart */}
       {activeChart === 'frequency' && (
         <div>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#00bcd4', marginBottom: 12, letterSpacing: 1 }}>
+          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#00ff41', marginBottom: 12, letterSpacing: 1 }}>
             WORKOUT FREQUENCY (12 WEEKS)
           </div>
           <ResponsiveContainer width="100%" height={250}>
@@ -238,7 +238,7 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator }) => {
               <XAxis dataKey="week" stroke="#555" tick={{ fontSize: 10, fontFamily: 'Share Tech Mono' }} />
               <YAxis stroke="#555" tick={{ fontSize: 10, fontFamily: 'Share Tech Mono' }} />
               <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="workouts" fill="#00bcd4" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="workouts" fill="#00ff41" radius={[4, 4, 0, 0]} />
               <Bar dataKey="completed" fill="#00ff41" radius={[4, 4, 0, 0]} />
               <Legend wrapperStyle={{ fontFamily: 'Share Tech Mono', fontSize: 10 }} />
             </BarChart>
@@ -249,7 +249,7 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator }) => {
       {/* Nutrition Chart */}
       {activeChart === 'nutrition' && (
         <div>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#e040fb', marginBottom: 12, letterSpacing: 1 }}>
+          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#FF8C00', marginBottom: 12, letterSpacing: 1 }}>
             NUTRITION TRACKING (14 DAYS)
           </div>
           {nutritionData.length > 0 ? (
@@ -260,7 +260,7 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator }) => {
                 <YAxis yAxisId="cal" orientation="left" stroke="#555" tick={{ fontSize: 10, fontFamily: 'Share Tech Mono' }} />
                 <YAxis yAxisId="pro" orientation="right" stroke="#555" tick={{ fontSize: 10, fontFamily: 'Share Tech Mono' }} />
                 <Tooltip contentStyle={tooltipStyle} />
-                <Bar yAxisId="cal" dataKey="calories" fill="rgba(224,64,251,0.6)" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="cal" dataKey="calories" fill="rgba(255,140,0,0.6)" radius={[4, 4, 0, 0]} />
                 <Bar yAxisId="pro" dataKey="protein" fill="rgba(0,255,65,0.6)" radius={[4, 4, 0, 0]} />
                 <Legend wrapperStyle={{ fontFamily: 'Share Tech Mono', fontSize: 10 }} />
               </BarChart>
@@ -288,7 +288,7 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator }) => {
                 <YAxis yAxisId="bf" orientation="right" stroke="#555" tick={{ fontSize: 10, fontFamily: 'Share Tech Mono' }} domain={[0, 40]} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Line yAxisId="weight" type="monotone" dataKey="weight" stroke="#ff6600" strokeWidth={2} dot={{ fill: '#ff6600', r: 4 }} name="Weight (lbs)" />
-                <Line yAxisId="bf" type="monotone" dataKey="bodyFat" stroke="#00bcd4" strokeWidth={2} dot={{ fill: '#00bcd4', r: 4 }} name="Body Fat %" />
+                <Line yAxisId="bf" type="monotone" dataKey="bodyFat" stroke="#00ff41" strokeWidth={2} dot={{ fill: '#00ff41', r: 4 }} name="Body Fat %" />
                 <Legend wrapperStyle={{ fontFamily: 'Share Tech Mono', fontSize: 10 }} />
               </LineChart>
             </ResponsiveContainer>

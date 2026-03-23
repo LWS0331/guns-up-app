@@ -91,7 +91,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
 
   const getRankColor = (idx: number) => {
     if (idx === 0) return '#ffd700'; // gold
-    if (idx === 1) return '#c0c0c0'; // silver
+    if (idx === 1) return '#888888'; // silver
     if (idx === 2) return '#cd7f32'; // bronze
     return '#888';
   };

@@ -353,7 +353,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           <KPICard label="MRR" value={`$${totalMRR.toFixed(2)}`} color="#00ff41" />
           <KPICard label="ARR" value={`$${totalARR.toFixed(2)}`} color="#00ff41" />
           <KPICard label="NET PROFIT/MO" value={`$${netProfit.toFixed(2)}`} color={netProfit > 0 ? '#00ff41' : '#ff4444'} />
-          <KPICard label="TOTAL CLIENTS" value={String(clients.length)} color="#00bcd4" />
+          <KPICard label="TOTAL CLIENTS" value={String(clients.length)} color="#00ff41" />
           <KPICard label="TRAINER PAYOUT" value={`$${totalTrainerPayout.toFixed(2)}/mo`} color="#ffb800" />
           <KPICard label="API COST" value={`$${totalApiCost.toFixed(2)}/mo`} color="#ff4444" />
         </div>
@@ -381,7 +381,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                     <td style={{ padding: '10px 8px', color: '#888' }}>${config.monthlyPrice}</td>
                     <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.mrr.toFixed(2)}</td>
                     <td style={{ padding: '10px 8px', color: '#ffb800' }}>${data.trainerPayout.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#00bcd4' }}>${data.platformRevenue.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.platformRevenue.toFixed(2)}</td>
                     <td style={{ padding: '10px 8px', color: '#ff4444' }}>${data.apiCost.toFixed(2)}</td>
                     <td style={{ padding: '10px 8px', color: '#888' }}>${data.stripeFees.toFixed(2)}</td>
                     <td style={{ padding: '10px 8px', color: margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{margin.toFixed(1)}%</td>
@@ -410,7 +410,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                   <td style={{ padding: '10px 8px', color: tierColor(row.tier) }}>{row.tier}</td>
                   <td style={{ padding: '10px 8px', color: '#888' }}>{row.workouts}</td>
                   <td style={{ padding: '10px 8px', color: '#888' }}>{row.messages}</td>
-                  <td style={{ padding: '10px 8px', color: '#00bcd4' }}>{row.estTokens.toLocaleString()}</td>
+                  <td style={{ padding: '10px 8px', color: '#00ff41' }}>{row.estTokens.toLocaleString()}</td>
                   <td style={{ padding: '10px 8px', color: row.estCost > 10 ? '#ff4444' : '#00ff41' }}>${row.estCost.toFixed(2)}</td>
                   <td style={{ padding: '10px 8px', color: row.status === 'VANGUARD' ? '#ff00ff' : row.status === 'BETA FREE' ? '#00ff41' : row.status === 'PROMO' ? '#ffb800' : '#888' }}>{row.status}</td>
                 </tr>
@@ -503,12 +503,12 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
 
         {/* User KPIs — real from DB */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="TOTAL OPERATORS" value={String(dbStats?.total ?? operators.length)} color="#00bcd4" />
+          <KPICard label="TOTAL OPERATORS" value={String(dbStats?.total ?? operators.length)} color="#00ff41" />
           <KPICard label="TRAINERS" value={String(dbStats?.trainers ?? trainers.length)} color="#ffb800" />
           <KPICard label="CLIENTS" value={String(dbStats?.clients ?? clients.length)} color="#00ff41" />
           <KPICard label="ACTIVE (7D)" value={String(dbStats?.active7d ?? 0)} color={dbStats?.active7d ? '#00ff41' : '#ff4444'} />
           <KPICard label="BETA USERS" value={String(dbStats?.beta ?? 0)} color="#ff00ff" />
-          <KPICard label="PROFILE DONE" value={`${dbStats?.profileComplete ?? 0}/${dbStats?.total ?? operators.length}`} color="#00bcd4" />
+          <KPICard label="PROFILE DONE" value={`${dbStats?.profileComplete ?? 0}/${dbStats?.total ?? operators.length}`} color="#00ff41" />
         </div>
 
         {/* Tier Distribution */}
@@ -605,7 +605,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         {/* Platform KPIs */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
           <KPICard label="TOTAL WORKOUTS" value={String(dbPlatform?.totalWorkouts ?? 0)} color="#00ff41" />
-          <KPICard label="TOTAL MEALS" value={String(dbPlatform?.totalMeals ?? 0)} color="#00bcd4" />
+          <KPICard label="TOTAL MEALS" value={String(dbPlatform?.totalMeals ?? 0)} color="#00ff41" />
           <KPICard label="TOTAL PRs" value={String(dbPlatform?.totalPRs ?? 0)} color="#ffb800" />
           <KPICard label="INJURIES" value={String(dbPlatform?.totalInjuries ?? 0)} color="#ff4444" />
           <KPICard label="ACTIVE WEARABLES" value={String(dbPlatform?.activeWearables ?? 0)} color="#ff00ff" />
@@ -614,7 +614,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         {/* Platform Details */}
         <SectionHeader title="PLATFORM METRICS" />
         <StatusRow label="Total Workouts" status={String(dbPlatform?.totalWorkouts ?? 0)} color="#00ff41" />
-        <StatusRow label="Total Meals Logged" status={String(dbPlatform?.totalMeals ?? 0)} color="#00bcd4" />
+        <StatusRow label="Total Meals Logged" status={String(dbPlatform?.totalMeals ?? 0)} color="#00ff41" />
         <StatusRow label="Personal Records" status={String(dbPlatform?.totalPRs ?? 0)} color="#ffb800" />
         <StatusRow label="Injury Reports" status={String(dbPlatform?.totalInjuries ?? 0)} color="#ff4444" />
         <StatusRow label="Wearable Devices" status={String(dbPlatform?.activeWearables ?? 0)} color="#ff00ff" />
@@ -638,7 +638,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         <LiveBadge />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
           <KPICard label="BETA USERS" value={String(dbBeta?.beta ?? betaOps.length)} color="#ff00ff" />
-          <KPICard label="TOTAL FEEDBACK" value={String(allFeedback.length)} color="#00bcd4" />
+          <KPICard label="TOTAL FEEDBACK" value={String(allFeedback.length)} color="#00ff41" />
           <KPICard label="PROFILE COMPLETE" value={`${betaOps.filter(op => op.profile?.age && op.profile?.weight).length}/${betaOps.length}`} color="#00ff41" />
         </div>
 
@@ -676,7 +676,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
             disabled={!selectedOperatorForPromo}
             style={{
               padding: '6px 12px', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace',
-              color: '#00bcd4', background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)',
+              color: '#00ff41', background: 'rgba(0,255,65,0.08)', border: '1px solid rgba(0,255,65,0.2)',
               cursor: selectedOperatorForPromo ? 'pointer' : 'not-allowed', opacity: selectedOperatorForPromo ? 1 : 0.5,
               letterSpacing: '1px',
             }}
@@ -725,7 +725,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           allFeedback.map((fb, i) => (
             <div key={i} style={{
               padding: '12px 16px', marginBottom: '6px',
-              background: 'rgba(0,188,212,0.03)', border: '1px solid rgba(0,188,212,0.08)',
+              background: 'rgba(0,255,65,0.03)', border: '1px solid rgba(0,255,65,0.08)',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span style={{ color: tierColor(fb.tier as AiTier), fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', fontWeight: 600 }}>{fb.callsign}</span>
@@ -793,7 +793,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       }}>
         <div style={{ color: '#888', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px', lineHeight: '1.8' }}>
           <div style={{ color: '#00ff41', fontWeight: 700, marginBottom: '8px' }}>WEBHOOK ENDPOINT (for marketing agent):</div>
-          <code style={{ color: '#00bcd4', background: 'rgba(0,188,212,0.08)', padding: '4px 8px' }}>
+          <code style={{ color: '#00ff41', background: 'rgba(0,255,65,0.08)', padding: '4px 8px' }}>
             POST /api/marketing/publish
           </code>
           <div style={{ marginTop: '12px', color: '#555' }}>
@@ -959,7 +959,7 @@ const DataRow: React.FC<{ label: string; value: string }> = ({ label, value }) =
 
 const tierColor = (tier: AiTier | string): string => {
   switch (tier) {
-    case 'haiku': return '#00bcd4';
+    case 'haiku': return '#00ff41';
     case 'sonnet': return '#ffb800';
     case 'opus': return '#ff4444';
     case 'white_glove': return '#ff00ff';

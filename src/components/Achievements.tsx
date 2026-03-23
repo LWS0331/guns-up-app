@@ -22,9 +22,9 @@ interface Badge {
 
 const BADGE_COLORS = {
   bronze: { bg: '#8B4513', border: '#CD853F', text: '#FFD700' },
-  silver: { bg: '#708090', border: '#C0C0C0', text: '#FFFFFF' },
+  silver: { bg: '#708090', border: '#888888', text: '#FFFFFF' },
   gold: { bg: '#B8860B', border: '#FFD700', text: '#FFFFFF' },
-  diamond: { bg: '#1E90FF', border: '#00BFFF', text: '#FFFFFF' },
+  diamond: { bg: '#00ff41', border: '#00ff41', text: '#FFFFFF' },
 };
 
 const Achievements: React.FC<AchievementsProps> = ({ operator }) => {

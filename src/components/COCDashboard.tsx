@@ -176,7 +176,7 @@ function isToday(date: Date): boolean {
 
 function getTierBadgeColor(tier: string): string {
   switch (tier) {
-    case 'haiku': return '#00bcd4'; // cyan
+    case 'haiku': return '#00ff41'; // cyan
     case 'sonnet': return '#ffb800'; // amber
     case 'opus': return '#ff4444'; // red
     case 'white_glove': return '#ffaa00'; // bright amber
@@ -220,7 +220,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
     { label: t('dashboard.workouts'), labelKey: 'dashboard.workouts', value: animWorkouts, suffix: '', sub: 'THIS WEEK', color: '#00ff41', delay: 0 },
     { label: t('dashboard.streak'), labelKey: 'dashboard.streak', value: animStreak, suffix: 'D', sub: 'CONSECUTIVE', color: '#00ff41', delay: 1 },
     { label: 'VOLUME', value: animVolume, suffix: '', sub: 'LBS MOVED', color: '#ffb800', delay: 2 },
-    { label: t('dashboard.pr_records'), labelKey: 'dashboard.pr_records', value: animPRs, suffix: '', sub: 'LIFETIME', color: '#00bcd4', delay: 3 },
+    { label: t('dashboard.pr_records'), labelKey: 'dashboard.pr_records', value: animPRs, suffix: '', sub: 'LIFETIME', color: '#00ff41', delay: 3 },
   ];
 
   return (
@@ -504,10 +504,10 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                       <div style={{
                         fontFamily: 'Share Tech Mono, monospace',
                         fontSize: '15px',
-                        color: '#00bcd4',
+                        color: '#00ff41',
                         padding: '2px 8px',
-                        border: '1px solid rgba(0,188,212,0.2)',
-                        backgroundColor: 'rgba(0,188,212,0.04)',
+                        border: '1px solid rgba(0,255,65,0.2)',
+                        backgroundColor: 'rgba(0,255,65,0.04)',
                       }}>
                         {workout.blocks.length} BLOCKS
                       </div>
@@ -639,7 +639,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
               alignItems: 'center',
               gap: '8px',
             }}>
-              <span style={{ color: '#00bcd4', fontSize: '15px' }}>◈</span>
+              <span style={{ color: '#00ff41', fontSize: '15px' }}>◈</span>
               OPERATOR {t('dashboard.readiness')}
             </div>
 
@@ -659,7 +659,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                 value={operator.profile.sleep}
                 max={10}
                 size={72}
-                color="#00bcd4"
+                color="#00ff41"
                 label="SLEEP"
               />
               <ProgressRing

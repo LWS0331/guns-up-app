@@ -193,7 +193,7 @@ const getTimeOfDay = (): string => {
 
 const getTierColor = (tier: string): string => {
   switch (tier) {
-    case 'haiku': return '#00bcd4';
+    case 'haiku': return '#6B7B6B';
     case 'sonnet': return '#ffb800';
     case 'opus': return '#ff4444';
     case 'white_glove': return '#ff00ff';

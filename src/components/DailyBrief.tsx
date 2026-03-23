@@ -304,8 +304,8 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
           )}
 
           {/* Nutrition Reminder */}
-          <div style={{ padding: 10, background: 'rgba(0,188,212,0.05)', border: '1px solid rgba(0,188,212,0.15)', borderRadius: 4, marginBottom: 12 }}>
-            <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#00bcd4', letterSpacing: 1, marginBottom: 4 }}>NUTRITION</div>
+          <div style={{ padding: 10, background: 'rgba(0,255,65,0.05)', border: '1px solid rgba(0,255,65,0.15)', borderRadius: 4, marginBottom: 12 }}>
+            <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#00ff41', letterSpacing: 1, marginBottom: 4 }}>NUTRITION</div>
             <div style={{ fontSize: 11, color: '#ccc' }}>{brief.nutritionReminder}</div>
           </div>
 
