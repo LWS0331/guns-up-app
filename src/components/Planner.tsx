@@ -200,13 +200,20 @@ const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
   );
 };
 
+export interface WorkoutModeState {
+  active: boolean;
+  workoutTitle: string;
+  exercises: { name: string; prescription: string; sets: { weight: number; reps: number; completed: boolean }[] }[];
+}
+
 interface PlannerProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
   onOpenGunny?: () => void;
+  onWorkoutModeChange?: (state: WorkoutModeState) => void;
 }
 
-const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny }) => {
+const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onWorkoutModeChange }) => {
   const { t } = useLanguage();
   // ============================================================================
   // STATE
@@ -280,6 +287,30 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     }
     return HR_ZONES[0];
   };
+
+  // Broadcast workout mode state to parent (for Gunny Assist context)
+  useEffect(() => {
+    if (!onWorkoutModeChange) return;
+    if (!workoutMode) {
+      onWorkoutModeChange({ active: false, workoutTitle: '', exercises: [] });
+      return;
+    }
+    const dateStr = selectedDate || new Date().toISOString().split('T')[0];
+    const workout = operator.workouts?.[dateStr];
+    if (!workout) return;
+    const exercises = (workout.blocks || [])
+      .filter((b: WorkoutBlock) => b.type === 'exercise')
+      .map((b) => {
+        const ex = b as { id: string; exerciseName?: string; prescription?: string };
+        const blockData = workoutResults[ex.id] || { sets: [] };
+        return {
+          name: ex.exerciseName || '',
+          prescription: ex.prescription || '',
+          sets: blockData.sets.map(s => ({ weight: s.weight, reps: s.reps, completed: s.completed })),
+        };
+      });
+    onWorkoutModeChange({ active: true, workoutTitle: workout.title || '', exercises });
+  }, [workoutMode, workoutResults, selectedDate, onWorkoutModeChange]);
 
   // Poll wearable for HR data during workout mode
   useEffect(() => {

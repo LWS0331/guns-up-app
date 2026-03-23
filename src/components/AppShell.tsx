@@ -8,7 +8,7 @@ import UserSwitcher from '@/components/UserSwitcher';
 import LanguageToggle from '@/components/LanguageToggle';
 import { useLanguage } from '@/lib/i18n';
 import COCDashboard from '@/components/COCDashboard';
-import Planner from '@/components/Planner';
+import Planner, { WorkoutModeState } from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
@@ -185,6 +185,7 @@ const AppShell: React.FC<AppShellProps> = ({
   const [gunnyInput, setGunnyInput] = useState('');
   const [gunnyLoading, setGunnyLoading] = useState(false);
   const [gunnyGreeted, setGunnyGreeted] = useState(false);
+  const [workoutModeState, setWorkoutModeState] = useState<WorkoutModeState>({ active: false, workoutTitle: '', exercises: [] });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
@@ -439,22 +440,49 @@ const AppShell: React.FC<AppShellProps> = ({
         context += `No workout scheduled for today.\n`;
       }
     } else if (activeTab === 'planner') {
-      // Planner — show today's workout details if exists
-      context += `The operator is viewing their workout planner.\n`;
-      if (todayWorkout) {
-        context += `Today's workout: "${todayWorkout.title}"\n`;
-        if (todayWorkout.warmup) context += `Warmup: ${todayWorkout.warmup}\n`;
-        todayWorkout.blocks.forEach((block, i) => {
-          if (block.type === 'exercise') {
-            context += `  ${String.fromCharCode(65 + i)}) ${block.exerciseName} — ${block.prescription}\n`;
-          } else {
-            context += `  ${String.fromCharCode(65 + i)}) [Conditioning] ${block.format}: ${block.description}\n`;
+      // Planner — check if operator is in WORKOUT MODE (actively training)
+      if (workoutModeState.active) {
+        context += `*** THE OPERATOR IS IN WORKOUT MODE — ACTIVELY TRAINING RIGHT NOW ***\n`;
+        context += `Workout: "${workoutModeState.workoutTitle}"\n\n`;
+        context += `LIVE EXERCISE LOG (what they've entered so far):\n`;
+        context += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        workoutModeState.exercises.forEach((ex, i) => {
+          context += `\n${i + 1}. ${ex.name} — Prescribed: ${ex.prescription}\n`;
+          if (ex.sets.length > 0) {
+            const loggedSets = ex.sets.filter(s => s.weight > 0 || s.reps > 0 || s.completed);
+            if (loggedSets.length > 0) {
+              loggedSets.forEach((s, si) => {
+                context += `   Set ${si + 1}: ${s.weight}lbs x ${s.reps} reps ${s.completed ? '✓ DONE' : '(in progress)'}\n`;
+              });
+              const unloggedCount = ex.sets.length - loggedSets.length;
+              if (unloggedCount > 0) {
+                context += `   ${unloggedCount} set(s) remaining\n`;
+              }
+            } else {
+              context += `   No sets logged yet — upcoming exercise\n`;
+            }
           }
         });
-        if (todayWorkout.cooldown) context += `Cooldown: ${todayWorkout.cooldown}\n`;
-        if (todayWorkout.notes) context += `Coach's Notes: ${todayWorkout.notes}\n`;
+        context += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        context += `IMPORTANT: Use the logged weights and reps above to give specific weight recommendations. You can see exactly what they lifted.\n`;
       } else {
-        context += `No workout scheduled for today. The operator may be browsing other days.\n`;
+        // Normal planner view
+        context += `The operator is viewing their workout planner.\n`;
+        if (todayWorkout) {
+          context += `Today's workout: "${todayWorkout.title}"\n`;
+          if (todayWorkout.warmup) context += `Warmup: ${todayWorkout.warmup}\n`;
+          todayWorkout.blocks.forEach((block, i) => {
+            if (block.type === 'exercise') {
+              context += `  ${String.fromCharCode(65 + i)}) ${block.exerciseName} — ${block.prescription}\n`;
+            } else {
+              context += `  ${String.fromCharCode(65 + i)}) [Conditioning] ${block.format}: ${block.description}\n`;
+            }
+          });
+          if (todayWorkout.cooldown) context += `Cooldown: ${todayWorkout.cooldown}\n`;
+          if (todayWorkout.notes) context += `Coach's Notes: ${todayWorkout.notes}\n`;
+        } else {
+          context += `No workout scheduled for today. The operator may be browsing other days.\n`;
+        }
       }
       // Recent workout history
       const recentDates = Object.keys(op.workouts || {}).sort().reverse().slice(0, 5);
@@ -844,7 +872,7 @@ const AppShell: React.FC<AppShellProps> = ({
           </>
         );
       case 'planner':
-        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} />;
+        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} onWorkoutModeChange={setWorkoutModeState} />;
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'gunny':
