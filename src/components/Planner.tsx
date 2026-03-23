@@ -2194,7 +2194,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
 
       {/* ACTIVE BATTLE PLAN — Training Reference */}
       {operator.sitrep && operator.sitrep.generatedDate && (
-        <BattlePlanRef sitrep={operator.sitrep} focus="training" compact={true} />
+        <BattlePlanRef sitrep={operator.sitrep} focus="training" compact={true}
+          operator={operator} onUpdateOperator={onUpdateOperator} />
       )}
 
       {/* TODAY'S BRIEF — Training for Today */}

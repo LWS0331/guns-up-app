@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sitrep, SitrepExercise } from '@/lib/types';
+import { Sitrep, SitrepExercise, Operator } from '@/lib/types';
+import { sitrepDayToWorkout } from '@/lib/workoutConverter';
 
 interface BattlePlanRefProps {
   sitrep: Sitrep;
@@ -9,11 +10,28 @@ interface BattlePlanRefProps {
   focus?: 'all' | 'training' | 'nutrition';
   /** Compact mode — collapsed by default, expandable */
   compact?: boolean;
+  /** Optional — needed for "Load to Planner" */
+  operator?: Operator;
+  onUpdateOperator?: (updated: Operator) => void;
 }
 
-export default function BattlePlanRef({ sitrep, focus = 'all', compact = false }: BattlePlanRefProps) {
+export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, operator, onUpdateOperator }: BattlePlanRefProps) {
   const [expanded, setExpanded] = useState(!compact);
   const [activeSection, setActiveSection] = useState<'training' | 'nutrition'>(focus === 'nutrition' ? 'nutrition' : 'training');
+
+  // Check if Day 1 workout already loaded in planner
+  const todayStr = new Date().toISOString().split('T')[0];
+  const workoutAlreadyLoaded = !!operator?.workouts?.[todayStr];
+
+  const handleLoadDay1 = () => {
+    if (!sitrep.today || !operator || !onUpdateOperator) return;
+    const workout = sitrepDayToWorkout(sitrep.today, todayStr);
+    const updated = {
+      ...operator,
+      workouts: { ...operator.workouts, [todayStr]: workout },
+    };
+    onUpdateOperator(updated);
+  };
 
   const showTraining = focus === 'all' || focus === 'training';
   const showNutrition = focus === 'all' || focus === 'nutrition';
@@ -139,6 +157,24 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false }
                   {today.warmup && <div style={{ fontSize: 10, color: '#888', marginBottom: 6 }}>Warmup: {today.warmup}</div>}
                   {(today.exercises || []).map((ex, i) => renderExercise(ex, i))}
                   {today.cooldown && <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>Cooldown: {today.cooldown}</div>}
+
+                  {/* Load Day 1 to Planner */}
+                  {operator && onUpdateOperator && (
+                    <button
+                      onClick={handleLoadDay1}
+                      disabled={workoutAlreadyLoaded}
+                      style={{
+                        width: '100%', marginTop: 8, padding: 8,
+                        background: workoutAlreadyLoaded ? 'rgba(0,255,65,0.08)' : '#00ff41',
+                        color: workoutAlreadyLoaded ? '#00ff41' : '#000',
+                        border: workoutAlreadyLoaded ? '1px solid rgba(0,255,65,0.2)' : 'none',
+                        borderRadius: 4, cursor: workoutAlreadyLoaded ? 'default' : 'pointer',
+                        fontFamily: 'Orbitron, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1,
+                      }}
+                    >
+                      {workoutAlreadyLoaded ? '✓ LOADED IN PLANNER' : '⚔️ LOAD DAY 1 TO PLANNER'}
+                    </button>
+                  )}
                 </div>
               )}
 

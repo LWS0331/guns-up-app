@@ -758,7 +758,8 @@ const AppShell: React.FC<AppShellProps> = ({
 
             {/* Battle Plan Reference — dedicated section */}
             {currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate && (
-              <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true} />
+              <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true}
+                operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
             )}
 
             {/* Daily Brief Reference — dedicated section */}
