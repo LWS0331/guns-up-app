@@ -124,6 +124,9 @@ function stripCallSign(text: string, callSign: string): string {
     cleaned = cleaned.replace(csRegex, '');
   }
   cleaned = cleaned.replace(/\b(?:hey\s+)?gunny\s*/gi, '');
+  // Strip common radio protocol filler phrases
+  cleaned = cleaned.replace(/\b(?:come\s+in|do\s+you\s+copy|do\s+you\s+read|how\s+copy|radio\s+check|this\s+is|to)\b/gi, '');
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
   return cleaned.trim();
 }
 
@@ -299,7 +302,7 @@ export default function VoiceInput({
             // STANDBY — check for call sign wake word
             if (detectCallSign(phrase, callSignRef.current)) {
               updateCommsState('hot');
-              showFeedback('COMMS OPEN');
+              showFeedback('SEND YOUR TRAFFIC');
               // DON'T open Gunny panel — just go hot, stay on workout screen
               if (onWakeGunnyRef.current) onWakeGunnyRef.current();
 

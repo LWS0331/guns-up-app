@@ -220,7 +220,7 @@ interface PlannerProps {
 }
 
 const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, gunnyVoiceResponse, onDismissGunnyResponse, onWorkoutModeChange }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   // ============================================================================
   // STATE
   // ============================================================================
@@ -1281,8 +1281,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }
             }}
             onWakeGunny={() => {
-              // Call sign detected — DON'T open panel, just acknowledge
-              // Panel stays closed, response shows as overlay on workout screen
+              // Call sign detected — speak radio protocol acknowledgment
+              const cs = operator.callsign || 'OPERATOR';
+              const ack = language === 'es'
+                ? `Gunny a ${cs}, transmita su mensaje.`
+                : `Gunny to ${cs}, send your traffic.`;
+              speak(ack);
             }}
             callSign={operator.callsign}
             activeListening={activeListening}
