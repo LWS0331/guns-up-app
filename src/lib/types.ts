@@ -50,6 +50,7 @@ export interface IntakeAssessment {
   daysPerWeek?: number; // training days per week (2-7)
   sessionDuration?: number; // minutes per session
   preferredSplit?: string; // PPL, Upper/Lower, Full Body, Bro Split, etc.
+  trainingPath?: string; // bodybuilding, crossfit, powerlifting, athletic, tactical, hybrid, gunny_pick
   startingPRs: { exercise: string; weight: number; reps: number }[];
 }
 
@@ -236,6 +237,7 @@ export interface TrainingPreferences {
   equipmentDetailed?: EquipmentItem[]; // rich equipment with descriptions
   sessionDuration: number;
   daysPerWeek: number;
+  trainingPath?: string;
   weakPoints: string[];
   avoidMovements: string[];
 }

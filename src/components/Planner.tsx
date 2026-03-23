@@ -248,6 +248,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [showDayMenu, setShowDayMenu] = useState<string | null>(null);
   const [showWorkoutBuilder, setShowWorkoutBuilder] = useState(false);
 
+  // Drag and drop state
+  const [dragDate, setDragDate] = useState<string | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+
   // Workout builder state
   const [builderData, setBuilderData] = useState<Workout>({
     id: '',
@@ -267,7 +271,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [activeBlockIdx, setActiveBlockIdx] = useState(0);
   const [restTimer, setRestTimer] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
-  const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[] }>>({});
+  const [restTimerMax, setRestTimerMax] = useState(0); // for progress ring calculation
+  const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string }>>({});
 
   // Voice command state
   const [activeListening, setActiveListening] = useState(false);
@@ -935,6 +940,24 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     setSelectedDate(null);
   };
 
+  const handleMoveWorkout = (fromDate: string, toDate: string) => {
+    if (fromDate === toDate) return;
+    const workout = operator.workouts?.[fromDate];
+    if (!workout) return;
+    const updated = { ...operator };
+    updated.workouts = { ...updated.workouts };
+    // Move workout to new date
+    updated.workouts[toDate] = { ...workout, date: toDate };
+    delete updated.workouts[fromDate];
+    // Also move day tags if they exist
+    if (operator.dayTags?.[fromDate]) {
+      updated.dayTags = { ...updated.dayTags };
+      updated.dayTags[toDate] = operator.dayTags[fromDate];
+      delete updated.dayTags[fromDate];
+    }
+    onUpdateOperator(updated);
+  };
+
   const handleSaveDayTag = (dateStr: string) => {
     const updated = { ...operator };
     updated.dayTags = updated.dayTags || {};
@@ -1013,23 +1036,38 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   key={dateStr}
                   onClick={() => { setSelectedDate(dateStr); setViewMode('day'); }}
                   onContextMenu={e => { e.preventDefault(); setShowDayMenu(dateStr); }}
+                  onDragOver={e => { e.preventDefault(); setDragOverDate(dateStr); }}
+                  onDragEnter={e => { e.preventDefault(); setDragOverDate(dateStr); }}
+                  onDragLeave={() => { if (dragOverDate === dateStr) setDragOverDate(null); }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    if (dragDate && dragDate !== dateStr) {
+                      handleMoveWorkout(dragDate, dateStr);
+                    }
+                    setDragDate(null);
+                    setDragOverDate(null);
+                  }}
                   style={{
                     minHeight: isMobile ? '60px' : '90px',
                     padding: isMobile ? '4px' : '8px',
-                    backgroundColor: isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)',
-                    border: isCurrentDay ? '1px solid rgba(0,255,65,0.3)' : '1px solid rgba(0,255,65,0.04)',
+                    backgroundColor: dragOverDate === dateStr ? 'rgba(0,255,65,0.1)' : (isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)'),
+                    border: dragOverDate === dateStr ? '2px dashed #00ff41' : (isCurrentDay ? '1px solid rgba(0,255,65,0.3)' : '1px solid rgba(0,255,65,0.04)'),
                     cursor: 'pointer',
                     position: 'relative',
                     transition: 'all 0.2s ease',
                     overflow: 'hidden',
                   }}
                   onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,255,65,0.2)';
-                    (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0,255,65,0.03)';
+                    if (dragOverDate !== dateStr) {
+                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,255,65,0.2)';
+                      (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0,255,65,0.03)';
+                    }
                   }}
                   onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.borderColor = isCurrentDay ? 'rgba(0,255,65,0.3)' : 'rgba(0,255,65,0.04)';
-                    (e.currentTarget as HTMLElement).style.backgroundColor = isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)';
+                    if (dragOverDate !== dateStr) {
+                      (e.currentTarget as HTMLElement).style.borderColor = isCurrentDay ? 'rgba(0,255,65,0.3)' : 'rgba(0,255,65,0.04)';
+                      (e.currentTarget as HTMLElement).style.backgroundColor = isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)';
+                    }
                   }}
                 >
                   {/* Today left accent */}
@@ -1048,17 +1086,27 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   </div>
 
                   {workout && (
-                    <div style={{
-                      fontFamily: 'Chakra Petch',
-                      fontSize: '15px',
-                      color: '#00ff41',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      marginBottom: '4px',
-                      paddingLeft: '6px',
-                      borderLeft: '1px solid rgba(0,255,65,0.3)',
-                    }}>
+                    <div
+                      draggable={true}
+                      onDragStart={e => {
+                        setDragDate(dateStr);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
+                      style={{
+                        fontFamily: 'Chakra Petch',
+                        fontSize: '15px',
+                        color: '#00ff41',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        marginBottom: '4px',
+                        paddingLeft: '6px',
+                        borderLeft: '1px solid rgba(0,255,65,0.3)',
+                        cursor: dragDate === dateStr ? 'grabbing' : 'grab',
+                        opacity: dragDate === dateStr ? 0.6 : 1,
+                        transition: 'opacity 0.2s ease',
+                      }}>
                       {workout.title}
                     </div>
                   )}
@@ -1085,6 +1133,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               );
             })
           )}
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 8, fontFamily: 'Share Tech Mono', fontSize: 9, color: '#444' }}>
+          Drag workouts to move between dates
         </div>
       </div>
     );
@@ -1164,8 +1216,37 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // Rest timer countdown
   useEffect(() => {
     if (!restRunning || restTimer <= 0) {
-      if (restTimer <= 0 && restRunning) setRestRunning(false);
+      if (restTimer <= 0 && restRunning) {
+        setRestRunning(false);
+        // Audio cue: TIME
+        try {
+          const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 880;
+          gain.gain.value = 0.3;
+          osc.start();
+          osc.stop(ctx.currentTime + 0.5);
+        } catch {}
+        speak('Time. Next set.');
+      }
       return;
+    }
+    // Beep at 3, 2, 1
+    if (restTimer <= 3 && restTimer > 0) {
+      try {
+        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 440;
+        gain.gain.value = 0.2;
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+      } catch {}
     }
     const interval = setInterval(() => setRestTimer(prev => prev - 1), 1000);
     return () => clearInterval(interval);
@@ -1179,11 +1260,34 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     if (!workout) return;
     if (Object.keys(workoutResults).length === 0) {
       const initial = workout.results?.blockResults
-        ? Object.fromEntries(Object.entries(workout.results.blockResults).map(([k, v]) => [k, { sets: v.sets.map(s => ({ weight: s.weight || 0, reps: s.reps || 0, completed: s.completed })) }]))
-        : Object.fromEntries(workout.blocks.map(b => [b.id, { sets: [{ weight: 0, reps: 0, completed: false }] }]));
+        ? Object.fromEntries(Object.entries(workout.results.blockResults).map(([k, v]) => [k, { sets: v.sets.map(s => ({ weight: s.weight || 0, reps: s.reps || 0, completed: s.completed })), notes: (v as { sets: unknown[]; notes?: string }).notes }]))
+        : Object.fromEntries(workout.blocks.map(b => [b.id, { sets: [{ weight: 0, reps: 0, completed: false }], notes: '' }]));
       setWorkoutResults(initial);
     }
   }, [workoutMode, selectedDate]);
+
+  // Auto-persist workout results on every change (prevents data loss on tab switch)
+  useEffect(() => {
+    if (!workoutMode) return;
+    if (Object.keys(workoutResults).length === 0) return;
+    const dateStr = selectedDate || formatDate(currentDate);
+    const workout = getWorkoutForDate(dateStr);
+    if (!workout) return;
+
+    const savedResults: WorkoutResults = {
+      startTime: workout.results?.startTime || new Date().toISOString(),
+      blockResults: Object.fromEntries(
+        Object.entries(workoutResults).map(([blockId, data]) => [
+          blockId,
+          { sets: data.sets.map(s => ({ weight: s.weight, reps: s.reps, completed: s.completed })), notes: (data as { sets: unknown[]; notes?: string }).notes }
+        ])
+      ),
+    };
+    const updated = { ...operator };
+    updated.workouts = { ...updated.workouts };
+    updated.workouts[dateStr] = { ...workout, results: savedResults };
+    onUpdateOperator(updated);
+  }, [workoutResults]);
 
   const renderWorkoutMode = () => {
     const dateStr = selectedDate || formatDate(currentDate);
@@ -1200,7 +1304,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         blockResults: Object.fromEntries(
           Object.entries(results).map(([blockId, data]) => [
             blockId,
-            { sets: data.sets.map(s => ({ weight: s.weight, reps: s.reps, completed: s.completed })) }
+            { sets: data.sets.map(s => ({ weight: s.weight, reps: s.reps, completed: s.completed })), notes: (data as { sets: unknown[]; notes?: string }).notes }
           ])
         ),
       };
@@ -1425,14 +1529,26 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* Rest Timer */}
-        <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: restRunning ? '#1a1a0a' : '#0a0a0a', border: `1px solid ${restRunning ? '#FF8C00' : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
-          <div style={{ fontFamily: 'Orbitron', fontSize: restRunning ? 48 : 24, color: restTimer <= 10 && restRunning ? '#ff4444' : '#FF8C00', transition: 'all 0.3s' }}>
+        {/* Rest Timer with countdown ring + audio */}
+        <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: restRunning ? '#1a1a0a' : '#0a0a0a', border: `1px solid ${restRunning ? '#FF8C00' : '#333'}`, borderRadius: 8, transition: 'all 0.3s', position: 'relative' }}>
+          {restRunning && restTimerMax > 0 && (
+            <svg width="100" height="100" viewBox="0 0 100 100" style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', opacity: 0.3 }}>
+              <circle cx="50" cy="50" r="44" fill="none" stroke="#333" strokeWidth="4" />
+              <circle cx="50" cy="50" r="44" fill="none" stroke={restTimer <= 10 ? '#ff4444' : '#FF8C00'} strokeWidth="4"
+                strokeDasharray={`${2 * Math.PI * 44}`}
+                strokeDashoffset={`${2 * Math.PI * 44 * (1 - restTimer / restTimerMax)}`}
+                strokeLinecap="round"
+                transform="rotate(-90 50 50)"
+                style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s' }}
+              />
+            </svg>
+          )}
+          <div style={{ fontFamily: 'Orbitron', fontSize: restRunning ? 48 : 24, color: restTimer <= 3 && restRunning ? '#ff4444' : restTimer <= 10 && restRunning ? '#FF8C00' : '#FF8C00', transition: 'all 0.3s', position: 'relative', zIndex: 1 }}>
             {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8, position: 'relative', zIndex: 1 }}>
             {[30, 60, 90, 120, 180].map(sec => (
-              <button key={sec} onClick={() => { setRestTimer(sec); setRestRunning(true); }}
+              <button key={sec} onClick={() => { setRestTimer(sec); setRestTimerMax(sec); setRestRunning(true); }}
                 style={{ padding: '4px 8px', background: '#1a1a1a', border: '1px solid #444', color: '#ccc', fontFamily: 'Share Tech Mono', fontSize: 11, cursor: 'pointer', borderRadius: 4 }}>
                 {sec < 60 ? `${sec}s` : `${sec / 60}m`}
               </button>
@@ -1563,21 +1679,42 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
             {/* Mini HR history sparkline */}
             {hrHistory.length > 1 && (
-              <div style={{ marginTop: 8, height: 30, display: 'flex', alignItems: 'end', gap: 1 }}>
-                {hrHistory.slice(-20).map((h, i) => {
-                  const minH = Math.min(...hrHistory.slice(-20).map(x => x.hr));
-                  const maxH = Math.max(...hrHistory.slice(-20).map(x => x.hr));
-                  const range = maxH - minH || 1;
-                  const pct = ((h.hr - minH) / range) * 100;
-                  return (
-                    <div key={i} style={{
-                      flex: 1, height: `${Math.max(10, pct)}%`,
-                      background: getCurrentZone(h.hr).color,
-                      borderRadius: '1px 1px 0 0', opacity: 0.7,
-                      transition: 'height 0.3s',
-                    }} />
-                  );
-                })}
+              <div style={{ marginTop: 8 }}>
+                <svg width="100%" height="60" viewBox="0 0 200 60" preserveAspectRatio="none" style={{ display: 'block' }}>
+                  {(() => {
+                    const data = hrHistory.slice(-30);
+                    const minH = Math.min(...data.map(x => x.hr)) - 5;
+                    const maxH = Math.max(...data.map(x => x.hr)) + 5;
+                    const range = maxH - minH || 1;
+                    const points = data.map((h, i) => {
+                      const x = (i / (data.length - 1)) * 200;
+                      const y = 55 - ((h.hr - minH) / range) * 50;
+                      return `${x},${y}`;
+                    }).join(' ');
+                    const fillPoints = `0,55 ${points} 200,55`;
+                    const lastHr = data[data.length - 1];
+                    const lastColor = lastHr ? getCurrentZone(lastHr.hr).color : '#FF8C00';
+                    return (
+                      <>
+                        <defs>
+                          <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={lastColor} stopOpacity="0.3" />
+                            <stop offset="100%" stopColor={lastColor} stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <polygon points={fillPoints} fill="url(#hrGrad)" />
+                        <polyline points={points} fill="none" stroke={lastColor} strokeWidth="2" strokeLinejoin="round" />
+                        {lastHr && (
+                          <circle cx={200} cy={55 - ((lastHr.hr - minH) / range) * 50} r="3" fill={lastColor} />
+                        )}
+                      </>
+                    );
+                  })()}
+                </svg>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Share Tech Mono', fontSize: 8, color: '#555' }}>
+                  <span>{hrHistory.length > 30 ? `${Math.round((Date.now() - hrHistory[hrHistory.length - 30].time) / 60000)}min ago` : 'start'}</span>
+                  <span>now</span>
+                </div>
               </div>
             )}
           </div>
@@ -1593,12 +1730,70 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
         {/* Exercise blocks in execution mode */}
         {workout.blocks.map((block, idx) => {
-          if (block.type !== 'exercise') return (
-            <div key={block.id} style={{ padding: 12, marginBottom: 12, background: '#0a0a0a', border: '1px solid rgba(255, 184, 0, 0.3)', borderRadius: 4 }}>
-              <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: 13, fontWeight: 'bold' }}>CONDITIONING</div>
-              <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: 13, marginTop: 4 }}>{block.format}: {block.description}</div>
-            </div>
-          );
+          if (block.type !== 'exercise') {
+            const condBlock = block as ConditioningBlock;
+            const blockData = results[block.id] || { sets: [{ weight: 0, reps: 0, completed: false }] };
+            return (
+              <div key={block.id} style={{
+                padding: 16, marginBottom: 12,
+                background: blockData.sets[0]?.completed ? 'rgba(255,140,0,0.08)' : '#0a0a0a',
+                border: `2px solid ${blockData.sets[0]?.completed ? '#00ff41' : '#FF8C00'}`,
+                borderRadius: 8,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontFamily: 'Orbitron', color: '#FF8C00', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 }}>
+                    GO TIME
+                  </div>
+                  <div style={{ fontFamily: 'Orbitron', color: '#FF8C00', fontSize: 12 }}>
+                    {condBlock.format}
+                  </div>
+                </div>
+                <div style={{
+                  fontFamily: 'Share Tech Mono', color: '#e0e0e0', fontSize: 14,
+                  lineHeight: 1.8, whiteSpace: 'pre-line', marginBottom: 12,
+                  padding: '8px 12px', background: 'rgba(255,140,0,0.04)',
+                  borderLeft: '3px solid #FF8C00', borderRadius: '0 4px 4px 0',
+                }}>
+                  {condBlock.description?.replace(/\\n/g, '\n')}
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="text" placeholder="Time / Rounds / Score"
+                    value={blockData.sets[0]?.reps ? `${blockData.sets[0].reps}` : ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setResults(prev => ({
+                        ...prev,
+                        [block.id]: { sets: [{ weight: 0, reps: parseInt(val) || 0, completed: blockData.sets[0]?.completed || false }] }
+                      }));
+                    }}
+                    style={{
+                      flex: 1, padding: '8px 10px', background: '#000',
+                      border: '1px solid #FF8C00', color: '#e0e0e0',
+                      fontFamily: 'Share Tech Mono', fontSize: 14, borderRadius: 4,
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      setResults(prev => ({
+                        ...prev,
+                        [block.id]: { sets: [{ ...blockData.sets[0], completed: !blockData.sets[0]?.completed }] }
+                      }));
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      background: blockData.sets[0]?.completed ? '#00ff41' : '#FF8C00',
+                      border: 'none',
+                      color: '#000',
+                      fontFamily: 'Orbitron', fontSize: 12, fontWeight: 700,
+                      cursor: 'pointer', borderRadius: 4,
+                    }}
+                  >
+                    {blockData.sets[0]?.completed ? 'DONE' : 'COMPLETE'}
+                  </button>
+                </div>
+              </div>
+            );
+          }
 
           const blockResults = results[block.id] || { sets: [{ weight: 0, reps: 0, completed: false }] };
           const parsedSets = parseInt(block.prescription?.match(/(\d+)\s*x/)?.[1] || '3');
@@ -1619,6 +1814,27 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   Form video
                 </a>
               )}
+              {/* Exercise notes — intel for Gunny */}
+              <div style={{ marginTop: 6 }}>
+                <input
+                  type="text"
+                  placeholder="Notes (e.g. banded felt hard, left knee tight)"
+                  value={(results[block.id] as { sets: unknown[]; notes?: string })?.notes || ''}
+                  onChange={e => {
+                    const notes = e.target.value;
+                    setResults(prev => ({
+                      ...prev,
+                      [block.id]: { ...prev[block.id], notes }
+                    }));
+                  }}
+                  style={{
+                    width: '100%', padding: '4px 8px', background: '#000',
+                    border: '1px solid #222', color: '#999',
+                    fontFamily: 'Share Tech Mono', fontSize: 10,
+                    borderRadius: 3, boxSizing: 'border-box',
+                  }}
+                />
+              </div>
               <div style={{ marginTop: 8 }}>
                 {blockResults.sets.slice(0, parsedSets).map((set, si) => (
                   <div key={si} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
@@ -1636,12 +1852,27 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     }}
                       style={{ width: 50, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 13, textAlign: 'center' }} />
                     <button onClick={() => {
+                      const wasCompleted = set.completed;
                       setResults(prev => {
                         const blockData = { ...prev[block.id] };
                         const sets = [...blockData.sets];
-                        sets[si] = { ...sets[si], completed: !sets[si].completed };
+                        sets[si] = { ...sets[si], completed: !wasCompleted };
                         return { ...prev, [block.id]: { sets } };
                       });
+                      // Auto-start rest timer from prescription when logging a set
+                      if (!wasCompleted) {
+                        const restMatch = block.prescription?.match(/(?:rest|Rest|REST)\s*:?\s*(\d+)\s*:?\s*(\d+)?/i);
+                        if (restMatch) {
+                          const mins = restMatch[2] !== undefined ? parseInt(restMatch[1]) : 0;
+                          const secs = restMatch[2] !== undefined ? parseInt(restMatch[2]) : parseInt(restMatch[1]);
+                          const totalSecs = mins * 60 + secs;
+                          if (totalSecs > 0) {
+                            setRestTimer(totalSecs);
+                            setRestTimerMax(totalSecs);
+                            setRestRunning(true);
+                          }
+                        }
+                      }
                     }}
                       style={{ padding: '2px 8px', background: set.completed ? '#00ff41' : '#1a1a1a', border: `1px solid ${set.completed ? '#00ff41' : '#444'}`, color: set.completed ? '#000' : '#888', fontFamily: 'Share Tech Mono', fontSize: 11, cursor: 'pointer', borderRadius: 4 }}>
                       {set.completed ? 'DONE' : 'LOG'}
@@ -1652,6 +1883,43 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             </div>
           );
         })}
+
+        {/* Mid-workout edit controls */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 4 }}>
+          <button onClick={() => {
+            const newBlock: ExerciseBlock = {
+              type: 'exercise', id: `block-live-${Date.now()}`, sortOrder: workout.blocks.length,
+              exerciseName: '', prescription: '3x10', isLinkedToNext: false,
+            };
+            const dateStr = selectedDate || formatDate(currentDate);
+            const updated = { ...operator };
+            updated.workouts = { ...updated.workouts };
+            updated.workouts[dateStr] = { ...workout, blocks: [...workout.blocks, newBlock] };
+            onUpdateOperator(updated);
+            // Initialize results for new block
+            setWorkoutResults(prev => ({ ...prev, [newBlock.id]: { sets: [{ weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }], notes: '' } }));
+          }}
+            style={{ flex: 1, padding: '6px 8px', background: '#0a0a0a', border: '1px dashed #333', color: '#666', fontFamily: 'Share Tech Mono', fontSize: 10, cursor: 'pointer', borderRadius: 4 }}>
+            + ADD EXERCISE
+          </button>
+          <button onClick={() => {
+            if (workout.blocks.length <= 1) return;
+            const dateStr = selectedDate || formatDate(currentDate);
+            const removedId = workout.blocks[workout.blocks.length - 1].id;
+            const updated = { ...operator };
+            updated.workouts = { ...updated.workouts };
+            updated.workouts[dateStr] = { ...workout, blocks: workout.blocks.slice(0, -1) };
+            onUpdateOperator(updated);
+            setWorkoutResults(prev => {
+              const next = { ...prev };
+              delete next[removedId];
+              return next;
+            });
+          }}
+            style={{ padding: '6px 8px', background: '#0a0a0a', border: '1px dashed #442222', color: '#884444', fontFamily: 'Share Tech Mono', fontSize: 10, cursor: 'pointer', borderRadius: 4 }}>
+            - REMOVE LAST
+          </button>
+        </div>
 
         {/* Ask Gunny — mid-workout coaching access */}
         {onOpenGunny && (

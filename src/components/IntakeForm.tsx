@@ -9,9 +9,9 @@ interface IntakeFormProps {
   onSkip: () => void;
 }
 
-type IntakeStep = 'welcome' | 'basics' | 'experience' | 'goals' | 'health' | 'lifestyle' | 'nutrition' | 'equipment' | 'prs' | 'review';
+type IntakeStep = 'welcome' | 'basics' | 'experience' | 'goals' | 'training_path' | 'health' | 'lifestyle' | 'nutrition' | 'equipment' | 'prs' | 'review';
 
-const STEP_ORDER: IntakeStep[] = ['welcome', 'basics', 'experience', 'goals', 'health', 'lifestyle', 'nutrition', 'equipment', 'prs', 'review'];
+const STEP_ORDER: IntakeStep[] = ['welcome', 'basics', 'experience', 'goals', 'training_path', 'health', 'lifestyle', 'nutrition', 'equipment', 'prs', 'review'];
 
 const DIET_OPTIONS = [
   { id: 'no_plan', label: 'NO PLAN', desc: 'I eat whatever, no tracking' },
@@ -59,6 +59,16 @@ const COMMON_CONDITIONS = [
   'Previous Surgery', 'Pregnancy/Postpartum', 'None',
 ];
 
+const TRAINING_PATH_OPTIONS = [
+  { id: 'bodybuilding', label: 'BODYBUILDING', desc: 'Hypertrophy focus — sculpt physique, maximize muscle size, controlled tempos', icon: '🏋️' },
+  { id: 'crossfit', label: 'FUNCTIONAL FITNESS', desc: 'CrossFit-style — WODs, varied movements, compete against the clock', icon: '⚡' },
+  { id: 'powerlifting', label: 'POWERLIFTING', desc: 'Squat, bench, deadlift — chase maximal strength numbers', icon: '🔩' },
+  { id: 'athletic', label: 'ATHLETIC PERFORMANCE', desc: 'Speed, agility, power — train like a pro athlete', icon: '🏃' },
+  { id: 'tactical', label: 'TACTICAL / MILITARY', desc: 'Rucking, calisthenics, endurance — PFT and selection prep', icon: '🎖️' },
+  { id: 'hybrid', label: 'HYBRID', desc: 'Best of everything — strength + conditioning + muscle', icon: '🔄' },
+  { id: 'gunny_pick', label: 'LET GUNNY DECIDE', desc: 'Based on your goals, experience, and profile — Gunny picks the optimal path', icon: '🤖' },
+];
+
 const PR_EXERCISES = [
   'Back Squat', 'Bench Press', 'Deadlift', 'Overhead Press',
   'Pull-ups (max reps)', 'Mile Run (minutes)',
@@ -90,6 +100,7 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
     estimatedCalories: 2000,
     proteinPriority: 'moderate',
     dietaryRestrictions: [],
+    trainingPath: 'gunny_pick',
     startingPRs: [],
   });
 
@@ -258,6 +269,7 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
         daysPerWeek: fullIntake.daysPerWeek || 4,
         sessionDuration: fullIntake.sessionDuration || 60,
         split: fullIntake.preferredSplit || 'No Preference',
+        trainingPath: intake.trainingPath || 'gunny_pick',
       },
     };
 
@@ -453,6 +465,64 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
               </button>
             ))}
           </div>
+          <div style={s.navRow}>
+            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
+            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+          </div>
+        </div>
+      )}
+
+      {step === 'training_path' && (
+        <div>
+          <div style={s.stepTitle}>CHOOSE YOUR PATH</div>
+          <p style={{ color: '#ccc', lineHeight: 1.6, fontSize: 13, marginBottom: 8 }}>
+            Every path is scalable — Gunny adapts to your level. There is no wrong choice.
+            If you are unsure, let Gunny analyze your profile and recommend the best fit.
+          </p>
+          {/* Gunny Recommendation Banner */}
+          {intake.primaryGoal && (
+            <div style={{ padding: 12, background: '#0a1a0a', border: '1px solid #1a3a1a', borderRadius: 4, marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: '#00ff41', letterSpacing: 1, marginBottom: 6, fontFamily: 'Orbitron, sans-serif' }}>GUNNY RECOMMENDS</div>
+              <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.5 }}>
+                {(() => {
+                  const goal = intake.primaryGoal;
+                  const exp = intake.exerciseHistory || 'none';
+                  if (goal === 'muscle_gain') return 'Based on your muscle-building goal — BODYBUILDING path will maximize hypertrophy with structured volume and progressive overload.';
+                  if (goal === 'weight_loss' && (exp === 'none' || exp === 'sporadic')) return 'For fat loss with your current experience — FUNCTIONAL FITNESS combines strength and conditioning for maximum calorie burn.';
+                  if (goal === 'weight_loss') return 'For fat loss — HYBRID path blends strength training to preserve muscle with conditioning for calorie expenditure.';
+                  if (goal === 'strength') return 'For raw strength — POWERLIFTING path with periodized peaking cycles on the big 3 lifts.';
+                  if (goal === 'endurance') return 'For endurance — FUNCTIONAL FITNESS or TACTICAL path with structured cardio progressions and work capacity building.';
+                  if (goal === 'athletic') return 'For athletic performance — ATHLETIC path with power development, speed work, and sport-specific conditioning.';
+                  if (goal === 'sport_specific') return 'For your sport — ATHLETIC path customized to your sport demands, or HYBRID for well-rounded athleticism.';
+                  if (goal === 'rehab') return 'For injury recovery — HYBRID path with controlled progressions. Gunny will respect all restrictions and build you back up safely.';
+                  return 'Based on your profile — HYBRID path gives you the best of all worlds. Or let Gunny pick for a fully customized recommendation.';
+                })()}
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, marginBottom: 16 }}>
+            {TRAINING_PATH_OPTIONS.map(p => (
+              <button key={p.id} style={{
+                ...s.optionBtn,
+                textAlign: 'left' as const,
+                padding: '14px 12px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                ...(intake.trainingPath === p.id ? s.optionBtnActive : {}),
+              }}
+                onClick={() => setIntake(prev => ({ ...prev, trainingPath: p.id }))}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>{p.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 12 }}>{p.label}</div>
+                  <div style={{ fontSize: 10, marginTop: 4, color: intake.trainingPath === p.id ? '#00ff4199' : '#666' }}>{p.desc}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: '#666', marginBottom: 16, textAlign: 'center' as const }}>
+            Any time commitment works. Gunny scales programming for 2 days/week to 7 days/week.
+          </p>
           <div style={s.navRow}>
             <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
             <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
@@ -771,6 +841,10 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
           <div style={s.reviewSection}>
             <div style={s.reviewLabel}>PRIMARY GOAL</div>
             <div style={s.reviewValue}>{GOAL_OPTIONS.find(g => g.id === intake.primaryGoal)?.label || intake.primaryGoal}</div>
+          </div>
+          <div style={s.reviewSection}>
+            <div style={s.reviewLabel}>TRAINING PATH</div>
+            <div style={s.reviewValue}>{TRAINING_PATH_OPTIONS.find(p => p.id === intake.trainingPath)?.label || 'LET GUNNY DECIDE'}</div>
           </div>
           <div style={s.reviewSection}>
             <div style={s.reviewLabel}>LIFESTYLE</div>

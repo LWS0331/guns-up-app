@@ -513,6 +513,14 @@ const AppShell: React.FC<AppShellProps> = ({
     return context;
   };
 
+  // Determine Gunny AI mode based on current context
+  const getGunnyMode = (): string => {
+    if (workoutModeState.active) return 'workout';
+    if (activeTab === 'intel') return 'nutrition';
+    if (activeTab === 'gunny') return 'gameplan';
+    return 'assist';
+  };
+
   // Build operator context for API (includes intake assessment data for Gunny)
   // Reads from intake column first, falls back to profile/preferences fields (which always persist)
   // Accepts optional fresh operator to avoid stale closure reads (e.g. post-intake SITREP generation)
@@ -663,7 +671,7 @@ const AppShell: React.FC<AppShellProps> = ({
           messages: [...gunnyMessages, userMessage],
           operatorContext: buildOperatorContext(),
           tier: selectedOperator.tier || 'standard',
-          mode: 'assistant',
+          mode: getGunnyMode(),
           screenContext: getScreenContext(),
           ...(trainerData && { trainerData }),
         }),
@@ -778,7 +786,7 @@ const AppShell: React.FC<AppShellProps> = ({
               messages: [...gunnyMessages, userMessage],
               operatorContext: buildOperatorContext(),
               tier: selectedOperator.tier || 'standard',
-              mode: 'assistant',
+              mode: getGunnyMode(),
               screenContext: getScreenContext(),
               ...(trainerData && { trainerData }),
             }),
@@ -833,7 +841,7 @@ const AppShell: React.FC<AppShellProps> = ({
       };
       doSend();
     }, 50);
-  }, [gunnyMessages, selectedOperator, operators, buildOperatorContext, getScreenContext, currentSelectedOp, onUpdateOperator, showGunnyVoiceResponse]);
+  }, [gunnyMessages, selectedOperator, operators, buildOperatorContext, getScreenContext, getGunnyMode, currentSelectedOp, onUpdateOperator, showGunnyVoiceResponse]);
 
   const baseTabs: { id: AppTab; label: string; labelKey: string; icon: string }[] = [
     { id: 'coc', label: t('nav.coc_short'), labelKey: 'nav.coc_short', icon: '◆' },

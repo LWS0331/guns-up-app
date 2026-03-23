@@ -246,10 +246,13 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: 'e214', name: 'Kettlebell Halo', category: 'Mobility', equipment: 'Kettlebell', videoUrl: 'https://www.youtube.com/@marcusfilly/search?query=kettlebell+halo' },
 ];
 
-// Helper: look up video URL by exercise name
-export function getVideoUrl(exerciseName: string): string | undefined {
+// Helper: look up video URL by exercise name, with YouTube search fallback
+export function getVideoUrl(exerciseName: string): string {
   const exercise = EXERCISE_LIBRARY.find(
     ex => ex.name.toLowerCase() === exerciseName.toLowerCase()
   );
-  return exercise?.videoUrl;
+  if (exercise?.videoUrl) return exercise.videoUrl;
+  // Fallback: generate YouTube search URL so no exercise goes without a video
+  const searchQuery = exerciseName.replace(/\s+/g, '+').toLowerCase();
+  return `https://www.youtube.com/results?search_query=${searchQuery}+form+tutorial`;
 }
