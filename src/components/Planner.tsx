@@ -203,9 +203,10 @@ const TagPill: React.FC<{ tag: TagPillData }> = ({ tag }) => {
 interface PlannerProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
+  onOpenGunny?: () => void;
 }
 
-const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
+const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny }) => {
   const { t } = useLanguage();
   // ============================================================================
   // STATE
@@ -1090,7 +1091,28 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ fontFamily: 'Orbitron', color: '#e040fb', fontSize: 18, margin: 0 }}>WORKOUT MODE</h2>
-          <button onClick={() => setWorkoutMode(false)} style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer' }}>EXIT</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {onOpenGunny && (
+              <button
+                onClick={onOpenGunny}
+                style={{
+                  padding: '4px 12px',
+                  background: 'linear-gradient(135deg, rgba(255,184,0,0.2), rgba(255,184,0,0.1))',
+                  border: '1px solid rgba(255,184,0,0.5)',
+                  color: '#ffb800',
+                  fontFamily: 'Orbitron, sans-serif',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  cursor: 'pointer',
+                  borderRadius: 4,
+                }}
+              >
+                ⚡ ASK GUNNY
+              </button>
+            )}
+            <button onClick={() => setWorkoutMode(false)} style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer' }}>EXIT</button>
+          </div>
         </div>
         <h3 style={{ fontFamily: 'Chakra Petch', color: '#00bcd4', fontSize: 16, margin: '0 0 20px 0' }}>{workout.title}</h3>
 
@@ -1321,6 +1343,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator }) => {
             </div>
           );
         })}
+
+        {/* Ask Gunny — mid-workout coaching access */}
+        {onOpenGunny && (
+          <button onClick={onOpenGunny}
+            style={{ width: '100%', padding: 12, background: 'linear-gradient(135deg, rgba(255,184,0,0.15), rgba(255,184,0,0.08))', color: '#ffb800', border: '1px solid rgba(255,184,0,0.4)', fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, cursor: 'pointer', borderRadius: 4, marginTop: 12 }}>
+            ⚡ NEED HELP? ASK GUNNY
+          </button>
+        )}
 
         <button onClick={handleSaveResults}
           style={{ width: '100%', padding: 14, background: '#00ff41', color: '#000', border: 'none', fontFamily: 'Orbitron', fontSize: 14, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', borderRadius: 4, marginTop: 12 }}>

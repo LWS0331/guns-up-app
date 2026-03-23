@@ -817,7 +817,7 @@ const AppShell: React.FC<AppShellProps> = ({
           </>
         );
       case 'planner':
-        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />;
+        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} />;
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'gunny':
