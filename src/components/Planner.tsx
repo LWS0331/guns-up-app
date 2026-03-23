@@ -1416,7 +1416,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             }}
           >
             {activeListening
-              ? `● COMMS ACTIVE — "${operator.callsign || 'GUNNY'}" to talk, "OVER" to send | SHAKE for PTT`
+              ? `● COMMS ACTIVE — "${operator.callsign || 'GUNNY'}" to talk, "OVER" to send | ${typeof navigator !== 'undefined' && (/iPad/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)) ? 'TAP' : 'SHAKE'} for PTT`
               : 'TAP TO ENABLE VOICE COMMS'}
           </button>
           {activeListening && (

@@ -45,10 +45,23 @@ export function unlockAudioContext() {
   }
 }
 
+// Callbacks for when audio queue finishes (used by voice comms to restart mic)
+let onQueueEmptyCallbacks: (() => void)[] = [];
+
+export function onSpeechDone(cb: () => void) {
+  onQueueEmptyCallbacks.push(cb);
+}
+
+export function offSpeechDone(cb: () => void) {
+  onQueueEmptyCallbacks = onQueueEmptyCallbacks.filter(c => c !== cb);
+}
+
 // Play next audio in queue
 function playNext() {
   if (audioQueue.length === 0) {
     isPlaying = false;
+    // Notify listeners that all speech is done
+    onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch {} });
     return;
   }
   isPlaying = true;
@@ -123,6 +136,12 @@ function browserSpeak(text: string, voice: GunnyVoice) {
     if (preferred) utterance.voice = preferred;
   }
 
+  utterance.onend = () => {
+    if (audioQueue.length === 0) {
+      isPlaying = false;
+      onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch {} });
+    }
+  };
   window.speechSynthesis.speak(utterance);
 }
 

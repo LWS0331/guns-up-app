@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useShakeToTalk } from '@/lib/useShakeToTalk';
+import { onSpeechDone, offSpeechDone } from '@/lib/tts';
 
 // Web Speech API TypeScript declarations
 interface SpeechRecognitionEvent extends Event {
@@ -394,17 +395,16 @@ export default function VoiceInput({
 
     recognition.onerror = (event: Event & { error: string }) => {
       if (event.error === 'no-speech') {
-        if (activeListeningRef.current && !isMobileDevice()) {
-          setError(null);
-          return;
-        }
-        setError(null); // Don't show error on mobile either
+        setError(null);
       } else if (event.error === 'network') {
         setError('Network error');
       } else if (event.error === 'aborted') {
         setError(null);
+        // On mobile, if aborted while in HOT/BUFFERING (TTS killed mic), onend will handle restart
+      } else if (event.error === 'not-allowed') {
+        setError('Mic permission denied');
       } else {
-        setError(`Error: ${event.error}`);
+        setError(null); // Don't show cryptic errors during workout
       }
     };
 
@@ -417,17 +417,41 @@ export default function VoiceInput({
         onTranscript(finalTranscriptRef.current.trim());
       }
 
-      // Auto-restart: only on DESKTOP in active listening mode
-      // On mobile: do NOT auto-restart (push-to-talk — user taps again)
-      if (activeListeningRef.current && !isMobileDevice()) {
-        setTimeout(() => {
-          try {
-            finalTranscriptRef.current = '';
-            recognition.start();
-          } catch {
-            // Already started or error — ignore
+      if (activeListeningRef.current) {
+        if (isMobileDevice()) {
+          // Mobile: if in HOT/BUFFERING, TTS killed the mic — restart after TTS finishes
+          if (commsStateRef.current === 'hot' || commsStateRef.current === 'buffering') {
+            const restartMic = () => {
+              offSpeechDone(restartMic);
+              setTimeout(() => {
+                try {
+                  finalTranscriptRef.current = '';
+                  recognition.start();
+                } catch { /* ignore */ }
+              }, 500);
+            };
+            // Wait for TTS to finish, or restart after 3s safety timeout
+            onSpeechDone(restartMic);
+            setTimeout(() => {
+              offSpeechDone(restartMic);
+              // If mic is still off, force restart
+              if (!recognitionRef.current) return;
+              try {
+                finalTranscriptRef.current = '';
+                recognition.start();
+              } catch { /* ignore */ }
+            }, 3000);
           }
-        }, 300);
+          // STANDBY on mobile: don't auto-restart (PTT — tap or shake)
+        } else {
+          // Desktop: always auto-restart
+          setTimeout(() => {
+            try {
+              finalTranscriptRef.current = '';
+              recognition.start();
+            } catch { /* ignore */ }
+          }, 300);
+        }
       }
 
       if (silenceTimeoutRef.current) {
@@ -458,11 +482,15 @@ export default function VoiceInput({
       updateCommsState('standby');
       updateBuffer('');
     } else {
+      // Abort first to clear any zombie state (critical for iPad)
+      try { recognitionRef.current?.abort(); } catch { /* ignore */ }
       finalTranscriptRef.current = '';
       setError(null);
       updateCommsState('standby');
       updateBuffer('');
-      recognitionRef.current?.start();
+      setTimeout(() => {
+        try { recognitionRef.current?.start(); } catch { /* ignore */ }
+      }, 100);
     }
   };
 

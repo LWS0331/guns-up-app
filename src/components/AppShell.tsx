@@ -748,8 +748,9 @@ const AppShell: React.FC<AppShellProps> = ({
   const showGunnyVoiceResponse = useCallback((text: string) => {
     setGunnyVoiceResponse(text);
     if (gunnyVoiceResponseTimer.current) clearTimeout(gunnyVoiceResponseTimer.current);
-    // Auto-dismiss after 8s (or when next response comes)
-    gunnyVoiceResponseTimer.current = setTimeout(() => setGunnyVoiceResponse(null), 8000);
+    // Auto-dismiss based on text length (10s min, 30s max)
+    const duration = Math.min(30000, Math.max(10000, text.length * 80));
+    gunnyVoiceResponseTimer.current = setTimeout(() => setGunnyVoiceResponse(null), duration);
   }, []);
 
   // Voice "over" trigger — sends directly to Gunny without touching the phone

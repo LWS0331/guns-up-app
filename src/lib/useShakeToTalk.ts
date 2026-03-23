@@ -11,6 +11,19 @@ import { useEffect, useRef, useCallback } from 'react';
 // smooth/slow acceleration) vs. a deliberate phone shake (sharp jerk).
 //
 // iOS 13+ requires explicit permission request via DeviceMotionEvent.requestPermission()
+//
+// NOTE: Shake disabled on iPad — tablet form factor makes shaking impractical.
+// iPad users use tap-to-talk instead.
+
+function isIPad(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  // iPadOS 13+ reports as Mac in user agent, so check for touch + Mac combo
+  const ua = navigator.userAgent;
+  if (/iPad/i.test(ua)) return true;
+  // Modern iPadOS: "Macintosh" UA + touch support = iPad
+  if (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return true;
+  return false;
+}
 
 interface UseShakeToTalkOptions {
   enabled: boolean;
@@ -112,6 +125,9 @@ export function useShakeToTalk({
 
   useEffect(() => {
     if (!enabled || typeof window === 'undefined') return;
+
+    // Skip shake on iPad — tablet form factor, use tap-to-talk instead
+    if (isIPad()) return;
 
     // Check if DeviceMotion is available
     if (!('DeviceMotionEvent' in window)) return;
