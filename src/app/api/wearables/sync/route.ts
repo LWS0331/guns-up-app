@@ -118,16 +118,18 @@ export async function POST(req: NextRequest) {
       computedReadiness,
     };
 
-    // Update all connections with latest sync data
-    for (const conn of connections) {
-      await prisma.wearableConnection.update({
-        where: { id: conn.id },
-        data: {
-          lastSyncAt: new Date(),
-          syncData: JSON.parse(JSON.stringify(syncSnapshot)),
-        },
-      });
-    }
+    // Batch-update all connections with latest sync data (parallel instead of sequential)
+    await Promise.all(
+      connections.map(conn =>
+        prisma.wearableConnection.update({
+          where: { id: conn.id },
+          data: {
+            lastSyncAt: new Date(),
+            syncData: JSON.parse(JSON.stringify(syncSnapshot)),
+          },
+        })
+      )
+    );
 
     // Auto-update operator profile with wearable data
     const operator = await prisma.operator.findUnique({ where: { id: operatorId } });

@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const operators = await prisma.operator.findMany();
+    // Only fetch billing-relevant fields
+    const operators = await prisma.operator.findMany({
+      select: { tier: true, billing: true },
+    });
 
     const billingRecords = operators.map(op => {
       const billing = (op.billing as BillingData) || {};

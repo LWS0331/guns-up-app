@@ -37,7 +37,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const operators = await prisma.operator.findMany();
+    // Only fetch the fields we need — not entire operator records with workouts/profiles/etc.
+    const operators = await prisma.operator.findMany({
+      select: { id: true, callsign: true, tier: true, billing: true },
+    });
 
     // Parse billing data from each operator
     const billingRecords = operators.map(op => {

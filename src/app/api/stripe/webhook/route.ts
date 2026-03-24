@@ -107,12 +107,13 @@ export async function POST(req: NextRequest) {
         const subscriptionId = (invoice as unknown as { subscription: string }).subscription;
 
         if (subscriptionId) {
-          // Find operator by subscription ID
-          const operators = await prisma.operator.findMany();
-          const op = operators.find(o => {
-            const billing = o.billing as Record<string, unknown> | null;
-            return billing?.stripeSubscriptionId === subscriptionId;
+          // Find operator by subscription ID using JSONB query instead of fetching all operators
+          const operators = await prisma.operator.findMany({
+            where: { billing: { path: ['stripeSubscriptionId'], equals: subscriptionId } },
+            select: { id: true, billing: true },
+            take: 1,
           });
+          const op = operators[0] || null;
 
           if (op) {
             const existingBilling = (op.billing as Record<string, unknown>) || {};

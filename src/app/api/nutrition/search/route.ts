@@ -57,10 +57,42 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Query parameter "q" is required' }, { status: 400 });
     }
 
-    const url = `${USDA_BASE}/foods/search?api_key=${USDA_API_KEY}&query=${encodeURIComponent(query)}&pageSize=${pageSize}&dataType=Foundation,SR Legacy,Survey (FNDDS)`;
+    // Encode dataType param properly — spaces in URL were causing 502
+    const dataTypes = ['Foundation', 'SR Legacy', 'Survey (FNDDS)'].map(encodeURIComponent).join(',');
+    const url = `${USDA_BASE}/foods/search?api_key=${USDA_API_KEY}&query=${encodeURIComponent(query)}&pageSize=${pageSize}&dataType=${dataTypes}`;
 
-    const response = await fetch(url);
+    // Add timeout to prevent Railway proxy from killing the request
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    let response: Response;
+    try {
+      response = await fetch(url, { signal: controller.signal });
+    } catch (fetchErr) {
+      clearTimeout(timeout);
+      const msg = fetchErr instanceof Error ? fetchErr.message : 'Unknown fetch error';
+      // AbortError means timeout
+      if (msg.includes('abort')) {
+        return NextResponse.json(
+          { error: 'USDA API timed out — try a shorter query', timeout: true },
+          { status: 504, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+      return NextResponse.json({ error: `USDA API unreachable: ${msg}` }, { status: 502 });
+    } finally {
+      clearTimeout(timeout);
+    }
+
     if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      // Rate-limited by DEMO_KEY
+      if (response.status === 429) {
+        return NextResponse.json(
+          { error: 'USDA rate limit hit — set USDA_API_KEY env var for higher limits', rateLimited: true },
+          { status: 429, headers: { 'Retry-After': '60' } }
+        );
+      }
+      console.error(`USDA API ${response.status}: ${errBody.substring(0, 200)}`);
       return NextResponse.json({ error: 'USDA API error', status: response.status }, { status: 502 });
     }
 
@@ -75,13 +107,11 @@ export async function GET(req: NextRequest) {
       macros: extractMacros(food.foodNutrients),
     }));
 
-    return NextResponse.json({
-      success: true,
-      query,
-      count: foods.length,
-      foods,
-      accuracy: 'usda_verified',
-    });
+    // Cache successful nutrition searches for 1 hour — USDA data doesn't change frequently
+    return NextResponse.json(
+      { success: true, query, count: foods.length, foods, accuracy: 'usda_verified' },
+      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' } }
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('USDA search error:', message);
