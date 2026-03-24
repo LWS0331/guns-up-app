@@ -601,11 +601,9 @@ const AppShell: React.FC<AppShellProps> = ({
       if (data.success && data.sitrep) {
         setPendingSitrep(data.sitrep);
       } else {
-        console.error('SITREP API error:', data.error || data);
         setSitrepError(data.error || 'Failed to generate SITREP. Check API key configuration.');
       }
     } catch (err) {
-      console.error('SITREP generation failed:', err);
       setSitrepError('Network error generating SITREP. Please retry.');
     }
     setSitrepLoading(false);
@@ -725,7 +723,6 @@ const AppShell: React.FC<AppShellProps> = ({
         }
       }
     } catch (error) {
-      console.error('Gunny panel error:', error);
       setGunnyMessages(prev => {
         const lastMsg = prev[prev.length - 1];
         if (lastMsg?.role === 'gunny' && lastMsg.text.includes('connection')) return prev;

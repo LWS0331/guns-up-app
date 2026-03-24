@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { requireAuth } from '@/lib/requireAuth';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
 
 export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const { operatorContext, tier, clientDayName, clientDate, clientTimezone } = body;

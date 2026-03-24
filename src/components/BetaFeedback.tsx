@@ -73,7 +73,6 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
           setEntries(data.feedback || []);
         }
       } catch (err) {
-        console.error('Error fetching feedback:', err);
       } finally {
         setLoading(false);
       }
@@ -131,7 +130,6 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
         setEntries(newData.feedback || []);
       }
     } catch (err) {
-      console.error('Submit error:', err);
       setToast('Failed to submit feedback');
     } finally {
       setSubmitting(false);

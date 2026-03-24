@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireAuth } from '@/lib/requireAuth';
 
 // GET /api/wearables?operatorId=xxx — List connected wearables for an operator
 export async function GET(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
   const operatorId = req.nextUrl.searchParams.get('operatorId');
 
   if (!operatorId) {

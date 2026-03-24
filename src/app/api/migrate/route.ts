@@ -1,9 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import pg from 'pg';
 
 // POST /api/migrate — create tables if they don't exist
 // This is a one-time migration endpoint for when prisma db push didn't run during build
-export async function POST() {
+// Protected by ADMIN_SECRET env var
+export async function POST(req: NextRequest) {
+  const secret = req.headers.get('x-admin-secret') || new URL(req.url).searchParams.get('secret');
+  if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     return NextResponse.json({ error: 'No DATABASE_URL configured' }, { status: 500 });
@@ -42,6 +47,8 @@ export async function POST() {
 
     // Add new beta/promo columns to Operator (safe to run multiple times — IF NOT EXISTS not needed, ALTER ADD handles gracefully)
     const newColumns = [
+      { name: 'email', type: 'TEXT UNIQUE' },
+      { name: 'passwordHash', type: 'TEXT' },
       { name: 'betaStartDate', type: 'TEXT' },
       { name: 'betaEndDate', type: 'TEXT' },
       { name: 'isVanguard', type: 'BOOLEAN NOT NULL DEFAULT false' },
@@ -49,6 +56,10 @@ export async function POST() {
       { name: 'promoActive', type: 'BOOLEAN NOT NULL DEFAULT false' },
       { name: 'promoType', type: 'TEXT' },
       { name: 'promoExpiry', type: 'TEXT' },
+      { name: 'intake', type: "JSONB NOT NULL DEFAULT '{}'" },
+      { name: 'sitrep', type: "JSONB NOT NULL DEFAULT '{}'" },
+      { name: 'dailyBrief', type: "JSONB NOT NULL DEFAULT '{}'" },
+      { name: 'billing', type: "JSONB NOT NULL DEFAULT '{}'" },
     ];
     for (const col of newColumns) {
       await pool.query(`

@@ -27,7 +27,6 @@ export default function Home() {
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
-          console.log('Service Worker registered:', registration);
           // Check for updates every 60 seconds
           setInterval(() => registration.update(), 60000);
           // When a new SW is waiting, activate it
@@ -44,12 +43,11 @@ export default function Home() {
           });
         })
         .catch((error) => {
-          console.log('Service Worker registration failed:', error);
+          // Service Worker registration failed
         });
       // Listen for SW update messages
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data?.type === 'SW_UPDATED') {
-          console.log('App updated to version:', event.data.version);
           window.location.reload();
         }
       });
@@ -63,14 +61,11 @@ export default function Home() {
           if (data.operators && data.operators.length > 0) {
             setOperators(data.operators as Operator[]);
             setDbReady(true);
-            console.log(`Loaded ${data.operators.length} operators from database`);
           } else {
             // Database is empty — seed it
-            console.log('Database empty, seeding...');
             const seedRes = await fetch('/api/seed', { method: 'POST' });
             if (seedRes.ok) {
               const seedData = await seedRes.json();
-              console.log(`Seeded ${seedData.created} operators`);
               // Re-fetch after seed
               const reRes = await fetch('/api/operators');
               if (reRes.ok) {
@@ -84,12 +79,10 @@ export default function Home() {
           }
         } else {
           // API error — fall back to static data
-          console.warn('DB fetch failed, using static data');
           setDbReady(false);
         }
       } catch (err) {
         // Network/DB not available — fall back to static data
-        console.warn('Database not available, using static data:', err);
         setDbReady(false);
       }
 
@@ -110,13 +103,11 @@ export default function Home() {
               tier: meData.operator.tier,
               callsign: meData.operator.callsign
             });
-            console.log('Auto-logged in from stored token');
           } else {
             // Token invalid, clear it
             localStorage.removeItem('authToken');
           }
         } catch (err) {
-          console.warn('Failed to verify token:', err);
           localStorage.removeItem('authToken');
         }
       }
@@ -144,13 +135,11 @@ export default function Home() {
         body: JSON.stringify(updated),
       });
       if (!res.ok) {
-        console.error('DB save failed:', res.status, await res.text().catch(() => ''));
       } else if (!dbReady) {
         // DB recovered — mark as ready
         setDbReady(true);
       }
     } catch (err) {
-      console.warn('Failed to persist operator to DB:', err);
     }
   }, [dbReady]);
 

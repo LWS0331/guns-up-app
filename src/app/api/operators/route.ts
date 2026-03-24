@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireAuth } from '@/lib/requireAuth';
 
-// GET /api/operators — fetch all operators
-export async function GET() {
+// GET /api/operators — fetch all operators (auth required)
+export async function GET(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const rows = await prisma.operator.findMany();
 

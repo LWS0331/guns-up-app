@@ -11,7 +11,11 @@ const toJsonArray = (val: any) => JSON.parse(JSON.stringify(val ?? []));
 // POST /api/seed — seed the database with default operators
 // Only inserts operators that don't already exist (won't overwrite user data)
 export async function POST(req: NextRequest) {
-  // Simple auth check — require a secret or check for dev mode
+  const secret = req.headers.get('x-admin-secret') || new URL(req.url).searchParams.get('secret');
+  if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { force } = await req.json().catch(() => ({ force: false }));
 
   try {

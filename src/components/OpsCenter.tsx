@@ -108,7 +108,6 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         setLastRefresh(new Date().toLocaleTimeString());
       }
     } catch (err) {
-      console.error('Failed to fetch OPS metrics:', err);
     } finally {
       setMetricsLoading(false);
     }
@@ -199,7 +198,6 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         fetchMetrics();
       }
     } catch (err) {
-      console.error('Failed to update tier:', err);
     }
   };
 
@@ -224,7 +222,6 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       }
       fetchMetrics();
     } catch (err) {
-      console.error('Failed to activate beta:', err);
     }
   };
 
@@ -241,7 +238,6 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       }
       fetchMetrics();
     } catch (err) {
-      console.error('Failed to lock tiers:', err);
     }
   };
 
@@ -259,7 +255,6 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       });
       fetchMetrics();
     } catch (err) {
-      console.error('Failed to grant vanguard:', err);
     }
   };
 
@@ -281,7 +276,6 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         window.location.reload();
       }
     } catch (err) {
-      console.error('Failed to reset accounts:', err);
     }
   };
 
@@ -309,7 +303,6 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       setSelectedOperatorForPromo(null);
       fetchMetrics();
     } catch (err) {
-      console.error('Failed to offer promo:', err);
     }
   };
 

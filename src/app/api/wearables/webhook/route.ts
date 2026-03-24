@@ -1,11 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import * as crypto from 'crypto';
+
+// Verify webhook signature from Junction/Vital
+function verifyWebhookSignature(payload: string, signature: string | null): boolean {
+  const secret = process.env.VITAL_WEBHOOK_SECRET;
+  if (!secret) {
+    // If no secret configured, log warning but allow in dev/sandbox
+    if (process.env.NODE_ENV === 'production') return false;
+    return true;
+  }
+  if (!signature) return false;
+  const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
 
 // POST /api/wearables/webhook — Receive Junction/Vital webhook events
 // Events: provider.connection.created, daily.data.sleep.created, daily.data.activity.created, etc.
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    const signature = req.headers.get('x-vital-signature') || req.headers.get('svix-signature');
+
+    if (!verifyWebhookSignature(rawBody, signature)) {
+      return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 403 });
+    }
+
+    const body = JSON.parse(rawBody);
     const eventType = body.event_type;
     const data = body.data;
     const clientUserId = body.client_user_id; // "guns-up-{operatorId}"
