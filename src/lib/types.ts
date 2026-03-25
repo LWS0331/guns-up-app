@@ -19,7 +19,7 @@ export const TEAMS: Team[] = [
 ];
 
 // Intake assessment types
-export interface IntakeAssessment {
+export interface IntakeAssessment 
   completed: boolean;
   completedDate?: string;
   fitnessLevel: FitnessLevel;
@@ -397,7 +397,7 @@ export interface DailyBrief {
 }
 
 export type ViewMode = 'month' | 'week' | 'day';
-export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'ops';
+export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'radio' | 'ops';
 
 // Hardcoded admin access for OPS CENTER
 export const OPS_CENTER_ACCESS = ['op-ruben', 'op-britney'];
