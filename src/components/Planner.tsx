@@ -6,9 +6,8 @@ import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayT
 import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
-import VoiceInput, { VoiceCommand } from '@/components/VoiceInput';
+import { VoiceCommand } from '@/components/VoiceInput';
 import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice } from '@/lib/tts';
-import { requestDeviceMotionPermission } from '@/lib/useShakeToTalk';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -275,7 +274,6 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string }>>({});
 
   // Voice command state
-  const [activeListening, setActiveListening] = useState(false);
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<GunnyVoice>('onyx');
   const [showVoiceSelect, setShowVoiceSelect] = useState(false);
@@ -840,7 +838,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     onUpdateOperator(updated);
     setShowWorkoutBuilder(false);
     setWorkoutMode(false);
-    setActiveListening(false);
+    /* activeListening removed — use Radio tab */
     // Stay on day view so user can review the saved workout — don't clear selectedDate
   };
 
@@ -1312,7 +1310,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       updated.workouts[dateStr] = { ...workout, results: savedResults, completed: true };
       onUpdateOperator(updated);
       setWorkoutMode(false);
-      setActiveListening(false);
+      /* activeListening removed — use Radio tab */
       setWorkoutResults({});
     };
 
@@ -1356,77 +1354,29 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 ⚡ GUNNY
               </button>
             )}
-            <button onClick={() => { setWorkoutMode(false); setActiveListening(false); }} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer', fontSize: 11 }}>EXIT</button>
+            <button onClick={() => { setWorkoutMode(false); /* activeListening removed — use Radio tab */ }} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer', fontSize: 11 }}>EXIT</button>
           </div>
         </div>
         <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 16, margin: '0 0 12px 0' }}>{workout.title}</h3>
 
-        {/* ═══ VOICE COMMS BAR ═══ */}
+        {/* ═══ RADIO COMMS LINK ═══ */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
           padding: '8px 12px',
-          background: activeListening ? 'rgba(0,255,65,0.04)' : 'rgba(255,255,255,0.02)',
-          border: `1px solid ${activeListening ? 'rgba(0,255,65,0.25)' : '#1C2E1C'}`,
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid #1C2E1C',
           borderRadius: 6,
-          transition: 'all 0.3s',
         }}>
-          <VoiceInput
-            onTranscript={(text) => {
-              // Non-command voice in non-active mode goes to Gunny Assist
-              if (onOpenGunny) onOpenGunny();
-            }}
-            onVoiceCommand={handleVoiceCommand}
-            onSendMessage={(text) => {
-              // "Over" trigger — send to Gunny without touching the phone
-              if (onSendGunnyMessage) {
-                onSendGunnyMessage(text);
-              } else if (onOpenGunny) {
-                onOpenGunny();
-              }
-            }}
-            onWakeGunny={() => {
-              // Call sign detected — speak radio protocol acknowledgment
-              const cs = operator.callsign || 'OPERATOR';
-              const ack = language === 'es'
-                ? `Gunny a ${cs}, transmita su mensaje.`
-                : `Gunny to ${cs}, send your traffic.`;
-              speak(ack);
-            }}
-            callSign={operator.callsign}
-            activeListening={activeListening}
-            compact
-          />
-          <button
-            onClick={() => setActiveListening(!activeListening)}
-            style={{
-              flex: 1,
-              padding: '6px 0',
-              background: activeListening
-                ? 'linear-gradient(90deg, rgba(0,255,65,0.1), rgba(0,255,65,0.05))'
-                : 'transparent',
-              border: 'none',
-              color: activeListening ? '#00ff41' : '#6B7B6B',
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: 9,
-              fontWeight: 700,
-              letterSpacing: 1.2,
-              cursor: 'pointer',
-              textAlign: 'left',
-              transition: 'all 0.2s',
-            }}
-          >
-            {activeListening
-              ? `● COMMS ACTIVE — "${operator.callsign || 'GUNNY'}" to talk, "OVER" to send | ${typeof navigator !== 'undefined' && (/iPad/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)) ? 'TAP' : 'SHAKE'} for PTT`
-              : 'TAP TO ENABLE VOICE COMMS'}
-          </button>
-          {activeListening && (
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%', background: '#00ff41',
-              boxShadow: '0 0 6px rgba(0,255,65,0.8)',
-              animation: 'voicePulse 2s infinite',
-              flexShrink: 0,
-            }} />
-          )}
+          <span style={{ fontSize: 16 }}>📡</span>
+          <span style={{
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: 1.2,
+            color: '#6B7B6B',
+          }}>
+            USE THE RADIO TAB TO TALK TO GUNNY
+          </span>
         </div>
 
         {/* Voice command feedback toast */}
@@ -1982,9 +1932,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <button
                   onClick={() => {
                     unlockAudioContext(); // Pre-warm iOS audio on user gesture
-                    requestDeviceMotionPermission(); // iOS shake-to-talk permission (must be user gesture)
                     setWorkoutMode(true);
-                    setActiveListening(true);
                     setSelectedDate(dateStr);
                   }}
                   style={{

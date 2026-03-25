@@ -13,7 +13,7 @@ import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
 import SitrepView from '@/components/SitrepView';
-import VoiceInput from '@/components/VoiceInput';
+import TacticalRadio from '@/components/TacticalRadio';
 import { speak as gunnySpeak } from '@/lib/tts';
 import DailyBriefComponent from '@/components/DailyBrief';
 import BattlePlanRef from '@/components/BattlePlanRef';
@@ -845,6 +845,7 @@ const AppShell: React.FC<AppShellProps> = ({
     { id: 'coc', label: t('nav.coc_short'), labelKey: 'nav.coc_short', icon: '◆' },
     { id: 'planner', label: t('nav.planner'), labelKey: 'nav.planner', icon: '▦' },
     { id: 'intel', label: t('nav.intel_short'), labelKey: 'nav.intel_short', icon: '◈' },
+    { id: 'radio', label: 'RADIO', labelKey: 'nav.radio', icon: '📡' },
     { id: 'gunny', label: t('nav.gunny_short'), labelKey: 'nav.gunny_short', icon: '▶' },
   ];
 
@@ -991,6 +992,8 @@ const AppShell: React.FC<AppShellProps> = ({
         return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} />;
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
+      case 'radio':
+        return <TacticalRadio operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />;
       case 'gunny':
         return <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />;
       case 'ops':
@@ -1771,14 +1774,6 @@ const AppShell: React.FC<AppShellProps> = ({
                 }
               }}
               disabled={gunnyLoading}
-            />
-            <VoiceInput
-              onTranscript={(text) => {
-                setGunnyInput(prev => prev ? prev + ' ' + text : text);
-              }}
-              onSendMessage={sendGunnyVoiceMessage}
-              callSign={selectedOperator.callsign}
-              compact
             />
             <button
               className="gunny-send-btn"
