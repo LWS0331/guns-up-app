@@ -19,7 +19,7 @@ export const TEAMS: Team[] = [
 ];
 
 // Intake assessment types
-export interface IntakeAssessment 
+export interface IntakeAssessment {
   completed: boolean;
   completedDate?: string;
   fitnessLevel: FitnessLevel;
