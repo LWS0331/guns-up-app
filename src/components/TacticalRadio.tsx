@@ -40,11 +40,6 @@ interface SpeechRecognition extends EventTarget {
   onend: (() => void) | null;
   onstart: (() => void) | null;
 }
-declare global {
-  interface Window {
-    webkitSpeechRecognition: new () => SpeechRecognition;
-  }
-}
 
 // Radio audio effect generator using Web Audio API
 class RadioAudioEngine {
