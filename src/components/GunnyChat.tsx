@@ -365,7 +365,7 @@ const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
   // Save to API (non-blocking)
   fetch('/api/chat', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
     body: JSON.stringify({ operatorId: opId, chatType, messages: serializable }),
   }).catch(() => { /* API unavailable — localStorage will cover it */ });
   // Also save to localStorage as immediate fallback
@@ -563,7 +563,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
         try {
           const res = await fetch('/api/gunny', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
             body: JSON.stringify({
               messages: [{ role: 'user', text: 'I just signed up. Start my intake assessment.' }],
               tier: operator.tier,
@@ -1102,7 +1102,7 @@ ${mealSuggestion}`;
 
       const res = await fetch('/api/gunny', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
         body: JSON.stringify({
           messages: recentMessages,
           tier: operator.tier,

@@ -217,7 +217,7 @@ export default function TacticalRadio({ operator }: TacticalRadioProps) {
       try {
         const response = await fetch('/api/gunny', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
           body: JSON.stringify({
             messages: chatHistoryRef.current.map(m => ({
               role: m.role === 'assistant' ? 'gunny' : 'user',

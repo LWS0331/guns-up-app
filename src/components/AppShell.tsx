@@ -361,7 +361,7 @@ const AppShell: React.FC<AppShellProps> = ({
             // Migrate to API
             fetch('/api/chat', {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
               body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: saved }),
             }).catch(() => {});
             return;
@@ -399,7 +399,7 @@ const AppShell: React.FC<AppShellProps> = ({
       // Save to API (non-blocking)
       fetch('/api/chat', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
         body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: gunnyMessages }),
       }).catch(() => {});
       // Also save to localStorage as fallback
@@ -588,7 +588,7 @@ const AppShell: React.FC<AppShellProps> = ({
     try {
       const res = await fetch('/api/gunny/sitrep', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
         body: JSON.stringify({
           operatorContext: buildOperatorContext(updatedOperator),
           tier: updatedOperator.tier,
@@ -664,7 +664,7 @@ const AppShell: React.FC<AppShellProps> = ({
 
       const response = await fetch('/api/gunny', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
         body: JSON.stringify({
           messages: [...gunnyMessages, userMessage],
           operatorContext: buildOperatorContext(),
@@ -779,7 +779,7 @@ const AppShell: React.FC<AppShellProps> = ({
 
           const response = await fetch('/api/gunny', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
             body: JSON.stringify({
               messages: [...gunnyMessages, userMessage],
               operatorContext: buildOperatorContext(),
