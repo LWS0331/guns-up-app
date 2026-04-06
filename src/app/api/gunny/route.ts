@@ -673,11 +673,25 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       contextBlock += `\n\n═══ LIVE OPERATIONAL DATA FROM DATABASE ═══\n${JSON.stringify(body.opsData, null, 2)}`;
     }
 
-    // Convert messages to Anthropic format
-    const anthropicMessages = messages.map((msg: { role: string; text: string }) => ({
-      role: msg.role === 'gunny' ? 'assistant' as const : 'user' as const,
-      content: msg.text,
-    }));
+    // Convert messages to Anthropic format — filter empty and ensure first msg is user role
+    const anthropicMessages = messages
+      .map((msg: { role: string; text?: string; content?: string }) => ({
+        role: msg.role === 'gunny' ? 'assistant' as const : 'user' as const,
+        content: msg.text || msg.content || '',
+      }))
+      .filter((msg) => msg.content && msg.content.trim().length > 0);
+
+    // Anthropic requires the first message to be from the user
+    while (anthropicMessages.length > 0 && anthropicMessages[0].role === 'assistant') {
+      anthropicMessages.shift();
+    }
+
+    if (anthropicMessages.length === 0) {
+      return NextResponse.json(
+        { error: 'No valid messages to process' },
+        { status: 400 }
+      );
+    }
 
     let systemPrompt: string;
     if (isOpsMode) {
