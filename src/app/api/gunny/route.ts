@@ -639,15 +639,15 @@ ${operatorContext.dietaryRestrictions?.length ? `Dietary Restrictions: ${operato
 ${operatorContext.supplements?.length ? `Supplements: ${operatorContext.supplements.join(', ')}` : ''}
 Health Conditions: ${operatorContext.healthConditions?.length ? operatorContext.healthConditions.join(', ') : 'None reported'}
 
-PRs: ${operatorContext.prs?.length ? operatorContext.prs.map(pr => `${pr.exercise}: ${pr.weight}lbs`).join(', ') : 'None logged yet'}
+PRs: ${operatorContext.prs?.length ? (Array.isArray(operatorContext.prs) ? operatorContext.prs.map((pr: { exercise: string; weight: number }) => `${pr.exercise}: ${pr.weight}lbs`).join(', ') : operatorContext.prs) : 'None logged yet'}
 
 INJURIES & RESTRICTIONS:
-${operatorContext.injuries?.length ? operatorContext.injuries.map((inj: { name: string; status: string; notes?: string; restrictions?: string[] }, idx: number) => {
+${operatorContext.injuries?.length ? (Array.isArray(operatorContext.injuries) ? operatorContext.injuries.map((inj: { name: string; status: string; notes?: string; restrictions?: string[] }, idx: number) => {
   let entry = `${idx + 1}. ${inj.name} (${(inj.status || 'active').toUpperCase()})`;
   if (inj.notes && inj.notes !== 'Reported during intake') entry += `\n   Notes: ${inj.notes}`;
   if (inj.restrictions?.length) entry += `\n   Restrictions: ${inj.restrictions.join('; ')}`;
   return entry;
-}).join('\n') : 'None — all clear'}
+}).join('\n') : operatorContext.injuries) : 'None — all clear'}
 ${operatorContext.injuryNotes ? `\nRAW INJURY NOTES FROM OPERATOR (verbatim — use these for full context):\n${operatorContext.injuryNotes}` : ''}
 
 Trainer Notes: ${operatorContext.trainerNotes || 'No special directives'}
