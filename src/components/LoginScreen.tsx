@@ -67,6 +67,19 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
         setSuccess(true);
         setError('');
         setMatchedOperator(operator);
+        // Fetch JWT token from API so Gunny AI requests are authenticated
+        fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.token) {
+              localStorage.setItem('authToken', data.token);
+            }
+          })
+          .catch(() => { /* token fetch failed, continue anyway */ });
         setTimeout(() => {
           onLogin(operator);
         }, 1400);
