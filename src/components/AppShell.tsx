@@ -187,6 +187,10 @@ const AppShell: React.FC<AppShellProps> = ({
   const [gunnyInput, setGunnyInput] = useState('');
   const [gunnyLoading, setGunnyLoading] = useState(false);
   const [gunnyGreeted, setGunnyGreeted] = useState(false);
+  const [gunnyTtsEnabled, setGunnyTtsEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(`guns-up-tts-${selectedOperator?.id}`) === 'true';
+  });
   const [workoutModeState, setWorkoutModeState] = useState<WorkoutModeState>({ active: false, workoutTitle: '', exercises: [] });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -632,9 +636,17 @@ const AppShell: React.FC<AppShellProps> = ({
     generateSitrep(currentUser);
   };
 
-  // TTS — Gunny speaks back
+  // TTS — Gunny speaks back (only when toggle is enabled)
   const speakGunny = (text: string) => {
-    gunnySpeak(text);
+    if (gunnyTtsEnabled) gunnySpeak(text);
+  };
+
+  const toggleGunnyTts = () => {
+    setGunnyTtsEnabled(prev => {
+      const next = !prev;
+      try { localStorage.setItem(`guns-up-tts-${selectedOperator?.id}`, String(next)); } catch {}
+      return next;
+    });
   };
 
   // Send message to Gunny API (side panel — context-aware mode)
@@ -799,7 +811,7 @@ const AppShell: React.FC<AppShellProps> = ({
             setGunnyMessages(prev => [...prev, { role: 'gunny' as const, text: replyText, timestamp: Date.now() }]);
             // Show response on workout screen + speak it
             showGunnyVoiceResponse(replyText);
-            gunnySpeak(replyText);
+            speakGunny(replyText);
 
             if (data.workoutData) {
               const today = new Date().toISOString().split('T')[0];
@@ -845,7 +857,6 @@ const AppShell: React.FC<AppShellProps> = ({
     { id: 'coc', label: t('nav.coc_short'), labelKey: 'nav.coc_short', icon: '◆' },
     { id: 'planner', label: t('nav.planner'), labelKey: 'nav.planner', icon: '▦' },
     { id: 'intel', label: t('nav.intel_short'), labelKey: 'nav.intel_short', icon: '◈' },
-    { id: 'radio', label: 'RADIO', labelKey: 'nav.radio', icon: '📡' },
     { id: 'gunny', label: t('nav.gunny_short'), labelKey: 'nav.gunny_short', icon: '▶' },
   ];
 
@@ -1712,6 +1723,27 @@ const AppShell: React.FC<AppShellProps> = ({
                 GUNNY ASSIST
               </span>
             </div>
+            <button
+              onClick={toggleGunnyTts}
+              title={gunnyTtsEnabled ? 'Voice ON — tap to mute' : 'Voice OFF — tap to unmute'}
+              style={{
+                background: gunnyTtsEnabled ? 'rgba(255,184,0,0.15)' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${gunnyTtsEnabled ? 'rgba(255,184,0,0.4)' : 'rgba(255,255,255,0.15)'}`,
+                borderRadius: '4px',
+                color: gunnyTtsEnabled ? '#ffb800' : '#666',
+                fontSize: '16px',
+                cursor: 'pointer',
+                padding: '6px 10px',
+                minWidth: '44px',
+                minHeight: '36px',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {gunnyTtsEnabled ? '🔊' : '🔇'}
+            </button>
             <button
               onClick={() => setShowGunnyPanel(false)}
               style={{
