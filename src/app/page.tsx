@@ -54,46 +54,17 @@ export default function Home() {
     }
 
     const loadFromDB = async () => {
-      try {
-        const res = await fetch('/api/operators');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.operators && data.operators.length > 0) {
-            setOperators(data.operators as Operator[]);
-            setDbReady(true);
-          } else {
-            // Database is empty — seed it
-            const seedRes = await fetch('/api/seed', { method: 'POST' });
-            if (seedRes.ok) {
-              const seedData = await seedRes.json();
-              // Re-fetch after seed
-              const reRes = await fetch('/api/operators');
-              if (reRes.ok) {
-                const reData = await reRes.json();
-                if (reData.operators?.length > 0) {
-                  setOperators(reData.operators as Operator[]);
-                }
-              }
-            }
-            setDbReady(true);
-          }
-        } else {
-          // API error — fall back to static data
-          setDbReady(false);
-        }
-      } catch (err) {
-        // Network/DB not available — fall back to static data
-        setDbReady(false);
-      }
-
-      // Check for stored JWT token and auto-login
+      // Check for stored JWT token FIRST — needed for authenticated API calls
       const token = localStorage.getItem('authToken');
+      const authHeaders: Record<string, string> = token
+        ? { 'Authorization': `Bearer ${token}` }
+        : {};
+
+      // Auto-login if token exists
       if (token) {
         try {
           const meRes = await fetch('/api/auth/me', {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
           });
           if (meRes.ok) {
             const meData = await meRes.json();
@@ -110,6 +81,38 @@ export default function Home() {
         } catch (err) {
           localStorage.removeItem('authToken');
         }
+      }
+
+      // Now fetch operators with auth header (so we get DB data, not static fallback)
+      try {
+        const res = await fetch('/api/operators', { headers: authHeaders });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.operators && data.operators.length > 0) {
+            setOperators(data.operators as Operator[]);
+            setDbReady(true);
+          } else {
+            // Database is empty — seed it
+            const seedRes = await fetch('/api/seed', { method: 'POST' });
+            if (seedRes.ok) {
+              // Re-fetch after seed
+              const reRes = await fetch('/api/operators', { headers: authHeaders });
+              if (reRes.ok) {
+                const reData = await reRes.json();
+                if (reData.operators?.length > 0) {
+                  setOperators(reData.operators as Operator[]);
+                }
+              }
+            }
+            setDbReady(true);
+          }
+        } else {
+          // API error — fall back to static data
+          setDbReady(false);
+        }
+      } catch (err) {
+        // Network/DB not available — fall back to static data
+        setDbReady(false);
       }
 
       setIsLoaded(true);
@@ -146,7 +149,7 @@ export default function Home() {
     }
   }, [dbReady]);
 
-  const handleLogin = (operator: Operator) => {
+  const handleLogin = async (operator: Operator) => {
     // Get the latest version of this operator from state
     const latest = operators.find(op => op.id === operator.id) || operator;
     setCurrentUser(latest);
@@ -156,6 +159,27 @@ export default function Home() {
       callsign: latest.callsign
     });
     trackEvent(EVENTS.LOGIN, { role: latest.role, tier: latest.tier });
+
+    // Re-fetch operators from DB now that we have an auth token
+    // This ensures we load persisted data (not static fallback) after fresh login
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      try {
+        const res = await fetch('/api/operators', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.operators?.length > 0) {
+            setOperators(data.operators as Operator[]);
+            // Update currentUser with DB version
+            const dbUser = data.operators.find((op: Operator) => op.id === operator.id);
+            if (dbUser) setCurrentUser(dbUser);
+            setDbReady(true);
+          }
+        }
+      } catch { /* DB unavailable — keep static data */ }
+    }
   };
 
   const handleLogout = () => {
