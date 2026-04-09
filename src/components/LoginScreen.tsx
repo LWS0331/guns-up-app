@@ -62,42 +62,43 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
 
   useEffect(() => {
     if (pin.length === 4) {
-      const operator = operators.find((op) => op.pin === pin);
-      if (operator) {
-        setSuccess(true);
-        setError('');
-        setMatchedOperator(operator);
-        // Fetch JWT token from API BEFORE calling onLogin — sitrep needs auth
-        const loginWithToken = async () => {
-          try {
-            const res = await fetch('/api/auth/login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ pin }),
-            });
+      // Authenticate via API first (DB is source of truth for PINs)
+      const loginViaApi = async () => {
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin }),
+          });
+          if (res.ok) {
             const data = await res.json();
-            if (data.token) {
-              localStorage.setItem('authToken', data.token);
-            }
-            // Use DB operator data if available (has persisted changes)
-            setTimeout(() => { onLogin(data.operator || operator); }, 1400);
-          } catch {
-            // Token fetch failed — proceed without token (offline mode)
-            setTimeout(() => { onLogin(operator); }, 1400);
+            if (data.token) localStorage.setItem('authToken', data.token);
+            setSuccess(true);
+            setError('');
+            setMatchedOperator(data.operator);
+            setTimeout(() => { onLogin(data.operator); }, 1400);
+            return;
           }
-        };
-        loginWithToken();
-      } else {
-        setError('Invalid PIN');
-        setSuccess(false);
-        setTimeout(() => {
-          setPin('');
+        } catch { /* API unreachable — fall through to offline */ }
+
+        // Offline fallback: match against local operators (no JWT issued)
+        const operator = operators.find((op) => op.pin === pin);
+        if (operator) {
+          setSuccess(true);
           setError('');
-          if (hiddenInputRef.current) {
-            hiddenInputRef.current.focus();
-          }
-        }, 800);
-      }
+          setMatchedOperator(operator);
+          setTimeout(() => { onLogin(operator); }, 1400);
+        } else {
+          setError('Invalid PIN');
+          setSuccess(false);
+          setTimeout(() => {
+            setPin('');
+            setError('');
+            if (hiddenInputRef.current) hiddenInputRef.current.focus();
+          }, 800);
+        }
+      };
+      loginViaApi();
     }
   }, [pin, operators, onLogin]);
 
