@@ -67,22 +67,26 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
         setSuccess(true);
         setError('');
         setMatchedOperator(operator);
-        // Fetch JWT token from API so Gunny AI requests are authenticated
-        fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin }),
-        })
-          .then(res => res.json())
-          .then(data => {
+        // Fetch JWT token from API BEFORE calling onLogin — sitrep needs auth
+        const loginWithToken = async () => {
+          try {
+            const res = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pin }),
+            });
+            const data = await res.json();
             if (data.token) {
               localStorage.setItem('authToken', data.token);
             }
-          })
-          .catch(() => { /* token fetch failed, continue anyway */ });
-        setTimeout(() => {
-          onLogin(operator);
-        }, 1400);
+            // Use DB operator data if available (has persisted changes)
+            setTimeout(() => { onLogin(data.operator || operator); }, 1400);
+          } catch {
+            // Token fetch failed — proceed without token (offline mode)
+            setTimeout(() => { onLogin(operator); }, 1400);
+          }
+        };
+        loginWithToken();
       } else {
         setError('Invalid PIN');
         setSuccess(false);
