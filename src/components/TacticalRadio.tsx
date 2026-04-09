@@ -192,8 +192,8 @@ export default function TacticalRadio({ operator }: TacticalRadioProps) {
     if (op.profile?.weight) parts.push(`Weight: ${op.profile.weight}lbs`);
     if (op.profile?.goals?.length) parts.push(`Goals: ${op.profile.goals.join(', ')}`);
     if (op.profile?.fitnessLevel) parts.push(`Level: ${op.profile.fitnessLevel}`);
-    if (op.prs?.length) {
-      const prStr = op.prs.slice(0, 5).map(pr => `${pr.exercise}: ${pr.weight}lbs`).join(', ');
+    if ((op.prs || []).length) {
+      const prStr = (op.prs || []).slice(0, 5).map(pr => `${pr.exercise}: ${pr.weight}lbs`).join(', ');
       parts.push(`PRs: ${prStr}`);
     }
     return parts.join(' | ');

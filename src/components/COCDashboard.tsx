@@ -124,7 +124,7 @@ function getWeekDates(): { date: Date; key: string; dayName: string }[] {
 }
 
 function countWorkoutsThisWeek(operator: Operator): number {
-  return getWeekDates().filter((d) => operator.workouts[d.key]).length;
+  return getWeekDates().filter((d) => operator.workouts?.[d.key]).length;
 }
 
 function calculateStreak(operator: Operator): number {
@@ -133,7 +133,7 @@ function calculateStreak(operator: Operator): number {
   const currentDate = new Date(today);
   while (true) {
     const key = formatDateKey(currentDate);
-    if (operator.workouts[key]) {
+    if (operator.workouts?.[key]) {
       streak++;
       currentDate.setDate(currentDate.getDate() - 1);
     } else break;
@@ -149,9 +149,9 @@ function parseReps(prescription: string): number {
 function calculateWeeklyVolume(operator: Operator): number {
   let totalVolume = 0;
   getWeekDates().forEach((d) => {
-    const workout = operator.workouts[d.key];
+    const workout = operator.workouts?.[d.key];
     if (workout) {
-      workout.blocks.forEach((block) => {
+      (workout.blocks || []).forEach((block) => {
         if (block.type === 'exercise') totalVolume += parseReps(block.prescription) * 135;
       });
     }
@@ -160,7 +160,7 @@ function calculateWeeklyVolume(operator: Operator): number {
 }
 
 function getRecentPRs(operator: Operator, limit: number = 5) {
-  return [...operator.prs]
+  return [...(operator.prs || [])]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, limit);
 }
@@ -189,7 +189,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
   const workoutsThisWeek = countWorkoutsThisWeek(operator);
   const streak = calculateStreak(operator);
   const volume = calculateWeeklyVolume(operator);
-  const prCount = operator.prs.length;
+  const prCount = (operator.prs || []).length;
   const recentPRs = getRecentPRs(operator);
   const weekDates = getWeekDates();
   const [mounted, setMounted] = useState(false);
@@ -273,7 +273,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
               letterSpacing: '1px',
               marginTop: '4px',
             }}>
-              {operator.name} // {operator.role.toUpperCase()} // {operator.profile.goals.join(' + ').toUpperCase()}
+              {operator.name} // {operator.role.toUpperCase()} // {(operator.profile?.goals || []).join(' + ').toUpperCase()}
             </div>
           </div>
           {/* Tier/Beta Badge */}
@@ -435,7 +435,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
             background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
           }}>
             {weekDates.map((dayInfo, i) => {
-              const workout = operator.workouts[dayInfo.key];
+              const workout = operator.workouts?.[dayInfo.key];
               const today = isToday(dayInfo.date);
 
               return (
@@ -509,9 +509,9 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                         border: '1px solid rgba(0,255,65,0.2)',
                         backgroundColor: 'rgba(0,255,65,0.04)',
                       }}>
-                        {workout.blocks.length} BLOCKS
+                        {(workout.blocks || []).length} BLOCKS
                       </div>
-                      {workout.completed && (
+                      {workout?.completed && (
                         <div style={{
                           fontFamily: 'Share Tech Mono, monospace',
                           fontSize: '15px',
@@ -649,21 +649,21 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
               alignItems: 'center',
             }}>
               <ProgressRing
-                value={operator.profile.readiness}
+                value={operator.profile?.readiness || 0}
                 max={100}
                 size={72}
                 color="#00ff41"
                 label="READINESS"
               />
               <ProgressRing
-                value={operator.profile.sleep}
+                value={operator.profile?.sleep || 0}
                 max={10}
                 size={72}
                 color="#00ff41"
                 label="SLEEP"
               />
               <ProgressRing
-                value={operator.profile.stress}
+                value={operator.profile?.stress || 0}
                 max={10}
                 size={72}
                 color="#ffb800"

@@ -441,7 +441,7 @@ const AppShell: React.FC<AppShellProps> = ({
       context += `Workouts this week: ${thisWeekWorkouts}\n`;
       context += `Readiness: ${op.profile?.readiness || 'unknown'}/10\n`;
       if (todayWorkout) {
-        context += `Today's workout: "${todayWorkout.title}" — ${todayWorkout.blocks.length} blocks\n`;
+        context += `Today's workout: "${todayWorkout.title}" — ${(todayWorkout?.blocks || []).length} blocks\n`;
       } else {
         context += `No workout scheduled for today.\n`;
       }
@@ -477,7 +477,7 @@ const AppShell: React.FC<AppShellProps> = ({
         if (todayWorkout) {
           context += `Today's workout: "${todayWorkout.title}"\n`;
           if (todayWorkout.warmup) context += `Warmup: ${todayWorkout.warmup}\n`;
-          todayWorkout.blocks.forEach((block, i) => {
+          (todayWorkout?.blocks || []).forEach((block, i) => {
             if (block.type === 'exercise') {
               context += `  ${String.fromCharCode(65 + i)}) ${block.exerciseName} — ${block.prescription}\n`;
             } else {
@@ -501,14 +501,14 @@ const AppShell: React.FC<AppShellProps> = ({
       context += `Profile: ${op.profile?.age}yo, ${op.profile?.height}, ${op.profile?.weight}lbs, ${op.profile?.bodyFat}% BF, Training age: ${op.profile?.trainingAge}\n`;
       context += `Goals: ${op.profile?.goals?.join(', ') || 'none set'}\n`;
       if (op.prs?.length > 0) {
-        context += `PRs: ${op.prs.map(pr => `${pr.exercise}: ${pr.weight}lbs`).join(', ')}\n`;
+        context += `PRs: ${(op.prs || []).map(pr => `${pr.exercise}: ${pr.weight}lbs`).join(', ')}\n`;
       }
       if (op.injuries?.length > 0) {
-        context += `Injuries: ${op.injuries.map(inj => `${inj.name} (${inj.status})${inj.restrictions?.length ? ' — avoid: ' + inj.restrictions.join(', ') : ''}`).join('; ')}\n`;
+        context += `Injuries: ${(op.injuries || []).map(inj => `${inj.name} (${inj.status})${inj.restrictions?.length ? ' — avoid: ' + inj.restrictions.join(', ') : ''}`).join('; ')}\n`;
       }
       const nutri = op.nutrition?.targets;
       if (nutri) {
-        context += `Nutrition targets: ${nutri.calories} cal, ${nutri.protein}g protein, ${nutri.carbs}g carbs, ${nutri.fat}g fat\n`;
+        context += `Nutrition targets: ${nutri?.calories || 0} cal, ${nutri?.protein || 0}g protein, ${nutri?.carbs || 0}g carbs, ${nutri?.fat || 0}g fat\n`;
       }
     } else if (activeTab === 'gunny') {
       context += `The operator has the full Gunny AI tab open (gameplan/programming mode). They opened the side panel for quick contextual help.\n`;
@@ -870,12 +870,12 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'coc':
         return (
           <>
-            {currentSelectedOp.sitrep && (
+            {currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
               <DailyBriefComponent operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
             )}
 
             {/* New Battle Plan button — only show for own profile when SITREP exists */}
-            {currentSelectedOp.id === currentUser.id && currentSelectedOp.sitrep && (
+            {currentSelectedOp.id === currentUser.id && currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
                 <button
                   onClick={() => setShowNewPlanConfirm(true)}

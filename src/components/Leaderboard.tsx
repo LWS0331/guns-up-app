@@ -16,7 +16,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
     return operators.map(op => {
       const workoutsCompleted = Object.values(op.workouts || {}).filter(w => w.completed).length;
       const todayStr = new Date().toISOString().split('T')[0];
-      const mealsLogged = Object.values(op.nutrition?.meals || {}).reduce((sum, meals) => sum + meals.length, 0);
+      const mealsLogged = Object.values(op.nutrition?.meals || {}).reduce((sum, meals) => sum + (Array.isArray(meals) ? meals.length : 0), 0);
       const prsHit = (op.prs || []).length;
 
       // Calculate streak (consecutive days with completed workout)
