@@ -1075,17 +1075,107 @@ ${mealSuggestion}`;
         text: m.text,
       }));
 
+      // ── Full operator context (supercharged) ──
+      const prof = operator.profile;
+      const intake = operator.intake;
+      const prefs = operator.preferences;
+      const today = new Date().toISOString().split('T')[0];
+      const todayWorkout = operator.workouts?.[today];
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const workoutsMap = (operator.workouts || {}) as Record<string, any>;
+      const workoutDates = Object.keys(workoutsMap).sort().reverse().slice(0, 7);
+      const recentWorkoutHistory = workoutDates.map(date => {
+        const w = workoutsMap[date];
+        const blocks = (w?.blocks || []) as Array<{ type: string; exerciseName?: string; prescription?: string }>;
+        const exercises = blocks
+          .filter(b => b.type === 'exercise')
+          .map(b => `${b.exerciseName} (${b.prescription})`)
+          .join(', ');
+        return `${date}: "${w?.title || 'Untitled'}" — ${exercises}${w?.completed ? ' ✅ COMPLETED' : ''}`;
+      }).join('\n');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nutri = operator.nutrition as any;
+      const mealLog = (nutri?.meals || {}) as Record<string, Array<{ calories: number; protein: number; carbs: number; fat: number }>>;
+      const mealDates = Object.keys(mealLog).sort().reverse().slice(0, 3);
+      const recentMealHistory = mealDates.map(date => {
+        const meals = mealLog[date] || [];
+        const total = meals.reduce((acc, m) => ({
+          calories: acc.calories + (m.calories || 0), protein: acc.protein + (m.protein || 0),
+          carbs: acc.carbs + (m.carbs || 0), fat: acc.fat + (m.fat || 0),
+        }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+        return `${date}: ${meals.length} meals — ${total.calories}cal, ${total.protein}g P, ${total.carbs}g C, ${total.fat}g F`;
+      }).join('\n');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sitrep = operator.sitrep as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dailyBrief = operator.dailyBrief as any;
+
       const operatorContext = {
-        callsign: operator.callsign,
-        name: operator.name,
-        role: operator.role,
-        weight: operator.profile?.weight,
-        goals: operator.profile?.goals,
-        readiness: operator.profile?.readiness,
-        prs: operator.prs?.slice(0, 5).map(pr => `${pr.exercise}: ${pr.weight}lbs x${pr.reps}`).join(', ') || 'None',
-        injuries: operator.injuries?.map(inj => inj.name).join(', ') || 'None',
-        trainerNotes: operator.trainerNotes || 'None',
-        language: 'en',
+        callsign: operator.callsign, name: operator.name, role: operator.role, language: 'en',
+        weight: prof?.weight, height: prof?.height, age: prof?.age, bodyFat: prof?.bodyFat, trainingAge: prof?.trainingAge,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fitnessLevel: (operator as any).fitnessLevel || intake?.fitnessLevel || prof?.fitnessLevel,
+        experienceYears: intake?.experienceYears ?? prof?.experienceYears,
+        goals: prof?.goals, readiness: prof?.readiness,
+        sleepQuality: intake?.sleepQuality || prof?.sleep, stressLevel: intake?.stressLevel || prof?.stress,
+        movementScreenScore: intake?.movementScreenScore, motivationFactors: intake?.motivationFactors,
+        availableEquipment: intake?.availableEquipment || prefs?.equipment, equipmentDetailed: prefs?.equipmentDetailed,
+        preferredSplit: prefs?.split, daysPerWeek: prefs?.daysPerWeek, sessionDuration: prefs?.sessionDuration,
+        preferredWorkoutTime: intake?.preferredWorkoutTime || prof?.preferredWorkoutTime,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        macroTargets: (operator.nutrition as any)?.targets,
+        nutritionHabits: intake?.nutritionHabits || prof?.nutritionHabits, currentDiet: intake?.currentDiet,
+        mealsPerDay: intake?.mealsPerDay, dailyWaterOz: intake?.dailyWaterOz,
+        proteinPriority: intake?.proteinPriority, dietaryRestrictions: intake?.dietaryRestrictions,
+        supplements: intake?.supplements, healthConditions: intake?.healthConditions || prof?.healthConditions,
+        prs: (operator.prs || []).slice(0, 10).map(pr => ({
+          exercise: pr.exercise, weight: pr.weight, reps: pr.reps, date: pr.date, type: pr.type || 'strength', notes: pr.notes,
+        })),
+        injuries: (operator.injuries || []).map(inj => ({
+          id: inj.id, name: inj.name, status: inj.status, notes: inj.notes, restrictions: inj.restrictions,
+        })),
+        injuryNotes: intake?.injuryNotes,
+        trainerNotes: operator.trainerNotes || 'None', wearableDevice: intake?.wearableDevice,
+        sitrep: sitrep && Object.keys(sitrep).length > 0 ? {
+          summary: sitrep.summary, trainingPlan: sitrep.trainingPlan,
+          nutritionPlan: sitrep.nutritionPlan ? {
+            dailyCalories: sitrep.nutritionPlan.dailyCalories, protein: sitrep.nutritionPlan.protein,
+            carbs: sitrep.nutritionPlan.carbs, fat: sitrep.nutritionPlan.fat,
+            mealsPerDay: sitrep.nutritionPlan.mealsPerDay, hydrationOz: sitrep.nutritionPlan.hydrationOz,
+            approach: sitrep.nutritionPlan.approach,
+          } : null,
+          priorityFocus: sitrep.priorityFocus, restrictions: sitrep.restrictions, milestones30Day: sitrep.milestones30Day,
+        } : null,
+        dailyBrief: dailyBrief?.date === today ? {
+          complianceScore: dailyBrief.complianceScore, adjustments: dailyBrief.adjustments, gunnyNote: dailyBrief.gunnyNote,
+        } : null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        todayWorkout: todayWorkout ? {
+          title: (todayWorkout as any).title,
+          exercises: ((todayWorkout as any).blocks || [])
+            .filter((b: { type: string }) => b.type === 'exercise')
+            .map((b: { exerciseName?: string; prescription?: string }) => `${b.exerciseName} (${b.prescription})`),
+          completed: (todayWorkout as any).completed,
+        } : null,
+        recentWorkoutHistory: recentWorkoutHistory || 'No workouts logged yet',
+        recentMealHistory: recentMealHistory || 'No meals logged yet',
+        workoutStreak: (() => {
+          let streak = 0; const now = new Date();
+          for (let i = 0; i < 365; i++) {
+            const d = new Date(now); d.setDate(d.getDate() - i);
+            const key = d.toISOString().split('T')[0];
+            if (workoutsMap[key]?.completed) streak++; else if (i > 0) break;
+          }
+          return streak;
+        })(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        totalWorkoutsCompleted: Object.values(workoutsMap).filter((w: any) => w?.completed).length,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recentDayTags: Object.entries(operator.dayTags || {}).sort(([a], [b]) => b.localeCompare(a)).slice(0, 7)
+          .map(([date, tag]) => `${date}: [${(tag as any).color}] ${(tag as any).note}`).join('\n') || null,
       };
 
       const apiMode = forceMode || (isOnboarding ? 'onboarding' : undefined);
