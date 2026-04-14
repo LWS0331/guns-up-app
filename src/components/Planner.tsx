@@ -11,6 +11,7 @@ import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_
 import VideoModal from '@/components/VideoModal';
 import WarmupMovementCard from '@/components/WarmupMovementCard';
 import HRZoneGauge from '@/components/HRZoneGauge';
+import WorkoutPTT from '@/components/WorkoutPTT';
 import { parseMovementText } from '@/lib/parseMovementText';
 import { buildSearchUrl } from '@/lib/videoUrl';
 
@@ -1478,25 +1479,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         </div>
         <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 16, margin: '0 0 12px 0' }}>{workout.title}</h3>
 
-        {/* ═══ RADIO COMMS LINK ═══ */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
-          padding: '8px 12px',
-          background: 'rgba(255,255,255,0.02)',
-          border: '1px solid #1C2E1C',
-          borderRadius: 6,
-        }}>
-          <span style={{ fontSize: 16 }}>📡</span>
-          <span style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: 9,
-            fontWeight: 700,
-            letterSpacing: 1.2,
-            color: '#6B7B6B',
-          }}>
-            USE THE RADIO TAB TO TALK TO GUNNY
-          </span>
-        </div>
+        {/* ═══ WORKOUT PTT — floating voice button (replaces the old RADIO TAB banner) ═══ */}
+        {/* Button itself is rendered at the end of renderWorkoutMode via <WorkoutPTT /> */}
 
         {/* Voice command feedback toast */}
         {voiceFeedback && (
@@ -2092,6 +2076,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           style={{ width: '100%', padding: 14, background: '#00ff41', color: '#000', border: 'none', fontFamily: 'Orbitron', fontSize: 14, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', borderRadius: 4, marginTop: 12 }}>
           COMPLETE WORKOUT
         </button>
+
+        {/* ═══ Floating Push-To-Talk — voice to Gunny without leaving workout mode ═══ */}
+        <WorkoutPTT
+          onSend={(text) => {
+            if (onSendGunnyMessage) onSendGunnyMessage(text);
+          }}
+          onLocalCommand={(cmd) => handleVoiceCommand(cmd)}
+        />
       </div>
     );
   };

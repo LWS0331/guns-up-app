@@ -72,7 +72,7 @@ export default function WarmupMovementCard({
         )}
       </div>
 
-      {onPlayVideo && (
+      {onPlayVideo && movement.isExercise && (
         <button
           onClick={handlePlay}
           aria-label={`Play demo video for ${movement.name}`}
