@@ -8,6 +8,11 @@ import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import { VoiceCommand } from '@/components/VoiceInput';
 import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice } from '@/lib/tts';
+import VideoModal from '@/components/VideoModal';
+import WarmupMovementCard from '@/components/WarmupMovementCard';
+import HRZoneGauge from '@/components/HRZoneGauge';
+import { parseMovementText } from '@/lib/parseMovementText';
+import { buildSearchUrl } from '@/lib/videoUrl';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -382,6 +387,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [targetZone, setTargetZone] = useState<number>(3); // default Zone 3
   const [hrSource, setHrSource] = useState<'wearable' | 'manual' | 'none'>('none');
   const [showHrPanel, setShowHrPanel] = useState(true);
+  // ═══ Task 20/21: WARMUP + COOLDOWN collapsible + in-app video modal ═══
+  const [videoModalState, setVideoModalState] = useState<{ url: string; title: string } | null>(null);
+  const [warmupExpanded, setWarmupExpanded] = useState(true);
+  const [cooldownExpanded, setCooldownExpanded] = useState(false);
+  const openExerciseVideo = useCallback((exerciseName: string, curatedUrl?: string | null) => {
+    const url = curatedUrl || getVideoUrl(exerciseName) || buildSearchUrl(exerciseName);
+    setVideoModalState({ url, title: exerciseName });
+  }, []);
   const [hrHistory, setHrHistory] = useState<{ hr: number; time: number }[]>([]);
   const hrPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -441,7 +454,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       try {
         const res = await fetch('/api/wearables/sync', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          },
           body: JSON.stringify({ operatorId: operator.id }),
         });
         if (res.ok) {
@@ -1627,6 +1643,23 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
         {/* HR Zone Tracking Panel */}
         {showHrPanel && (
+          <HRZoneGauge
+            currentHR={currentHR}
+            targetZone={targetZone}
+            hrSource={hrSource}
+            zones={HR_ZONES}
+            history={hrHistory}
+            onSetTargetZone={setTargetZone}
+            onManualSubmit={(val) => {
+              setCurrentHR(val);
+              setHrSource('manual');
+              setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
+            }}
+            onClose={() => setShowHrPanel(false)}
+          />
+        )}
+        {/* legacy inline HR panel — kept commented for reference */}
+        {false && (
           <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: `1px solid ${currentHR ? getCurrentZone(currentHR).color : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <div style={{ fontFamily: 'Orbitron', fontSize: 11, color: '#888', letterSpacing: 1 }}>HR ZONE TRACKER</div>
@@ -1791,6 +1824,30 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           }}>SHOW HR TRACKER</button>
         )}
 
+        {/* ═══ WARMUP — collapsible, tappable movement cards with in-app video ═══ */}
+        {workout.warmup && parseMovementText(workout.warmup).length > 0 && (
+          <div style={{ marginBottom: 12, border: '1px solid rgba(255,138,60,0.35)', borderRadius: 8, overflow: 'hidden' }}>
+            <button
+              onClick={() => setWarmupExpanded(v => !v)}
+              style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255,138,60,0.08)', border: 'none', cursor: 'pointer', color: '#ff8a3c', fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 1.5 }}>
+              <span>WARMUP · {parseMovementText(workout.warmup).length} MOVEMENTS</span>
+              <span style={{ fontFamily: 'Share Tech Mono', fontSize: 14 }}>{warmupExpanded ? '▾' : '▸'}</span>
+            </button>
+            {warmupExpanded && (
+              <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, background: '#070707' }}>
+                {parseMovementText(workout.warmup).map((m, i) => (
+                  <WarmupMovementCard
+                    key={`warmup-${i}`}
+                    movement={m}
+                    variant="warmup"
+                    onPlayVideo={(name) => openExerciseVideo(name)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Exercise blocks in execution mode */}
         {workout.blocks.map((block, idx) => {
           if (block.type !== 'exercise') {
@@ -1872,10 +1929,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 14, fontWeight: 'bold' }}>{block.exerciseName}</div>
                 <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: 11 }}>{block.prescription}</div>
               </div>
-              {block.videoUrl && (
-                <a href={block.videoUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: '#666', fontFamily: 'Share Tech Mono', textDecoration: 'none' }}>
-                  Form video
-                </a>
+              {(block.videoUrl || getVideoUrl(block.exerciseName)) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
+                  style={{ fontSize: 10, padding: '3px 10px', marginTop: 4, background: 'rgba(255,184,0,0.08)', border: '1px solid rgba(255,184,0,0.4)', color: '#ffb800', fontFamily: 'Share Tech Mono', cursor: 'pointer', borderRadius: 4 }}>
+                  ▶ FORM DEMO
+                </button>
               )}
               {/* Exercise notes — intel for Gunny */}
               <div style={{ marginTop: 6 }}>
@@ -1983,6 +2042,43 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             - REMOVE LAST
           </button>
         </div>
+
+        {/* ═══ COOLDOWN — collapsible, auto-expands when last exercise set is completed ═══ */}
+        {workout.cooldown && parseMovementText(workout.cooldown).length > 0 && (() => {
+          const lastExercise = [...workout.blocks].reverse().find(b => b.type === 'exercise') as ExerciseBlock | undefined;
+          const lastDone = lastExercise ? (results[lastExercise.id]?.sets?.every(s => s.completed) ?? false) : false;
+          const isExpanded = cooldownExpanded || lastDone;
+          return (
+            <div style={{ marginTop: 12, marginBottom: 12, border: '1px solid rgba(96,165,250,0.35)', borderRadius: 8, overflow: 'hidden' }}>
+              <button
+                onClick={() => setCooldownExpanded(v => !v)}
+                style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(96,165,250,0.08)', border: 'none', cursor: 'pointer', color: '#60a5fa', fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 1.5 }}>
+                <span>COOLDOWN · {parseMovementText(workout.cooldown).length} MOVEMENTS{lastDone ? ' · READY' : ''}</span>
+                <span style={{ fontFamily: 'Share Tech Mono', fontSize: 14 }}>{isExpanded ? '▾' : '▸'}</span>
+              </button>
+              {isExpanded && (
+                <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, background: '#070707' }}>
+                  {parseMovementText(workout.cooldown).map((m, i) => (
+                    <WarmupMovementCard
+                      key={`cooldown-${i}`}
+                      movement={m}
+                      variant="cooldown"
+                      onPlayVideo={(name) => openExerciseVideo(name)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ═══ Video Modal (Task 18) ═══ */}
+        <VideoModal
+          open={!!videoModalState}
+          onClose={() => setVideoModalState(null)}
+          url={videoModalState?.url || ''}
+          title={videoModalState?.title}
+        />
 
         {/* Ask Gunny — mid-workout coaching access */}
         {onOpenGunny && (

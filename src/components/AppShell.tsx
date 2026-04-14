@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Operator, AppTab, OPS_CENTER_ACCESS } from '@/lib/types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification } from '@/lib/workoutModification';
+import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
@@ -359,7 +360,9 @@ const AppShell: React.FC<AppShellProps> = ({
     const loadPanelChat = async () => {
       // Try API first
       try {
-        const res = await fetch(`/api/chat?operatorId=${selectedOperator.id}&chatType=gunny-panel`);
+        const res = await fetch(`/api/chat?operatorId=${selectedOperator.id}&chatType=gunny-panel`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+        });
         if (res.ok) {
           const data = await res.json();
           const msgs = data.messages as ChatMessage[];
@@ -547,6 +550,22 @@ const AppShell: React.FC<AppShellProps> = ({
   // Reads from intake column first, falls back to profile/preferences fields (which always persist)
   // Accepts optional fresh operator to avoid stale closure reads (e.g. post-intake SITREP generation)
   const buildOperatorContext = (freshOperator?: Operator): OperatorContextData => {
+    const op = freshOperator || selectedOperator;
+    // Shared builder is the source of truth (Task 12/13).
+    // We wrap it to inject UI-local state (language, active workout mode).
+    return buildFullGunnyContext(op, {
+      language: language || 'en',
+      workoutExecution: workoutModeState?.active ? {
+        active: workoutModeState.active,
+        workoutTitle: workoutModeState.workoutTitle,
+        exercises: workoutModeState.exercises,
+      } : null,
+    }) as OperatorContextData;
+  };
+
+  // LEGACY builder retained for reference — remove in next cleanup pass.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _legacyBuildOperatorContext = (freshOperator?: Operator): OperatorContextData => {
     const op = freshOperator || selectedOperator;
     const intake = op.intake;
     const prof = op.profile;

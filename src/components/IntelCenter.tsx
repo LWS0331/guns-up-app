@@ -1173,7 +1173,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
         const res = await fetch('/api/nutrition/analyze-photo', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          },
           body: JSON.stringify({ image: base64, mimeType }),
         });
 
@@ -1186,7 +1189,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         setPhotoAnalyzing(false);
       };
       reader.readAsDataURL(file);
-    } catch {
+    } catch (err) {
+      console.error('[IntelCenter:analyzePhoto] Failed:', err);
       setPhotoAnalyzing(false);
       alert('Photo analysis failed.');
     }
@@ -1228,12 +1232,15 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     if (!usdaSearch.trim()) return;
     setUsdaSearching(true);
     try {
-      const res = await fetch(`/api/nutrition/search?q=${encodeURIComponent(usdaSearch)}&limit=8`);
+      const res = await fetch(`/api/nutrition/search?q=${encodeURIComponent(usdaSearch)}&limit=8`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+      });
       const data = await res.json();
       if (data.success && data.foods) {
         setUsdaResults(data.foods);
       }
-    } catch {
+    } catch (err) {
+      console.error('[IntelCenter:handleUsdaSearch] Failed:', err);
       setUsdaResults([]);
     }
     setUsdaSearching(false);

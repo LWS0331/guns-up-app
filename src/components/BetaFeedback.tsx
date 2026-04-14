@@ -67,12 +67,15 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
     const fetchFeedback = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/beta-feedback?operatorId=${operatorId}`);
+        const res = await fetch(`/api/beta-feedback?operatorId=${operatorId}`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+        });
         if (res.ok) {
           const data = await res.json();
           setEntries(data.feedback || []);
         }
       } catch (err) {
+        console.error('[BetaFeedback:fetchFeedback] Failed:', err);
       } finally {
         setLoading(false);
       }
@@ -112,7 +115,10 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
       setSubmitting(true);
       const res = await fetch('/api/beta-feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
         body: JSON.stringify({ operatorId, callsign, type: feedbackType, category, description, screenshot }),
       });
       if (!res.ok) throw new Error('Failed');
@@ -124,7 +130,9 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
       setCategory('LOW');
       if (fileInputRef.current) fileInputRef.current.value = '';
       // Refresh
-      const refreshRes = await fetch(`/api/beta-feedback?operatorId=${operatorId}`);
+      const refreshRes = await fetch(`/api/beta-feedback?operatorId=${operatorId}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+      });
       if (refreshRes.ok) {
         const newData = await refreshRes.json();
         setEntries(newData.feedback || []);

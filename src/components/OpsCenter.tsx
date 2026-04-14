@@ -101,13 +101,16 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const fetchMetrics = async () => {
     setMetricsLoading(true);
     try {
-      const res = await fetch(`/api/ops?operatorId=${currentUser.id}`);
+      const res = await fetch(`/api/ops?operatorId=${currentUser.id}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setMetrics(data);
         setLastRefresh(new Date().toLocaleTimeString());
       }
     } catch (err) {
+      console.error('[OpsCenter:fetchMetrics] Failed:', err);
     } finally {
       setMetricsLoading(false);
     }
@@ -191,13 +194,17 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       const updated = { ...op, tier: newTier };
       const res = await fetch(`/api/operators/${operatorId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
         body: JSON.stringify(updated),
       });
       if (res.ok) {
         fetchMetrics();
       }
     } catch (err) {
+      console.error('[OpsCenter:handleTierChange] Failed:', err);
     }
   };
 
@@ -216,12 +223,16 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         };
         await fetch(`/api/operators/${op.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          },
           body: JSON.stringify(updated),
         });
       }
       fetchMetrics();
     } catch (err) {
+      console.error('[OpsCenter:handleActivateBeta] Failed:', err);
     }
   };
 
@@ -232,12 +243,16 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         const updated = { ...op, tierLocked: true };
         await fetch(`/api/operators/${op.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          },
           body: JSON.stringify(updated),
         });
       }
       fetchMetrics();
     } catch (err) {
+      console.error('[OpsCenter:handleLockAllTiers] Failed:', err);
     }
   };
 
@@ -250,11 +265,15 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       const updated = { ...op, isVanguard: true };
       await fetch(`/api/operators/${operatorId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
         body: JSON.stringify(updated),
       });
       fetchMetrics();
     } catch (err) {
+      console.error('[OpsCenter:handleGrantVanguard] Failed:', err);
     }
   };
 
@@ -266,7 +285,10 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     try {
       const res = await fetch('/api/ops/reset', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
         body: JSON.stringify({
           operatorId: currentUser.id,
           excludeIds: ['op-ruben'],
@@ -276,6 +298,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         window.location.reload();
       }
     } catch (err) {
+      console.error('[OpsCenter:handleResetAllAccounts] Failed:', err);
     }
   };
 
@@ -297,12 +320,16 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       };
       await fetch(`/api/operators/${selectedOperatorForPromo}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
         body: JSON.stringify(updated),
       });
       setSelectedOperatorForPromo(null);
       fetchMetrics();
     } catch (err) {
+      console.error('[OpsCenter:handleOfferPromo] Failed:', err);
     }
   };
 

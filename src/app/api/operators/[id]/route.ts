@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/requireAuth';
+import { OPS_CENTER_ACCESS } from '@/lib/types';
 
-// PUT /api/operators/:id — update a single operator (auth required)
+// PUT /api/operators/:id — update a single operator (auth required + ownership check)
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -12,6 +13,24 @@ export async function PUT(
 
   try {
     const { id } = await params;
+
+    // OWNERSHIP CHECK: allow if updating self OR caller is admin (OPS_CENTER_ACCESS)
+    // OR caller is the trainer of the target operator
+    const isSelf = auth.operatorId === id;
+    const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
+    let isTrainerOfTarget = false;
+    if (!isSelf && !isAdmin) {
+      const target = await prisma.operator.findUnique({
+        where: { id },
+        select: { trainerId: true },
+      });
+      isTrainerOfTarget = !!target && target.trainerId === auth.operatorId;
+    }
+    if (!isSelf && !isAdmin && !isTrainerOfTarget) {
+      console.warn('[api/operators/:id PUT] FORBIDDEN', { actor: auth.operatorId, target: id });
+      return NextResponse.json({ error: 'Forbidden: cannot update another operator' }, { status: 403 });
+    }
+
     const body = await req.json();
 
     const updated = await prisma.operator.update({

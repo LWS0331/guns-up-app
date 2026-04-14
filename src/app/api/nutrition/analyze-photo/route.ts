@@ -80,7 +80,8 @@ Estimation rules:
     try {
       const jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
       parsed = JSON.parse(jsonStr);
-    } catch {
+    } catch (err) {
+      console.error('[api/nutrition/analyze-photo] JSON parse failed:', err);
       return NextResponse.json({ error: 'Failed to parse nutrition data', raw: text }, { status: 500 });
     }
 

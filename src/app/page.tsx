@@ -76,9 +76,11 @@ export default function Home() {
             });
           } else {
             // Token invalid, clear it
+            console.warn('[page.tsx:loadFromDB] Auth /me returned non-ok:', meRes.status);
             localStorage.removeItem('authToken');
           }
         } catch (err) {
+          console.error('[page.tsx:loadFromDB] Auth /me network error:', err);
           localStorage.removeItem('authToken');
         }
       }
@@ -93,7 +95,7 @@ export default function Home() {
             setDbReady(true);
           } else {
             // Database is empty — seed it
-            const seedRes = await fetch('/api/seed', { method: 'POST' });
+            const seedRes = await fetch('/api/seed', { method: 'POST', headers: authHeaders });
             if (seedRes.ok) {
               // Re-fetch after seed
               const reRes = await fetch('/api/operators', { headers: authHeaders });
@@ -130,22 +132,82 @@ export default function Home() {
       } catch { /* localStorage unavailable */ }
     }
 
-    // Attempt DB save even if dbReady is false — the DB may have come back online
+    // Targeted dual-PATCH strategy: workouts save in parallel with profile save,
+    // so two concurrent tabs editing different fields no longer overwrite each other.
+    const token = localStorage.getItem('authToken') || '';
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+
+    const workoutsBody = {
+      workouts: updated.workouts ?? {},
+      prs: updated.prs ?? [],
+      dayTags: updated.dayTags ?? {},
+      injuries: updated.injuries ?? [],
+    };
+    const profileBody = {
+      name: updated.name,
+      callsign: updated.callsign,
+      intake: updated.intake ?? {},
+      profile: updated.profile ?? {},
+      nutrition: updated.nutrition ?? {},
+      preferences: updated.preferences ?? {},
+      sitrep: updated.sitrep ?? {},
+      dailyBrief: updated.dailyBrief ?? {},
+      trainerNotes: updated.trainerNotes ?? null,
+      // Admin-only fields (ignored by server if not admin)
+      tier: updated.tier,
+      role: updated.role,
+      coupleWith: updated.coupleWith ?? null,
+      trainerId: updated.trainerId ?? null,
+      clientIds: updated.clientIds ?? [],
+      betaUser: updated.betaUser ?? false,
+      betaFeedback: updated.betaFeedback ?? [],
+      betaStartDate: updated.betaStartDate ?? null,
+      betaEndDate: updated.betaEndDate ?? null,
+      isVanguard: updated.isVanguard ?? false,
+      tierLocked: updated.tierLocked ?? false,
+      promoActive: updated.promoActive ?? false,
+      promoType: updated.promoType ?? null,
+      promoExpiry: updated.promoExpiry ?? null,
+    };
+
     try {
-      const res = await fetch(`/api/operators/${updated.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-        body: JSON.stringify(updated),
-      });
-      if (!res.ok) {
-      } else if (!dbReady) {
-        // DB recovered — mark as ready
-        setDbReady(true);
+      const [wRes, pRes] = await Promise.allSettled([
+        fetch(`/api/operators/${updated.id}/workouts`, {
+          method: 'PATCH',
+          headers: authHeaders,
+          body: JSON.stringify(workoutsBody),
+        }),
+        fetch(`/api/operators/${updated.id}/profile`, {
+          method: 'PATCH',
+          headers: authHeaders,
+          body: JSON.stringify(profileBody),
+        }),
+      ]);
+
+      const checks: Array<[string, PromiseSettledResult<Response>]> = [
+        ['workouts', wRes],
+        ['profile', pRes],
+      ];
+      let anyOk = false;
+      for (const [label, result] of checks) {
+        if (result.status === 'rejected') {
+          console.error(`[page.tsx:persistOperator] ${label} PATCH rejected:`, result.reason);
+          continue;
+        }
+        const res = result.value;
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          console.error(`[page.tsx:persistOperator] ${label} PATCH failed:`, res.status, errText);
+        } else {
+          anyOk = true;
+        }
       }
+      if (anyOk && !dbReady) setDbReady(true);
     } catch (err) {
+      console.error('[page.tsx:persistOperator] Network error:', err);
     }
   }, [dbReady]);
 

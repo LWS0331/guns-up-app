@@ -151,7 +151,8 @@ ADAPTATION RULES:
         }
       }
       parsed = JSON.parse(jsonStr);
-    } catch {
+    } catch (err) {
+      console.error('[api/gunny/daily-brief] JSON parse failed:', err);
       return NextResponse.json({ error: 'Failed to parse daily brief', raw: text.substring(0, 500) }, { status: 500 });
     }
 

@@ -1,14 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/requireAuth';
+import { OPS_CENTER_ACCESS } from '@/lib/types';
 
-// GET /api/operators — fetch all operators (auth required)
+// GET /api/operators — fetch operators visible to caller (auth required)
+// Admins: all operators. Trainers: self + assigned clients. Clients: self only.
 export async function GET(req: NextRequest) {
   const auth = requireAuth(req);
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const rows = await prisma.operator.findMany();
+    const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
+    const me = await prisma.operator.findUnique({ where: { id: auth.operatorId } });
+
+    let rows;
+    if (isAdmin) {
+      rows = await prisma.operator.findMany();
+    } else if (me?.role === 'trainer') {
+      rows = await prisma.operator.findMany({
+        where: {
+          OR: [
+            { id: auth.operatorId },
+            { trainerId: auth.operatorId },
+          ],
+        },
+      });
+    } else {
+      rows = me ? [me] : [];
+    }
 
     // Convert DB rows back to the app's Operator shape
     const operators = rows.map(row => ({

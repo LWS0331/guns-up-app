@@ -83,7 +83,12 @@ export async function speak(text: string, voice?: GunnyVoice) {
   try {
     const res = await fetch('/api/tts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': typeof localStorage !== 'undefined'
+          ? `Bearer ${localStorage.getItem('authToken') || ''}`
+          : '',
+      },
       body: JSON.stringify({ text, voice: selectedVoice, speed: 1.1 }),
     });
 

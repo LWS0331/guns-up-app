@@ -119,6 +119,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
         onUpdateOperator(updated);
       }
     } catch (err) {
+      console.error('[DailyBrief:generate] Failed:', err);
     }
     setLoading(false);
   }, [operator, onUpdateOperator]);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -672,6 +673,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Messages array required' },
         { status: 400 }
+      );
+    }
+
+    // Rate limit (per-operator, per-tier, per-hour)
+    const rl = checkRateLimit(auth.operatorId, tier);
+    if (!rl.allowed) {
+      const retryAfterSec = Math.ceil(rl.resetMs / 1000);
+      return NextResponse.json(
+        {
+          error: 'Rate limit exceeded',
+          message: `Tier ${tier || 'haiku'} limit of ${rl.limit}/hour reached. Retry in ${Math.ceil(retryAfterSec / 60)}m.`,
+          limit: rl.limit,
+          remaining: 0,
+          resetInSec: retryAfterSec,
+        },
+        { status: 429, headers: { 'Retry-After': String(retryAfterSec) } }
       );
     }
 

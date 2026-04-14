@@ -72,7 +72,9 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
   // Load existing connections
   const loadConnections = useCallback(async () => {
     try {
-      const res = await fetch(`/api/wearables?operatorId=${operator.id}`);
+      const res = await fetch(`/api/wearables?operatorId=${operator.id}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setConnections(data.connections || []);
@@ -95,7 +97,10 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
     try {
       const res = await fetch('/api/wearables/connect', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
         body: JSON.stringify({ operatorId: operator.id, provider: providerSlug }),
       });
 
@@ -136,7 +141,10 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
     try {
       const res = await fetch('/api/wearables/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
         body: JSON.stringify({ operatorId: operator.id }),
       });
 

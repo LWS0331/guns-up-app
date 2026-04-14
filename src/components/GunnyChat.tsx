@@ -5,6 +5,7 @@ import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification } from '@/lib/workoutModification';
+import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
@@ -378,7 +379,9 @@ const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
 
 const loadChatFromAPI = async (opId: string, chatType: string): Promise<Message[] | null> => {
   try {
-    const res = await fetch(`/api/chat?operatorId=${opId}&chatType=${chatType}`);
+    const res = await fetch(`/api/chat?operatorId=${opId}&chatType=${chatType}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+    });
     if (!res.ok) return null;
     const data = await res.json();
     const msgs = data.messages as Array<{ id: string; role: string; text: string; timestamp: string; isWorkout?: boolean }>;
@@ -1114,8 +1117,13 @@ ${mealSuggestion}`;
       const sitrep = operator.sitrep as any;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const dailyBrief = operator.dailyBrief as any;
+      void sitrep; void dailyBrief;
 
-      const operatorContext = {
+      // Tasks 12/13: delegate to the shared context builder. AppShell uses
+      // the same function, so the main chat and side panel no longer drift.
+      const operatorContext = buildFullGunnyContext(operator, { language: 'en' });
+      /* LEGACY inline builder preserved for reference:
+      const _legacyContext = {
         callsign: operator.callsign, name: operator.name, role: operator.role, language: 'en',
         weight: prof?.weight, height: prof?.height, age: prof?.age, bodyFat: prof?.bodyFat, trainingAge: prof?.trainingAge,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1186,6 +1194,7 @@ ${mealSuggestion}`;
           return buildWorkoutAnalysis(target, operator.prs || [], operator.workouts || {});
         })(),
       };
+      END LEGACY */
 
       const apiMode = forceMode || (isOnboarding ? 'onboarding' : undefined);
 
