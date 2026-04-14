@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Operator, AppTab, OPS_CENTER_ACCESS } from '@/lib/types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification } from '@/lib/workoutModification';
+import { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
 import UserSwitcher from '@/components/UserSwitcher';
@@ -1806,7 +1807,7 @@ const AppShell: React.FC<AppShellProps> = ({
           onClick={() => setShowGunnyPanel(true)}
           title="Open Gunny AI"
         >
-          ⚡ GUNNY
+          <BoltIcon size={14} /> <span style={{ marginLeft: 4 }}>GUNNY</span>
         </button>
       )}
 
@@ -1924,7 +1925,7 @@ const AppShell: React.FC<AppShellProps> = ({
               onClick={sendGunnyMessage}
               disabled={gunnyLoading || !gunnyInput.trim()}
             >
-              {gunnyLoading ? '⋯' : '▶'}
+              {gunnyLoading ? '⋯' : <SendIcon size={14} />}
             </button>
           </div>
         </div>
