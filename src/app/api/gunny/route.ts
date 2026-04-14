@@ -254,6 +254,54 @@ Format:
 }
 </workout_json>
 
+WORKOUT MODIFICATION PROTOCOL (CRITICAL):
+When the operator asks to modify their CURRENT active workout (swap exercises, change sets/reps, add/remove exercises), use <workout_modification> — NOT <workout_json>. A modification is a SURGICAL change to the active workout; it does NOT replace the entire workout and PRESERVES all logged results.
+
+Use <workout_modification> when:
+- Operator says "swap X for Y" or "replace X with Y"
+- Operator says "add [exercise] after [exercise]"
+- Operator says "drop [exercise]" or "remove [exercise]"
+- Operator says "change sets to..." or "make it 5x5 instead"
+- ANY request to change the CURRENT in-progress workout
+
+Use <workout_json> ONLY when building a COMPLETE NEW workout from scratch (e.g. "build me a leg day").
+
+If the operator asks to swap an exercise they have ALREADY completed (all sets logged), acknowledge it is already done and offer to swap it for the next session instead.
+
+Modification format (pick ONE type):
+
+<workout_modification>
+{ "type": "swap_exercise",
+  "targetExerciseName": "Lat Pulldown",
+  "changes": {
+    "exerciseName": "Cable Row",
+    "prescription": "4x10 @ 140",
+    "videoUrl": "https://www.youtube.com/results?search_query=cable+row+form"
+  }
+}
+</workout_modification>
+
+Other types:
+- { "type": "add_block", "afterExerciseName": "Overhead Press", "newBlock": { "type": "exercise", "exerciseName": "Face Pull", "prescription": "3x15" } }
+- { "type": "remove_block", "targetExerciseName": "Bicep Curl" }
+- { "type": "update_prescription", "targetExerciseName": "Bench Press", "changes": { "prescription": "5x5 @ 225" } }
+
+After emitting <workout_modification>, confirm the change in plain text (e.g. "Roger. Lat Pulldown swapped for Cable Row — 4x10 at 140.").
+
+POST-WORKOUT ANALYSIS PROTOCOL:
+When the operator says "analyze my workout", "how did I do", "review my session", "workout sitrep", or similar — provide a FULL PERFORMANCE SITREP grounded in their ACTUAL logged data (from COMPLETED WORKOUT ANALYSIS in the context block).
+
+Your analysis MUST include:
+1. MISSION SUMMARY: Duration, completion rate, total volume
+2. EXERCISE BREAKDOWN: Planned vs actual for each exercise
+3. PERFORMANCE GRADE: A / B / C / D / F based on completion and effort
+4. PR CHECK: Call out any new personal records
+5. PROGRESSIVE OVERLOAD: Compare to last similar workout if data exists
+6. RECOVERY NOTES: Based on volume and intensity, recommend rest/nutrition
+7. NEXT SESSION ADJUSTMENTS: What to change next time
+
+NEVER give a generic "great job" — ALWAYS reference specific numbers from their session. Example style: "You moved 12,450 lbs total volume — 8% up from last Tuesday. Bench hit 225x5 which ties your PR. Squat dropped from 4 reps to 3 on set 3 — fatigue management needs work."
+
 SCALING:
 - Always scale weights relative to the operator's bodyweight and PRs
 - If they squat 405, they're advanced — program accordingly
@@ -458,6 +506,27 @@ CRITICAL — MID-WORKOUT COACHING:
 - If they ask you to restructure, modify, swap exercises, or adjust their workout — DO IT RIGHT HERE
 - You are their real-time coach. Handle it. Don't punt.
 - Include a <workout_json> block when you build or restructure a workout so the app can save it
+
+WORKOUT MODIFICATION PROTOCOL (CRITICAL — USE FOR MID-WORKOUT CHANGES):
+When the operator asks to modify their CURRENT active workout (swap, add, remove, change sets/reps), emit a <workout_modification> block — NOT <workout_json>. Modifications are SURGICAL and preserve all logged sets/weights already completed. Use <workout_json> ONLY when building a brand new complete workout.
+
+Triggers for <workout_modification>:
+- "swap X for Y" / "replace X with Y"
+- "add [exercise] after [exercise]"
+- "drop [exercise]" / "remove [exercise]"
+- "change sets to..." / "make it 5x5 instead"
+
+Format:
+<workout_modification>
+{ "type": "swap_exercise", "targetExerciseName": "Lat Pulldown", "changes": { "exerciseName": "Cable Row", "prescription": "4x10 @ 140", "videoUrl": "https://www.youtube.com/results?search_query=cable+row+form" } }
+</workout_modification>
+
+Types: swap_exercise | add_block (with afterExerciseName + newBlock) | remove_block | update_prescription.
+
+If the operator asks to swap an exercise they have already fully completed, acknowledge it's done and offer to swap it for next session instead.
+
+POST-WORKOUT ANALYSIS:
+If the operator asks "how did I do" or "analyze my workout" and the context block contains COMPLETED WORKOUT ANALYSIS data, give a specific, number-grounded SITREP: volume, completion %, PRs, compare to last similar session. Never give generic "great job" responses.
 
 WHAT YOU SHOULD NOT DO:
 - Don't build full multi-week periodization programs (direct them to the GUNNY tab for that)
@@ -725,6 +794,12 @@ ${operatorContext.recentDayTags ? `═══ RECENT DAY TAGS ═══
 ${operatorContext.recentDayTags}
 ` : ''}
 
+${operatorContext.lastCompletedWorkout ? `${operatorContext.lastCompletedWorkout}
+` : ''}
+
+${operatorContext.workoutExecution ? `${operatorContext.workoutExecution}
+` : ''}
+
 ═══ CRITICAL INSTRUCTIONS ═══
 You have access to this operator's COMPLETE profile, battle plan, workout history, nutrition logs, PRs, injuries, and preferences. USE ALL OF IT.
 - Reference their specific PRs when recommending weights ("You hit 225 on bench last week — let's push for 230 today")
@@ -819,6 +894,17 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       }
     }
 
+    // Extract workout MODIFICATION if present (surgical change to active workout)
+    let workoutModification = null;
+    const modMatch = responseText.match(/<workout_modification>([\s\S]*?)<\/workout_modification>/);
+    if (modMatch) {
+      try {
+        workoutModification = JSON.parse(modMatch[1].trim());
+      } catch (e) {
+        console.error('Invalid workout_modification JSON:', e, modMatch[1]);
+      }
+    }
+
     // Extract profile JSON if present (from onboarding)
     let profileData = null;
     const profileMatch = responseText.match(/<profile_json>([\s\S]*?)<\/profile_json>/);
@@ -833,12 +919,14 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // Clean the response text (remove JSON blocks from display)
     const cleanResponse = responseText
       .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
+      .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
       .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
       .trim();
 
     return NextResponse.json({
       response: cleanResponse,
       workoutData,
+      workoutModification,
       profileData,
       model: finalModel,
       usage: {

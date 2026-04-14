@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Operator, AppTab, OPS_CENTER_ACCESS } from '@/lib/types';
+import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
+import { applyWorkoutModification, type WorkoutModification } from '@/lib/workoutModification';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
 import UserSwitcher from '@/components/UserSwitcher';
@@ -147,6 +149,8 @@ interface OperatorContextData {
   totalWorkoutsCompleted?: number;
   recentDayTags?: string | null;
   trainingAge?: string;
+  lastCompletedWorkout?: string | null;
+  workoutExecution?: string | null;
 }
 
 interface AppShellProps {
@@ -633,6 +637,31 @@ const AppShell: React.FC<AppShellProps> = ({
         if (!entries.length) return null;
         return entries.map(([date, tag]) => `${date}: [${(tag as any).color}] ${(tag as any).note}`).join('\n');
       })(),
+      lastCompletedWorkout: (() => {
+        const td = new Date().toISOString().split('T')[0];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const todayW = (op.workouts as any)?.[td];
+        const target = todayW?.completed ? todayW : findMostRecentCompletedWorkout(op);
+        if (!target) return null;
+        return buildWorkoutAnalysis(target, op.prs || [], op.workouts || {});
+      })(),
+      workoutExecution: (() => {
+        if (!workoutModeState?.active) return null;
+        const lines: string[] = [];
+        lines.push('═══ ACTIVE WORKOUT EXECUTION ═══');
+        lines.push(`Title: ${workoutModeState.workoutTitle || 'Current workout'}`);
+        (workoutModeState.exercises || []).forEach((ex, i) => {
+          const sets = ex.sets || [];
+          const done = sets.filter(s => s.completed);
+          let row = `${i + 1}. ${ex.name} — ${ex.prescription || ''} [${done.length}/${sets.length} sets done]`;
+          if (done.length > 0) {
+            const last = done[done.length - 1];
+            row += ` last: ${last.weight || 0}lbs x${last.reps || 0}`;
+          }
+          lines.push(row);
+        });
+        return lines.join('\n');
+      })(),
     };
   };
 
@@ -761,8 +790,24 @@ const AppShell: React.FC<AppShellProps> = ({
         setGunnyMessages(prev => [...prev, gunnyReply]);
         speakGunny(replyText);
 
-        // If Gunny Assist built a workout, save it to the planner
-        if (data.workoutData) {
+        // SURGICAL MODIFICATION — apply targeted change to today's workout (preserves logged results)
+        if (data.workoutModification) {
+          const today = new Date().toISOString().split('T')[0];
+          const current = currentSelectedOp.workouts?.[today];
+          if (current) {
+            try {
+              const modified = applyWorkoutModification(current, data.workoutModification as WorkoutModification);
+              const updated = { ...currentSelectedOp };
+              updated.workouts = { ...updated.workouts, [today]: modified };
+              onUpdateOperator(updated);
+            } catch (e) {
+              console.error('applyWorkoutModification failed:', e);
+            }
+          } else {
+            console.warn('workout_modification returned but no active workout for today');
+          }
+        } else if (data.workoutData) {
+          // If Gunny Assist built a complete new workout, save it to the planner
           const today = new Date().toISOString().split('T')[0];
           const workout = {
             id: `workout-assist-${Date.now()}`,
@@ -867,7 +912,20 @@ const AppShell: React.FC<AppShellProps> = ({
             showGunnyVoiceResponse(replyText);
             speakGunny(replyText);
 
-            if (data.workoutData) {
+            if (data.workoutModification) {
+              const today = new Date().toISOString().split('T')[0];
+              const current = currentSelectedOp.workouts?.[today];
+              if (current) {
+                try {
+                  const modified = applyWorkoutModification(current, data.workoutModification as WorkoutModification);
+                  const updated = { ...currentSelectedOp };
+                  updated.workouts = { ...updated.workouts, [today]: modified };
+                  onUpdateOperator(updated);
+                } catch (e) {
+                  console.error('applyWorkoutModification (voice) failed:', e);
+                }
+              }
+            } else if (data.workoutData) {
               const today = new Date().toISOString().split('T')[0];
               const workout = {
                 id: `workout-assist-${Date.now()}`,

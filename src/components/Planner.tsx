@@ -271,6 +271,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [restTimer, setRestTimer] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
   const [restTimerMax, setRestTimerMax] = useState(0); // for progress ring calculation
+  const [timerAlarm, setTimerAlarm] = useState(false); // visual pulse when timer completes
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const fallbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string }>>({});
 
   // Voice command state
@@ -1211,44 +1214,118 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // ============================================================================
   // WORKOUT MODE — Simplified execution view with rest timer + result logging
   // ============================================================================
+  // Play a LOUD multi-tone completion alarm — 3 ascending tones, repeated twice
+  const playCompletionAlarm = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const tones = [660, 880, 1100]; // Hz — ascending urgency
+      const toneDur = 0.18;
+      const gap = 0.06;
+      const pattern = [...tones, ...tones]; // repeat twice for extra attention
+      pattern.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        const start = ctx.currentTime + i * (toneDur + gap);
+        // envelope: quick attack, sustain at 0.8, short release — prevents click
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.8, start + 0.01);
+        gain.gain.setValueAtTime(0.8, start + toneDur - 0.02);
+        gain.gain.linearRampToValueAtTime(0, start + toneDur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + toneDur);
+      });
+    } catch {}
+    // Fallback HTML5 Audio (for browsers where AudioContext fails silently)
+    try {
+      if (fallbackAudioRef.current) {
+        fallbackAudioRef.current.currentTime = 0;
+        fallbackAudioRef.current.volume = 1.0;
+        void fallbackAudioRef.current.play();
+      }
+    } catch {}
+    // Vibration pattern: long-short-long-short-long (attention-grabbing)
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([400, 120, 400, 120, 600]);
+      }
+    } catch {}
+  };
+
   // Rest timer countdown
   useEffect(() => {
     if (!restRunning || restTimer <= 0) {
       if (restTimer <= 0 && restRunning) {
         setRestRunning(false);
-        // Audio cue: TIME
-        try {
-          const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.frequency.value = 880;
-          gain.gain.value = 0.3;
-          osc.start();
-          osc.stop(ctx.currentTime + 0.5);
-        } catch {}
+        playCompletionAlarm();
+        // Visual alarm pulse for 5 seconds
+        setTimerAlarm(true);
+        setTimeout(() => setTimerAlarm(false), 5000);
         speak('Time. Next set.');
       }
       return;
     }
-    // Beep at 3, 2, 1
+    // Louder beep at 3, 2, 1
     if (restTimer <= 3 && restTimer > 0) {
       try {
         const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
+        osc.type = 'square';
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.frequency.value = 440;
-        gain.gain.value = 0.2;
+        osc.frequency.value = 520;
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.01);
+        gain.gain.setValueAtTime(0.6, ctx.currentTime + 0.22);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
         osc.start();
-        osc.stop(ctx.currentTime + 0.1);
+        osc.stop(ctx.currentTime + 0.25);
+      } catch {}
+      // Short vibration tick on final countdown (if supported)
+      try {
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          navigator.vibrate(80);
+        }
       } catch {}
     }
     const interval = setInterval(() => setRestTimer(prev => prev - 1), 1000);
     return () => clearInterval(interval);
   }, [restRunning, restTimer]);
+
+  // Wake lock — keep screen awake during rest timer and workout mode
+  useEffect(() => {
+    const shouldLock = workoutMode || restRunning;
+    const acquire = async () => {
+      try {
+        const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinel> } };
+        if (nav.wakeLock && !wakeLockRef.current) {
+          wakeLockRef.current = await nav.wakeLock.request('screen');
+          wakeLockRef.current.addEventListener('release', () => {
+            wakeLockRef.current = null;
+          });
+        }
+      } catch {}
+    };
+    const release = async () => {
+      try {
+        if (wakeLockRef.current) {
+          await wakeLockRef.current.release();
+          wakeLockRef.current = null;
+        }
+      } catch {}
+    };
+    if (shouldLock) {
+      void acquire();
+    } else {
+      void release();
+    }
+    return () => { void release(); };
+  }, [workoutMode, restRunning]);
 
   // Initialize workout results when entering workout mode
   useEffect(() => {
@@ -1263,6 +1340,26 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       setWorkoutResults(initial);
     }
   }, [workoutMode, selectedDate]);
+
+  // Merge external workout block changes (from Gunny modifications) into workoutResults
+  useEffect(() => {
+    if (!workoutMode) return;
+    const dateStr = selectedDate || formatDate(currentDate);
+    const workout = getWorkoutForDate(dateStr);
+    if (!workout) return;
+    const currentBlockIds = Object.keys(workoutResults);
+    if (currentBlockIds.length === 0) return;
+    const newBlockIds = workout.blocks.map(b => b.id);
+    const hasChanges = newBlockIds.some(id => !currentBlockIds.includes(id))
+                    || currentBlockIds.some(id => !newBlockIds.includes(id));
+    if (hasChanges) {
+      const merged: typeof workoutResults = {};
+      workout.blocks.forEach(b => {
+        merged[b.id] = workoutResults[b.id] || { sets: [{ weight: 0, reps: 0, completed: false }], notes: '' };
+      });
+      setWorkoutResults(merged);
+    }
+  }, [operator.workouts, selectedDate, workoutMode]);
 
   // Auto-persist workout results on every change (prevents data loss on tab switch)
   useEffect(() => {
@@ -1332,6 +1429,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
     return (
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
+        {/* Fallback HTML5 audio — short data-URI beep (pure tone via WAV header) */}
+        <audio
+          ref={fallbackAudioRef}
+          preload="auto"
+          src="data:audio/wav;base64,UklGRnQFAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YVAFAACAgIGChIaHiYqMjY6QkZKTlJWVlpaXl5eXlpaVlZSTkpGPjo2Li4qJiIeHhoaFhYWEhISEhISEhYWGhoeIiYqKi4yNjo6PkJGSk5OUlZaWl5eYmJiYmJiYmJeXlpaVlJOSkZCPjo2MjIuKiYiHh4aGhoWFhYWFhYWFhYaGh4eIiImJioqLi4yMjY2Ojo+Pj5CQkJCRkZGRkZGRkZGRkZCQkJCPj4+OjY2MjIuLiomJiIiHh4eGhoaGhoaGhoaGhoaGh4eHh4iIiIiJiYmKioqLi4uLjIyMjIyNjY2NjY2NjY2Njo6Ojo2NjY2NjIyMjIuLioqKiYmJiYiIiIiHh4eHh4eHh4eHh4eHh4eHh4eIiIiIiImJiYmJiYqKioqKiouLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4qKioqKiYmJiYmIiIiIiIeHh4eHh4eHh4eHh4eHh4eHiIiIiIiIiImJiYmJiYqKioqKiouLi4uLi4uMjIyMjIyMjIyMjIyMjIyMjIyMjIyLi4uLi4uKioqKioqJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiJiYmJiYmJiYqKioqKiouLi4uLi4yMjIyMjIyMjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjIyMjIyMjIuLi4uLi4qKioqKiomJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiIiIiIiJiYmJiYmKioqKiouLi4uMjIyMjIyNjY2NjY2Ojo6Ojo6Ojo+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj46Ojo6Ojo6NjY2NjY2MjIyMi4uLi4uKioqKioqJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiYmJiYmJiYqKioqKioqLi4uLi4uLjIyMjIyMjIyNjY2NjY2NjY2Njo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6NjY2NjY2MjIyMjIyMi4uLi4uLi4uKioqKioqKiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmKioqKioqKiouLi4uLi4uLjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIuLi4uLi4uLioqKioqKiomJiYmJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiImJiYmJiYmJiYqKioqKiouLi4uLi4yMjIyMjIyNjY2NjY2OjY2Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo2NjY2NjY2NjY2MjIyMjIyMi4uLi4uLioqKioqKiYmJiYmJiIiIiIiIiIiIiIiIiIiIiIiIiIiIiImJiYmJiYmKioqKioqKi4uLi4uLi4yMjIyMjIyMjIyMjIyMjIyMjIyMjIyLi4uLi4uLi4qKioqKioqKiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmKioqKioqKiouLi4uLi4uMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyLi4uLi4uKioqKioqKiomJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiomJiYmJiYmKioqKioqKi4uLi4uLjIyMjIyMjY2NjY2Njo6Ojo6Ojo+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Ojo6Ojo6Ojo6NjY2NjY2MjIyMjIuLi4uLioqKioqJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiImJiYmJiYqKioqKi4uLi4uMjIyMjIyNjY2NjY2Ojo6Ojo6Ojo6Ojo6Ojo6NjY2NjY2MjIyMjIuLi4uKioqKiYmJiYiIiIiIh4eHh4eHh4eHh4eHh4eHh4eHh4eHiIiIiImJiYmJioqKioqLi4uLi4yMjIyMjI2NjY2Nj"
+        />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontFamily: 'Orbitron', color: '#FF8C00', fontSize: 18, margin: 0 }}>WORKOUT MODE</h2>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1480,7 +1583,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         )}
 
         {/* Rest Timer with countdown ring + audio */}
-        <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: restRunning ? '#1a1a0a' : '#0a0a0a', border: `1px solid ${restRunning ? '#FF8C00' : '#333'}`, borderRadius: 8, transition: 'all 0.3s', position: 'relative' }}>
+        <div style={{
+          textAlign: 'center', marginBottom: 20, padding: 16,
+          background: timerAlarm ? '#3a0a0a' : restRunning ? '#1a1a0a' : '#0a0a0a',
+          border: `${timerAlarm ? 3 : 1}px solid ${timerAlarm ? '#ff4444' : restRunning ? '#FF8C00' : '#333'}`,
+          borderRadius: 8,
+          transition: 'all 0.3s',
+          position: 'relative',
+          animation: timerAlarm ? 'timerAlarmPulse 0.5s ease-in-out infinite' : undefined,
+          boxShadow: timerAlarm ? '0 0 24px rgba(255,68,68,0.6)' : undefined,
+        }}>
+          <style>{`@keyframes timerAlarmPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }`}</style>
           {restRunning && restTimerMax > 0 && (
             <svg width="100" height="100" viewBox="0 0 100 100" style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', opacity: 0.3 }}>
               <circle cx="50" cy="50" r="44" fill="none" stroke="#333" strokeWidth="4" />

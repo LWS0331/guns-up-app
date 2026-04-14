@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
+import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
+import { applyWorkoutModification, type WorkoutModification } from '@/lib/workoutModification';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
@@ -1068,7 +1070,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; profileData?: Record<string, unknown> } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; profileData?: Record<string, unknown> } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1176,6 +1178,13 @@ ${mealSuggestion}`;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recentDayTags: Object.entries(operator.dayTags || {}).sort(([a], [b]) => b.localeCompare(a)).slice(0, 7)
           .map(([date, tag]) => `${date}: [${(tag as any).color}] ${(tag as any).note}`).join('\n') || null,
+        lastCompletedWorkout: (() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tw = todayWorkout as any;
+          const target = tw?.completed ? tw : findMostRecentCompletedWorkout(operator);
+          if (!target) return null;
+          return buildWorkoutAnalysis(target, operator.prs || [], operator.workouts || {});
+        })(),
       };
 
       const apiMode = forceMode || (isOnboarding ? 'onboarding' : undefined);
@@ -1208,7 +1217,7 @@ ${mealSuggestion}`;
         const errMsg = data?.error || 'Gunny AI temporarily offline.';
         return { response: errMsg };
       }
-      return { response: data.response, workoutData: data.workoutData, profileData: data.profileData };
+      return { response: data.response, workoutData: data.workoutData, workoutModification: data.workoutModification, profileData: data.profileData };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
     }
@@ -1352,15 +1361,35 @@ ${mealSuggestion}`;
       const apiResult = await callGunnyAPI(updatedMessages);
       const responseText = apiResult?.response || FALLBACK_RESPONSE;
 
-      // Store workout data if AI generated one
-      if (apiResult?.workoutData) {
+      // SURGICAL MODIFICATION — apply targeted change to today's active workout
+      let wasModification = false;
+      if (apiResult?.workoutModification && onUpdateOperator) {
+        const today = new Date().toISOString().split('T')[0];
+        const current = operator.workouts?.[today];
+        if (current) {
+          try {
+            const modified = applyWorkoutModification(current, apiResult.workoutModification);
+            const updated = { ...operator };
+            updated.workouts = { ...updated.workouts, [today]: modified };
+            onUpdateOperator(updated);
+            wasModification = true;
+          } catch (e) {
+            console.error('applyWorkoutModification failed:', e);
+          }
+        }
+      }
+
+      // Store workout data if AI generated a NEW complete workout
+      if (!wasModification && apiResult?.workoutData) {
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
 
-      const hasWorkout = !!apiResult?.workoutData;
+      const hasWorkout = !wasModification && !!apiResult?.workoutData;
       const gunnyResponse: Message = {
         id: 'gunny-' + Date.now(), role: 'gunny',
-        text: responseText + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : ''),
+        text: responseText
+          + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
+          + (wasModification ? '\n\n[WORKOUT UPDATED]' : ''),
         timestamp: new Date(), isWorkout: hasWorkout,
       };
       setIsTyping(false);
@@ -1390,13 +1419,33 @@ ${mealSuggestion}`;
     } else {
       const apiResult = await callGunnyAPI(updatedMessages);
       const responseText = apiResult?.response || FALLBACK_RESPONSE;
-      if (apiResult?.workoutData) {
+
+      let wasModification = false;
+      if (apiResult?.workoutModification && onUpdateOperator) {
+        const today = new Date().toISOString().split('T')[0];
+        const current = operator.workouts?.[today];
+        if (current) {
+          try {
+            const modified = applyWorkoutModification(current, apiResult.workoutModification);
+            const updated = { ...operator };
+            updated.workouts = { ...updated.workouts, [today]: modified };
+            onUpdateOperator(updated);
+            wasModification = true;
+          } catch (e) {
+            console.error('applyWorkoutModification (quick action) failed:', e);
+          }
+        }
+      }
+
+      if (!wasModification && apiResult?.workoutData) {
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
-      const hasWorkout = !!apiResult?.workoutData;
+      const hasWorkout = !wasModification && !!apiResult?.workoutData;
       const gunnyResponse: Message = {
         id: 'gunny-' + Date.now(), role: 'gunny',
-        text: responseText + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : ''),
+        text: responseText
+          + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
+          + (wasModification ? '\n\n[WORKOUT UPDATED]' : ''),
         timestamp: new Date(), isWorkout: hasWorkout,
       };
       setIsTyping(false);
