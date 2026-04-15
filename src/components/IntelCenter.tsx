@@ -1561,7 +1561,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         >
           MACRO TARGETS
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', minWidth: 0 }}>
           <div>
             <label
               style={{
@@ -1576,7 +1576,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             >
               Calories
             </label>
-            <div style={{ display: 'flex', gap: '4px' }}>
+            <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
               <input
                 type="number"
                 value={state.nutrition.calorieTarget}
@@ -1618,7 +1618,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             >
               Protein (g)
             </label>
-            <div style={{ display: 'flex', gap: '4px' }}>
+            <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
               <input
                 type="number"
                 value={state.nutrition.proteinTarget}
@@ -1660,7 +1660,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             >
               Carbs (g)
             </label>
-            <div style={{ display: 'flex', gap: '4px' }}>
+            <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
               <input
                 type="number"
                 value={state.nutrition.carbsTarget}
@@ -1702,7 +1702,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             >
               Fat (g)
             </label>
-            <div style={{ display: 'flex', gap: '4px' }}>
+            <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
               <input
                 type="number"
                 value={state.nutrition.fatTarget}
@@ -1929,10 +1929,11 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr) auto',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
             gap: '8px',
             marginBottom: '16px',
             alignItems: 'flex-end',
+            minWidth: 0,
           }}
         >
           <input
@@ -1941,6 +1942,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             value={state.nutrition.mealName}
             onChange={(e) => handleNutritionChange('mealName', e.target.value)}
             style={{
+              gridColumn: '1 / -1',
               padding: '8px',
               fontFamily: 'Chakra Petch, sans-serif',
               fontSize: '15px',
@@ -1949,6 +1951,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               color: '#ddd',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s',
+              minWidth: 0,
             }}
             onFocus={(e) => {
               e.target.style.borderColor = 'rgba(0,255,65,0.2)';
@@ -2048,9 +2051,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <button
             onClick={addMeal}
             style={{
-              padding: '8px 16px',
+              gridColumn: '1 / -1',
+              padding: '10px 16px',
               fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
+              fontSize: '20px',
               backgroundColor: 'transparent',
               border: '1px solid #00ff41',
               color: '#00ff41',
@@ -2151,12 +2155,13 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               backgroundColor: 'rgba(0,255,65,0.04)',
               borderRadius: '4px',
               fontFamily: 'Share Tech Mono, monospace',
-              fontSize: '26px',
+              fontSize: '22px',
               color: '#00ff41',
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(70px, 1fr))',
               gap: '8px',
               textAlign: 'center',
+              minWidth: 0,
             }}
           >
             <div>
