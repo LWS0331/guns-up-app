@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Operator } from '@/lib/types';
+import { toLocalDateStr } from '@/lib/dateUtils';
 
 interface AchievementsProps {
   operator: Operator;
@@ -41,7 +42,7 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
     for (let i = 0; i < 365; i++) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
+      const key = toLocalDateStr(d);
       if (operator.workouts?.[key]?.completed) streak++;
       else if (i > 0) break;
     }

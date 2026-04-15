@@ -1,6 +1,8 @@
 // Push notification utilities for GUNS UP PWA
 // Full SITREP-aware compliance reminder engine
 
+import { getLocalDateStr, toLocalDateStr } from './dateUtils';
+
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!('Notification' in window)) return false;
   if (Notification.permission === 'granted') return true;
@@ -213,7 +215,7 @@ export function loadNotificationPrefs(operatorId: string): NotificationPreferenc
 
 // Check and send streak warning if needed
 export function checkStreakWarning(callsign: string, workouts: Record<string, { completed?: boolean }>): void {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateStr();
   const hasWorkoutToday = workouts[today]?.completed;
 
   if (!hasWorkoutToday) {
@@ -222,7 +224,7 @@ export function checkStreakWarning(callsign: string, workouts: Record<string, { 
     for (let i = 1; i < 365; i++) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
+      const key = toLocalDateStr(d);
       if (workouts[key]?.completed) streak++;
       else break;
     }

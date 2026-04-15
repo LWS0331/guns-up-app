@@ -9,16 +9,10 @@ interface DailyBriefProps {
   onUpdateOperator: (updated: Operator) => void;
 }
 
-function getTodayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+import { getLocalDateStr, getLocalYesterdayStr, getLocalDateLongStr, getLocalTimezone } from '@/lib/dateUtils';
 
-function getYesterdayStr(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+const getTodayStr = getLocalDateStr;
+const getYesterdayStr = getLocalYesterdayStr;
 
 export default function DailyBriefComponent({ operator, onUpdateOperator }: DailyBriefProps) {
   const [brief, setBrief] = useState<DailyBriefType | null>(operator.dailyBrief?.date === getTodayStr() ? operator.dailyBrief : null);
@@ -160,6 +154,9 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
           operatorContext: { callsign: operator.callsign, fitnessLevel: operator.fitnessLevel || 'beginner' },
           tier: operator.tier,
           mode: 'assistant',
+          clientDate: getLocalDateStr(),
+          clientDateLong: getLocalDateLongStr(),
+          clientTimezone: getLocalTimezone(),
         }),
       });
       const data = await res.json();

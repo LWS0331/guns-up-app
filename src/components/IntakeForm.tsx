@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Operator, IntakeAssessment, FitnessLevel, calculateFitnessLevel, calculateTrainingAge, calculateReadiness, formatHeightInput } from '@/lib/types';
+import { getLocalDateStr } from '@/lib/dateUtils';
 
 interface IntakeFormProps {
   operator: Operator;
@@ -187,7 +188,7 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
         exercise: pr.exercise,
         weight: pr.weight,
         reps: pr.reps,
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateStr(),
         notes: 'Set during intake',
       }));
 

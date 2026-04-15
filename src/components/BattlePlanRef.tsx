@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Sitrep, SitrepExercise, Operator } from '@/lib/types';
 import { sitrepDayToWorkout } from '@/lib/workoutConverter';
+import { getLocalDateStr } from '@/lib/dateUtils';
 
 interface BattlePlanRefProps {
   sitrep: Sitrep;
@@ -20,7 +21,7 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
   const [activeSection, setActiveSection] = useState<'training' | 'nutrition'>(focus === 'nutrition' ? 'nutrition' : 'training');
 
   // Check if Day 1 workout already loaded in planner
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateStr();
   const workoutAlreadyLoaded = !!operator?.workouts?.[todayStr];
 
   const handleLoadDay1 = () => {

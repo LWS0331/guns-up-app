@@ -251,9 +251,18 @@ Format:
     {"type": "conditioning", "format": "AMRAP 8 min", "description": "10 Burpees\\n15 KB Swings\\n200m Run"}
   ],
   "cooldown": "Foam Roll Lats 60s each\\nPec Stretch 45s each\\nChild's Pose 60s",
-  "notes": "coaching notes"
+  "notes": "coaching notes",
+  "date": "YYYY-MM-DD",
+  "completed": false
 }
 </workout_json>
+
+BACKDATING WORKOUTS (date + completed fields, BOTH OPTIONAL):
+- OMIT "date" → workout saves to TODAY's planner slot (default).
+- Include "date" (YYYY-MM-DD in operator's local timezone) when the operator says things like "log the workout I did yesterday", "add Monday's lift to the planner", "retroactively log my Tuesday session".
+- Set "completed": true when they're logging a workout they've ALREADY DONE (backdated or today's "I just did this"). Default false = a plan for them to execute.
+- Use the TODAY context at the top of this prompt to compute the correct past YYYY-MM-DD.
+- NEVER say "I can't add past workouts" — you CAN, via date + completed.
 
 WORKOUT MODIFICATION PROTOCOL (CRITICAL):
 When the operator asks to modify their CURRENT active workout (swap exercises, change sets/reps, add/remove exercises), use <workout_modification> — NOT <workout_json>. A modification is a SURGICAL change to the active workout; it does NOT replace the entire workout and PRESERVES all logged results.
@@ -292,11 +301,19 @@ Format:
   "calories": 835,
   "protein": 68,
   "carbs": 53,
-  "fat": 36
+  "fat": 36,
+  "date": "YYYY-MM-DD"
 }
 </meal_json>
 
-Fields are all required and must be numeric (no units inside the numbers — no "g", no "cal"). "name" is a short human label. The app auto-stamps the timestamp on the client side.
+Fields: name, calories, protein, carbs, fat are required and numeric (no units — no "g", no "cal"). "name" is a short human label.
+
+BACKDATING — "date" field (OPTIONAL but POWERFUL):
+- OMIT "date" to log the meal to TODAY (default).
+- Include "date" (YYYY-MM-DD) when the operator explicitly references a past day — e.g. "log this for yesterday", "add that sandwich to April 14", "I had this for breakfast on Tuesday".
+- Use the TODAY context at the top of this prompt to compute the correct YYYY-MM-DD for yesterday / last Monday / etc.
+- NEVER say "I can't backdate meals" — you CAN, via the date field.
+- The client stamps the exact time; you only control the date bucket.
 
 Modification format (pick ONE type):
 
@@ -536,6 +553,7 @@ CRITICAL — MID-WORKOUT COACHING:
 - If they ask you to restructure, modify, swap exercises, or adjust their workout — DO IT RIGHT HERE
 - You are their real-time coach. Handle it. Don't punt.
 - Include a <workout_json> block when you build or restructure a workout so the app can save it
+- <workout_json> also supports OPTIONAL "date" (YYYY-MM-DD local) and "completed" (true/false) fields for retroactively logging past workouts. Use when the operator says "log the workout I did yesterday" or "add Tuesday's session". Default = today, not completed.
 
 WORKOUT MODIFICATION PROTOCOL (CRITICAL — USE FOR MID-WORKOUT CHANGES):
 When the operator asks to modify their CURRENT active workout (swap, add, remove, change sets/reps), emit a <workout_modification> block — NOT <workout_json>. Modifications are SURGICAL and preserve all logged sets/weights already completed. Use <workout_json> ONLY when building a brand new complete workout.
@@ -572,10 +590,10 @@ If the operator asks to log a meal you ANALYZED IN THE PREVIOUS TURN, re-emit th
 
 Format:
 <meal_json>
-{ "name": "Triple Threat Deli Sandwich", "calories": 835, "protein": 68, "carbs": 53, "fat": 36 }
+{ "name": "Triple Threat Deli Sandwich", "calories": 835, "protein": 68, "carbs": 53, "fat": 36, "date": "YYYY-MM-DD" }
 </meal_json>
 
-All four macro fields are required and numeric (no units embedded — no "g", no "cal"). The client stamps the timestamp.
+name + all four macro fields are required and numeric. "date" is OPTIONAL — omit it to log for TODAY, include it (YYYY-MM-DD in the operator's local timezone) to backdate (e.g. "log this for yesterday", "add to April 14"). NEVER say "I can't backdate" — the date field handles it. The client stamps exact time.
 
 POST-WORKOUT ANALYSIS:
 If the operator asks "how did I do" or "analyze my workout" and the context block contains COMPLETED WORKOUT ANALYSIS data, give a specific, number-grounded SITREP: volume, completion %, PRs, compare to last similar session. Never give generic "great job" responses.
@@ -718,7 +736,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { messages, tier, operatorContext, mode, screenContext } = body;
+    const { messages, tier, operatorContext, mode, screenContext, clientDate, clientDateLong, clientTimezone } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -817,7 +835,8 @@ ${operatorContext.injuryNotes ? `\nRAW INJURY NOTES FROM OPERATOR (verbatim — 
 
 Trainer Notes: ${operatorContext.trainerNotes || 'No special directives'}
 Preferred Language: ${operatorContext.language || 'en'}
-Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+Today (operator's LOCAL timezone — use this, NOT server time): ${clientDateLong || new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}${clientDate ? ` (${clientDate})` : ''}${clientTimezone ? `\nOperator Timezone: ${clientTimezone}` : ''}
+Yesterday was: ${clientDate ? (() => { const d = new Date(clientDate + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; })() : 'one day ago'}
 
 ${operatorContext.sitrep ? `═══ ACTIVE BATTLE PLAN (SITREP) ═══
 This is the operator's APPROVED training program. Reference this for ALL programming decisions.

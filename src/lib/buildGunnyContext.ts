@@ -6,6 +6,7 @@
 
 import type { Operator } from './types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from './workoutAnalysis';
+import { getLocalDateStr, toLocalDateStr } from './dateUtils';
 
 // Matches the in-progress Workout Mode UI state consumed by AppShell
 export interface WorkoutExecutionState {
@@ -89,7 +90,7 @@ export function buildFullGunnyContext(
   const sitrep = operator.sitrep as AnyRec | undefined;
   const dailyBrief = operator.dailyBrief as AnyRec | undefined;
   const workouts = (operator.workouts || {}) as AnyRec;
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateStr();
   const todayWorkout = workouts[today];
 
   const recentWorkoutHistory = (() => {
@@ -132,7 +133,7 @@ export function buildFullGunnyContext(
     for (let i = 0; i < 365; i++) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
+      const key = toLocalDateStr(d);
       if (workouts[key]?.completed) streak++;
       else if (i > 0) break;
     }

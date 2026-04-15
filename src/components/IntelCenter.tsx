@@ -9,6 +9,7 @@ import { FOOD_DB } from '@/data/foods';
 import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
+import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 
 // Local type aliases for internal state management
 interface Goal {
@@ -75,11 +76,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<SubTab>('PROFILE');
 
-  // Helper function to get today's date in YYYY-MM-DD format
-  const getTodayStr = () => {
-    const now = new Date();
-    return now.toISOString().split('T')[0];
-  };
+  // Helper function to get today's date in YYYY-MM-DD format — LOCAL timezone.
+  // Using UTC (toISOString) silently drops meals logged by PST/EST users when
+  // their local evening crosses UTC midnight.
+  const getTodayStr = () => getLocalDateStr();
 
   // Convert string goals to Goal objects with id/name
   const convertGoalsToObjects = (goals: string[]): Goal[] => {
@@ -286,7 +286,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       exercise: 'New Exercise',
       weight: 0,
       reps: 1,
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDateStr(),
       notes: '',
     };
     setState((prev) => ({
@@ -461,7 +461,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     if (!meal?.time) return true;
     const parsed = new Date(meal.time);
     if (isNaN(parsed.getTime())) return true; // legacy time-only string — still today
-    return parsed.toISOString().split('T')[0] === todayStr;
+    // Compare LOCAL date keys (not UTC) so 11 AM PST April 14 doesn't get tagged as April 15.
+    return toLocalDateStr(parsed) === todayStr;
   });
 
   const mealTotals = todaysMeals.reduce(

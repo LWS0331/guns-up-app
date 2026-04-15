@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Operator, TEAMS, LEADERBOARD_POINTS } from '@/lib/types';
+import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 
 interface LeaderboardProps {
   operators: Operator[];
@@ -15,7 +16,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
   const leaderboardData = useMemo(() => {
     return operators.map(op => {
       const workoutsCompleted = Object.values(op.workouts || {}).filter(w => w.completed).length;
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateStr();
       const mealsLogged = Object.values(op.nutrition?.meals || {}).reduce((sum, meals) => sum + (Array.isArray(meals) ? meals.length : 0), 0);
       const prsHit = (op.prs || []).length;
 
@@ -23,7 +24,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
       let streak = 0;
       const date = new Date();
       for (let i = 0; i < 365; i++) {
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = toLocalDateStr(date);
         const workout = op.workouts?.[dateStr];
         if (workout?.completed) {
           streak++;

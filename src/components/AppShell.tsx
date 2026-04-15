@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Operator, AppTab, OPS_CENTER_ACCESS } from '@/lib/types';
+import { Operator, AppTab, OPS_CENTER_ACCESS, Workout } from '@/lib/types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification } from '@/lib/workoutModification';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
+import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
 import { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
@@ -269,7 +270,7 @@ const AppShell: React.FC<AppShellProps> = ({
           const data = getComplianceData();
           // Workout reminder (only if not completed)
           if (prefs.workoutReminders) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalDateStr();
             if (!data.workouts?.[today]?.completed) {
               notifyWorkoutReminder(callsign);
             }
@@ -445,7 +446,7 @@ const AppShell: React.FC<AppShellProps> = ({
   // Reads what the user is currently looking at and builds a text summary
   const getScreenContext = (): string => {
     const op = currentSelectedOp;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateStr();
     const todayWorkout = op.workouts?.[today];
 
     let context = `CURRENT SCREEN: ${activeTab.toUpperCase()} tab\n`;
@@ -618,12 +619,12 @@ const AppShell: React.FC<AppShellProps> = ({
           priorityFocus: s.priorityFocus || [], restrictions: s.restrictions || [], milestones30Day: s.milestones30Day || [] };
       })(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      dailyBrief: (() => { const td = new Date().toISOString().split('T')[0]; const db = op.dailyBrief as any;
+      dailyBrief: (() => { const td = getLocalDateStr(); const db = op.dailyBrief as any;
         if (!db || db.date !== td) return null;
         return { complianceScore: db.complianceScore, adjustments: db.adjustments, gunnyNote: db.gunnyNote };
       })(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      todayWorkout: (() => { const td = new Date().toISOString().split('T')[0]; const w = (op.workouts as any)?.[td];
+      todayWorkout: (() => { const td = getLocalDateStr(); const w = (op.workouts as any)?.[td];
         if (!w) return null;
         return { title: w.title || 'Untitled', exercises: (w.blocks || [])
           .filter((b: { type: string }) => b.type === 'exercise')
@@ -648,7 +649,7 @@ const AppShell: React.FC<AppShellProps> = ({
       workoutStreak: (() => { let streak = 0; const now = new Date();
         for (let i = 0; i < 365; i++) { const d = new Date(now); d.setDate(d.getDate() - i);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const key = d.toISOString().split('T')[0]; if ((op.workouts as any)?.[key]?.completed) streak++; else if (i > 0) break; }
+          const key = toLocalDateStr(d); if ((op.workouts as any)?.[key]?.completed) streak++; else if (i > 0) break; }
         return streak; })(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       totalWorkoutsCompleted: Object.values(op.workouts || {}).filter((w: any) => (w as any)?.completed).length,
@@ -658,7 +659,7 @@ const AppShell: React.FC<AppShellProps> = ({
         return entries.map(([date, tag]) => `${date}: [${(tag as any).color}] ${(tag as any).note}`).join('\n');
       })(),
       lastCompletedWorkout: (() => {
-        const td = new Date().toISOString().split('T')[0];
+        const td = getLocalDateStr();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const todayW = (op.workouts as any)?.[td];
         const target = todayW?.completed ? todayW : findMostRecentCompletedWorkout(op);
@@ -786,6 +787,9 @@ const AppShell: React.FC<AppShellProps> = ({
           tier: selectedOperator.tier || 'standard',
           mode: getGunnyMode(),
           screenContext: getScreenContext(),
+          clientDate: getLocalDateStr(),
+          clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+          clientTimezone: getLocalTimezone(),
           ...(trainerData && { trainerData }),
         }),
       });
@@ -810,11 +814,18 @@ const AppShell: React.FC<AppShellProps> = ({
         setGunnyMessages(prev => [...prev, gunnyReply]);
         speakGunny(replyText);
 
-        // DIRECT MEAL LOG — Gunny emitted <meal_json>; persist to nutrition.meals[today]
+        // DIRECT MEAL LOG — Gunny emitted <meal_json>; persist to nutrition.meals[date].
+        // Gunny can pass an optional "date" (YYYY-MM-DD local) to backdate — e.g. "log this for yesterday".
         if (data.mealData && typeof data.mealData === 'object') {
-          const m = data.mealData as { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number };
+          const m = data.mealData as { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; date?: string };
           if (typeof m.calories === 'number' && typeof m.protein === 'number' && typeof m.carbs === 'number' && typeof m.fat === 'number') {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalDateStr();
+            const targetDate = isValidDateStr(m.date) ? m.date : today;
+            // If backdating, anchor the timestamp to noon of that date (local) so the
+            // display time is sane and the meal reliably sorts into the correct bucket.
+            const time = targetDate === today
+              ? new Date().toISOString()
+              : new Date(`${targetDate}T12:00:00`).toISOString();
             const meal = {
               id: `meal-${Date.now()}`,
               name: m.name || 'Logged meal',
@@ -822,20 +833,20 @@ const AppShell: React.FC<AppShellProps> = ({
               protein: Math.round(m.protein),
               carbs: Math.round(m.carbs),
               fat: Math.round(m.fat),
-              time: new Date().toISOString(),
+              time,
             };
             const updated = { ...currentSelectedOp };
             if (!updated.nutrition) updated.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
             if (!updated.nutrition.meals) updated.nutrition.meals = {};
-            const prevToday = updated.nutrition.meals[today] || [];
-            updated.nutrition.meals = { ...updated.nutrition.meals, [today]: [...prevToday, meal] };
+            const prevBucket = updated.nutrition.meals[targetDate] || [];
+            updated.nutrition.meals = { ...updated.nutrition.meals, [targetDate]: [...prevBucket, meal] };
             onUpdateOperator(updated);
           }
         }
 
         // SURGICAL MODIFICATION — apply targeted change to today's workout (preserves logged results)
         if (data.workoutModification) {
-          const today = new Date().toISOString().split('T')[0];
+          const today = getLocalDateStr();
           const current = currentSelectedOp.workouts?.[today];
           if (current) {
             try {
@@ -850,29 +861,44 @@ const AppShell: React.FC<AppShellProps> = ({
             console.warn('workout_modification returned but no active workout for today');
           }
         } else if (data.workoutData) {
-          // If Gunny Assist built a complete new workout, save it to the planner
-          const today = new Date().toISOString().split('T')[0];
-          const workout = {
+          // Gunny Assist built a workout. Honors optional "date" (backdate) and "completed" flags.
+          const today = getLocalDateStr();
+          const wd = data.workoutData as Record<string, unknown>;
+          const targetDate = isValidDateStr(wd.date) ? (wd.date as string) : today;
+          const completedFlag = wd.completed === true;
+          const workout: Workout = {
             id: `workout-assist-${Date.now()}`,
-            date: today,
-            title: data.workoutData.title || 'Gunny Assist Workout',
-            notes: data.workoutData.notes || '',
-            warmup: data.workoutData.warmup || '',
-            blocks: (data.workoutData.blocks || []).map((b: Record<string, unknown>, i: number) => ({
-              type: b.type || 'exercise',
-              id: `block-assist-${i}`,
-              sortOrder: i,
-              exerciseName: b.exerciseName || '',
-              prescription: b.prescription || '',
-              isLinkedToNext: false,
-              ...(b.type === 'conditioning' ? { format: b.format, description: b.description } : {}),
-              ...(b.videoUrl ? { videoUrl: b.videoUrl } : {}),
-            })),
-            cooldown: data.workoutData.cooldown || '',
-            completed: false,
+            date: targetDate,
+            title: (wd.title as string) || 'Gunny Assist Workout',
+            notes: (wd.notes as string) || '',
+            warmup: (wd.warmup as string) || '',
+            blocks: ((wd.blocks as Array<Record<string, unknown>>) || []).map((b: Record<string, unknown>, i: number) => {
+              const blockType = (b.type as string) === 'conditioning' ? 'conditioning' : 'exercise';
+              if (blockType === 'conditioning') {
+                return {
+                  type: 'conditioning' as const,
+                  id: `block-assist-${i}`,
+                  sortOrder: i,
+                  format: (b.format as string) || '',
+                  description: (b.description as string) || '',
+                  isLinkedToNext: false,
+                };
+              }
+              return {
+                type: 'exercise' as const,
+                id: `block-assist-${i}`,
+                sortOrder: i,
+                exerciseName: (b.exerciseName as string) || '',
+                prescription: (b.prescription as string) || '',
+                isLinkedToNext: false,
+                ...(b.videoUrl ? { videoUrl: b.videoUrl as string } : {}),
+              };
+            }),
+            cooldown: (wd.cooldown as string) || '',
+            completed: completedFlag,
           };
           const updated = { ...currentSelectedOp };
-          updated.workouts = { ...updated.workouts, [today]: workout };
+          updated.workouts = { ...updated.workouts, [targetDate]: workout };
           onUpdateOperator(updated);
         }
       }
@@ -940,6 +966,9 @@ const AppShell: React.FC<AppShellProps> = ({
               tier: selectedOperator.tier || 'standard',
               mode: getGunnyMode(),
               screenContext: getScreenContext(),
+              clientDate: getLocalDateStr(),
+              clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+              clientTimezone: getLocalTimezone(),
               ...(trainerData && { trainerData }),
             }),
           });
@@ -955,11 +984,15 @@ const AppShell: React.FC<AppShellProps> = ({
             showGunnyVoiceResponse(replyText);
             speakGunny(replyText);
 
-            // DIRECT MEAL LOG via voice — Gunny emitted <meal_json>
+            // DIRECT MEAL LOG via voice — Gunny emitted <meal_json>, honors backdate
             if (data.mealData && typeof data.mealData === 'object') {
-              const m = data.mealData as { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number };
+              const m = data.mealData as { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; date?: string };
               if (typeof m.calories === 'number' && typeof m.protein === 'number' && typeof m.carbs === 'number' && typeof m.fat === 'number') {
-                const today = new Date().toISOString().split('T')[0];
+                const today = getLocalDateStr();
+                const targetDate = isValidDateStr(m.date) ? m.date : today;
+                const time = targetDate === today
+                  ? new Date().toISOString()
+                  : new Date(`${targetDate}T12:00:00`).toISOString();
                 const meal = {
                   id: `meal-${Date.now()}`,
                   name: m.name || 'Logged meal',
@@ -967,19 +1000,19 @@ const AppShell: React.FC<AppShellProps> = ({
                   protein: Math.round(m.protein),
                   carbs: Math.round(m.carbs),
                   fat: Math.round(m.fat),
-                  time: new Date().toISOString(),
+                  time,
                 };
                 const updated = { ...currentSelectedOp };
                 if (!updated.nutrition) updated.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
                 if (!updated.nutrition.meals) updated.nutrition.meals = {};
-                const prevToday = updated.nutrition.meals[today] || [];
-                updated.nutrition.meals = { ...updated.nutrition.meals, [today]: [...prevToday, meal] };
+                const prevBucket = updated.nutrition.meals[targetDate] || [];
+                updated.nutrition.meals = { ...updated.nutrition.meals, [targetDate]: [...prevBucket, meal] };
                 onUpdateOperator(updated);
               }
             }
 
             if (data.workoutModification) {
-              const today = new Date().toISOString().split('T')[0];
+              const today = getLocalDateStr();
               const current = currentSelectedOp.workouts?.[today];
               if (current) {
                 try {
@@ -992,28 +1025,43 @@ const AppShell: React.FC<AppShellProps> = ({
                 }
               }
             } else if (data.workoutData) {
-              const today = new Date().toISOString().split('T')[0];
-              const workout = {
+              const today = getLocalDateStr();
+              const wd = data.workoutData as Record<string, unknown>;
+              const targetDate = isValidDateStr(wd.date) ? (wd.date as string) : today;
+              const completedFlag = wd.completed === true;
+              const workout: Workout = {
                 id: `workout-assist-${Date.now()}`,
-                date: today,
-                title: data.workoutData.title || 'Gunny Assist Workout',
-                notes: data.workoutData.notes || '',
-                warmup: data.workoutData.warmup || '',
-                blocks: (data.workoutData.blocks || []).map((b: Record<string, unknown>, i: number) => ({
-                  type: b.type || 'exercise',
-                  id: `block-assist-${i}`,
-                  sortOrder: i,
-                  exerciseName: b.exerciseName || '',
-                  prescription: b.prescription || '',
-                  isLinkedToNext: false,
-                  ...(b.type === 'conditioning' ? { format: b.format, description: b.description } : {}),
-                  ...(b.videoUrl ? { videoUrl: b.videoUrl } : {}),
-                })),
-                cooldown: data.workoutData.cooldown || '',
-                completed: false,
+                date: targetDate,
+                title: (wd.title as string) || 'Gunny Assist Workout',
+                notes: (wd.notes as string) || '',
+                warmup: (wd.warmup as string) || '',
+                blocks: ((wd.blocks as Array<Record<string, unknown>>) || []).map((b: Record<string, unknown>, i: number) => {
+                  const blockType = (b.type as string) === 'conditioning' ? 'conditioning' : 'exercise';
+                  if (blockType === 'conditioning') {
+                    return {
+                      type: 'conditioning' as const,
+                      id: `block-assist-${i}`,
+                      sortOrder: i,
+                      format: (b.format as string) || '',
+                      description: (b.description as string) || '',
+                      isLinkedToNext: false,
+                    };
+                  }
+                  return {
+                    type: 'exercise' as const,
+                    id: `block-assist-${i}`,
+                    sortOrder: i,
+                    exerciseName: (b.exerciseName as string) || '',
+                    prescription: (b.prescription as string) || '',
+                    isLinkedToNext: false,
+                    ...(b.videoUrl ? { videoUrl: b.videoUrl as string } : {}),
+                  };
+                }),
+                cooldown: (wd.cooldown as string) || '',
+                completed: completedFlag,
               };
               const updated = { ...currentSelectedOp };
-              updated.workouts = { ...updated.workouts, [today]: workout };
+              updated.workouts = { ...updated.workouts, [targetDate]: workout };
               onUpdateOperator(updated);
             }
           }

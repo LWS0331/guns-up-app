@@ -9,6 +9,7 @@ import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
+import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -211,7 +212,7 @@ const calculateStreak = (operator: Operator): number => {
   let currentDate = new Date(today);
 
   while (true) {
-    const dateStr = currentDate.toISOString().split('T')[0];
+    const dateStr = toLocalDateStr(currentDate);
     if (operator.workouts[dateStr]?.completed) {
       streak++;
       currentDate.setDate(currentDate.getDate() - 1);
@@ -506,7 +507,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
         exercise: String(pr.exercise || ''),
         weight: Number(pr.weight) || 0,
         reps: Number(pr.reps) || 1,
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateStr(),
         notes: String(pr.notes || 'Set during onboarding'),
       }));
       if (prs.length > 0) {
@@ -574,6 +575,9 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
               messages: [{ role: 'user', text: 'I just signed up. Start my intake assessment.' }],
               tier: operator.tier,
               mode: 'onboarding',
+              clientDate: getLocalDateStr(),
+              clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+              clientTimezone: getLocalTimezone(),
               operatorContext: {
                 callsign: operator.callsign,
                 name: operator.name,
@@ -791,14 +795,14 @@ Total: ${clients.length} active clients`;
       }
 
       // Look for today's workout, then yesterday, then day before
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateStr();
       let workoutDate = today;
       let workout: Workout | null = null;
 
       for (let i = 0; i < 3; i++) {
         const dateToCheck = new Date();
         dateToCheck.setDate(dateToCheck.getDate() - i);
-        const dateStr = dateToCheck.toISOString().split('T')[0];
+        const dateStr = toLocalDateStr(dateToCheck);
         if (trainer.workouts[dateStr]?.completed) {
           workoutDate = dateStr;
           workout = trainer.workouts[dateStr];
@@ -880,7 +884,7 @@ Total: ${clients.length} active clients`;
       const goals = operator.profile?.goals || [];
       const weight = operator.profile?.weight || 180;
       const nutrition = operator.nutrition;
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateStr();
       const todayMeals = nutrition?.meals?.[today] || [];
       const currentCalories = todayMeals.reduce((sum: number, m: { calories?: number }) => sum + (m.calories || 0), 0);
       const targetCalories = nutrition?.targets?.calories || 2500;
@@ -918,7 +922,7 @@ ${mealSuggestion}`;
 
     if (lower.includes('nutrition status') || lower.includes('check macros') || lower.includes('macro status') || lower.includes('how are my macros')) {
       const nutrition = operator.nutrition;
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateStr();
       const todayMeals = nutrition?.meals?.[today] || [];
       const currentCalories = todayMeals.reduce((sum: number, m: { calories?: number }) => sum + (m.calories || 0), 0);
       const targetCalories = nutrition?.targets?.calories || 2500;
@@ -1019,7 +1023,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number } } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string } } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1030,7 +1034,7 @@ ${mealSuggestion}`;
       const prof = operator.profile;
       const intake = operator.intake;
       const prefs = operator.preferences;
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateStr();
       const todayWorkout = operator.workouts?.[today];
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1122,7 +1126,7 @@ ${mealSuggestion}`;
           let streak = 0; const now = new Date();
           for (let i = 0; i < 365; i++) {
             const d = new Date(now); d.setDate(d.getDate() - i);
-            const key = d.toISOString().split('T')[0];
+            const key = toLocalDateStr(d);
             if (workoutsMap[key]?.completed) streak++; else if (i > 0) break;
           }
           return streak;
@@ -1161,6 +1165,9 @@ ${mealSuggestion}`;
           messages: recentMessages,
           tier: operator.tier,
           operatorContext,
+          clientDate: getLocalDateStr(),
+          clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+          clientTimezone: getLocalTimezone(),
           ...(apiMode && { mode: apiMode }),
           ...(trainerData && { trainerData }),
         }),
@@ -1194,10 +1201,12 @@ ${mealSuggestion}`;
     return normalized.trim();
   };
 
-  // Save workout to planner
+  // Save workout to planner. Honors optional `date` (backdate) and `completed` fields on workoutData.
   const saveWorkoutToPlanner = (workoutData: Record<string, unknown>) => {
     if (!onUpdateOperator) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateStr();
+    const targetDate = isValidDateStr(workoutData.date) ? (workoutData.date as string) : today;
+    const completedFlag = workoutData.completed === true;
     const updatedOp = { ...operator };
 
     const blocks = ((workoutData.blocks as Array<Record<string, unknown>>) || []).map((block, i) => {
@@ -1224,15 +1233,15 @@ ${mealSuggestion}`;
 
     updatedOp.workouts = {
       ...updatedOp.workouts,
-      [today]: {
+      [targetDate]: {
         id: `wk-ai-${Date.now()}`,
-        date: today,
+        date: targetDate,
         title: (workoutData.title as string) || 'AI Generated Workout',
         notes: normalizeDescription((workoutData.notes as string) || ''),
         warmup: normalizeDescription((workoutData.warmup as string) || ''),
         blocks,
         cooldown: normalizeDescription((workoutData.cooldown as string) || ''),
-        completed: false,
+        completed: completedFlag,
       },
     };
 
@@ -1319,7 +1328,7 @@ ${mealSuggestion}`;
       // SURGICAL MODIFICATION — apply targeted change to today's active workout
       let wasModification = false;
       if (apiResult?.workoutModification && onUpdateOperator) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateStr();
         const current = operator.workouts?.[today];
         if (current) {
           try {
@@ -1349,7 +1358,11 @@ ${mealSuggestion}`;
           typeof m.carbs === 'number' && !isNaN(m.carbs) &&
           typeof m.fat === 'number' && !isNaN(m.fat);
         if (macrosOk) {
-          const today = new Date().toISOString().split('T')[0];
+          const today = getLocalDateStr();
+          const targetDate = isValidDateStr(m.date) ? m.date : today;
+          const time = targetDate === today
+            ? new Date().toISOString()
+            : new Date(`${targetDate}T12:00:00`).toISOString();
           const meal: Meal = {
             id: `meal-${Date.now()}`,
             name: m.name || 'Logged meal',
@@ -1357,13 +1370,13 @@ ${mealSuggestion}`;
             protein: Math.round(m.protein),
             carbs: Math.round(m.carbs),
             fat: Math.round(m.fat),
-            time: new Date().toISOString(),
+            time,
           };
           const updatedOp = { ...operator };
           if (!updatedOp.nutrition) updatedOp.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
           if (!updatedOp.nutrition.meals) updatedOp.nutrition.meals = {};
-          if (!updatedOp.nutrition.meals[today]) updatedOp.nutrition.meals[today] = [];
-          updatedOp.nutrition.meals[today] = [...updatedOp.nutrition.meals[today], meal];
+          if (!updatedOp.nutrition.meals[targetDate]) updatedOp.nutrition.meals[targetDate] = [];
+          updatedOp.nutrition.meals[targetDate] = [...updatedOp.nutrition.meals[targetDate], meal];
           onUpdateOperator(updatedOp);
           mealLogged = true;
         }
@@ -1408,7 +1421,7 @@ ${mealSuggestion}`;
 
       let wasModification = false;
       if (apiResult?.workoutModification && onUpdateOperator) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateStr();
         const current = operator.workouts?.[today];
         if (current) {
           try {

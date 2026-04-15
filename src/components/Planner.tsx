@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
 import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
+import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import { VoiceCommand } from '@/components/VoiceInput';
@@ -313,7 +314,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // Handle voice commands during workout mode
   const handleVoiceCommand = useCallback((command: VoiceCommand) => {
     if (!workoutMode) return;
-    const dateStr = selectedDate || new Date().toISOString().split('T')[0];
+    const dateStr = selectedDate || getLocalDateStr();
     const workout = operator.workouts?.[dateStr];
     if (!workout) return;
 
@@ -434,7 +435,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       onWorkoutModeChange({ active: false, workoutTitle: '', exercises: [] });
       return;
     }
-    const dateStr = selectedDate || new Date().toISOString().split('T')[0];
+    const dateStr = selectedDate || getLocalDateStr();
     const workout = operator.workouts?.[dateStr];
     if (!workout) return;
     const exercises = (workout.blocks || [])

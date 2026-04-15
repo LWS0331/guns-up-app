@@ -222,6 +222,9 @@ export default function TacticalRadio({ operator }: TacticalRadioProps) {
             tier: operator.tier || 'standard',
             mode: 'radio',
             screenContext: 'Operator is on the Tactical Radio comms screen. Using push-to-talk voice interface. Keep responses SHORT — 2-3 sentences max. Radio brevity.',
+            clientDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })(),
+            clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+            clientTimezone: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { return null; } })(),
           }),
         });
 
