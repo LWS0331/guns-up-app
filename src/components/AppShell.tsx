@@ -810,6 +810,29 @@ const AppShell: React.FC<AppShellProps> = ({
         setGunnyMessages(prev => [...prev, gunnyReply]);
         speakGunny(replyText);
 
+        // DIRECT MEAL LOG — Gunny emitted <meal_json>; persist to nutrition.meals[today]
+        if (data.mealData && typeof data.mealData === 'object') {
+          const m = data.mealData as { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number };
+          if (typeof m.calories === 'number' && typeof m.protein === 'number' && typeof m.carbs === 'number' && typeof m.fat === 'number') {
+            const today = new Date().toISOString().split('T')[0];
+            const meal = {
+              id: `meal-${Date.now()}`,
+              name: m.name || 'Logged meal',
+              calories: Math.round(m.calories),
+              protein: Math.round(m.protein),
+              carbs: Math.round(m.carbs),
+              fat: Math.round(m.fat),
+              time: new Date().toISOString(),
+            };
+            const updated = { ...currentSelectedOp };
+            if (!updated.nutrition) updated.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+            if (!updated.nutrition.meals) updated.nutrition.meals = {};
+            const prevToday = updated.nutrition.meals[today] || [];
+            updated.nutrition.meals = { ...updated.nutrition.meals, [today]: [...prevToday, meal] };
+            onUpdateOperator(updated);
+          }
+        }
+
         // SURGICAL MODIFICATION — apply targeted change to today's workout (preserves logged results)
         if (data.workoutModification) {
           const today = new Date().toISOString().split('T')[0];
@@ -931,6 +954,29 @@ const AppShell: React.FC<AppShellProps> = ({
             // Show response on workout screen + speak it
             showGunnyVoiceResponse(replyText);
             speakGunny(replyText);
+
+            // DIRECT MEAL LOG via voice — Gunny emitted <meal_json>
+            if (data.mealData && typeof data.mealData === 'object') {
+              const m = data.mealData as { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number };
+              if (typeof m.calories === 'number' && typeof m.protein === 'number' && typeof m.carbs === 'number' && typeof m.fat === 'number') {
+                const today = new Date().toISOString().split('T')[0];
+                const meal = {
+                  id: `meal-${Date.now()}`,
+                  name: m.name || 'Logged meal',
+                  calories: Math.round(m.calories),
+                  protein: Math.round(m.protein),
+                  carbs: Math.round(m.carbs),
+                  fat: Math.round(m.fat),
+                  time: new Date().toISOString(),
+                };
+                const updated = { ...currentSelectedOp };
+                if (!updated.nutrition) updated.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+                if (!updated.nutrition.meals) updated.nutrition.meals = {};
+                const prevToday = updated.nutrition.meals[today] || [];
+                updated.nutrition.meals = { ...updated.nutrition.meals, [today]: [...prevToday, meal] };
+                onUpdateOperator(updated);
+              }
+            }
 
             if (data.workoutModification) {
               const today = new Date().toISOString().split('T')[0];

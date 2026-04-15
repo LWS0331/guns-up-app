@@ -282,6 +282,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const fallbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string }>>({});
 
+  // Mission Complete overlay — shown after COMPLETE WORKOUT, before returning to day view
+  const [showCompletionScreen, setShowCompletionScreen] = useState(false);
+  const [completionData, setCompletionData] = useState<{
+    title: string;
+    duration: number;       // minutes
+    exerciseCount: number;
+    totalVolume: number;    // lbs
+    completionRate: number; // 0-100
+    gunnyMessage: string;
+  } | null>(null);
+
   // Voice command state
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<GunnyVoice>('onyx');
@@ -1423,9 +1434,97 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       const updated = { ...operator };
       updated.workouts[dateStr] = { ...workout, results: savedResults, completed: true };
       onUpdateOperator(updated);
-      setWorkoutMode(false);
-      /* activeListening removed — use Radio tab */
-      setWorkoutResults({});
+
+      // ─── MISSION COMPLETE stats ──────────────────────────────────────────
+      const startTimeStr = workout.results?.startTime || savedResults.startTime;
+      const startTime = new Date(startTimeStr);
+      const durationMin = Math.max(
+        1,
+        Math.round((Date.now() - startTime.getTime()) / 60000)
+      );
+
+      let totalVolume = 0;
+      let completedSets = 0;
+      let totalSets = 0;
+      Object.values(results).forEach((block) => {
+        block.sets.forEach((s) => {
+          totalSets++;
+          if (s.completed) {
+            completedSets++;
+            totalVolume += (s.weight || 0) * (s.reps || 0);
+          }
+        });
+      });
+      const exerciseCount = workout.blocks.filter(
+        (b) => b.type === 'exercise'
+      ).length;
+      const completionRate = totalSets > 0
+        ? Math.round((completedSets / totalSets) * 100)
+        : 0;
+
+      const callsign = operator.callsign || 'Operator';
+      const volumeStr = totalVolume.toLocaleString();
+      const gunnyLines = {
+        perfect: [
+          `100% completion. That's what DISCIPLINE looks like, ${callsign}. Zero excuses. Zero shortcuts. Every rep accounted for.`,
+          `FLAWLESS EXECUTION, ${callsign}. ${volumeStr} lbs moved. That iron didn't stand a chance.`,
+          `${callsign} — every set, every rep, every pound. THAT is the standard. Maintain it.`,
+        ],
+        good: [
+          `${completionRate}% completion — solid session, ${callsign}. ${volumeStr} lbs of total volume. Recover hard, come back harder.`,
+          `Good work out there, ${callsign}. Not perfect, but you showed up and put in work. That counts.`,
+          `Real talk, ${callsign}: ${completionRate}% of the plan executed, ${volumeStr} lbs moved in ${durationMin} minutes. That's a win. Log the food, hydrate, sleep.`,
+        ],
+        partial: [
+          `${completionRate}% today, ${callsign}. Some days the weight wins. What matters is you were HERE. Rest up and attack it next session.`,
+          `Listen up, ${callsign} — a bad day in the gym beats a good day on the couch. ${durationMin} minutes of work is ${durationMin} minutes of growth. We go again.`,
+          `${callsign}, the scoreboard doesn't always reflect the fight. You showed up. Recover, reassess, redeploy.`,
+        ],
+      } as const;
+      const tier: 'perfect' | 'good' | 'partial' =
+        completionRate >= 100 ? 'perfect'
+        : completionRate >= 70 ? 'good'
+        : 'partial';
+      const lines = gunnyLines[tier];
+      const gunnyMessage = lines[Math.floor(Math.random() * lines.length)];
+
+      setCompletionData({
+        title: workout.title,
+        duration: durationMin,
+        exerciseCount,
+        totalVolume,
+        completionRate,
+        gunnyMessage,
+      });
+      setShowCompletionScreen(true);
+
+      // Ascending victory chord
+      try {
+        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctx) {
+          const ctx = new Ctx();
+          [440, 554, 659, 880].forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + i * 0.15 + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.35);
+            osc.start(ctx.currentTime + i * 0.15);
+            osc.stop(ctx.currentTime + i * 0.15 + 0.4);
+          });
+        }
+      } catch { /* audio unavailable — silent fallback */ }
+
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        try { navigator.vibrate([100, 50, 100, 50, 200]); } catch { /* noop */ }
+      }
+
+      // setWorkoutMode(false) + setWorkoutResults({}) are deferred to the
+      // DEBRIEF COMPLETE button in the overlay — so stats/volume math above
+      // still has access to the in-memory results.
     };
 
     // Smart weight logic: if user enters weight for first set, auto-fill rest
@@ -2084,6 +2183,126 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           }}
           onLocalCommand={(cmd) => handleVoiceCommand(cmd)}
         />
+
+        {/* ═══ MISSION COMPLETE overlay — shown after COMPLETE WORKOUT ═══ */}
+        {showCompletionScreen && completionData && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              background: 'rgba(0,0,0,0.95)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 24,
+              textAlign: 'center',
+              animation: 'fadeInScale 0.35s ease',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: 30,
+                fontWeight: 900,
+                color: '#00ff41',
+                letterSpacing: 4,
+                marginBottom: 8,
+                textShadow: '0 0 20px rgba(0,255,65,0.5)',
+              }}
+            >
+              MISSION COMPLETE
+            </div>
+            <div
+              style={{
+                fontFamily: 'Chakra Petch, sans-serif',
+                fontSize: 16,
+                color: '#FF8C00',
+                marginBottom: 28,
+                maxWidth: 360,
+              }}
+            >
+              {completionData.title}
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 12,
+                width: '100%',
+                maxWidth: 340,
+                marginBottom: 28,
+              }}
+            >
+              {[
+                { label: 'DURATION', value: `${completionData.duration} MIN`, color: '#00ff41' },
+                { label: 'EXERCISES', value: String(completionData.exerciseCount), color: '#00ff41' },
+                { label: 'VOLUME', value: `${completionData.totalVolume.toLocaleString()} LBS`, color: '#FFB800' },
+                { label: 'COMPLETION', value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  style={{
+                    background: '#111',
+                    border: '1px solid #222',
+                    borderRadius: 8,
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#666', letterSpacing: 1, marginBottom: 4 }}>{stat.label}</div>
+                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 20, fontWeight: 700, color: stat.color }}>{stat.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                maxWidth: 400,
+                width: '100%',
+                padding: '14px 18px',
+                background: 'rgba(255,140,0,0.05)',
+                border: '1px solid rgba(255,140,0,0.2)',
+                borderLeft: '3px solid #FF8C00',
+                borderRadius: 4,
+                marginBottom: 28,
+                fontFamily: 'Share Tech Mono, monospace',
+                fontSize: 13,
+                color: '#ccc',
+                lineHeight: 1.6,
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>GUNNY SAYS</div>
+              {completionData.gunnyMessage}
+            </div>
+
+            <button
+              onClick={() => {
+                setShowCompletionScreen(false);
+                setCompletionData(null);
+                setWorkoutMode(false);
+                setWorkoutResults({});
+              }}
+              style={{
+                padding: '14px 40px',
+                background: '#00ff41',
+                color: '#000',
+                border: 'none',
+                borderRadius: 4,
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: 14,
+                fontWeight: 700,
+                letterSpacing: 1,
+                cursor: 'pointer',
+              }}
+            >
+              DEBRIEF COMPLETE
+            </button>
+          </div>
+        )}
       </div>
     );
   };

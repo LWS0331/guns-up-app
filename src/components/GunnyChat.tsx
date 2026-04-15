@@ -122,6 +122,7 @@ const FOOD_DATABASE: Record<string, { calories: number; protein: number; carbs: 
   'candy': { calories: 150, protein: 0, carbs: 40, fat: 0 },
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept as offline fallback; active path now uses <meal_json> from Gunny API
 const estimateMacros = (foodDescription: string): {
   name: string;
   portion: string;
@@ -865,67 +866,12 @@ Total: ${clients.length} active clients`;
       return { response: "No injuries on the books, champ. You're clean. Keep that body healthy." };
     }
 
-    // Food logging - "i ate", "i had", "just ate", "log food", etc
-    if (lower.includes('i ate') || lower.includes('i had') || lower.includes('just ate') ||
-        lower.includes('log food') || lower.includes('track meal') || lower.includes('had a') ||
-        lower.includes('eaten')) {
-      const estimatedMeal = estimateMacros(userMessage);
-      if (estimatedMeal && onUpdateOperator) {
-        const today = new Date().toISOString().split('T')[0];
-        const updatedOp = { ...operator };
-
-        // Initialize meals for today if not exists
-        if (!updatedOp.nutrition.meals[today]) {
-          updatedOp.nutrition.meals[today] = [];
-        }
-
-        // Create meal object
-        const meal: Meal = {
-          id: `meal-${Date.now()}`,
-          name: estimatedMeal.name,
-          calories: estimatedMeal.calories,
-          protein: estimatedMeal.protein,
-          carbs: estimatedMeal.carbs,
-          fat: estimatedMeal.fat,
-          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        };
-
-        updatedOp.nutrition.meals[today].push(meal);
-        onUpdateOperator(updatedOp);
-
-        // Calculate daily totals
-        const todayMeals = updatedOp.nutrition.meals[today];
-        const totalCalories = todayMeals.reduce((sum, m) => sum + m.calories, 0);
-        const totalProtein = todayMeals.reduce((sum, m) => sum + m.protein, 0);
-        const targetCalories = updatedOp.nutrition.targets?.calories || 2500;
-        const targetProtein = updatedOp.nutrition.targets?.protein || 150;
-
-        const response = `MACRO INTEL — FOOD LOGGED
-━━━━━━━━━━━━━━━━━━
-${estimatedMeal.name} — ${estimatedMeal.portion}
-Calories: ~${estimatedMeal.calories} | Protein: ~${estimatedMeal.protein}g | Carbs: ~${estimatedMeal.carbs}g | Fat: ~${estimatedMeal.fat}g
-
-DAILY RUNNING TOTAL:
-Calories: ${totalCalories}/${targetCalories} | Protein: ${totalProtein}g/${targetProtein}g
-
-⚠ ${estimatedMeal.confidence}`;
-
-        return { response, updatedOperator: updatedOp };
-      }
-
-      // Fallback if no food matched
-      const nutrition = operator.nutrition;
-      const today = new Date().toISOString().split('T')[0];
-      const todayMeals = nutrition?.meals?.[today] || [];
-      const currentCalories = todayMeals.reduce((sum: number, m: { calories?: number }) => sum + (m.calories || 0), 0);
-      const targetCalories = nutrition?.targets?.calories || 2500;
-      const currentProtein = todayMeals.reduce((sum: number, m: { protein?: number }) => sum + (m.protein || 0), 0);
-      const targetProtein = nutrition?.targets?.protein || 150;
-      const rec = currentCalories < targetCalories * 0.85 ? 'UNDER. Fuel up before training.'
-        : currentCalories > targetCalories * 1.15 ? 'OVER. Tighten it up.'
-        : 'Tracking solid. Discipline.';
-      return { response: `NUTRITION STATUS:\nCalories: ${currentCalories}/${targetCalories} | Protein: ${currentProtein}g/${targetProtein}g\n\n${rec}` };
-    }
+    // Food logging — the crude estimateMacros() fallback used to intercept
+    // "i ate / i had / just ate / had a / log food / track meal / eaten"
+    // messages here. It's been removed so ALL food messages reach the Gunny
+    // API, which does far better analysis AND writes via <meal_json>.
+    // (Follow-ups like "add it to my meal log" now also reach the AI and
+    // succeed, instead of being told "I can't write to your meal log".)
 
     // Macro recommendations
     if (lower.includes('macro recommendation') || lower.includes('what should i eat') ||
@@ -1073,7 +1019,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; profileData?: Record<string, unknown> } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number } } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1226,7 +1172,7 @@ ${mealSuggestion}`;
         const errMsg = data?.error || 'Gunny AI temporarily offline.';
         return { response: errMsg };
       }
-      return { response: data.response, workoutData: data.workoutData, workoutModification: data.workoutModification, profileData: data.profileData };
+      return { response: data.response, workoutData: data.workoutData, workoutModification: data.workoutModification, profileData: data.profileData, mealData: data.mealData };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
     }
@@ -1393,12 +1339,43 @@ ${mealSuggestion}`;
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
 
+      // MEAL LOGGING — Gunny emitted <meal_json>; write straight to operator
+      let mealLogged = false;
+      if (apiResult?.mealData && onUpdateOperator) {
+        const m = apiResult.mealData;
+        const macrosOk =
+          typeof m.calories === 'number' && !isNaN(m.calories) &&
+          typeof m.protein === 'number' && !isNaN(m.protein) &&
+          typeof m.carbs === 'number' && !isNaN(m.carbs) &&
+          typeof m.fat === 'number' && !isNaN(m.fat);
+        if (macrosOk) {
+          const today = new Date().toISOString().split('T')[0];
+          const meal: Meal = {
+            id: `meal-${Date.now()}`,
+            name: m.name || 'Logged meal',
+            calories: Math.round(m.calories),
+            protein: Math.round(m.protein),
+            carbs: Math.round(m.carbs),
+            fat: Math.round(m.fat),
+            time: new Date().toISOString(),
+          };
+          const updatedOp = { ...operator };
+          if (!updatedOp.nutrition) updatedOp.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+          if (!updatedOp.nutrition.meals) updatedOp.nutrition.meals = {};
+          if (!updatedOp.nutrition.meals[today]) updatedOp.nutrition.meals[today] = [];
+          updatedOp.nutrition.meals[today] = [...updatedOp.nutrition.meals[today], meal];
+          onUpdateOperator(updatedOp);
+          mealLogged = true;
+        }
+      }
+
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
       const gunnyResponse: Message = {
         id: 'gunny-' + Date.now(), role: 'gunny',
         text: responseText
           + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
-          + (wasModification ? '\n\n[WORKOUT UPDATED]' : ''),
+          + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
+          + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : ''),
         timestamp: new Date(), isWorkout: hasWorkout,
       };
       setIsTyping(false);

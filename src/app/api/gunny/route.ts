@@ -269,6 +269,35 @@ Use <workout_json> ONLY when building a COMPLETE NEW workout from scratch (e.g. 
 
 If the operator asks to swap an exercise they have ALREADY completed (all sets logged), acknowledge it is already done and offer to swap it for the next session instead.
 
+MEAL LOGGING PROTOCOL (CRITICAL):
+You CAN write meals directly to the operator's nutrition log. Do NOT say "I can't write to your meal log" — you CAN, via <meal_json>.
+
+When the operator describes food they ate OR asks you to log/add a meal:
+1. Analyze the food and calculate total calories, protein, carbs, fat
+2. Show the breakdown in your conversational response (human-readable)
+3. Include a <meal_json> block at the END of your response so the app saves it automatically
+
+ALWAYS emit <meal_json> when the operator says:
+- "I ate …", "I had …", "just ate …", "had a …", "eaten …"
+- "log this", "log it", "add it to my meal log", "track this meal", "save this meal", "add this to my nutrition"
+- Describes food and asks for an analysis (emit it proactively — the user can ignore it if they didn't want it saved)
+
+If the operator asked you to ADD a meal you JUST analyzed in the previous turn, re-emit the same macros in <meal_json> — do not recalculate from scratch if you already have the numbers.
+
+Format:
+
+<meal_json>
+{
+  "name": "Triple Threat Deli Sandwich",
+  "calories": 835,
+  "protein": 68,
+  "carbs": 53,
+  "fat": 36
+}
+</meal_json>
+
+Fields are all required and must be numeric (no units inside the numbers — no "g", no "cal"). "name" is a short human label. The app auto-stamps the timestamp on the client side.
+
 Modification format (pick ONE type):
 
 <workout_modification>
@@ -525,6 +554,28 @@ Format:
 Types: swap_exercise | add_block (with afterExerciseName + newBlock) | remove_block | update_prescription.
 
 If the operator asks to swap an exercise they have already fully completed, acknowledge it's done and offer to swap it for next session instead.
+
+MEAL LOGGING PROTOCOL (CRITICAL):
+You CAN write meals directly to the operator's nutrition log. NEVER say "I can't write to your meal log" — you CAN, via <meal_json>.
+
+When the operator describes food they ate OR asks to log/add a meal:
+1. Analyze and calculate total calories, protein (g), carbs (g), fat (g)
+2. Show the breakdown conversationally
+3. Emit <meal_json> so the app saves it
+
+Triggers — ALWAYS include <meal_json>:
+- "I ate …", "I had …", "just ate …", "had a …"
+- "log this", "log it", "add it to my meal log", "track this meal", "save this meal"
+- Describes food and asks for analysis (emit proactively)
+
+If the operator asks to log a meal you ANALYZED IN THE PREVIOUS TURN, re-emit the same macros — do not recalculate.
+
+Format:
+<meal_json>
+{ "name": "Triple Threat Deli Sandwich", "calories": 835, "protein": 68, "carbs": 53, "fat": 36 }
+</meal_json>
+
+All four macro fields are required and numeric (no units embedded — no "g", no "cal"). The client stamps the timestamp.
 
 POST-WORKOUT ANALYSIS:
 If the operator asks "how did I do" or "analyze my workout" and the context block contains COMPLETED WORKOUT ANALYSIS data, give a specific, number-grounded SITREP: volume, completion %, PRs, compare to last similar session. Never give generic "great job" responses.
@@ -933,11 +984,24 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       }
     }
 
+    // Extract meal JSON if present (direct meal logging — client writes to
+    // operator.nutrition.meals[today]).
+    let mealData = null;
+    const mealMatch = responseText.match(/<meal_json>([\s\S]*?)<\/meal_json>/);
+    if (mealMatch) {
+      try {
+        mealData = JSON.parse(mealMatch[1].trim());
+      } catch (e) {
+        console.error('Invalid meal_json JSON:', e, mealMatch[1]);
+      }
+    }
+
     // Clean the response text (remove JSON blocks from display)
     const cleanResponse = responseText
       .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
       .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
       .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
+      .replace(/<meal_json>[\s\S]*?<\/meal_json>/, '')
       .trim();
 
     return NextResponse.json({
@@ -945,6 +1009,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       workoutData,
       workoutModification,
       profileData,
+      mealData,
       model: finalModel,
       usage: {
         input_tokens: response.usage.input_tokens,

@@ -447,11 +447,21 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     }));
   };
 
-  // Calculate today's meal totals
+  // Calculate today's meal totals.
+  //
+  // state.nutrition.mealLogs is already sourced from operator.nutrition.meals[todayStr]
+  // (see getTodayMeals()) so every entry here is structurally "today". The previous
+  // new Date(meal.time).toDateString() check silently dropped every meal whose `time`
+  // was stored as a bare time string ("11:00 AM", "11:00") — i.e. everything logged
+  // via GunnyChat, Quick Food, Photo, and USDA paths. We now keep all entries from the
+  // date-keyed bucket and only filter out meals whose full ISO timestamp demonstrably
+  // belongs to a different day.
+  const todayStr = getTodayStr();
   const todaysMeals = state.nutrition.mealLogs.filter((meal) => {
-    const mealDate = new Date(meal.time).toDateString();
-    const today = new Date().toDateString();
-    return mealDate === today;
+    if (!meal?.time) return true;
+    const parsed = new Date(meal.time);
+    if (isNaN(parsed.getTime())) return true; // legacy time-only string — still today
+    return parsed.toISOString().split('T')[0] === todayStr;
   });
 
   const mealTotals = todaysMeals.reduce(
@@ -1137,7 +1147,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       protein: quickFoodResult.protein,
       carbs: quickFoodResult.carbs,
       fat: quickFoodResult.fat,
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: new Date().toISOString(),
     };
     const todayStr = getTodayStr();
     const updatedMeals = [...(operator.nutrition?.meals?.[todayStr] || []), newMeal];
@@ -1208,7 +1218,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       protein: photoResult.totals.protein,
       carbs: photoResult.totals.carbs,
       fat: photoResult.totals.fat,
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: new Date().toISOString(),
     };
     const todayStr = getTodayStr();
     const updatedMeals = [...(operator.nutrition?.meals?.[todayStr] || []), newMeal];
@@ -1254,7 +1264,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       protein: food.macros.protein,
       carbs: food.macros.carbs,
       fat: food.macros.fat,
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: new Date().toISOString(),
     };
     const todayStr = getTodayStr();
     const updatedMeals = [...(operator.nutrition?.meals?.[todayStr] || []), newMeal];
@@ -2101,10 +2111,18 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                     fontSize: '15px',
                   }}
                 >
-                  {new Date(meal.time).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {(() => {
+                    const d = new Date(meal.time);
+                    if (!isNaN(d.getTime())) {
+                      return d.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      });
+                    }
+                    // Legacy bare time string ("11:00 AM" / "11:00") — show raw.
+                    return meal.time;
+                  })()}
                 </div>
                 <button
                   onClick={() => removeMeal(meal.id)}
