@@ -20,6 +20,7 @@ import IntakeForm from '@/components/IntakeForm';
 import SitrepView from '@/components/SitrepView';
 import TacticalRadio from '@/components/TacticalRadio';
 import { speak as gunnySpeak } from '@/lib/tts';
+import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import DailyBriefComponent from '@/components/DailyBrief';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
@@ -220,6 +221,7 @@ const AppShell: React.FC<AppShellProps> = ({
   const [gunnyMessages, setGunnyMessages] = useState<ChatMessage[]>([]);
   const [gunnyInput, setGunnyInput] = useState('');
   const [gunnyLoading, setGunnyLoading] = useState(false);
+  const [gunnyThinkingAt, setGunnyThinkingAt] = useState<number | null>(null);
   const [gunnyGreeted, setGunnyGreeted] = useState(false);
   const [gunnyTtsEnabled, setGunnyTtsEnabled] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -363,7 +365,7 @@ const AppShell: React.FC<AppShellProps> = ({
   // Auto-scroll messages to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [gunnyMessages]);
+  }, [gunnyMessages, gunnyLoading]);
 
   // Load saved panel chat or generate greeting when panel opens
   useEffect(() => {
@@ -767,7 +769,7 @@ const AppShell: React.FC<AppShellProps> = ({
     });
   };
 
-  // Send message to Gunny API (side panel — context-aware mode)
+  // Send message to Gunny API (side panel — context-aware mode, SSE streaming)
   const sendGunnyMessage = async () => {
     if (!gunnyInput.trim()) return;
 
@@ -777,9 +779,10 @@ const AppShell: React.FC<AppShellProps> = ({
       timestamp: Date.now(),
     };
 
-    setGunnyMessages(prev => [...prev, userMessage]);
+    const placeholderId = 'gunny-panel-' + Date.now();
+    setGunnyMessages(prev => [...prev, userMessage, { role: 'gunny' as const, text: '', timestamp: Date.now(), _placeholderId: placeholderId } as ChatMessage & { _placeholderId: string }]);
     setGunnyInput('');
-    setGunnyLoading(true);
+    setGunnyLoading(true); setGunnyThinkingAt(Date.now());
 
     try {
       // Build trainer dataset for sidebar assistant
@@ -792,9 +795,13 @@ const AppShell: React.FC<AppShellProps> = ({
         trainerNotes: selectedOperator.trainerNotes,
       } : null;
 
-      const response = await fetch('/api/gunny', {
+      const res = await fetch('/api/gunny', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}`,
+          'Accept': 'text/event-stream',
+        },
         body: JSON.stringify({
           messages: [...gunnyMessages, userMessage],
           operatorContext: buildOperatorContext(),
@@ -808,133 +815,211 @@ const AppShell: React.FC<AppShellProps> = ({
         }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        // Use the specific error message from the API
-        const errMsg = data?.error || 'Gunny AI temporarily offline.';
-        setGunnyMessages(prev => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg?.role === 'gunny' && lastMsg.text === errMsg) return prev;
-          return [...prev, { role: 'gunny' as const, text: errMsg, timestamp: Date.now() }];
-        });
-      } else {
-        const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
-        const gunnyReply: ChatMessage = {
-          role: 'gunny',
-          text: replyText,
-          timestamp: Date.now(),
-        };
-        setGunnyMessages(prev => [...prev, gunnyReply]);
-        speakGunny(replyText);
-
-        // DIRECT MEAL LOG — Gunny emitted <meal_json>; persist to nutrition.meals[date].
-        // Gunny can pass an optional "date" (YYYY-MM-DD local) to backdate — e.g. "log this for yesterday".
-        if (data.mealData && typeof data.mealData === 'object') {
-          const m = data.mealData as { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; date?: string };
-          if (typeof m.calories === 'number' && typeof m.protein === 'number' && typeof m.carbs === 'number' && typeof m.fat === 'number') {
-            const today = getLocalDateStr();
-            const targetDate = isValidDateStr(m.date) ? m.date : today;
-            // If backdating, anchor the timestamp to noon of that date (local) so the
-            // display time is sane and the meal reliably sorts into the correct bucket.
-            const time = targetDate === today
-              ? new Date().toISOString()
-              : new Date(`${targetDate}T12:00:00`).toISOString();
-            const meal = {
-              id: `meal-${Date.now()}`,
-              name: m.name || 'Logged meal',
-              calories: Math.round(m.calories),
-              protein: Math.round(m.protein),
-              carbs: Math.round(m.carbs),
-              fat: Math.round(m.fat),
-              time,
-            };
-            // Deep-clone the nutrition chain to avoid mutating the live operator reference
-            const existingNutrition = currentSelectedOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
-            const existingMeals = existingNutrition.meals || {};
-            const prevBucket = existingMeals[targetDate] || [];
-            const updated = {
-              ...currentSelectedOp,
-              nutrition: {
-                ...existingNutrition,
-                meals: { ...existingMeals, [targetDate]: [...prevBucket, meal] },
-              },
-            };
-            onUpdateOperator(updated);
-          }
+      // Graceful fallback: server returned JSON (error path or old deployment)
+      const ctype = res.headers.get('content-type') || '';
+      if (!ctype.includes('text/event-stream')) {
+        const data = await res.json();
+        if (!res.ok) {
+          const errMsg = data?.error || 'Gunny AI temporarily offline.';
+          setGunnyMessages(prev => prev.map(m =>
+            (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
+              ? { ...m, text: errMsg } : m
+          ));
+        } else {
+          const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
+          setGunnyMessages(prev => prev.map(m =>
+            (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
+              ? { ...m, text: replyText } : m
+          ));
+          speakGunny(replyText);
+          // Handle meal/workout data from JSON fallback
+          if (data.mealData) handlePanelMealData(data.mealData);
+          if (data.workoutModification) handlePanelWorkoutMod(data.workoutModification);
+          else if (data.workoutData) handlePanelWorkoutData(data.workoutData);
         }
+        return;
+      }
 
-        // SURGICAL MODIFICATION — apply targeted change to today's workout (preserves logged results)
-        if (data.workoutModification) {
-          const today = getLocalDateStr();
-          const current = currentSelectedOp.workouts?.[today];
-          if (current) {
-            try {
-              const modified = applyWorkoutModification(current, data.workoutModification as WorkoutModification);
-              const updated = { ...currentSelectedOp };
-              updated.workouts = { ...updated.workouts, [today]: modified };
-              onUpdateOperator(updated);
-            } catch (e) {
-              console.error('applyWorkoutModification failed:', e);
-            }
-          } else {
-            console.warn('workout_modification returned but no active workout for today');
+      // Streaming path — parse SSE manually
+      if (!res.body) {
+        setGunnyMessages(prev => prev.map(m =>
+          (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
+            ? { ...m, text: `⚠ Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
+        ));
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accumulated = '';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let finalPayload: any = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const raw of events) {
+          if (!raw.trim()) continue;
+          const lines = raw.split('\n');
+          let eventType = 'message';
+          let dataStr = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+            else if (line.startsWith('data: ')) dataStr = line.slice(6);
           }
-        } else if (data.workoutData) {
-          // Gunny Assist built a workout. Honors optional "date" (backdate) and "completed" flags.
-          const today = getLocalDateStr();
-          const wd = data.workoutData as Record<string, unknown>;
-          const targetDate = isValidDateStr(wd.date) ? (wd.date as string) : today;
-          const completedFlag = wd.completed === true;
-          const workout: Workout = {
-            id: `workout-assist-${Date.now()}`,
-            date: targetDate,
-            title: (wd.title as string) || 'Gunny Assist Workout',
-            notes: (wd.notes as string) || '',
-            warmup: (wd.warmup as string) || '',
-            blocks: ((wd.blocks as Array<Record<string, unknown>>) || []).map((b: Record<string, unknown>, i: number) => {
-              const blockType = (b.type as string) === 'conditioning' ? 'conditioning' : 'exercise';
-              if (blockType === 'conditioning') {
-                return {
-                  type: 'conditioning' as const,
-                  id: `block-assist-${i}`,
-                  sortOrder: i,
-                  format: (b.format as string) || '',
-                  description: (b.description as string) || '',
-                  isLinkedToNext: false,
-                };
+          if (!dataStr) continue;
+          try {
+            const payload = JSON.parse(dataStr);
+            if (eventType === 'delta' && payload.text) {
+              accumulated += payload.text;
+              const visible = accumulated
+                .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
+                .replace(/<workout_json>[\s\S]*$/, '')
+                .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+                .replace(/<workout_modification>[\s\S]*$/, '')
+                .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
+                .replace(/<profile_json>[\s\S]*$/, '')
+                .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+                .replace(/<meal_json>[\s\S]*$/, '');
+              // Hide thinking indicator once we have content
+              if (visible.length > 0) {
+                setGunnyLoading(false);
+                setGunnyThinkingAt(null);
               }
-              return {
-                type: 'exercise' as const,
-                id: `block-assist-${i}`,
-                sortOrder: i,
-                exerciseName: (b.exerciseName as string) || '',
-                prescription: (b.prescription as string) || '',
-                isLinkedToNext: false,
-                ...(b.videoUrl ? { videoUrl: b.videoUrl as string } : {}),
-              };
-            }),
-            cooldown: (wd.cooldown as string) || '',
-            completed: completedFlag,
-          };
-          const updated = { ...currentSelectedOp };
-          updated.workouts = { ...updated.workouts, [targetDate]: workout };
-          onUpdateOperator(updated);
+              setGunnyMessages(prev => prev.map(m =>
+                (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
+                  ? { ...m, text: visible } : m
+              ));
+            } else if (eventType === 'final') {
+              finalPayload = payload;
+            } else if (eventType === 'error') {
+              setGunnyMessages(prev => prev.map(m =>
+                (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
+                  ? { ...m, text: `⚠ Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
+              ));
+              return;
+            }
+          } catch { /* malformed SSE record */ }
         }
       }
+
+      if (finalPayload) {
+        setGunnyMessages(prev => prev.map(m =>
+          (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
+            ? { ...m, text: finalPayload.cleanText } : m
+        ));
+        speakGunny(finalPayload.cleanText);
+        if (finalPayload.mealData) handlePanelMealData(finalPayload.mealData);
+        if (finalPayload.workoutModification) handlePanelWorkoutMod(finalPayload.workoutModification);
+        else if (finalPayload.workoutData) handlePanelWorkoutData(finalPayload.workoutData);
+      } else if (!accumulated) {
+        setGunnyMessages(prev => prev.map(m =>
+          (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
+            ? { ...m, text: `⚠ Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
+        ));
+      }
     } catch (error) {
-      setGunnyMessages(prev => {
-        const lastMsg = prev[prev.length - 1];
-        if (lastMsg?.role === 'gunny' && lastMsg.text.includes('connection')) return prev;
-        return [...prev, {
-          role: 'gunny' as const,
-          text: `Network error, ${selectedOperator.callsign}. Check your internet connection.`,
-          timestamp: Date.now(),
-        }];
-      });
+      setGunnyMessages(prev => prev.map(m =>
+        (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
+          ? { ...m, text: `Network error, ${selectedOperator.callsign}. Check your internet connection.` } : m
+      ));
     } finally {
-      setGunnyLoading(false);
+      setGunnyLoading(false); setGunnyThinkingAt(null);
     }
+  };
+
+  // Helper: handle meal data from streaming final payload
+  const handlePanelMealData = (mealData: unknown) => {
+    if (!mealData || typeof mealData !== 'object') return;
+    const m = mealData as { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; date?: string };
+    if (typeof m.calories === 'number' && typeof m.protein === 'number' && typeof m.carbs === 'number' && typeof m.fat === 'number') {
+      const today = getLocalDateStr();
+      const targetDate = isValidDateStr(m.date) ? m.date : today;
+      const time = targetDate === today
+        ? new Date().toISOString()
+        : new Date(`${targetDate}T12:00:00`).toISOString();
+      const meal = {
+        id: `meal-${Date.now()}`,
+        name: m.name || 'Logged meal',
+        calories: Math.round(m.calories),
+        protein: Math.round(m.protein),
+        carbs: Math.round(m.carbs),
+        fat: Math.round(m.fat),
+        time,
+      };
+      const existingNutrition = currentSelectedOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+      const existingMeals = existingNutrition.meals || {};
+      const prevBucket = existingMeals[targetDate] || [];
+      const updated = {
+        ...currentSelectedOp,
+        nutrition: {
+          ...existingNutrition,
+          meals: { ...existingMeals, [targetDate]: [...prevBucket, meal] },
+        },
+      };
+      onUpdateOperator(updated);
+    }
+  };
+
+  // Helper: handle workout modification from streaming final payload
+  const handlePanelWorkoutMod = (workoutMod: unknown) => {
+    const today = getLocalDateStr();
+    const current = currentSelectedOp.workouts?.[today];
+    if (current) {
+      try {
+        const modified = applyWorkoutModification(current, workoutMod as WorkoutModification);
+        const updated = { ...currentSelectedOp };
+        updated.workouts = { ...updated.workouts, [today]: modified };
+        onUpdateOperator(updated);
+      } catch (e) {
+        console.error('applyWorkoutModification failed:', e);
+      }
+    }
+  };
+
+  // Helper: handle new workout data from streaming final payload
+  const handlePanelWorkoutData = (workoutData: unknown) => {
+    const today = getLocalDateStr();
+    const wd = workoutData as Record<string, unknown>;
+    const targetDate = isValidDateStr(wd.date) ? (wd.date as string) : today;
+    const completedFlag = wd.completed === true;
+    const workout: Workout = {
+      id: `workout-assist-${Date.now()}`,
+      date: targetDate,
+      title: (wd.title as string) || 'Gunny Assist Workout',
+      notes: (wd.notes as string) || '',
+      warmup: (wd.warmup as string) || '',
+      blocks: ((wd.blocks as Array<Record<string, unknown>>) || []).map((b: Record<string, unknown>, i: number) => {
+        const blockType = (b.type as string) === 'conditioning' ? 'conditioning' : 'exercise';
+        if (blockType === 'conditioning') {
+          return {
+            type: 'conditioning' as const,
+            id: `block-assist-${i}`,
+            sortOrder: i,
+            format: (b.format as string) || '',
+            description: (b.description as string) || '',
+            isLinkedToNext: false,
+          };
+        }
+        return {
+          type: 'exercise' as const,
+          id: `block-assist-${i}`,
+          sortOrder: i,
+          exerciseName: (b.exerciseName as string) || '',
+          prescription: (b.prescription as string) || '',
+          isLinkedToNext: false,
+          ...(b.videoUrl ? { videoUrl: b.videoUrl as string } : {}),
+        };
+      }),
+      cooldown: (wd.cooldown as string) || '',
+      completed: completedFlag,
+    };
+    const updated = { ...currentSelectedOp };
+    updated.workouts = { ...updated.workouts, [targetDate]: workout };
+    onUpdateOperator(updated);
   };
 
   const currentSelectedOp = operators.find(op => op.id === selectedOperator.id) || selectedOperator;
@@ -964,7 +1049,7 @@ const AppShell: React.FC<AppShellProps> = ({
       };
       setGunnyMessages(prev => [...prev, userMessage]);
       setGunnyInput('');
-      setGunnyLoading(true);
+      setGunnyLoading(true); setGunnyThinkingAt(Date.now());
 
       const doSend = async () => {
         try {
@@ -1098,7 +1183,7 @@ const AppShell: React.FC<AppShellProps> = ({
             timestamp: Date.now(),
           }]);
         } finally {
-          setGunnyLoading(false);
+          setGunnyLoading(false); setGunnyThinkingAt(null);
         }
       };
       doSend();
@@ -2032,7 +2117,7 @@ const AppShell: React.FC<AppShellProps> = ({
                 {t('gunny.waiting') || 'Awaiting orders...'}
               </div>
             )}
-            {gunnyMessages.map((msg, idx) => (
+            {gunnyMessages.filter(m => m.role === 'user' || m.text.length > 0).map((msg, idx) => (
               <div
                 key={idx}
                 className={`gunny-message ${msg.role}`}
@@ -2040,6 +2125,13 @@ const AppShell: React.FC<AppShellProps> = ({
                 {msg.text}
               </div>
             ))}
+            {gunnyLoading && (
+              <ThinkingIndicator
+                variant="panel"
+                startedAt={gunnyThinkingAt ?? undefined}
+                label="GUNNY THINKING"
+              />
+            )}
             <div ref={messagesEndRef} />
           </div>
 

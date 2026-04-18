@@ -989,81 +989,162 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     }
 
     const maxTokens = ownerOverride ? 8192 : (isAssistantMode ? 1024 : isOnboardingMode ? 2048 : 4096);
-    const response = await client.messages.create({
+
+    // Check if client wants SSE streaming
+    const acceptHeader = req.headers.get('accept') || '';
+    const wantsStream = acceptHeader.includes('text/event-stream');
+
+    // ── NON-STREAMING (JSON) FALLBACK — for voice handler and legacy clients ──
+    if (!wantsStream) {
+      const response = await client.messages.create({
+        model: finalModel,
+        max_tokens: maxTokens,
+        system: systemPrompt + contextBlock,
+        messages: anthropicMessages,
+      });
+
+      const responseText = response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+        .map((block) => block.text)
+        .join('');
+
+      let workoutData = null;
+      const jsonMatch = responseText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
+      if (jsonMatch) { try { workoutData = JSON.parse(jsonMatch[1].trim()); } catch { /* ignore */ } }
+
+      let workoutModification = null;
+      const modMatch = responseText.match(/<workout_modification>([\s\S]*?)<\/workout_modification>/);
+      if (modMatch) { try { workoutModification = JSON.parse(modMatch[1].trim()); } catch { /* ignore */ } }
+
+      let profileData = null;
+      const profileMatch = responseText.match(/<profile_json>([\s\S]*?)<\/profile_json>/);
+      if (profileMatch) { try { profileData = JSON.parse(profileMatch[1].trim()); } catch { /* ignore */ } }
+
+      let mealData = null;
+      const mealMatch = responseText.match(/<meal_json>([\s\S]*?)<\/meal_json>/);
+      if (mealMatch) { try { mealData = JSON.parse(mealMatch[1].trim()); } catch { /* ignore */ } }
+
+      const cleanResponse = responseText
+        .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
+        .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
+        .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
+        .replace(/<meal_json>[\s\S]*?<\/meal_json>/, '')
+        .trim();
+
+      return NextResponse.json({
+        response: cleanResponse,
+        workoutData,
+        workoutModification,
+        profileData,
+        mealData,
+        model: finalModel,
+        usage: { input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens },
+      });
+    }
+
+    // ── SSE STREAMING ──
+    const stream = client.messages.stream({
       model: finalModel,
       max_tokens: maxTokens,
       system: systemPrompt + contextBlock,
       messages: anthropicMessages,
     });
 
-    const responseText = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-      .map((block) => block.text)
-      .join('');
+    // Build a ReadableStream that emits SSE-style events:
+    // - event: "delta"  data: { text: string }
+    // - event: "final"  data: { cleanText, workoutData, workoutModification, profileData, mealData, model, usage }
+    // - event: "error"  data: { error: string }
+    const encoder = new TextEncoder();
+    const responseStream = new ReadableStream({
+      async start(controller) {
+        let fullText = '';
+        try {
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' &&
+                event.delta.type === 'text_delta') {
+              const chunk = event.delta.text;
+              fullText += chunk;
+              controller.enqueue(
+                encoder.encode(`event: delta\ndata: ${JSON.stringify({ text: chunk })}\n\n`)
+              );
+            }
+          }
 
-    // Extract workout JSON if present
-    let workoutData = null;
-    const jsonMatch = responseText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
-    if (jsonMatch) {
-      try {
-        workoutData = JSON.parse(jsonMatch[1].trim());
-      } catch {
-        // Invalid JSON — ignore
-      }
-    }
+          // After the stream completes, pull out the final message for post-processing
+          const final = await stream.finalMessage();
 
-    // Extract workout MODIFICATION if present (surgical change to active workout)
-    let workoutModification = null;
-    const modMatch = responseText.match(/<workout_modification>([\s\S]*?)<\/workout_modification>/);
-    if (modMatch) {
-      try {
-        workoutModification = JSON.parse(modMatch[1].trim());
-      } catch (e) {
-        console.error('Invalid workout_modification JSON:', e, modMatch[1]);
-      }
-    }
+          // Extract workout JSON if present
+          let workoutData: Record<string, unknown> | null = null;
+          const wm = fullText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
+          if (wm) {
+            try { workoutData = JSON.parse(wm[1].trim()); } catch { /* invalid JSON */ }
+          }
 
-    // Extract profile JSON if present (from onboarding)
-    let profileData = null;
-    const profileMatch = responseText.match(/<profile_json>([\s\S]*?)<\/profile_json>/);
-    if (profileMatch) {
-      try {
-        profileData = JSON.parse(profileMatch[1].trim());
-      } catch {
-        // Invalid JSON — ignore
-      }
-    }
+          // Extract workout MODIFICATION if present
+          let workoutModification: Record<string, unknown> | null = null;
+          const modm = fullText.match(/<workout_modification>([\s\S]*?)<\/workout_modification>/);
+          if (modm) {
+            try { workoutModification = JSON.parse(modm[1].trim()); } catch { /* invalid JSON */ }
+          }
 
-    // Extract meal JSON if present (direct meal logging — client writes to
-    // operator.nutrition.meals[today]).
-    let mealData = null;
-    const mealMatch = responseText.match(/<meal_json>([\s\S]*?)<\/meal_json>/);
-    if (mealMatch) {
-      try {
-        mealData = JSON.parse(mealMatch[1].trim());
-      } catch (e) {
-        console.error('Invalid meal_json JSON:', e, mealMatch[1]);
-      }
-    }
+          // Extract profile JSON if present
+          let profileData: Record<string, unknown> | null = null;
+          const pm = fullText.match(/<profile_json>([\s\S]*?)<\/profile_json>/);
+          if (pm) {
+            try { profileData = JSON.parse(pm[1].trim()); } catch { /* invalid JSON */ }
+          }
 
-    // Clean the response text (remove JSON blocks from display)
-    const cleanResponse = responseText
-      .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
-      .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
-      .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
-      .replace(/<meal_json>[\s\S]*?<\/meal_json>/, '')
-      .trim();
+          // Extract meal JSON if present
+          let mealData: Record<string, unknown> | null = null;
+          const mm = fullText.match(/<meal_json>([\s\S]*?)<\/meal_json>/);
+          if (mm) {
+            try { mealData = JSON.parse(mm[1].trim()); } catch { /* invalid JSON */ }
+          }
 
-    return NextResponse.json({
-      response: cleanResponse,
-      workoutData,
-      workoutModification,
-      profileData,
-      mealData,
-      model: finalModel,
-      usage: {
-        input_tokens: response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
+          // Strip JSON blocks from the visible text
+          const cleanText = fullText
+            .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
+            .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
+            .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
+            .replace(/<meal_json>[\s\S]*?<\/meal_json>/, '')
+            .trim();
+
+          controller.enqueue(
+            encoder.encode(
+              `event: final\ndata: ${JSON.stringify({
+                cleanText,
+                workoutData,
+                workoutModification,
+                profileData,
+                mealData,
+                model: finalModel,
+                usage: {
+                  input_tokens: final.usage.input_tokens,
+                  output_tokens: final.usage.output_tokens,
+                },
+              })}\n\n`
+            )
+          );
+          controller.close();
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          controller.enqueue(
+            encoder.encode(
+              `event: error\ndata: ${JSON.stringify({ error: message })}\n\n`
+            )
+          );
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(responseStream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
       },
     });
   } catch (error: unknown) {

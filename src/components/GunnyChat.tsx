@@ -10,6 +10,7 @@ import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
 import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
+import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -434,6 +435,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
   const [isOnboarding, setIsOnboarding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -569,7 +571,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
 
       if (shouldOnboard) {
         // Start onboarding — send initial message to Gunny API
-        setIsTyping(true);
+        setIsTyping(true); setThinkingStartedAt(Date.now());
         try {
           const res = await fetch('/api/gunny', {
             method: 'POST',
@@ -618,7 +620,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
           };
           setMessages([greeting]);
         }
-        setIsTyping(false);
+        setIsTyping(false); setThinkingStartedAt(null);
         inputRef.current?.focus();
         return;
       }
@@ -646,18 +648,20 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   }, [operator.id, operator.role, allOperators]);
 
   // Persist messages whenever they change (API + localStorage)
+  // Guard: skip saves while streaming (isTyping=true) to avoid flooding the persistence API on every delta
   const prevMsgCountRef = useRef(0);
   useEffect(() => {
+    if (isTyping) return; // don't save mid-stream
     if (messages.length > 0 && messages.length !== prevMsgCountRef.current) {
       prevMsgCountRef.current = messages.length;
       const chatType = isOnboarding ? 'gunny-onboarding' : 'gunny-tab';
       saveChatToStorage(operator.id, chatType, messages);
     }
-  }, [messages, operator.id, isOnboarding]);
+  }, [messages, isTyping, operator.id, isOnboarding]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isTyping]);
 
   const calculateTrainingAge = (): number => {
     const parsed = parseInt(operator.profile?.trainingAge || '0');
@@ -1189,6 +1193,147 @@ ${mealSuggestion}`;
     }
   };
 
+  // ── STREAMING API CONSUMER ──
+  // Drop-in replacement for callGunnyAPI that streams tokens via SSE.
+  // Returns the same shape as callGunnyAPI, but also invokes onDelta
+  // as chunks arrive so the caller can update the in-progress message.
+  const callGunnyAPIStreaming = async (
+    allMessages: Message[],
+    opts: {
+      forceMode?: string;
+      onDelta: (accumulated: string) => void;
+    }
+  ): Promise<{
+    response: string;
+    workoutData?: Record<string, unknown>;
+    workoutModification?: Record<string, unknown>;
+    profileData?: Record<string, unknown>;
+    mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string };
+  } | null> => {
+    try {
+      const recentMessages = allMessages.slice(-10).map((m) => ({
+        role: m.role,
+        text: m.text,
+        ...(m.image ? { image: m.image } : {}),
+      }));
+
+      const operatorContext = buildFullGunnyContext(operator, { language: 'en' });
+      const apiMode = opts.forceMode || (isOnboarding ? 'onboarding' : undefined);
+
+      const trainer = operator.trainerId ? allOperators.find(op => op.id === operator.trainerId) : null;
+      const trainerData = trainer ? {
+        workouts: trainer.workouts,
+        preferences: trainer.preferences,
+        prs: trainer.prs,
+        profile: trainer.profile,
+        trainerNotes: operator.trainerNotes,
+      } : null;
+
+      const res = await fetch('/api/gunny', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}`,
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify({
+          messages: recentMessages,
+          tier: operator.tier,
+          operatorContext,
+          clientDate: getLocalDateStr(),
+          clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+          clientTimezone: getLocalTimezone(),
+          ...(apiMode && { mode: apiMode }),
+          ...(trainerData && { trainerData }),
+        }),
+      });
+
+      // Graceful fallback: server returned JSON (error path or old deployment)
+      const ctype = res.headers.get('content-type') || '';
+      if (!ctype.includes('text/event-stream')) {
+        const data = await res.json();
+        if (!res.ok) return null;
+        opts.onDelta(data.response || '');
+        return {
+          response: data.response || '',
+          workoutData: data.workoutData,
+          workoutModification: data.workoutModification,
+          profileData: data.profileData,
+          mealData: data.mealData,
+        };
+      }
+
+      // Streaming path — parse SSE manually
+      if (!res.body) return null;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accumulated = '';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let finalPayload: any = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split on the SSE record separator
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || ''; // last may be partial
+
+        for (const raw of events) {
+          if (!raw.trim()) continue;
+          const lines = raw.split('\n');
+          let eventType = 'message';
+          let dataStr = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+            else if (line.startsWith('data: ')) dataStr = line.slice(6);
+          }
+          if (!dataStr) continue;
+          try {
+            const payload = JSON.parse(dataStr);
+            if (eventType === 'delta' && payload.text) {
+              accumulated += payload.text;
+              // Strip in-progress JSON tags from the visible stream
+              const visible = accumulated
+                .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
+                .replace(/<workout_json>[\s\S]*$/, '')
+                .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+                .replace(/<workout_modification>[\s\S]*$/, '')
+                .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
+                .replace(/<profile_json>[\s\S]*$/, '')
+                .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+                .replace(/<meal_json>[\s\S]*$/, '');
+              opts.onDelta(visible);
+            } else if (eventType === 'final') {
+              finalPayload = payload;
+            } else if (eventType === 'error') {
+              return null;
+            }
+          } catch {
+            /* malformed SSE record — skip */
+          }
+        }
+      }
+
+      if (finalPayload) {
+        // Replace the visible text with the server's cleaned text (authoritative)
+        opts.onDelta(finalPayload.cleanText);
+        return {
+          response: finalPayload.cleanText,
+          workoutData: finalPayload.workoutData,
+          workoutModification: finalPayload.workoutModification,
+          profileData: finalPayload.profileData,
+          mealData: finalPayload.mealData,
+        };
+      }
+      return { response: accumulated };
+    } catch {
+      return null;
+    }
+  };
+
   // Normalize conditioning descriptions: ensure newlines are real, split "+" joined movements
   const normalizeDescription = (desc: string): string => {
     if (!desc) return '';
@@ -1261,7 +1406,7 @@ ${mealSuggestion}`;
     setMessages(updatedMessages);
     setInputValue('');
     setPendingImage(null);
-    setIsTyping(true);
+    setIsTyping(true); setThinkingStartedAt(Date.now());
 
     // Track Gunny chat event
     trackEvent(EVENTS.GUNNY_CHAT, {
@@ -1270,23 +1415,36 @@ ${mealSuggestion}`;
       isOnboarding: isOnboarding,
     });
 
-    // ═══ ONBOARDING MODE — always use API with onboarding prompt ═══
+    // ═══ ONBOARDING MODE — stream from API with onboarding prompt ═══
     if (isOnboarding) {
-      const apiResult = await callGunnyAPI(updatedMessages, 'onboarding');
-      const responseText = apiResult?.response || 'Copy that. Tell me more about your training background and goals.';
+      const placeholderId = 'gunny-onboard-' + Date.now();
+      setMessages((prev) => [...prev, {
+        id: placeholderId, role: 'gunny' as const, text: '', timestamp: new Date(),
+      }]);
 
-      // Apply any profile data extracted from the response
+      const apiResult = await callGunnyAPIStreaming(updatedMessages, {
+        forceMode: 'onboarding',
+        onDelta: (accumulated) => {
+          if (accumulated.length > 0) {
+            setIsTyping(false);
+            setThinkingStartedAt(null);
+          }
+          setMessages((prev) =>
+            prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
+          );
+        },
+      });
+
       if (apiResult?.profileData) {
         applyProfileData(apiResult.profileData);
       }
+      if (!apiResult) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: 'Copy that. Tell me more about your training background and goals.' } : m))
+        );
+      }
 
-      const gunnyResponse: Message = {
-        id: 'gunny-' + Date.now(), role: 'gunny',
-        text: responseText,
-        timestamp: new Date(),
-      };
-      setIsTyping(false);
-      setMessages((prev) => [...prev, gunnyResponse]);
+      setIsTyping(false); setThinkingStartedAt(null);
       inputRef.current?.focus();
       return;
     }
@@ -1305,7 +1463,7 @@ ${mealSuggestion}`;
           text: `LOCKED IN. "${savedTitle}" is now on your PLANNER for today. Go to PLANNER tab to review and execute. No excuses, champ.`,
           timestamp: new Date(),
         };
-        setIsTyping(false);
+        setIsTyping(false); setThinkingStartedAt(null);
         setMessages((prev) => [...prev, gunnyResponse]);
       }, 300);
       inputRef.current?.focus();
@@ -1322,13 +1480,34 @@ ${mealSuggestion}`;
       }
       setTimeout(() => {
         const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: result.response, timestamp: new Date() };
-        setIsTyping(false);
+        setIsTyping(false); setThinkingStartedAt(null);
         setMessages((prev) => [...prev, gunnyResponse]);
       }, 400 + Math.random() * 300);
     } else {
-      // No local match — call Anthropic API
-      const apiResult = await callGunnyAPI(updatedMessages);
-      const responseText = apiResult?.response || FALLBACK_RESPONSE;
+      // No local match — STREAM from Anthropic API
+      const placeholderId = 'gunny-' + Date.now();
+
+      // Create an empty Gunny bubble immediately — the thinking indicator will sit
+      // above it until the first token arrives, then the bubble fills in live.
+      setMessages((prev) => [...prev, {
+        id: placeholderId,
+        role: 'gunny' as const,
+        text: '',
+        timestamp: new Date(),
+      }]);
+
+      const apiResult = await callGunnyAPIStreaming(updatedMessages, {
+        onDelta: (accumulated) => {
+          // Hide the thinking indicator once we have content
+          if (accumulated.length > 0) {
+            setIsTyping(false);
+            setThinkingStartedAt(null);
+          }
+          setMessages((prev) =>
+            prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
+          );
+        },
+      });
 
       // SURGICAL MODIFICATION — apply targeted change to today's active workout
       let wasModification = false;
@@ -1337,7 +1516,7 @@ ${mealSuggestion}`;
         const current = operator.workouts?.[today];
         if (current) {
           try {
-            const modified = applyWorkoutModification(current, apiResult.workoutModification);
+            const modified = applyWorkoutModification(current, apiResult.workoutModification as unknown as WorkoutModification);
             const updated = { ...operator };
             updated.workouts = { ...updated.workouts, [today]: modified };
             onUpdateOperator(updated);
@@ -1355,8 +1534,10 @@ ${mealSuggestion}`;
 
       // MEAL LOGGING — Gunny emitted <meal_json>; write straight to operator
       let mealLogged = false;
-      if (apiResult?.mealData && onUpdateOperator) {
-        const m = apiResult.mealData;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mealPayload = apiResult?.mealData as any;
+      if (mealPayload && onUpdateOperator) {
+        const m = mealPayload;
         const macrosOk =
           typeof m.calories === 'number' && !isNaN(m.calories) &&
           typeof m.protein === 'number' && !isNaN(m.protein) &&
@@ -1377,7 +1558,6 @@ ${mealSuggestion}`;
             fat: Math.round(m.fat),
             time,
           };
-          // Deep-clone the nutrition chain to avoid mutating the live operator reference
           const existingNutrition = operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
           const existingMeals = existingNutrition.meals || {};
           const prevBucket = existingMeals[targetDate] || [];
@@ -1392,13 +1572,14 @@ ${mealSuggestion}`;
             return (nowMs - Number(idMatch[1])) < 60_000;
           });
           if (recentDup) {
-            // Show dedup warning instead of re-logging
             const dupMsg: Message = {
               id: 'gunny-dedup-' + Date.now(), role: 'gunny',
               text: `Hold up, champ — I just logged "${meal.name}" under a minute ago. If that was a second helping, say "log another serving" and I'll stack it.`,
               timestamp: new Date(),
             };
             setMessages((prev) => [...prev, dupMsg]);
+            setIsTyping(false); setThinkingStartedAt(null);
+            inputRef.current?.focus();
             return;
           }
 
@@ -1417,17 +1598,33 @@ ${mealSuggestion}`;
         }
       }
 
+      // Final pass — stamp the workout suffix if a workout was generated
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      const gunnyResponse: Message = {
-        id: 'gunny-' + Date.now(), role: 'gunny',
-        text: responseText
-          + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
-          + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
-          + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : ''),
-        timestamp: new Date(), isWorkout: hasWorkout,
-      };
-      setIsTyping(false);
-      setMessages((prev) => [...prev, gunnyResponse]);
+      if (hasWorkout || wasModification || mealLogged) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === placeholderId
+              ? {
+                  ...m,
+                  text: (apiResult?.response || m.text)
+                    + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
+                    + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
+                    + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : ''),
+                  isWorkout: hasWorkout,
+                }
+              : m
+          )
+        );
+      }
+
+      // If the API returned nothing at all, show the fallback
+      if (!apiResult) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.` } : m))
+        );
+      }
+
+      setIsTyping(false); setThinkingStartedAt(null);
     }
 
     inputRef.current?.focus();
@@ -1437,7 +1634,7 @@ ${mealSuggestion}`;
     const userMessage: Message = { id: 'user-' + Date.now(), role: 'user', text: action, timestamp: new Date() };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
-    setIsTyping(true);
+    setIsTyping(true); setThinkingStartedAt(Date.now());
 
     const result = generateGunnyResponse(action);
 
@@ -1447,12 +1644,27 @@ ${mealSuggestion}`;
       }
       setTimeout(() => {
         const gunnyResponse: Message = { id: 'gunny-' + Date.now(), role: 'gunny', text: result.response, timestamp: new Date() };
-        setIsTyping(false);
+        setIsTyping(false); setThinkingStartedAt(null);
         setMessages((prev) => [...prev, gunnyResponse]);
       }, 400 + Math.random() * 300);
     } else {
-      const apiResult = await callGunnyAPI(updatedMessages);
-      const responseText = apiResult?.response || FALLBACK_RESPONSE;
+      // No local match — STREAM from Anthropic API
+      const placeholderId = 'gunny-qa-' + Date.now();
+      setMessages((prev) => [...prev, {
+        id: placeholderId, role: 'gunny' as const, text: '', timestamp: new Date(),
+      }]);
+
+      const apiResult = await callGunnyAPIStreaming(updatedMessages, {
+        onDelta: (accumulated) => {
+          if (accumulated.length > 0) {
+            setIsTyping(false);
+            setThinkingStartedAt(null);
+          }
+          setMessages((prev) =>
+            prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
+          );
+        },
+      });
 
       let wasModification = false;
       if (apiResult?.workoutModification && onUpdateOperator) {
@@ -1460,7 +1672,7 @@ ${mealSuggestion}`;
         const current = operator.workouts?.[today];
         if (current) {
           try {
-            const modified = applyWorkoutModification(current, apiResult.workoutModification);
+            const modified = applyWorkoutModification(current, apiResult.workoutModification as unknown as WorkoutModification);
             const updated = { ...operator };
             updated.workouts = { ...updated.workouts, [today]: modified };
             onUpdateOperator(updated);
@@ -1475,15 +1687,27 @@ ${mealSuggestion}`;
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      const gunnyResponse: Message = {
-        id: 'gunny-' + Date.now(), role: 'gunny',
-        text: responseText
-          + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
-          + (wasModification ? '\n\n[WORKOUT UPDATED]' : ''),
-        timestamp: new Date(), isWorkout: hasWorkout,
-      };
-      setIsTyping(false);
-      setMessages((prev) => [...prev, gunnyResponse]);
+      if (hasWorkout || wasModification) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === placeholderId
+              ? {
+                  ...m,
+                  text: (apiResult?.response || m.text)
+                    + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
+                    + (wasModification ? '\n\n[WORKOUT UPDATED]' : ''),
+                  isWorkout: hasWorkout,
+                }
+              : m
+          )
+        );
+      }
+      if (!apiResult) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.` } : m))
+        );
+      }
+      setIsTyping(false); setThinkingStartedAt(null);
     }
   };
 
@@ -1750,7 +1974,7 @@ ${mealSuggestion}`;
         flexDirection: 'column',
         gap: '16px',
       }}>
-        {messages.map((message) => (
+        {messages.filter((m) => m.role === 'user' || m.text.length > 0).map((message) => (
           <div key={message.id} style={{
             display: 'flex',
             justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
@@ -1900,51 +2124,13 @@ ${mealSuggestion}`;
           </div>
         ))}
 
-        {/* Typing indicator */}
+        {/* Thinking indicator */}
         {isTyping && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            animation: 'msgSlideIn 0.2s ease-out',
-          }}>
-            <div style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #00ff41, #00cc33)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '26px',
-              fontWeight: 900,
-              color: '#030303',
-              flexShrink: 0,
-              fontFamily: '"Orbitron", sans-serif',
-              opacity: 0.7,
-            }}>
-              G
-            </div>
-            <div style={{
-              padding: '10px 14px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.08)',
-              display: 'flex',
-              gap: '4px',
-              alignItems: 'center',
-            }}>
-              {[0, 1, 2].map((i) => (
-                <div key={i} style={{
-                  width: '5px',
-                  height: '5px',
-                  borderRadius: '50%',
-                  backgroundColor: '#00ff41',
-                  animation: `typingDot 1.2s ease-in-out infinite`,
-                  animationDelay: `${i * 0.2}s`,
-                }} />
-              ))}
-            </div>
-          </div>
+          <ThinkingIndicator
+            variant="primary"
+            startedAt={thinkingStartedAt ?? undefined}
+            label="GUNNY THINKING"
+          />
         )}
 
         <div ref={messagesEndRef} />
