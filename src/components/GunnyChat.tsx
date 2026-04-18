@@ -11,6 +11,8 @@ import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
 import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -1304,7 +1306,9 @@ ${mealSuggestion}`;
                 .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
-                .replace(/<meal_json>[\s\S]*$/, '');
+                .replace(/<meal_json>[\s\S]*$/, '')
+                // Strip trailing half-streamed markdown table row (pipe-led line missing its closing pipe)
+                .replace(/\n\|[^\n|]*$/, '');
               opts.onDelta(visible);
             } else if (eventType === 'final') {
               finalPayload = payload;
@@ -2019,7 +2023,7 @@ ${mealSuggestion}`;
                   ? '1px solid rgba(255,184,0,0.15)'
                   : '1px solid rgba(0,255,65,0.08)',
               color: message.isWorkout ? '#e0a800' : message.role === 'user' ? '#bbb' : '#ccc',
-              whiteSpace: 'pre-wrap',
+              whiteSpace: message.isWorkout ? 'pre-wrap' : 'normal',
               wordWrap: 'break-word',
               fontFamily: message.isWorkout ? '"Share Tech Mono", monospace' : '"Chakra Petch", sans-serif',
               animation: message.isWorkout ? 'workoutCardGlow 3s ease-in-out infinite' : 'none',
@@ -2040,8 +2044,9 @@ ${mealSuggestion}`;
               {message.image && (
                 <img src={message.image} alt="User upload" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 4, marginBottom: 8, display: 'block' }} />
               )}
-              {/* Render text with VIDEO links and phase headers */}
-              {message.text.split('\n').map((line, lineIdx) => {
+              {/* Render text — workout cards keep the line-split with VIDEO links; other messages render as tactical markdown */}
+              {message.isWorkout ? (
+                message.text.split('\n').map((line, lineIdx) => {
                 // Phase headers — style them prominently
                 const isPhaseHeader = /^(PHASE \d|OPERATION:|TARGET:|GOAL PATH:|COOLDOWN:|━+$|PRIMER|COMPLEX|STRENGTH|ISOLATION|METCON)/i.test(line.trim());
                 const isSectionDivider = /^━+$/.test(line.trim());
@@ -2109,7 +2114,99 @@ ${mealSuggestion}`;
                     })}
                   </div>
                 );
-              })}
+                })
+              ) : (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    h1: ({ children }) => (
+                      <div style={{
+                        fontFamily: '"Orbitron", sans-serif', fontSize: '16px', fontWeight: 800,
+                        color: '#00ff41', letterSpacing: '2px', marginTop: '14px', marginBottom: '6px',
+                        textShadow: '0 0 6px rgba(0,255,65,0.3)',
+                      }}>{children}</div>
+                    ),
+                    h2: ({ children }) => (
+                      <div style={{
+                        fontFamily: '"Orbitron", sans-serif', fontSize: '14px', fontWeight: 700,
+                        color: '#00ff41', letterSpacing: '1.5px', marginTop: '12px', marginBottom: '4px',
+                      }}>{children}</div>
+                    ),
+                    h3: ({ children }) => (
+                      <div style={{
+                        fontFamily: '"Share Tech Mono", monospace', fontSize: '13px', fontWeight: 700,
+                        color: '#facc15', letterSpacing: '1px', marginTop: '10px', marginBottom: '4px',
+                      }}>{children}</div>
+                    ),
+                    p: ({ children }) => (
+                      <p style={{ margin: '6px 0', lineHeight: 1.6 }}>{children}</p>
+                    ),
+                    strong: ({ children }) => (
+                      <strong style={{ color: '#facc15', fontWeight: 700 }}>{children}</strong>
+                    ),
+                    em: ({ children }) => (
+                      <em style={{ color: '#9ca3af', fontStyle: 'italic' }}>{children}</em>
+                    ),
+                    ul: ({ children }) => (
+                      <ul style={{ margin: '6px 0', paddingLeft: '20px' }}>{children}</ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol style={{ margin: '6px 0', paddingLeft: '20px' }}>{children}</ol>
+                    ),
+                    li: ({ children }) => (
+                      <li style={{ margin: '2px 0', lineHeight: 1.5 }}>{children}</li>
+                    ),
+                    table: ({ children }) => (
+                      <div style={{ overflowX: 'auto', margin: '10px 0' }}>
+                        <table style={{
+                          width: '100%', borderCollapse: 'collapse',
+                          fontFamily: '"Share Tech Mono", monospace', fontSize: '13px',
+                          border: '1px solid rgba(0,255,65,0.25)',
+                        }}>{children}</table>
+                      </div>
+                    ),
+                    thead: ({ children }) => (
+                      <thead style={{ background: 'rgba(0,255,65,0.06)' }}>{children}</thead>
+                    ),
+                    tbody: ({ children }) => <tbody>{children}</tbody>,
+                    tr: ({ children }) => <tr>{children}</tr>,
+                    th: ({ children }) => (
+                      <th style={{
+                        padding: '6px 10px', textAlign: 'left',
+                        borderBottom: '1px solid rgba(0,255,65,0.3)',
+                        color: '#00ff41', fontWeight: 700, letterSpacing: '1px',
+                      }}>{children}</th>
+                    ),
+                    td: ({ children }) => (
+                      <td style={{
+                        padding: '5px 10px', borderBottom: '1px solid rgba(0,255,65,0.08)',
+                        color: '#ccc',
+                      }}>{children}</td>
+                    ),
+                    code: ({ children }) => (
+                      <code style={{
+                        background: 'rgba(0,255,65,0.08)', color: '#facc15',
+                        padding: '1px 5px', fontFamily: '"Share Tech Mono", monospace',
+                        fontSize: '13px', borderRadius: 2,
+                      }}>{children}</code>
+                    ),
+                    hr: () => (
+                      <div style={{
+                        height: '1px', margin: '10px 0',
+                        background: 'linear-gradient(90deg, transparent, rgba(0,255,65,0.3), transparent)',
+                      }} />
+                    ),
+                    blockquote: ({ children }) => (
+                      <blockquote style={{
+                        borderLeft: '2px solid #facc15', paddingLeft: '10px',
+                        margin: '8px 0', color: '#bbb', fontStyle: 'italic',
+                      }}>{children}</blockquote>
+                    ),
+                  }}
+                >
+                  {message.text}
+                </ReactMarkdown>
+              )}
               {/* Timestamp */}
               <div style={{
                 fontSize: '15px',
