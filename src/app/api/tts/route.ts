@@ -21,9 +21,17 @@ export async function POST(req: NextRequest) {
     // Truncate long text for TTS (keep it punchy — Gunny doesn't ramble)
     const truncated = text.length > 300 ? text.slice(0, 300) + '...' : text;
 
-    // Clean text for speech — strip formatting chars
+    // Clean text for speech — strip formatting chars and markdown tables before synthesis
     const clean = truncated
+      // Drop markdown table rows (pipe-delimited lines) so Gunny doesn't read ' pipe pipe pipe '
+      .replace(/^\|.*\|$/gm, '')
+      // Drop table divider rows like |---|---|
+      .replace(/^[\s|:\-]+$/gm, '')
+      // Strip bold/italic/heading/rule chars
       .replace(/[*_#━═]{2,}/g, '')
+      // Strip inline code backticks
+      .replace(/`+/g, '')
+      // Collapse newlines into sentence breaks
       .replace(/\n+/g, '. ')
       .replace(/\s{2,}/g, ' ')
       .trim();
