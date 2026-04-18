@@ -23,6 +23,7 @@ interface Message {
   text: string;
   timestamp: Date;
   isWorkout?: boolean;
+  image?: string; // base64 data URL for vision analysis
 }
 
 interface WorkoutSession {
@@ -430,10 +431,12 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [isOnboarding, setIsOnboarding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Track which operator ID we've initialized — only reset chat on actual user switch
   const initOperatorRef = useRef<string>('');
@@ -1028,6 +1031,7 @@ ${mealSuggestion}`;
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
         text: m.text,
+        ...(m.image && { image: m.image }),
       }));
 
       // ── Full operator context (supercharged) ──
@@ -1249,13 +1253,14 @@ ${mealSuggestion}`;
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
-    const text = inputValue;
+    if (!inputValue.trim() && !pendingImage) return;
+    const text = inputValue || (pendingImage ? 'Analyze this image' : '');
     const lower = text.toLowerCase();
-    const userMessage: Message = { id: 'user-' + Date.now(), role: 'user', text, timestamp: new Date() };
+    const userMessage: Message = { id: 'user-' + Date.now(), role: 'user', text, timestamp: new Date(), ...(pendingImage && { image: pendingImage }) };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInputValue('');
+    setPendingImage(null);
     setIsTyping(true);
 
     // Track Gunny chat event
@@ -1372,11 +1377,41 @@ ${mealSuggestion}`;
             fat: Math.round(m.fat),
             time,
           };
-          const updatedOp = { ...operator };
-          if (!updatedOp.nutrition) updatedOp.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
-          if (!updatedOp.nutrition.meals) updatedOp.nutrition.meals = {};
-          if (!updatedOp.nutrition.meals[targetDate]) updatedOp.nutrition.meals[targetDate] = [];
-          updatedOp.nutrition.meals[targetDate] = [...updatedOp.nutrition.meals[targetDate], meal];
+          // Deep-clone the nutrition chain to avoid mutating the live operator reference
+          const existingNutrition = operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+          const existingMeals = existingNutrition.meals || {};
+          const prevBucket = existingMeals[targetDate] || [];
+
+          // DEDUP: reject if same name + calories logged within 60 seconds
+          const nowMs = Date.now();
+          const recentDup = prevBucket.find((existing: Meal) => {
+            if ((existing.name || '').toLowerCase() !== (meal.name || '').toLowerCase()) return false;
+            if (Math.abs((existing.calories || 0) - meal.calories) > 5) return false;
+            const idMatch = existing.id.match(/^meal-(\d+)$/);
+            if (!idMatch) return false;
+            return (nowMs - Number(idMatch[1])) < 60_000;
+          });
+          if (recentDup) {
+            // Show dedup warning instead of re-logging
+            const dupMsg: Message = {
+              id: 'gunny-dedup-' + Date.now(), role: 'gunny',
+              text: `Hold up, champ — I just logged "${meal.name}" under a minute ago. If that was a second helping, say "log another serving" and I'll stack it.`,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, dupMsg]);
+            return;
+          }
+
+          const updatedOp = {
+            ...operator,
+            nutrition: {
+              ...existingNutrition,
+              meals: {
+                ...existingMeals,
+                [targetDate]: [...prevBucket, meal],
+              },
+            },
+          };
           onUpdateOperator(updatedOp);
           mealLogged = true;
         }
@@ -1452,7 +1487,7 @@ ${mealSuggestion}`;
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -1777,6 +1812,10 @@ ${mealSuggestion}`;
                   background: 'linear-gradient(90deg, transparent, #ffb800, transparent)',
                 }} />
               )}
+              {/* User-attached image */}
+              {message.image && (
+                <img src={message.image} alt="User upload" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 4, marginBottom: 8, display: 'block' }} />
+              )}
               {/* Render text with VIDEO links and phase headers */}
               {message.text.split('\n').map((line, lineIdx) => {
                 // Phase headers — style them prominently
@@ -1928,14 +1967,19 @@ ${mealSuggestion}`;
         }}>
           {'>>'}
         </div>
-        <input
+        <textarea
           ref={inputRef}
-          type="text"
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+          }}
           onKeyDown={handleKeyDown}
           placeholder="What's the mission, champ?"
           className="chat-input"
+          rows={1}
+          style={{ resize: 'none', overflow: 'hidden', lineHeight: '1.4' }}
         />
         <VoiceInput
           onTranscript={(text) => {
@@ -1951,10 +1995,49 @@ ${mealSuggestion}`;
           }}
           callSign={operator.callsign}
         />
-        <button onClick={handleSendMessage} className="send-btn" disabled={!inputValue.trim()}>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return; }
+            const reader = new FileReader();
+            reader.onload = () => setPendingImage(reader.result as string);
+            reader.readAsDataURL(file);
+            e.target.value = '';
+          }}
+        />
+        <button
+          onClick={() => imageInputRef.current?.click()}
+          style={{
+            background: pendingImage ? '#ff6b35' : 'transparent',
+            border: `1px solid ${pendingImage ? '#ff6b35' : '#333'}`,
+            borderRadius: 4,
+            padding: '6px 8px',
+            cursor: 'pointer',
+            fontSize: 16,
+            lineHeight: 1,
+            color: pendingImage ? '#fff' : '#666',
+          }}
+          title="Attach image for analysis"
+        >
+          📷
+        </button>
+        <button onClick={handleSendMessage} className="send-btn" disabled={!inputValue.trim() && !pendingImage}>
           SEND
         </button>
       </div>
+      {/* Image preview */}
+      {pendingImage && (
+        <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,107,53,0.08)', borderTop: '1px solid rgba(255,107,53,0.2)' }}>
+          <img src={pendingImage} alt="Preview" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #333' }} />
+          <span style={{ fontFamily: 'Chakra Petch, sans-serif', fontSize: 11, color: '#ff6b35' }}>IMAGE ATTACHED — Gunny will analyze</span>
+          <button onClick={() => setPendingImage(null)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: 14 }}>✕</button>
+        </div>
+      )}
     </div>
   );
 };

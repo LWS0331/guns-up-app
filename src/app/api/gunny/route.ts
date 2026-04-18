@@ -45,6 +45,15 @@ CORE IDENTITY:
 - You are NEVER generic. Every response is personalized to the operator's profile, goals, weight, PRs, injuries, and training age
 - Format with clean monospace lines and dashes — NEVER use markdown headers or bullet points with asterisks
 
+IMAGE ANALYSIS:
+- When the operator sends an image, analyze it thoroughly
+- For FOOD images: identify the meal, estimate portion sizes, and provide macro estimates (calories, protein, carbs, fat). Offer to log it
+- For FORM CHECK images: analyze body positioning, joint angles, and provide technique corrections
+- For PHYSIQUE images: provide honest assessment relative to their goals and training phase
+- For NUTRITION LABEL images: read and summarize the macros, flag anything relevant to their diet plan
+- For GYM/EQUIPMENT images: identify equipment and suggest exercises or modifications
+- Always tie analysis back to the operator's specific goals, plan, and profile data
+
 KNOWLEDGE SOURCES & EXPERT REFERENCE MAP:
 Gunny draws from the following expert sources by domain. Reference principles naturally in coaching — not "According to Dr. Galpin..." every time, but weave the science in. When pressed, name the source. If sources conflict, use this hierarchy: 1) Peer-reviewed research (Galpin, Norton, Helms, Israetel), 2) Clinical experience (Starrett, McGill, Attia), 3) Applied coaching (Filly, OPEX, MTI), 4) Content creators (Huberman, MPMD, Nippard).
 
@@ -925,12 +934,34 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     }
 
     // Convert messages to Anthropic format — filter empty and ensure first msg is user role
+    // Support vision: if a message has an image field (base64 data URL), build content blocks
     const anthropicMessages = messages
-      .map((msg: { role: string; text?: string; content?: string }) => ({
-        role: msg.role === 'gunny' ? 'assistant' as const : 'user' as const,
-        content: msg.text || msg.content || '',
-      }))
-      .filter((msg) => msg.content && msg.content.trim().length > 0);
+      .map((msg: { role: string; text?: string; content?: string; image?: string }) => {
+        const role = msg.role === 'gunny' ? 'assistant' as const : 'user' as const;
+        const text = msg.text || msg.content || '';
+        // If user message has an image, build multi-part content array
+        if (msg.image && role === 'user') {
+          type SupportedMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+          const ALLOWED_MEDIA: SupportedMediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+          const parts: Array<{ type: 'image'; source: { type: 'base64'; media_type: SupportedMediaType; data: string } } | { type: 'text'; text: string }> = [];
+          // Extract media type and base64 data from data URL
+          const match = msg.image.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+          if (match && ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) {
+            parts.push({ type: 'image', source: { type: 'base64', media_type: match[1] as SupportedMediaType, data: match[2] } });
+          }
+          if (text.trim()) {
+            parts.push({ type: 'text', text });
+          } else {
+            parts.push({ type: 'text', text: 'Analyze this image.' });
+          }
+          return { role, content: parts };
+        }
+        return { role, content: text };
+      })
+      .filter((msg) => {
+        if (typeof msg.content === 'string') return msg.content.trim().length > 0;
+        return Array.isArray(msg.content) && msg.content.length > 0;
+      });
 
     // Anthropic requires the first message to be from the user
     while (anthropicMessages.length > 0 && anthropicMessages[0].role === 'assistant') {

@@ -189,6 +189,20 @@ const AppShell: React.FC<AppShellProps> = ({
   // Auto-switch to Gunny tab if profile is incomplete (onboarding needed)
   const profileIncomplete = !currentUser.profile?.age || !currentUser.profile?.weight || !currentUser.profile?.goals?.length || !currentUser.preferences?.daysPerWeek;
   const [activeTab, setActiveTab] = useState<AppTab>(profileIncomplete && intakeCompleted ? 'gunny' : 'coc');
+
+  // P6: Font size setting (S/M/L)
+  const [fontScale, setFontScale] = useState<'S' | 'M' | 'L'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('gunsup-font-scale') as 'S' | 'M' | 'L') || 'M';
+    }
+    return 'M';
+  });
+  useEffect(() => {
+    const zoomMap = { S: '0.85', M: '1', L: '1.15' };
+    document.documentElement.style.setProperty('--gu-zoom', zoomMap[fontScale]);
+    document.documentElement.setAttribute('data-font-scale', fontScale);
+    localStorage.setItem('gunsup-font-scale', fontScale);
+  }, [fontScale]);
   const [selectedOperator, setSelectedOperator] = useState<Operator>(currentUser);
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -213,7 +227,7 @@ const AppShell: React.FC<AppShellProps> = ({
   });
   const [workoutModeState, setWorkoutModeState] = useState<WorkoutModeState>({ active: false, workoutTitle: '', exercises: [] });
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
 
   // Initialize mounted state and responsive detection
@@ -835,11 +849,17 @@ const AppShell: React.FC<AppShellProps> = ({
               fat: Math.round(m.fat),
               time,
             };
-            const updated = { ...currentSelectedOp };
-            if (!updated.nutrition) updated.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
-            if (!updated.nutrition.meals) updated.nutrition.meals = {};
-            const prevBucket = updated.nutrition.meals[targetDate] || [];
-            updated.nutrition.meals = { ...updated.nutrition.meals, [targetDate]: [...prevBucket, meal] };
+            // Deep-clone the nutrition chain to avoid mutating the live operator reference
+            const existingNutrition = currentSelectedOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+            const existingMeals = existingNutrition.meals || {};
+            const prevBucket = existingMeals[targetDate] || [];
+            const updated = {
+              ...currentSelectedOp,
+              nutrition: {
+                ...existingNutrition,
+                meals: { ...existingMeals, [targetDate]: [...prevBucket, meal] },
+              },
+            };
             onUpdateOperator(updated);
           }
         }
@@ -1002,11 +1022,17 @@ const AppShell: React.FC<AppShellProps> = ({
                   fat: Math.round(m.fat),
                   time,
                 };
-                const updated = { ...currentSelectedOp };
-                if (!updated.nutrition) updated.nutrition = { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
-                if (!updated.nutrition.meals) updated.nutrition.meals = {};
-                const prevBucket = updated.nutrition.meals[targetDate] || [];
-                updated.nutrition.meals = { ...updated.nutrition.meals, [targetDate]: [...prevBucket, meal] };
+                // Deep-clone the nutrition chain to avoid mutating the live operator reference
+                const existingNutrition = currentSelectedOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+                const existingMeals = existingNutrition.meals || {};
+                const prevBucket2 = existingMeals[targetDate] || [];
+                const updated = {
+                  ...currentSelectedOp,
+                  nutrition: {
+                    ...existingNutrition,
+                    meals: { ...existingMeals, [targetDate]: [...prevBucket2, meal] },
+                  },
+                };
                 onUpdateOperator(updated);
               }
             }
@@ -1830,7 +1856,7 @@ const AppShell: React.FC<AppShellProps> = ({
       }} />
 
       {/* Content Area */}
-      <main style={{
+      <main className="gu-scalable" style={{
         flex: 1,
         overflow: 'auto',
         backgroundColor: '#030303',
@@ -2019,19 +2045,25 @@ const AppShell: React.FC<AppShellProps> = ({
 
           {/* Input Area */}
           <div className="gunny-input-area">
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
               className="gunny-input"
               placeholder="Ask about what you see..."
               value={gunnyInput}
-              onChange={(e) => setGunnyInput(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && !gunnyLoading) {
+              onChange={(e) => {
+                setGunnyInput(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !gunnyLoading) {
+                  e.preventDefault();
                   sendGunnyMessage();
                 }
               }}
               disabled={gunnyLoading}
+              rows={1}
+              style={{ resize: 'none', overflow: 'hidden', lineHeight: '1.4' }}
             />
             <button
               className="gunny-send-btn"
@@ -2049,8 +2081,31 @@ const AppShell: React.FC<AppShellProps> = ({
       {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
 
       {/* Classification Bar */}
-      <div className="classification-bar">
-        GUNS UP — EYES ONLY
+      <div className="classification-bar" style={{ pointerEvents: 'auto', justifyContent: 'space-between', padding: '0 12px' }}>
+        <span style={{ opacity: 0.5, fontSize: 9 }}>GUNS UP — EYES ONLY</span>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          {(['S', 'M', 'L'] as const).map((size) => (
+            <button
+              key={size}
+              onClick={() => setFontScale(size)}
+              style={{
+                background: fontScale === size ? 'rgba(0,255,65,0.2)' : 'transparent',
+                border: fontScale === size ? '1px solid rgba(0,255,65,0.4)' : '1px solid transparent',
+                borderRadius: 2,
+                color: fontScale === size ? '#00ff41' : 'rgba(0,255,65,0.25)',
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: 8,
+                fontWeight: 700,
+                padding: '1px 4px',
+                cursor: 'pointer',
+                letterSpacing: 1,
+                lineHeight: 1,
+              }}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

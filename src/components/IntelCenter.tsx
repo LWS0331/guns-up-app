@@ -9,7 +9,18 @@ import { FOOD_DB } from '@/data/foods';
 import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
+import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
+
+/** Format a meal.time for display — handles ISO, legacy locale strings, and bare times. */
+const formatMealTime = (raw: string | undefined): string => {
+  if (!raw) return '';
+  const parsed = new Date(raw);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  }
+  return raw; // legacy non-parseable — show as stored
+};
 
 // Local type aliases for internal state management
 interface Goal {
@@ -80,6 +91,43 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
   // Using UTC (toISOString) silently drops meals logged by PST/EST users when
   // their local evening crosses UTC midnight.
   const getTodayStr = () => getLocalDateStr();
+
+  // ─── P1: Day-back navigation state ───
+  const [viewingDateStr, setViewingDateStr] = useState<string>(() => getLocalDateStr());
+
+  const viewingDayMeals: Meal[] = React.useMemo(
+    () => operator.nutrition?.meals?.[viewingDateStr] || [],
+    [operator.nutrition?.meals, viewingDateStr]
+  );
+
+  const viewingDayTotals = React.useMemo(() => viewingDayMeals.reduce(
+    (acc, m) => ({
+      calories: acc.calories + (m.calories || 0),
+      protein: acc.protein + (m.protein || 0),
+      carbs: acc.carbs + (m.carbs || 0),
+      fat: acc.fat + (m.fat || 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  ), [viewingDayMeals]);
+
+  const isViewingToday = viewingDateStr === getTodayStr();
+
+  const shiftViewingDate = (days: number) => {
+    const [y, m, d] = viewingDateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    setViewingDateStr(toLocalDateStr(dt));
+  };
+
+  const formatViewingDateLabel = () => {
+    if (isViewingToday) return 'TODAY';
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (viewingDateStr === toLocalDateStr(yesterday)) return 'YESTERDAY';
+    const [y, m, d] = viewingDateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+  };
 
   // Convert string goals to Goal objects with id/name
   const convertGoalsToObjects = (goals: string[]): Goal[] => {
@@ -1324,7 +1372,103 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         </div>
       </div>
 
-      {/* LOG MODE SELECTOR */}
+      {/* ─── DATE NAVIGATOR ─── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        padding: '10px 12px',
+        marginBottom: 12,
+        background: 'rgba(0,255,65,0.03)',
+        border: '1px solid rgba(0,255,65,0.10)',
+        borderRadius: 4,
+      }}>
+        <button
+          onClick={() => shiftViewingDate(-1)}
+          style={{
+            padding: '6px 12px',
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: 11,
+            fontWeight: 700,
+            color: '#00ff41',
+            background: 'transparent',
+            border: '1px solid rgba(0,255,65,0.3)',
+            borderRadius: 3,
+            cursor: 'pointer',
+            letterSpacing: 1,
+          }}
+          aria-label="Previous day"
+        >
+          ◀ PREV
+        </button>
+
+        <div style={{ textAlign: 'center', flex: 1 }}>
+          <div style={{
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: 13,
+            fontWeight: 700,
+            color: '#00ff41',
+            letterSpacing: 2,
+          }}>
+            {formatViewingDateLabel()}
+          </div>
+          <div style={{
+            fontFamily: 'Share Tech Mono, monospace',
+            fontSize: 10,
+            color: '#666',
+            marginTop: 2,
+          }}>
+            {viewingDateStr}
+          </div>
+        </div>
+
+        <button
+          onClick={() => shiftViewingDate(1)}
+          disabled={isViewingToday}
+          style={{
+            padding: '6px 12px',
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: 11,
+            fontWeight: 700,
+            color: isViewingToday ? '#333' : '#00ff41',
+            background: 'transparent',
+            border: `1px solid ${isViewingToday ? '#1a1a1a' : 'rgba(0,255,65,0.3)'}`,
+            borderRadius: 3,
+            cursor: isViewingToday ? 'not-allowed' : 'pointer',
+            letterSpacing: 1,
+          }}
+          aria-label="Next day"
+        >
+          NEXT ▶
+        </button>
+      </div>
+
+      {/* JUMP TO TODAY — only visible when viewing a past day */}
+      {!isViewingToday && (
+        <button
+          onClick={() => setViewingDateStr(getTodayStr())}
+          style={{
+            width: '100%',
+            padding: '8px',
+            marginBottom: 12,
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: 10,
+            fontWeight: 700,
+            color: '#facc15',
+            background: 'rgba(250,204,21,0.05)',
+            border: '1px solid rgba(250,204,21,0.2)',
+            borderRadius: 3,
+            cursor: 'pointer',
+            letterSpacing: 1.5,
+          }}
+        >
+          ↻ JUMP TO TODAY
+        </button>
+      )}
+
+      {/* LOG MODE SELECTOR — only when viewing today */}
+      {isViewingToday && (<>
       <div style={{ marginBottom: 16, display: 'flex', gap: 6 }}>
         {([
           { id: 'quick' as const, label: '💬 QUICK', color: '#facc15' },
@@ -1539,6 +1683,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           </div>
         </div>
       )}
+      </>)}
 
       {/* Macro Targets */}
       <div
@@ -1925,8 +2070,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           LOG MEAL
         </h3>
 
-        {/* Log Form */}
-        <div
+        {/* Log Form — only when viewing today */}
+        {isViewingToday ? (<div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
@@ -2073,117 +2218,90 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             ADD
           </button>
         </div>
+      ) : (
+        <div style={{
+          padding: 14,
+          marginBottom: 12,
+          background: 'rgba(255,184,0,0.04)',
+          border: '1px solid rgba(255,184,0,0.2)',
+          borderRadius: 4,
+          fontFamily: 'Share Tech Mono, monospace',
+          fontSize: 11,
+          color: '#facc15',
+          textAlign: 'center',
+        }}>
+          VIEWING PAST DAY — LOGGING DISABLED. Jump to today to add meals.
+        </div>
+      )}
 
         {/* Meals List */}
         <div style={{ marginBottom: '16px' }}>
-          {todaysMeals.length === 0 ? (
+          {(isViewingToday ? todaysMeals : viewingDayMeals).length === 0 ? (
             <div
               style={{
                 textAlign: 'center',
-                padding: '16px',
-                color: '#888',
+                padding: '20px 12px',
+                color: '#666',
                 fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '15px',
+                fontSize: 13,
               }}
             >
-              No meals logged today
+              {isViewingToday ? 'No meals logged today' : 'No meals logged on this day'}
             </div>
           ) : (
-            todaysMeals.map((meal) => (
-              <div
+            (isViewingToday ? todaysMeals : viewingDayMeals).map((meal) => (
+              <MealRow
                 key={meal.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '10px',
-                  borderBottom: '1px solid rgba(0,255,65,0.06)',
-                  fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '26px',
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: '#ddd', marginBottom: '4px' }}>{meal.name}</div>
-                  <div style={{ color: '#888', fontSize: '15px' }}>
-                    {meal.calories} cal | P: {meal.protein}g C: {meal.carbs}g F: {meal.fat}g
-                  </div>
-                </div>
-                <div
-                  style={{
-                    color: '#888',
-                    marginRight: '16px',
-                    fontFamily: 'Share Tech Mono, monospace',
-                    fontSize: '15px',
-                  }}
-                >
-                  {(() => {
-                    const d = new Date(meal.time);
-                    if (!isNaN(d.getTime())) {
-                      return d.toLocaleTimeString('en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true,
-                      });
-                    }
-                    // Legacy bare time string ("11:00 AM" / "11:00") — show raw.
-                    return meal.time;
-                  })()}
-                </div>
-                <button
-                  onClick={() => removeMeal(meal.id)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#ff4444',
-                    cursor: 'pointer',
-                    fontSize: '26px',
-                    padding: 0,
-                  }}
-                >
-                  ×
-                </button>
-              </div>
+                meal={meal}
+                timeLabel={formatMealTime(meal.time)}
+                onRemove={isViewingToday ? () => removeMeal(meal.id) : undefined}
+              />
             ))
           )}
         </div>
 
         {/* Totals Summary */}
-        {todaysMeals.length > 0 && (
+        {(isViewingToday ? todaysMeals : viewingDayMeals).length > 0 && (
           <div
             style={{
-              padding: '10px',
-              backgroundColor: 'rgba(0,255,65,0.04)',
-              borderRadius: '4px',
-              fontFamily: 'Share Tech Mono, monospace',
-              fontSize: '22px',
-              color: '#00ff41',
+              padding: '12px',
+              marginTop: 10,
+              background: 'rgba(0,255,65,0.04)',
+              border: '1px solid rgba(0,255,65,0.12)',
+              borderRadius: 4,
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(70px, 1fr))',
-              gap: '8px',
+              gap: 8,
               textAlign: 'center',
               minWidth: 0,
             }}
           >
-            <div>
-              <div style={{ color: '#888', fontSize: '15px', marginBottom: '2px' }}>
-                CALORIES
+            {[
+              { label: 'CAL', value: (isViewingToday ? mealTotals : viewingDayTotals).calories, color: '#ffb800' },
+              { label: 'P', value: `${(isViewingToday ? mealTotals : viewingDayTotals).protein}g`, color: '#00ff41' },
+              { label: 'C', value: `${(isViewingToday ? mealTotals : viewingDayTotals).carbs}g`, color: '#4ade80' },
+              { label: 'F', value: `${(isViewingToday ? mealTotals : viewingDayTotals).fat}g`, color: '#f97316' },
+            ].map((t) => (
+              <div key={t.label}>
+                <div style={{
+                  fontSize: 9,
+                  fontFamily: 'Orbitron, sans-serif',
+                  color: '#666',
+                  letterSpacing: 1.5,
+                  marginBottom: 4,
+                }}>
+                  {t.label}
+                </div>
+                <div style={{
+                  fontSize: 16,
+                  fontFamily: 'Share Tech Mono, monospace',
+                  color: t.color,
+                  fontWeight: 700,
+                }}>
+                  {t.value}
+                </div>
               </div>
-              {mealTotals.calories}
-            </div>
-            <div>
-              <div style={{ color: '#888', fontSize: '15px', marginBottom: '2px' }}>
-                PROTEIN
-              </div>
-              {mealTotals.protein}g
-            </div>
-            <div>
-              <div style={{ color: '#888', fontSize: '15px', marginBottom: '2px' }}>CARBS</div>
-              {mealTotals.carbs}g
-            </div>
-            <div>
-              <div style={{ color: '#888', fontSize: '15px', marginBottom: '2px' }}>FAT</div>
-              {mealTotals.fat}g
-            </div>
+            ))}
           </div>
         )}
       </div>

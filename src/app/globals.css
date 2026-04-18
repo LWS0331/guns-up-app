@@ -1,3 +1,9 @@
+/* P6: Font scale zoom tiers */
+:root { --gu-zoom: 1; }
+html[data-font-scale="S"] .gu-scalable { zoom: 0.85; }
+html[data-font-scale="M"] .gu-scalable { zoom: 1; }
+html[data-font-scale="L"] .gu-scalable { zoom: 1.15; }
+
 /* Core colors as CSS variables */
 :root {
   --bg-base: #030303;
