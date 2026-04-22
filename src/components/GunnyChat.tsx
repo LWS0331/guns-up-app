@@ -200,6 +200,30 @@ const getTimeOfDay = (): string => {
   return 'evening';
 };
 
+// Owner-only diagnostic surface for Gunny API failures (RAMPAGE only).
+// Classifies the error bucket from `/api/gunny` and renders a short debug block
+// so we can tell billing/auth/rate_limit apart from a generic comms drop.
+const formatOwnerDiagnostic = (info: { errorType?: string; message?: string; status?: number; details?: string }): string => {
+  const t = info.errorType || 'unknown';
+  const hint =
+    t === 'auth' ? 'Check ANTHROPIC_API_KEY in Railway env.'
+    : t === 'billing' ? 'Anthropic billing — verify payment method & active credits.'
+    : t === 'rate_limit' ? 'Hit per-minute rate limit — back off or downgrade tier.'
+    : t === 'overloaded' ? 'Anthropic 529 — retry in a few seconds.'
+    : t === 'model' ? 'Model string rejected — check TIER_MODEL_MAP.'
+    : t === 'network' ? 'Network/timeout — check Railway logs for stream cut.'
+    : t === 'stream_error' ? 'Mid-stream throw — see server log `Gunny API error`.'
+    : 'Unclassified — check Railway logs.';
+  const lines = [
+    '⚠ [DEBUG · RAMPAGE]',
+    `type: ${t}${info.status ? ` (HTTP ${info.status})` : ''}`,
+    info.message ? `msg: ${info.message}` : null,
+    info.details ? `details: ${info.details}` : null,
+    `→ ${hint}`,
+  ].filter(Boolean);
+  return lines.join('\n');
+};
+
 const getTierColor = (tier: string): string => {
   switch (tier) {
     case 'haiku': return '#6B7B6B';
@@ -369,18 +393,32 @@ Warmup: ${trainerWorkout.warmup}
 };
 
 // ═══ Chat persistence helpers (API-first, localStorage fallback) ═══
-const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
-  const serializable = msgs.map(m => ({ ...m, timestamp: new Date(m.timestamp).toISOString() }));
-  // Save to API (non-blocking)
+// Serializes a Message[] for both localStorage and the /api/chat PUT body.
+const serializeMessages = (msgs: Message[]) =>
+  msgs.map(m => ({ ...m, timestamp: new Date(m.timestamp).toISOString() }));
+
+// Sync, immediate — cheap and survives tab unmount / page refresh.
+const saveChatLocal = (opId: string, serialized: ReturnType<typeof serializeMessages>) => {
+  try {
+    localStorage.setItem(`gunny-chat-${opId}`, JSON.stringify(serialized));
+  } catch { /* storage full */ }
+};
+
+// Async API write. `keepalive` lets the request complete even if the document
+// unmounts or navigates away — critical because loadChat prefers API over local.
+const saveChatRemote = (opId: string, chatType: string, serialized: ReturnType<typeof serializeMessages>) => {
   fetch('/api/chat', {
     method: 'PUT',
+    keepalive: true,
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
-    body: JSON.stringify({ operatorId: opId, chatType, messages: serializable }),
+    body: JSON.stringify({ operatorId: opId, chatType, messages: serialized }),
   }).catch(() => { /* API unavailable — localStorage will cover it */ });
-  // Also save to localStorage as immediate fallback
-  try {
-    localStorage.setItem(`gunny-chat-${opId}`, JSON.stringify(serializable));
-  } catch { /* storage full */ }
+};
+
+const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
+  const serialized = serializeMessages(msgs);
+  saveChatRemote(opId, chatType, serialized);
+  saveChatLocal(opId, serialized);
 };
 
 const loadChatFromAPI = async (opId: string, chatType: string): Promise<Message[] | null> => {
@@ -649,17 +687,57 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     loadChat();
   }, [operator.id, operator.role, allOperators]);
 
-  // Persist messages whenever they change (API + localStorage)
-  // Guard: skip saves while streaming (isTyping=true) to avoid flooding the persistence API on every delta
-  const prevMsgCountRef = useRef(0);
+  // Persist messages — split strategy:
+  // • localStorage: written on every content change (sync, cheap, survives tab unmount + refresh).
+  // • API: debounced 600ms after last change so rapid streaming deltas collapse into one PUT.
+  //
+  // Why the content-hash signature? The previous gate triggered only on messages.length change,
+  // which missed every delta after the first (streaming mutates the placeholder's text, not the
+  // array length) — so localStorage/API froze at "Got"/"Roger" mid-stream. Hashing id:textLength
+  // per message catches text mutations too.
+  const prevSnapshotRef = useRef('');
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPendingSaveRef = useRef<{ chatType: string; serialized: ReturnType<typeof serializeMessages> } | null>(null);
+
   useEffect(() => {
-    if (isTyping) return; // don't save mid-stream
-    if (messages.length > 0 && messages.length !== prevMsgCountRef.current) {
-      prevMsgCountRef.current = messages.length;
-      const chatType = isOnboarding ? 'gunny-onboarding' : 'gunny-tab';
-      saveChatToStorage(operator.id, chatType, messages);
-    }
-  }, [messages, isTyping, operator.id, isOnboarding]);
+    if (messages.length === 0) return;
+
+    const snapshot = messages.map(m => `${m.id}:${m.text?.length ?? 0}`).join('|');
+    if (snapshot === prevSnapshotRef.current) return;
+    prevSnapshotRef.current = snapshot;
+
+    const chatType = isOnboarding ? 'gunny-onboarding' : 'gunny-tab';
+    const serialized = serializeMessages(messages);
+
+    saveChatLocal(operator.id, serialized);
+    lastPendingSaveRef.current = { chatType, serialized };
+
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      saveDebounceRef.current = null;
+      const pending = lastPendingSaveRef.current;
+      if (pending) {
+        saveChatRemote(operator.id, pending.chatType, pending.serialized);
+        lastPendingSaveRef.current = null;
+      }
+    }, 600);
+  }, [messages, operator.id, isOnboarding]);
+
+  // On unmount, flush any pending debounced save using keepalive so the final stream
+  // content reaches the API even if the tab was switched / page navigated away.
+  useEffect(() => {
+    return () => {
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
+      const pending = lastPendingSaveRef.current;
+      if (pending) {
+        saveChatRemote(operator.id, pending.chatType, pending.serialized);
+        lastPendingSaveRef.current = null;
+      }
+    };
+  }, [operator.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1204,6 +1282,7 @@ ${mealSuggestion}`;
     opts: {
       forceMode?: string;
       onDelta: (accumulated: string) => void;
+      onError?: (info: { errorType?: string; message?: string; status?: number; details?: string }) => void;
     }
   ): Promise<{
     response: string;
@@ -1253,8 +1332,17 @@ ${mealSuggestion}`;
       // Graceful fallback: server returned JSON (error path or old deployment)
       const ctype = res.headers.get('content-type') || '';
       if (!ctype.includes('text/event-stream')) {
-        const data = await res.json();
-        if (!res.ok) return null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data: any = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          opts.onError?.({
+            errorType: data?.errorType,
+            message: data?.error,
+            status: res.status,
+            details: data?.details,
+          });
+          return null;
+        }
         opts.onDelta(data.response || '');
         return {
           response: data.response || '',
@@ -1313,6 +1401,10 @@ ${mealSuggestion}`;
             } else if (eventType === 'final') {
               finalPayload = payload;
             } else if (eventType === 'error') {
+              opts.onError?.({
+                errorType: 'stream_error',
+                message: payload?.error,
+              });
               return null;
             }
           } catch {
@@ -1333,7 +1425,11 @@ ${mealSuggestion}`;
         };
       }
       return { response: accumulated };
-    } catch {
+    } catch (e) {
+      opts.onError?.({
+        errorType: 'network',
+        message: e instanceof Error ? e.message : 'Unknown fetch error',
+      });
       return null;
     }
   };
@@ -1426,6 +1522,7 @@ ${mealSuggestion}`;
         id: placeholderId, role: 'gunny' as const, text: '', timestamp: new Date(),
       }]);
 
+      let errorInfo: { errorType?: string; message?: string; status?: number; details?: string } | null = null;
       const apiResult = await callGunnyAPIStreaming(updatedMessages, {
         forceMode: 'onboarding',
         onDelta: (accumulated) => {
@@ -1437,14 +1534,18 @@ ${mealSuggestion}`;
             prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
           );
         },
+        onError: (info) => { errorInfo = info; },
       });
 
       if (apiResult?.profileData) {
         applyProfileData(apiResult.profileData);
       }
       if (!apiResult) {
+        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
+          ? formatOwnerDiagnostic(errorInfo)
+          : 'Copy that. Tell me more about your training background and goals.';
         setMessages((prev) =>
-          prev.map((m) => (m.id === placeholderId ? { ...m, text: 'Copy that. Tell me more about your training background and goals.' } : m))
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
       }
 
@@ -1500,6 +1601,7 @@ ${mealSuggestion}`;
         timestamp: new Date(),
       }]);
 
+      let errorInfo: { errorType?: string; message?: string; status?: number; details?: string } | null = null;
       const apiResult = await callGunnyAPIStreaming(updatedMessages, {
         onDelta: (accumulated) => {
           // Hide the thinking indicator once we have content
@@ -1511,6 +1613,7 @@ ${mealSuggestion}`;
             prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
           );
         },
+        onError: (info) => { errorInfo = info; },
       });
 
       // SURGICAL MODIFICATION — apply targeted change to today's active workout
@@ -1623,8 +1726,11 @@ ${mealSuggestion}`;
 
       // If the API returned nothing at all, show the fallback
       if (!apiResult) {
+        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
+          ? formatOwnerDiagnostic(errorInfo)
+          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
         setMessages((prev) =>
-          prev.map((m) => (m.id === placeholderId ? { ...m, text: `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.` } : m))
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
       }
 
@@ -1658,6 +1764,7 @@ ${mealSuggestion}`;
         id: placeholderId, role: 'gunny' as const, text: '', timestamp: new Date(),
       }]);
 
+      let errorInfo: { errorType?: string; message?: string; status?: number; details?: string } | null = null;
       const apiResult = await callGunnyAPIStreaming(updatedMessages, {
         onDelta: (accumulated) => {
           if (accumulated.length > 0) {
@@ -1668,6 +1775,7 @@ ${mealSuggestion}`;
             prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
           );
         },
+        onError: (info) => { errorInfo = info; },
       });
 
       let wasModification = false;
@@ -1707,8 +1815,11 @@ ${mealSuggestion}`;
         );
       }
       if (!apiResult) {
+        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
+          ? formatOwnerDiagnostic(errorInfo)
+          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
         setMessages((prev) =>
-          prev.map((m) => (m.id === placeholderId ? { ...m, text: `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.` } : m))
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
       }
       setIsTyping(false); setThinkingStartedAt(null);
