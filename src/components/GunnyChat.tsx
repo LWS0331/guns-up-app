@@ -393,18 +393,32 @@ Warmup: ${trainerWorkout.warmup}
 };
 
 // ═══ Chat persistence helpers (API-first, localStorage fallback) ═══
-const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
-  const serializable = msgs.map(m => ({ ...m, timestamp: new Date(m.timestamp).toISOString() }));
-  // Save to API (non-blocking)
+// Serializes a Message[] for both localStorage and the /api/chat PUT body.
+const serializeMessages = (msgs: Message[]) =>
+  msgs.map(m => ({ ...m, timestamp: new Date(m.timestamp).toISOString() }));
+
+// Sync, immediate — cheap and survives tab unmount / page refresh.
+const saveChatLocal = (opId: string, serialized: ReturnType<typeof serializeMessages>) => {
+  try {
+    localStorage.setItem(`gunny-chat-${opId}`, JSON.stringify(serialized));
+  } catch { /* storage full */ }
+};
+
+// Async API write. `keepalive` lets the request complete even if the document
+// unmounts or navigates away — critical because loadChat prefers API over local.
+const saveChatRemote = (opId: string, chatType: string, serialized: ReturnType<typeof serializeMessages>) => {
   fetch('/api/chat', {
     method: 'PUT',
+    keepalive: true,
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
-    body: JSON.stringify({ operatorId: opId, chatType, messages: serializable }),
+    body: JSON.stringify({ operatorId: opId, chatType, messages: serialized }),
   }).catch(() => { /* API unavailable — localStorage will cover it */ });
-  // Also save to localStorage as immediate fallback
-  try {
-    localStorage.setItem(`gunny-chat-${opId}`, JSON.stringify(serializable));
-  } catch { /* storage full */ }
+};
+
+const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
+  const serialized = serializeMessages(msgs);
+  saveChatRemote(opId, chatType, serialized);
+  saveChatLocal(opId, serialized);
 };
 
 const loadChatFromAPI = async (opId: string, chatType: string): Promise<Message[] | null> => {
@@ -673,17 +687,57 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     loadChat();
   }, [operator.id, operator.role, allOperators]);
 
-  // Persist messages whenever they change (API + localStorage)
-  // Guard: skip saves while streaming (isTyping=true) to avoid flooding the persistence API on every delta
-  const prevMsgCountRef = useRef(0);
+  // Persist messages — split strategy:
+  // • localStorage: written on every content change (sync, cheap, survives tab unmount + refresh).
+  // • API: debounced 600ms after last change so rapid streaming deltas collapse into one PUT.
+  //
+  // Why the content-hash signature? The previous gate triggered only on messages.length change,
+  // which missed every delta after the first (streaming mutates the placeholder's text, not the
+  // array length) — so localStorage/API froze at "Got"/"Roger" mid-stream. Hashing id:textLength
+  // per message catches text mutations too.
+  const prevSnapshotRef = useRef('');
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPendingSaveRef = useRef<{ chatType: string; serialized: ReturnType<typeof serializeMessages> } | null>(null);
+
   useEffect(() => {
-    if (isTyping) return; // don't save mid-stream
-    if (messages.length > 0 && messages.length !== prevMsgCountRef.current) {
-      prevMsgCountRef.current = messages.length;
-      const chatType = isOnboarding ? 'gunny-onboarding' : 'gunny-tab';
-      saveChatToStorage(operator.id, chatType, messages);
-    }
-  }, [messages, isTyping, operator.id, isOnboarding]);
+    if (messages.length === 0) return;
+
+    const snapshot = messages.map(m => `${m.id}:${m.text?.length ?? 0}`).join('|');
+    if (snapshot === prevSnapshotRef.current) return;
+    prevSnapshotRef.current = snapshot;
+
+    const chatType = isOnboarding ? 'gunny-onboarding' : 'gunny-tab';
+    const serialized = serializeMessages(messages);
+
+    saveChatLocal(operator.id, serialized);
+    lastPendingSaveRef.current = { chatType, serialized };
+
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      saveDebounceRef.current = null;
+      const pending = lastPendingSaveRef.current;
+      if (pending) {
+        saveChatRemote(operator.id, pending.chatType, pending.serialized);
+        lastPendingSaveRef.current = null;
+      }
+    }, 600);
+  }, [messages, operator.id, isOnboarding]);
+
+  // On unmount, flush any pending debounced save using keepalive so the final stream
+  // content reaches the API even if the tab was switched / page navigated away.
+  useEffect(() => {
+    return () => {
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
+      const pending = lastPendingSaveRef.current;
+      if (pending) {
+        saveChatRemote(operator.id, pending.chatType, pending.serialized);
+        lastPendingSaveRef.current = null;
+      }
+    };
+  }, [operator.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

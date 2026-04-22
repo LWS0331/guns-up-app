@@ -433,23 +433,68 @@ const AppShell: React.FC<AppShellProps> = ({
     loadPanelChat();
   }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign]);
 
-  // Persist panel messages (API + localStorage fallback)
-  const prevPanelMsgCountRef = useRef(0);
+  // Persist panel messages — split strategy:
+  // • localStorage: every content change (sync, cheap, survives unmount/refresh).
+  // • API: debounced 600ms after last change so streaming deltas collapse into one PUT.
+  // Previously gated on length only, which skipped every delta after the first and froze
+  // the saved message at the first word ("Got"/"Roger").
+  const prevPanelSnapshotRef = useRef('');
+  const panelSaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPanelPendingRef = useRef<{ serialized: unknown[] } | null>(null);
+
   useEffect(() => {
-    if (gunnyMessages.length > 0 && gunnyMessages.length !== prevPanelMsgCountRef.current) {
-      prevPanelMsgCountRef.current = gunnyMessages.length;
-      // Save to API (non-blocking)
+    if (gunnyMessages.length === 0) return;
+
+    // Content-aware signature catches text mutations, not just array length changes.
+    const snapshot = gunnyMessages
+      .map(m => `${m.role}:${(m.text ?? '').length}:${m.timestamp}`)
+      .join('|');
+    if (snapshot === prevPanelSnapshotRef.current) return;
+    prevPanelSnapshotRef.current = snapshot;
+
+    const serialized = gunnyMessages;
+
+    try {
+      localStorage.setItem(`gunny-panel-${selectedOperator.id}`, JSON.stringify(serialized));
+    } catch { /* storage full */ }
+    lastPanelPendingRef.current = { serialized };
+
+    if (panelSaveDebounceRef.current) clearTimeout(panelSaveDebounceRef.current);
+    panelSaveDebounceRef.current = setTimeout(() => {
+      panelSaveDebounceRef.current = null;
+      const pending = lastPanelPendingRef.current;
+      if (!pending) return;
       fetch('/api/chat', {
         method: 'PUT',
+        keepalive: true,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
-        body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: gunnyMessages }),
+        body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: pending.serialized }),
       }).catch(() => {});
-      // Also save to localStorage as fallback
-      try {
-        localStorage.setItem(`gunny-panel-${selectedOperator.id}`, JSON.stringify(gunnyMessages));
-      } catch { /* storage full */ }
-    }
+      lastPanelPendingRef.current = null;
+    }, 600);
   }, [gunnyMessages, selectedOperator.id]);
+
+  // On unmount / operator switch, flush any pending debounced save with keepalive
+  // so the final content reaches the API even if the page navigates away.
+  useEffect(() => {
+    const operatorId = selectedOperator.id;
+    return () => {
+      if (panelSaveDebounceRef.current) {
+        clearTimeout(panelSaveDebounceRef.current);
+        panelSaveDebounceRef.current = null;
+      }
+      const pending = lastPanelPendingRef.current;
+      if (pending) {
+        fetch('/api/chat', {
+          method: 'PUT',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+          body: JSON.stringify({ operatorId, chatType: 'gunny-panel', messages: pending.serialized }),
+        }).catch(() => {});
+        lastPanelPendingRef.current = null;
+      }
+    };
+  }, [selectedOperator.id]);
 
   // Focus input when panel opens
   useEffect(() => {
@@ -1343,7 +1388,9 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'radio':
         return <TacticalRadio operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />;
       case 'gunny':
-        return <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />;
+        // Rendered as an always-mounted sibling inside <main> below so streaming
+        // state survives tab switches. See the display-toggled wrapper near renderTabContent().
+        return null;
       case 'ops':
         // Trainer-specific view
         if (currentUser.role === 'trainer') {
@@ -1949,6 +1996,10 @@ const AppShell: React.FC<AppShellProps> = ({
         paddingBottom: isMobile ? '56px' : '0',
       }}>
         {renderTabContent()}
+        {/* Always-mounted GunnyChat — display-toggled so streaming state & refs survive tab switches. */}
+        <div style={{ display: activeTab === 'gunny' ? 'block' : 'none', height: '100%' }}>
+          <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />
+        </div>
       </main>
 
       {/* Mobile Bottom Tab Bar */}
