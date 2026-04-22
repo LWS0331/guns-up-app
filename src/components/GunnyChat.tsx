@@ -200,6 +200,30 @@ const getTimeOfDay = (): string => {
   return 'evening';
 };
 
+// Owner-only diagnostic surface for Gunny API failures (RAMPAGE only).
+// Classifies the error bucket from `/api/gunny` and renders a short debug block
+// so we can tell billing/auth/rate_limit apart from a generic comms drop.
+const formatOwnerDiagnostic = (info: { errorType?: string; message?: string; status?: number; details?: string }): string => {
+  const t = info.errorType || 'unknown';
+  const hint =
+    t === 'auth' ? 'Check ANTHROPIC_API_KEY in Railway env.'
+    : t === 'billing' ? 'Anthropic billing — verify payment method & active credits.'
+    : t === 'rate_limit' ? 'Hit per-minute rate limit — back off or downgrade tier.'
+    : t === 'overloaded' ? 'Anthropic 529 — retry in a few seconds.'
+    : t === 'model' ? 'Model string rejected — check TIER_MODEL_MAP.'
+    : t === 'network' ? 'Network/timeout — check Railway logs for stream cut.'
+    : t === 'stream_error' ? 'Mid-stream throw — see server log `Gunny API error`.'
+    : 'Unclassified — check Railway logs.';
+  const lines = [
+    '⚠ [DEBUG · RAMPAGE]',
+    `type: ${t}${info.status ? ` (HTTP ${info.status})` : ''}`,
+    info.message ? `msg: ${info.message}` : null,
+    info.details ? `details: ${info.details}` : null,
+    `→ ${hint}`,
+  ].filter(Boolean);
+  return lines.join('\n');
+};
+
 const getTierColor = (tier: string): string => {
   switch (tier) {
     case 'haiku': return '#6B7B6B';
@@ -1204,6 +1228,7 @@ ${mealSuggestion}`;
     opts: {
       forceMode?: string;
       onDelta: (accumulated: string) => void;
+      onError?: (info: { errorType?: string; message?: string; status?: number; details?: string }) => void;
     }
   ): Promise<{
     response: string;
@@ -1253,8 +1278,17 @@ ${mealSuggestion}`;
       // Graceful fallback: server returned JSON (error path or old deployment)
       const ctype = res.headers.get('content-type') || '';
       if (!ctype.includes('text/event-stream')) {
-        const data = await res.json();
-        if (!res.ok) return null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data: any = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          opts.onError?.({
+            errorType: data?.errorType,
+            message: data?.error,
+            status: res.status,
+            details: data?.details,
+          });
+          return null;
+        }
         opts.onDelta(data.response || '');
         return {
           response: data.response || '',
@@ -1313,6 +1347,10 @@ ${mealSuggestion}`;
             } else if (eventType === 'final') {
               finalPayload = payload;
             } else if (eventType === 'error') {
+              opts.onError?.({
+                errorType: 'stream_error',
+                message: payload?.error,
+              });
               return null;
             }
           } catch {
@@ -1333,7 +1371,11 @@ ${mealSuggestion}`;
         };
       }
       return { response: accumulated };
-    } catch {
+    } catch (e) {
+      opts.onError?.({
+        errorType: 'network',
+        message: e instanceof Error ? e.message : 'Unknown fetch error',
+      });
       return null;
     }
   };
@@ -1426,6 +1468,7 @@ ${mealSuggestion}`;
         id: placeholderId, role: 'gunny' as const, text: '', timestamp: new Date(),
       }]);
 
+      let errorInfo: { errorType?: string; message?: string; status?: number; details?: string } | null = null;
       const apiResult = await callGunnyAPIStreaming(updatedMessages, {
         forceMode: 'onboarding',
         onDelta: (accumulated) => {
@@ -1437,14 +1480,18 @@ ${mealSuggestion}`;
             prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
           );
         },
+        onError: (info) => { errorInfo = info; },
       });
 
       if (apiResult?.profileData) {
         applyProfileData(apiResult.profileData);
       }
       if (!apiResult) {
+        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
+          ? formatOwnerDiagnostic(errorInfo)
+          : 'Copy that. Tell me more about your training background and goals.';
         setMessages((prev) =>
-          prev.map((m) => (m.id === placeholderId ? { ...m, text: 'Copy that. Tell me more about your training background and goals.' } : m))
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
       }
 
@@ -1500,6 +1547,7 @@ ${mealSuggestion}`;
         timestamp: new Date(),
       }]);
 
+      let errorInfo: { errorType?: string; message?: string; status?: number; details?: string } | null = null;
       const apiResult = await callGunnyAPIStreaming(updatedMessages, {
         onDelta: (accumulated) => {
           // Hide the thinking indicator once we have content
@@ -1511,6 +1559,7 @@ ${mealSuggestion}`;
             prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
           );
         },
+        onError: (info) => { errorInfo = info; },
       });
 
       // SURGICAL MODIFICATION — apply targeted change to today's active workout
@@ -1623,8 +1672,11 @@ ${mealSuggestion}`;
 
       // If the API returned nothing at all, show the fallback
       if (!apiResult) {
+        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
+          ? formatOwnerDiagnostic(errorInfo)
+          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
         setMessages((prev) =>
-          prev.map((m) => (m.id === placeholderId ? { ...m, text: `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.` } : m))
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
       }
 
@@ -1658,6 +1710,7 @@ ${mealSuggestion}`;
         id: placeholderId, role: 'gunny' as const, text: '', timestamp: new Date(),
       }]);
 
+      let errorInfo: { errorType?: string; message?: string; status?: number; details?: string } | null = null;
       const apiResult = await callGunnyAPIStreaming(updatedMessages, {
         onDelta: (accumulated) => {
           if (accumulated.length > 0) {
@@ -1668,6 +1721,7 @@ ${mealSuggestion}`;
             prev.map((m) => (m.id === placeholderId ? { ...m, text: accumulated } : m))
           );
         },
+        onError: (info) => { errorInfo = info; },
       });
 
       let wasModification = false;
@@ -1707,8 +1761,11 @@ ${mealSuggestion}`;
         );
       }
       if (!apiResult) {
+        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
+          ? formatOwnerDiagnostic(errorInfo)
+          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
         setMessages((prev) =>
-          prev.map((m) => (m.id === placeholderId ? { ...m, text: `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.` } : m))
+          prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
       }
       setIsTyping(false); setThinkingStartedAt(null);
