@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
+import { PHOTO_ANALYSIS_MODEL } from '@/lib/models';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     }
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: PHOTO_ANALYSIS_MODEL,
       max_tokens: 1024,
       messages: [
         {
@@ -81,8 +82,17 @@ Estimation rules:
       const jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
       parsed = JSON.parse(jsonStr);
     } catch (err) {
-      console.error('[api/nutrition/analyze-photo] JSON parse failed:', err);
-      return NextResponse.json({ error: 'Failed to parse nutrition data', raw: text }, { status: 500 });
+      // Log the raw LLM output server-side (truncated) for debugging, but do
+      // NOT return it to the client. Returning raw model output to the caller
+      // leaks whatever the model generated — could be hallucinated content,
+      // partial prompt echoes, or unbounded text — and expands the UI's
+      // exposure to whatever shape a future model decides to emit.
+      const preview = typeof text === 'string' ? text.slice(0, 400) : '';
+      console.error('[api/nutrition/analyze-photo] JSON parse failed:', err, '| preview:', preview);
+      return NextResponse.json(
+        { error: 'Could not parse nutrition data from image. Try a clearer photo or log the meal manually.' },
+        { status: 502 },
+      );
     }
 
     return NextResponse.json({
