@@ -1256,6 +1256,14 @@ ${mealSuggestion}`;
     response: string;
     workoutData?: Record<string, unknown>;
     workoutModification?: Record<string, unknown>;
+    /**
+     * All workout_modification blocks parsed from Gunny's reply, in emission
+     * order. Gunny may emit several in one turn (e.g. prefill_weights for
+     * every exercise on today's workout). Callers should iterate and apply
+     * each one. The singular `workoutModification` above is kept as an alias
+     * for the first entry so pre-migration callers still compile.
+     */
+    workoutModifications?: Array<Record<string, unknown>>;
     profileData?: Record<string, unknown>;
     mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string };
     voiceControl?: { action?: string };
@@ -1317,6 +1325,7 @@ ${mealSuggestion}`;
           response: data.response || '',
           workoutData: data.workoutData,
           workoutModification: data.workoutModification,
+          workoutModifications: Array.isArray(data.workoutModifications) ? data.workoutModifications : (data.workoutModification ? [data.workoutModification] : []),
           profileData: data.profileData,
           mealData: data.mealData,
           voiceControl: data.voiceControl,
@@ -1392,6 +1401,7 @@ ${mealSuggestion}`;
           response: finalPayload.cleanText,
           workoutData: finalPayload.workoutData,
           workoutModification: finalPayload.workoutModification,
+          workoutModifications: Array.isArray(finalPayload.workoutModifications) ? finalPayload.workoutModifications : (finalPayload.workoutModification ? [finalPayload.workoutModification] : []),
           profileData: finalPayload.profileData,
           mealData: finalPayload.mealData,
           voiceControl: finalPayload.voiceControl,
@@ -1596,30 +1606,39 @@ ${mealSuggestion}`;
 
       applyVoiceControl(apiResult?.voiceControl);
 
-      // SURGICAL MODIFICATION — apply targeted change to today's active workout
+      // SURGICAL MODIFICATION — apply each targeted change Gunny emitted. Gunny
+      // can emit multiple <workout_modification> blocks (e.g. prefill_weights
+      // for every exercise on today's workout); we iterate and apply them in
+      // order. For block-shape mods (swap/add/remove/update), we fold them all
+      // into a single operator update to avoid a render storm.
       let wasModification = false;
-      if (apiResult?.workoutModification) {
-        const mod = apiResult.workoutModification as unknown as WorkoutModification;
-        if (mod?.type === 'prefill_weights') {
-          // Live prefill of workout-mode inputs — Planner's listener handles it.
-          // Does not mutate the persisted workout, does not need onUpdateOperator.
-          dispatchPrefillWeights(mod as PrefillWeightsMod);
-          wasModification = true;
-        } else if (onUpdateOperator) {
-          const today = getLocalDateStr();
-          const current = operator.workouts?.[today];
-          if (current) {
-            try {
-              const modified = applyWorkoutModification(current, mod);
-              const updated = { ...operator };
-              updated.workouts = { ...updated.workouts, [today]: modified };
-              onUpdateOperator(updated);
-              wasModification = true;
-            } catch (e) {
-              console.error('applyWorkoutModification failed:', e);
-            }
+      const mods = (apiResult?.workoutModifications || []) as unknown as WorkoutModification[];
+      if (mods.length > 0) {
+        const today = getLocalDateStr();
+        let workingOp = operator;
+        let touched = false;
+        for (const mod of mods) {
+          if (!mod || typeof mod !== 'object') continue;
+          if (mod.type === 'prefill_weights') {
+            // Live prefill of workout-mode inputs — Planner's listener handles
+            // it. Does not mutate the persisted workout.
+            dispatchPrefillWeights(mod as PrefillWeightsMod);
+            wasModification = true;
+            continue;
+          }
+          // Block-shape mods write to the persisted workout.
+          const current = workingOp.workouts?.[today];
+          if (!current) continue;
+          try {
+            const modified = applyWorkoutModification(current, mod);
+            workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
+            touched = true;
+            wasModification = true;
+          } catch (e) {
+            console.error('applyWorkoutModification failed:', e);
           }
         }
+        if (touched && onUpdateOperator) onUpdateOperator(workingOp);
       }
 
       // Store workout data if AI generated a NEW complete workout
@@ -1771,27 +1790,34 @@ ${mealSuggestion}`;
 
       applyVoiceControl(apiResult?.voiceControl);
 
+      // Same loop pattern as the normal-mode path above — apply every
+      // workout_modification Gunny emitted, prefills via event bus, block
+      // mods folded into a single operator update.
       let wasModification = false;
-      if (apiResult?.workoutModification) {
-        const mod = apiResult.workoutModification as unknown as WorkoutModification;
-        if (mod?.type === 'prefill_weights') {
-          dispatchPrefillWeights(mod as PrefillWeightsMod);
-          wasModification = true;
-        } else if (onUpdateOperator) {
-          const today = getLocalDateStr();
-          const current = operator.workouts?.[today];
-          if (current) {
-            try {
-              const modified = applyWorkoutModification(current, mod);
-              const updated = { ...operator };
-              updated.workouts = { ...updated.workouts, [today]: modified };
-              onUpdateOperator(updated);
-              wasModification = true;
-            } catch (e) {
-              console.error('applyWorkoutModification (quick action) failed:', e);
-            }
+      const qaMods = (apiResult?.workoutModifications || []) as unknown as WorkoutModification[];
+      if (qaMods.length > 0) {
+        const today = getLocalDateStr();
+        let workingOp = operator;
+        let touched = false;
+        for (const mod of qaMods) {
+          if (!mod || typeof mod !== 'object') continue;
+          if (mod.type === 'prefill_weights') {
+            dispatchPrefillWeights(mod as PrefillWeightsMod);
+            wasModification = true;
+            continue;
+          }
+          const current = workingOp.workouts?.[today];
+          if (!current) continue;
+          try {
+            const modified = applyWorkoutModification(current, mod);
+            workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
+            touched = true;
+            wasModification = true;
+          } catch (e) {
+            console.error('applyWorkoutModification (quick action) failed:', e);
           }
         }
+        if (touched && onUpdateOperator) onUpdateOperator(workingOp);
       }
 
       if (!wasModification && apiResult?.workoutData) {

@@ -359,6 +359,12 @@ update_prescription to bake the weights into the prescription string (e.g.
 "4 sets: 185x5, 195x5, 205x3, 215x3"), which the operator will see when they
 start workout mode for that day.
 
+MULTI-EXERCISE PREFILLS: when the operator asks you to fill weights across
+the whole workout ("fill every lift", "prefill all my exercises"), emit ONE
+<workout_modification> block per exercise. The client parses and applies
+every block in the response, so sequential blocks are fine. Keep each block
+self-contained and on its own line — do not nest or merge.
+
 After emitting <workout_modification>, confirm the change in plain text (e.g. "Roger. Lat Pulldown swapped for Cable Row — 4x10 at 140.").
 
 VOICE OUTPUT — YOU HAVE IT (HANDS-FREE TTS):
@@ -1162,9 +1168,16 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const jsonMatch = responseText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
       if (jsonMatch) { try { workoutData = JSON.parse(jsonMatch[1].trim()); } catch { /* ignore */ } }
 
-      let workoutModification = null;
-      const modMatch = responseText.match(/<workout_modification>([\s\S]*?)<\/workout_modification>/);
-      if (modMatch) { try { workoutModification = JSON.parse(modMatch[1].trim()); } catch { /* ignore */ } }
+      // Gunny may emit MULTIPLE <workout_modification> blocks in a single
+      // response — e.g. prefill_weights for 5 different exercises on the same
+      // workout day. Parse them all. workoutModifications (plural, array) is
+      // the canonical output. workoutModification (singular) is kept as the
+      // first-entry alias for any older callers that haven't migrated.
+      const workoutModifications: Array<Record<string, unknown>> = [];
+      for (const m of responseText.matchAll(/<workout_modification>([\s\S]*?)<\/workout_modification>/g)) {
+        try { workoutModifications.push(JSON.parse(m[1].trim())); } catch { /* ignore malformed block */ }
+      }
+      const workoutModification = workoutModifications[0] || null;
 
       let profileData = null;
       const profileMatch = responseText.match(/<profile_json>([\s\S]*?)<\/profile_json>/);
@@ -1178,18 +1191,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const voiceMatch = responseText.match(/<voice_control>([\s\S]*?)<\/voice_control>/);
       if (voiceMatch) { try { voiceControl = JSON.parse(voiceMatch[1].trim()); } catch { /* ignore */ } }
 
+      // /g flag on every tag so multi-block responses don't leak raw JSON into
+      // the chat bubble. Before adding /g, a response with two workout_modification
+      // blocks (common for multi-exercise prefills) would strip the first and
+      // render the second+ as plain text.
       const cleanResponse = responseText
-        .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
-        .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
-        .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
-        .replace(/<meal_json>[\s\S]*?<\/meal_json>/, '')
-        .replace(/<voice_control>[\s\S]*?<\/voice_control>/, '')
+        .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
+        .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+        .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
+        .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+        .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
         .trim();
 
       return NextResponse.json({
         response: cleanResponse,
         workoutData,
         workoutModification,
+        workoutModifications,
         profileData,
         mealData,
         voiceControl,
@@ -1236,12 +1254,14 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             try { workoutData = JSON.parse(wm[1].trim()); } catch { /* invalid JSON */ }
           }
 
-          // Extract workout MODIFICATION if present
-          let workoutModification: Record<string, unknown> | null = null;
-          const modm = fullText.match(/<workout_modification>([\s\S]*?)<\/workout_modification>/);
-          if (modm) {
-            try { workoutModification = JSON.parse(modm[1].trim()); } catch { /* invalid JSON */ }
+          // Extract workout MODIFICATION(S) — plural. Gunny emits one block per
+          // exercise when doing a multi-exercise prefill (e.g. filling weights
+          // for every lift in today's workout), so we match all occurrences.
+          const workoutModifications: Array<Record<string, unknown>> = [];
+          for (const m of fullText.matchAll(/<workout_modification>([\s\S]*?)<\/workout_modification>/g)) {
+            try { workoutModifications.push(JSON.parse(m[1].trim())); } catch { /* invalid JSON */ }
           }
+          const workoutModification: Record<string, unknown> | null = workoutModifications[0] || null;
 
           // Extract profile JSON if present
           let profileData: Record<string, unknown> | null = null;
@@ -1264,13 +1284,14 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             try { voiceControl = JSON.parse(vm[1].trim()); } catch { /* invalid JSON */ }
           }
 
-          // Strip JSON blocks from the visible text
+          // Strip ALL JSON/control blocks from the visible text. /g on every
+          // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
-            .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
-            .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
-            .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
-            .replace(/<meal_json>[\s\S]*?<\/meal_json>/, '')
-            .replace(/<voice_control>[\s\S]*?<\/voice_control>/, '')
+            .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
+            .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+            .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
+            .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+            .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
             .trim();
 
           controller.enqueue(
@@ -1279,6 +1300,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 cleanText,
                 workoutData,
                 workoutModification,
+                workoutModifications,
                 profileData,
                 mealData,
                 voiceControl,
