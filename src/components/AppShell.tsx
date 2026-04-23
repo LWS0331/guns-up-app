@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Operator, AppTab, OPS_CENTER_ACCESS, Workout } from '@/lib/types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
-import { applyWorkoutModification, type WorkoutModification } from '@/lib/workoutModification';
+import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
+import { dispatchPrefillWeights } from '@/lib/workoutEvents';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
 import { BoltIcon, SendIcon } from '@/components/Icons';
@@ -19,7 +20,7 @@ import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
 import SitrepView from '@/components/SitrepView';
 import TacticalRadio from '@/components/TacticalRadio';
-import { speak as gunnySpeak } from '@/lib/tts';
+import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
 import { getAuthToken } from '@/lib/authClient';
@@ -225,9 +226,13 @@ const AppShell: React.FC<AppShellProps> = ({
   const [gunnyLoading, setGunnyLoading] = useState(false);
   const [gunnyThinkingAt, setGunnyThinkingAt] = useState<number | null>(null);
   const [gunnyGreeted, setGunnyGreeted] = useState(false);
-  const [gunnyTtsEnabled, setGunnyTtsEnabled] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(`guns-up-tts-${selectedOperator?.id}`) === 'true';
+  // Mirror the device-scoped global TTS toggle so the header mic icon re-renders
+  // when other code (workout mode / planner / anywhere) flips it. One source of
+  // truth: lib/tts.ts. The historical per-operator key was migrated once and then
+  // retired — see the useEffect below.
+  const [gunnyTtsEnabled, setGunnyTtsEnabledLocal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return isTtsEnabled();
   });
   const [workoutModeState, setWorkoutModeState] = useState<WorkoutModeState>({ active: false, workoutTitle: '', exercises: [] });
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -803,19 +808,47 @@ const AppShell: React.FC<AppShellProps> = ({
     generateSitrep(currentUser);
   };
 
-  // TTS — Gunny speaks back (only when toggle is enabled)
+  // TTS — Gunny speaks back. The gate is now inside gunnySpeak itself (lib/tts.ts
+  // consults isTtsEnabled), so the simple wrapper below stays for callsites that
+  // want to read like English. Still checking the local state here as an early
+  // return avoids even constructing the clean text when muted.
   const speakGunny = (text: string) => {
     if (gunnyTtsEnabled) gunnySpeak(text);
   };
 
   const toggleGunnyTts = () => {
-    setGunnyTtsEnabled(prev => {
-      const next = !prev;
-      try { localStorage.setItem(`guns-up-tts-${selectedOperator?.id}`, String(next)); }
-      catch (err) { console.warn('[AppShell] localStorage quota/unavailable — TTS preference not persisted:', err); }
-      return next;
-    });
+    const next = !gunnyTtsEnabled;
+    setTtsEnabledGlobal(next); // persists + broadcasts via onTtsEnabledChange
+    // Tapping the mic icon is a user gesture — warm the audio context now so the
+    // NEXT speak() call (e.g. streaming response arriving in 3s) actually plays
+    // on iOS. Without this, the gesture window expires before the audio arrives.
+    if (next) unlockAudioContext();
   };
+
+  // Sync local mirror with global toggle changes + migrate the legacy
+  // per-operator key (if it ever stored `true` for this op, pre-populate the
+  // global key once so returning users don't suddenly lose their preference).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!selectedOperator?.id) return;
+
+    const legacyKey = `guns-up-tts-${selectedOperator.id}`;
+    const legacy = localStorage.getItem(legacyKey);
+    const globalKey = 'guns-up-tts-enabled';
+    const current = localStorage.getItem(globalKey);
+    if (legacy !== null && current === null) {
+      localStorage.setItem(globalKey, legacy);
+      setGunnyTtsEnabledLocal(legacy === 'true');
+    }
+    // Clean up legacy key — one-way migration.
+    if (legacy !== null) {
+      try { localStorage.removeItem(legacyKey); } catch { /* storage full */ }
+    }
+
+    // Keep local mirror in sync with any other component that flips the toggle.
+    const unsub = onTtsEnabledChange((enabled) => setGunnyTtsEnabledLocal(enabled));
+    return unsub;
+  }, [selectedOperator?.id]);
 
   // Send message to Gunny API (side panel — context-aware mode, SSE streaming)
   const sendGunnyMessage = async () => {
@@ -1014,11 +1047,20 @@ const AppShell: React.FC<AppShellProps> = ({
 
   // Helper: handle workout modification from streaming final payload
   const handlePanelWorkoutMod = (workoutMod: unknown) => {
+    const mod = workoutMod as WorkoutModification;
+
+    // prefill_weights doesn't mutate the persisted workout — it targets the
+    // Planner's live workoutResults state via a CustomEvent. Dispatch and exit.
+    if (mod?.type === 'prefill_weights') {
+      dispatchPrefillWeights(mod as PrefillWeightsMod);
+      return;
+    }
+
     const today = getLocalDateStr();
     const current = currentSelectedOp.workouts?.[today];
     if (current) {
       try {
-        const modified = applyWorkoutModification(current, workoutMod as WorkoutModification);
+        const modified = applyWorkoutModification(current, mod);
         const updated = { ...currentSelectedOp };
         updated.workouts = { ...updated.workouts, [today]: modified };
         onUpdateOperator(updated);
@@ -1171,16 +1213,21 @@ const AppShell: React.FC<AppShellProps> = ({
             }
 
             if (data.workoutModification) {
-              const today = getLocalDateStr();
-              const current = currentSelectedOp.workouts?.[today];
-              if (current) {
-                try {
-                  const modified = applyWorkoutModification(current, data.workoutModification as WorkoutModification);
-                  const updated = { ...currentSelectedOp };
-                  updated.workouts = { ...updated.workouts, [today]: modified };
-                  onUpdateOperator(updated);
-                } catch (e) {
-                  console.error('applyWorkoutModification (voice) failed:', e);
+              const mod = data.workoutModification as WorkoutModification;
+              if (mod?.type === 'prefill_weights') {
+                dispatchPrefillWeights(mod as PrefillWeightsMod);
+              } else {
+                const today = getLocalDateStr();
+                const current = currentSelectedOp.workouts?.[today];
+                if (current) {
+                  try {
+                    const modified = applyWorkoutModification(current, mod);
+                    const updated = { ...currentSelectedOp };
+                    updated.workouts = { ...updated.workouts, [today]: modified };
+                    onUpdateOperator(updated);
+                  } catch (e) {
+                    console.error('applyWorkoutModification (voice) failed:', e);
+                  }
                 }
               }
             } else if (data.workoutData) {

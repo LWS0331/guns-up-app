@@ -16,6 +16,7 @@ import WorkoutPTT from '@/components/WorkoutPTT';
 import { parseMovementText } from '@/lib/parseMovementText';
 import { buildSearchUrl } from '@/lib/videoUrl';
 import { getAuthToken } from '@/lib/authClient';
+import { onPrefillWeights } from '@/lib/workoutEvents';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -1390,6 +1391,73 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       setWorkoutResults(merged);
     }
   }, [operator.workouts, selectedDate, workoutMode]);
+
+  // Live prefill-weights from Gunny chat. When the user asks Gunny "fill in my
+  // weights from last week," Gunny emits a prefill_weights workout-modification;
+  // AppShell/GunnyChat dispatch the detail via CustomEvent on the window, and
+  // this effect patches the live workoutResults so the user sees the numbers
+  // populate in the set inputs without leaving workout mode.
+  //
+  // Listener is only attached while workoutMode is true — outside of workout
+  // mode there are no inputs to fill, and Gunny is instructed to use
+  // update_prescription instead (see lib prompt guidance).
+  useEffect(() => {
+    if (!workoutMode) return;
+    const dateStr = selectedDate || formatDate(currentDate);
+
+    const unsub = onPrefillWeights((detail) => {
+      const workout = getWorkoutForDate(dateStr);
+      if (!workout) return;
+
+      // Resolve target block: prefer id match (Gunny rarely has it), then
+      // case-insensitive exerciseName match. Bail if nothing matches — Gunny's
+      // plain-text reply still shows the user what was attempted.
+      const targetName = (detail.targetExerciseName || '').trim().toLowerCase();
+      const block = workout.blocks.find(b =>
+        (detail.targetBlockId && b.id === detail.targetBlockId) ||
+        (b.type === 'exercise' && targetName &&
+          (b as ExerciseBlock).exerciseName?.toLowerCase().trim() === targetName)
+      );
+      if (!block) {
+        console.warn('[Planner:prefill_weights] no matching block for', detail);
+        return;
+      }
+
+      // Merge incoming sets with whatever's already there: each incoming set
+      // index overwrites the weight/reps at that position. Preserves any
+      // `completed: true` flags so a user mid-session doesn't lose their work.
+      setWorkoutResults(prev => {
+        const existing = prev[block.id]?.sets || [];
+        const nextSets = detail.sets.map((s, i) => {
+          const e = existing[i];
+          return {
+            weight: s.weight || 0,
+            reps: s.reps ?? e?.reps ?? 0,
+            completed: e?.completed ?? false,
+          };
+        });
+        // Keep any extra sets the user already had beyond what Gunny prefilled.
+        const extras = existing.slice(detail.sets.length);
+        return {
+          ...prev,
+          [block.id]: {
+            sets: [...nextSets, ...extras],
+            notes: prev[block.id]?.notes || '',
+          },
+        };
+      });
+
+      // Hands-free feedback: flash the on-screen toast and speak a short
+      // confirmation. Callers explicitly asked for this to surface visibly so
+      // they can glance at the bar and see Gunny did the work.
+      const exName = block.type === 'exercise' ? (block as ExerciseBlock).exerciseName : 'this exercise';
+      const src = detail.sourceLabel ? ` ${detail.sourceLabel}` : '';
+      showVoiceFeedback(`Prefilled ${exName}${src}`);
+      speak(`${exName} weights loaded${src}.`);
+    });
+
+    return unsub;
+  }, [workoutMode, selectedDate, currentDate, showVoiceFeedback]);
 
   // Auto-persist workout results on every change (prevents data loss on tab switch)
   useEffect(() => {

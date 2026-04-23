@@ -7,6 +7,7 @@ import { getAuthToken } from './authClient';
 let audioQueue: HTMLAudioElement[] = [];
 let isPlaying = false;
 let audioContextUnlocked = false;
+let browserVoicesLoaded = false;
 
 export type GunnyVoice = 'onyx' | 'nova' | 'echo' | 'fable' | 'shimmer' | 'alloy';
 
@@ -18,6 +19,53 @@ export const VOICE_OPTIONS: { id: GunnyVoice; label: string; desc: string }[] = 
   { id: 'nova', label: 'NOVA', desc: 'Clear female — operator' },
   { id: 'shimmer', label: 'SHIMMER', desc: 'Soft female — medic' },
 ];
+
+// ═════════════════════════════════════════════════════════════════════
+// GLOBAL TTS ENABLED/DISABLED GATE
+// ═════════════════════════════════════════════════════════════════════
+// One switch controls speech for the entire app — Gunny chat, Gunny panel,
+// workout-mode voice feedback (rest-timer countdowns, set logged, workout
+// complete), Tactical Radio, etc. The intent is a hands-free experience
+// during workouts, gated by a single mute button the user can trust.
+//
+// Default: enabled. Device-scoped (not per-operator), since muting is almost
+// always about the physical environment (in public, phone on speaker, etc.),
+// not the user identity.
+const TTS_ENABLED_KEY = 'guns-up-tts-enabled';
+const TTS_ENABLED_CHANGED_EVENT = 'guns-up-tts-enabled:changed';
+
+export function isTtsEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  const v = localStorage.getItem(TTS_ENABLED_KEY);
+  // Treat unset as enabled so existing users don't regress.
+  if (v === null) return true;
+  return v === 'true';
+}
+
+export function setTtsEnabled(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(TTS_ENABLED_KEY, String(enabled));
+  } catch (err) {
+    console.warn('[tts] could not persist enabled state:', err);
+  }
+  // Cancel any queued speech immediately when muting so the user doesn't
+  // hear Gunny keep talking for several seconds after tapping mute.
+  if (!enabled) stopSpeaking();
+  // Broadcast so components that render a toggle UI can resync without
+  // each one having to poll localStorage.
+  try {
+    window.dispatchEvent(new CustomEvent(TTS_ENABLED_CHANGED_EVENT, { detail: enabled }));
+  } catch { /* dispatchEvent may throw in very old browsers */ }
+}
+
+/** Subscribe to TTS enable/disable changes. Returns an unsubscribe function. */
+export function onTtsEnabledChange(cb: (enabled: boolean) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const handler = (e: Event) => cb((e as CustomEvent<boolean>).detail);
+  window.addEventListener(TTS_ENABLED_CHANGED_EVENT, handler);
+  return () => window.removeEventListener(TTS_ENABLED_CHANGED_EVENT, handler);
+}
 
 // Get/set preferred voice from localStorage
 export function getPreferredVoice(): GunnyVoice {
@@ -31,19 +79,36 @@ export function setPreferredVoice(voice: GunnyVoice) {
   }
 }
 
-// Pre-warm audio context — call on a user gesture (e.g., START workout button)
-// iOS requires a user-initiated play() to unlock the audio context
+// Pre-warm audio context — call on a user gesture (e.g., START workout button,
+// any SEND tap, first PTT press). iOS requires a user-initiated play() to
+// unlock the audio context so subsequent TTS can fire without a fresh gesture.
 export function unlockAudioContext() {
   if (audioContextUnlocked) return;
+  if (typeof window === 'undefined') return;
   try {
     const audio = new Audio();
-    // Create a tiny silent audio data URI
     audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
     audio.volume = 0.01;
     const p = audio.play();
-    if (p) p.then(() => { audio.pause(); audioContextUnlocked = true; }).catch(() => {});
+    if (p) p.then(() => { audio.pause(); audioContextUnlocked = true; }).catch(() => { /* still blocked — next user gesture will retry */ });
   } catch {
     // Ignore — we tried
+  }
+  // Also warm browser speechSynthesis voices. Safari/Chrome load voices
+  // asynchronously and getVoices() returns [] until voiceschanged fires —
+  // without warming, the first browserSpeak() call can silently use the wrong
+  // voice or no voice at all.
+  if (!browserVoicesLoaded && 'speechSynthesis' in window) {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      browserVoicesLoaded = true;
+    } else {
+      window.speechSynthesis.addEventListener(
+        'voiceschanged',
+        () => { browserVoicesLoaded = true; },
+        { once: true },
+      );
+    }
   }
 }
 
@@ -62,23 +127,30 @@ export function offSpeechDone(cb: () => void) {
 function playNext() {
   if (audioQueue.length === 0) {
     isPlaying = false;
-    // Notify listeners that all speech is done
     onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch (err) { console.warn('[tts] queue-empty callback threw:', err); } });
     return;
   }
   isPlaying = true;
   const audio = audioQueue.shift()!;
   audio.onended = () => playNext();
-  audio.onerror = () => playNext();
-  audio.play().catch(() => {
-    // If play fails (iOS autoplay block), try browser TTS fallback
+  audio.onerror = () => {
+    console.warn('[tts] audio element errored — skipping to next in queue');
     playNext();
-  });
+  };
+  audio.play()
+    .then(() => { audioContextUnlocked = true; })
+    .catch((err) => {
+      // Likely iOS autoplay block with no prior user gesture. Log so it's
+      // findable in devtools rather than silently skipping.
+      console.warn('[tts] audio.play() rejected — autoplay blocked?', err);
+      playNext();
+    });
 }
 
 // Speak text using OpenAI TTS (with browser fallback)
 export async function speak(text: string, voice?: GunnyVoice) {
   if (!text || typeof window === 'undefined') return;
+  if (!isTtsEnabled()) return;
 
   const selectedVoice = voice || getPreferredVoice();
 
@@ -87,9 +159,7 @@ export async function speak(text: string, voice?: GunnyVoice) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': typeof localStorage !== 'undefined'
-          ? `Bearer ${getAuthToken()}`
-          : '',
+        'Authorization': `Bearer ${getAuthToken()}`,
       },
       body: JSON.stringify({ text, voice: selectedVoice, speed: 1.1 }),
     });
@@ -107,10 +177,21 @@ export async function speak(text: string, voice?: GunnyVoice) {
       return;
     }
 
-    // Fallback to browser TTS
+    // Server returned JSON — likely fallback=true (OPENAI_API_KEY missing or
+    // upstream error). Try to surface a useful dev warning before falling
+    // back to browser TTS.
+    try {
+      const body = await res.json();
+      if (body?.fallback) {
+        console.info('[tts] /api/tts returned fallback — using browser speechSynthesis');
+      } else if (!res.ok) {
+        console.warn('[tts] /api/tts returned', res.status, body);
+      }
+    } catch { /* ignore parse errors */ }
+
     browserSpeak(text, selectedVoice);
-  } catch {
-    // Network error — fallback to browser TTS
+  } catch (err) {
+    console.warn('[tts] network error hitting /api/tts — falling back to browser TTS:', err);
     browserSpeak(text, selectedVoice);
   }
 }
@@ -118,6 +199,7 @@ export async function speak(text: string, voice?: GunnyVoice) {
 // Browser speechSynthesis fallback
 function browserSpeak(text: string, voice: GunnyVoice) {
   if (!window.speechSynthesis) return;
+  if (!isTtsEnabled()) return;
 
   const clean = text
     .replace(/[*_#━═\-]{2,}/g, '')
@@ -130,26 +212,49 @@ function browserSpeak(text: string, voice: GunnyVoice) {
   utterance.pitch = (voice === 'onyx' || voice === 'echo' || voice === 'fable') ? 0.85 : 1.0;
   utterance.volume = 0.9;
 
-  const voices = window.speechSynthesis.getVoices();
-  if (voice === 'onyx' || voice === 'echo' || voice === 'fable') {
-    const preferred = voices.find(v =>
-      v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Google US English')
-    );
-    if (preferred) utterance.voice = preferred;
-  } else {
-    const preferred = voices.find(v =>
-      v.name.includes('Samantha') || v.name.includes('Victoria') || v.name.includes('Google UK English Female')
-    );
-    if (preferred) utterance.voice = preferred;
-  }
-
-  utterance.onend = () => {
-    if (audioQueue.length === 0) {
-      isPlaying = false;
-      onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch (err) { console.warn('[tts] queue-empty callback threw:', err); } });
+  // Defer until voices load. Without this, Safari picks a wrong-language
+  // default or silently drops the utterance on first call.
+  const pickVoiceAndSpeak = () => {
+    const voices = window.speechSynthesis.getVoices();
+    if (voice === 'onyx' || voice === 'echo' || voice === 'fable') {
+      const preferred = voices.find(v =>
+        v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Google US English')
+      );
+      if (preferred) utterance.voice = preferred;
+    } else {
+      const preferred = voices.find(v =>
+        v.name.includes('Samantha') || v.name.includes('Victoria') || v.name.includes('Google UK English Female')
+      );
+      if (preferred) utterance.voice = preferred;
     }
+
+    utterance.onend = () => {
+      if (audioQueue.length === 0) {
+        isPlaying = false;
+        onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch (err) { console.warn('[tts] queue-empty callback threw:', err); } });
+      }
+    };
+    window.speechSynthesis.speak(utterance);
   };
-  window.speechSynthesis.speak(utterance);
+
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0 || browserVoicesLoaded) {
+    pickVoiceAndSpeak();
+  } else {
+    window.speechSynthesis.addEventListener(
+      'voiceschanged',
+      () => { browserVoicesLoaded = true; pickVoiceAndSpeak(); },
+      { once: true },
+    );
+    // Some browsers never fire voiceschanged if getVoices already returned
+    // non-empty later — retry after a short delay as a safety net.
+    setTimeout(() => {
+      if (!browserVoicesLoaded && window.speechSynthesis.getVoices().length > 0) {
+        browserVoicesLoaded = true;
+        pickVoiceAndSpeak();
+      }
+    }, 250);
+  }
 }
 
 // Stop all speech

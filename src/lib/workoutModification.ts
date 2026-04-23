@@ -10,7 +10,8 @@ export type WorkoutModification =
   | AddBlockMod
   | RemoveBlockMod
   | UpdatePrescriptionMod
-  | ReorderBlocksMod;
+  | ReorderBlocksMod
+  | PrefillWeightsMod;
 
 export interface SwapExerciseMod {
   type: 'swap_exercise';
@@ -46,6 +47,28 @@ export interface UpdatePrescriptionMod {
 export interface ReorderBlocksMod {
   type: 'reorder_blocks';
   newOrder: string[];
+}
+
+/**
+ * Pre-fill the weights (and optionally reps) for an exercise in the ACTIVE
+ * workout-mode execution. Unlike the other mods, this does NOT change the
+ * workout's blocks — it writes to the live `workoutResults` state so the user
+ * sees numbers populate in the set inputs as they're watching.
+ *
+ * Emitted by Gunny when the user asks things like "fill in my bench weights
+ * from last week" or "prefill from my last leg day." Handled via a
+ * CustomEvent bridge (see workoutEvents.ts) rather than applyWorkoutModification
+ * because the persisted Workout object isn't the target — the Planner's
+ * in-memory live state is.
+ */
+export interface PrefillWeightsMod {
+  type: 'prefill_weights';
+  targetBlockId?: string;
+  targetExerciseName?: string;  // e.g. "Bench Press" — matched case-insensitively
+  sets: Array<{ weight: number; reps?: number }>;
+  // Short human-readable provenance string, shown to the user as a toast so
+  // they can verify what Gunny pulled. e.g. "from last Monday's push day".
+  sourceLabel?: string;
 }
 
 /** Case-insensitive block finder by id-or-name. */
@@ -180,6 +203,15 @@ export function applyWorkoutModification(
       byId.forEach(b => reordered.push(b));
       blocks = reordered.map((b, i) => ({ ...b, sortOrder: i }));
       break;
+    }
+
+    case 'prefill_weights': {
+      // Not this function's job — the live results state is owned by Planner,
+      // not the persisted Workout. Callers must route prefill_weights via
+      // workoutEvents.dispatchPrefillWeights() and let Planner's listener
+      // patch workoutResults directly. Returning the workout unchanged here
+      // just means we're a no-op for this mod type at the workout level.
+      return workout;
     }
 
     default:
