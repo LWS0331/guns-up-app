@@ -22,6 +22,7 @@ import TacticalRadio from '@/components/TacticalRadio';
 import { speak as gunnySpeak } from '@/lib/tts';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
+import { getAuthToken } from '@/lib/authClient';
 import DailyBriefComponent from '@/components/DailyBrief';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
@@ -379,7 +380,7 @@ const AppShell: React.FC<AppShellProps> = ({
       // Try API first
       try {
         const res = await fetch(`/api/chat?operatorId=${selectedOperator.id}&chatType=gunny-panel`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+          headers: { 'Authorization': `Bearer ${getAuthToken()}` },
         });
         if (res.ok) {
           const data = await res.json();
@@ -404,7 +405,7 @@ const AppShell: React.FC<AppShellProps> = ({
             // Migrate to API
             fetch('/api/chat', {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
               body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: saved }),
             }).catch(() => {});
             return;
@@ -457,7 +458,7 @@ const AppShell: React.FC<AppShellProps> = ({
 
     try {
       localStorage.setItem(`gunny-panel-${selectedOperator.id}`, JSON.stringify(serialized));
-    } catch { /* storage full */ }
+    } catch (err) { console.warn('[AppShell:panel-persist] localStorage write failed (quota?):', err); }
     lastPanelPendingRef.current = { serialized };
 
     if (panelSaveDebounceRef.current) clearTimeout(panelSaveDebounceRef.current);
@@ -468,7 +469,7 @@ const AppShell: React.FC<AppShellProps> = ({
       fetch('/api/chat', {
         method: 'PUT',
         keepalive: true,
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
         body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: pending.serialized }),
       }).catch(() => {});
       lastPanelPendingRef.current = null;
@@ -489,7 +490,7 @@ const AppShell: React.FC<AppShellProps> = ({
         fetch('/api/chat', {
           method: 'PUT',
           keepalive: true,
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
           body: JSON.stringify({ operatorId, chatType: 'gunny-panel', messages: pending.serialized }),
         }).catch(() => {});
         lastPanelPendingRef.current = null;
@@ -758,7 +759,7 @@ const AppShell: React.FC<AppShellProps> = ({
     try {
       const res = await fetch('/api/gunny/sitrep', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
         body: JSON.stringify({
           operatorContext: buildOperatorContext(updatedOperator),
           tier: updatedOperator.tier,
@@ -810,7 +811,8 @@ const AppShell: React.FC<AppShellProps> = ({
   const toggleGunnyTts = () => {
     setGunnyTtsEnabled(prev => {
       const next = !prev;
-      try { localStorage.setItem(`guns-up-tts-${selectedOperator?.id}`, String(next)); } catch {}
+      try { localStorage.setItem(`guns-up-tts-${selectedOperator?.id}`, String(next)); }
+      catch (err) { console.warn('[AppShell] localStorage quota/unavailable — TTS preference not persisted:', err); }
       return next;
     });
   };
@@ -845,7 +847,7 @@ const AppShell: React.FC<AppShellProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
           'Accept': 'text/event-stream',
         },
         body: JSON.stringify({
@@ -1110,7 +1112,7 @@ const AppShell: React.FC<AppShellProps> = ({
 
           const response = await fetch('/api/gunny', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
             body: JSON.stringify({
               messages: [...gunnyMessages, userMessage],
               operatorContext: buildOperatorContext(),

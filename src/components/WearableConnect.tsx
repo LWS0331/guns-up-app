@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Operator } from '@/lib/types';
+import { getAuthToken } from '@/lib/authClient';
 
 interface WearableConnection {
   id: string;
@@ -73,7 +74,7 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
   const loadConnections = useCallback(async () => {
     try {
       const res = await fetch(`/api/wearables?operatorId=${operator.id}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -99,7 +100,7 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify({ operatorId: operator.id, provider: providerSlug }),
       });
@@ -143,7 +144,7 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify({ operatorId: operator.id }),
       });

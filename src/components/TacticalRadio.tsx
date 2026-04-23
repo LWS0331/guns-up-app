@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { speak, stopSpeaking, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice, unlockAudioContext } from '@/lib/tts';
 import { Operator } from '@/lib/types';
+import { getAuthToken } from '@/lib/authClient';
 
 // ═══════════════════════════════════════════════════════════════
 // TACTICAL RADIO COMMS — Guns Up Command Center
@@ -211,7 +212,7 @@ export default function TacticalRadio({ operator }: TacticalRadioProps) {
       try {
         const response = await fetch('/api/gunny', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
           body: JSON.stringify({
             messages: chatHistoryRef.current.map(m => ({
               role: m.role === 'assistant' ? 'gunny' : 'user',

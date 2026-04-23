@@ -7,6 +7,7 @@ import LoginScreen from '@/components/LoginScreen';
 import AppShell from '@/components/AppShell';
 import ClientOnboarding from '@/components/ClientOnboarding';
 import { initAnalytics, identifyUser, resetAnalytics, trackEvent, EVENTS } from '@/lib/analytics';
+import { getAuthToken } from '@/lib/authClient';
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<Operator | null>(null);
@@ -55,7 +56,7 @@ export default function Home() {
 
     const loadFromDB = async () => {
       // Check for stored JWT token FIRST — needed for authenticated API calls
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       const authHeaders: Record<string, string> = token
         ? { 'Authorization': `Bearer ${token}` }
         : {};
@@ -134,7 +135,7 @@ export default function Home() {
 
     // Targeted dual-PATCH strategy: workouts save in parallel with profile save,
     // so two concurrent tabs editing different fields no longer overwrite each other.
-    const token = localStorage.getItem('authToken') || '';
+    const token = getAuthToken();
     const authHeaders = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
@@ -224,7 +225,7 @@ export default function Home() {
 
     // Re-fetch operators from DB now that we have an auth token
     // This ensures we load persisted data (not static fallback) after fresh login
-    const token = localStorage.getItem('authToken');
+    const token = getAuthToken();
     if (token) {
       try {
         const res = await fetch('/api/operators', {

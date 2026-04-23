@@ -399,8 +399,25 @@ export interface DailyBrief {
 export type ViewMode = 'month' | 'week' | 'day';
 export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'radio' | 'ops';
 
-// Hardcoded admin access for OPS CENTER
-export const OPS_CENTER_ACCESS = ['op-ruben', 'op-britney'];
+// Operator IDs that can access OPS CENTER and the server-side admin guards.
+//
+// Configurable at build time via NEXT_PUBLIC_OPS_CENTER_ACCESS (comma-separated
+// operator IDs). Falls back to the historical hardcoded list if the env var
+// isn't set — so existing Railway deployments keep working without a config
+// change. NEXT_PUBLIC_ is intentional: these IDs are referenced in both the
+// client bundle (to hide/show the OPS tab) and server routes (authorization
+// checks), and operator IDs aren't secret.
+//
+// To grant ops access to another operator without a code change, set e.g.
+// NEXT_PUBLIC_OPS_CENTER_ACCESS="op-ruben,op-britney,op-newadmin" in Railway
+// environment variables and redeploy. A proper DB-backed admin table is the
+// next step (backlog: B1 follow-up) but the env var unblocks operational
+// changes for now.
+const OPS_CENTER_ACCESS_DEFAULT = ['op-ruben', 'op-britney'];
+const opsEnv = process.env.NEXT_PUBLIC_OPS_CENTER_ACCESS;
+export const OPS_CENTER_ACCESS: readonly string[] = opsEnv
+  ? opsEnv.split(',').map(s => s.trim()).filter(Boolean)
+  : OPS_CENTER_ACCESS_DEFAULT;
 export const BETA_DURATION_DAYS = 45;
 export type IntelTab = 'profile' | 'nutrition' | 'prs' | 'injuries' | 'preferences' | 'wearables';
 

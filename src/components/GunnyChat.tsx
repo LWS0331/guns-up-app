@@ -13,6 +13,7 @@ import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, form
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { getAuthToken } from '@/lib/authClient';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -29,31 +30,16 @@ interface Message {
   image?: string; // base64 data URL for vision analysis
 }
 
-interface WorkoutSession {
-  muscleGroup: string;
-  goal: string;
-  warmup: string;
-  primer: { movements: string[]; rounds: string };
-  complex: { movement: string; reps: string; timing: string };
-  strength: { exercise: string; sets: string; rest: string };
-  isolation: { exercise: string; reps: string; rest: string; rounds: string };
-  metcon: { format: string; movements: string[] };
-}
-
+// GOAL_PATHS is still used by the "show me goal paths" local handler below —
+// it just reads each entry's `description` string. WorkoutSession and
+// MUSCLE_GROUP_TEMPLATES were removed in sprint 6 along with the canned
+// workout builder they fed; routing goes to the LLM now (sprint 2 A1).
 const GOAL_PATHS = {
   HYPERTROPHY: { name: 'HYPERTROPHY', description: 'Muscle building focus. Higher reps (8-12), moderate weight, constant tension.', primerRounds: '3-4', complexReps: '3-4', strengthSets: '4-5', isolationRounds: '4', metconStyle: 'moderate-weight high-volume' },
   FAT_LOSS: { name: 'FAT LOSS', description: 'Metabolic conditioning focus. Moderate reps (6-10), heavier weight, shorter rest.', primerRounds: '3', complexReps: '3', strengthSets: '3-4', isolationRounds: '3', metconStyle: 'high-intensity short-duration' },
   STRENGTH: { name: 'STRENGTH', description: 'Powerlifting focus. Lower reps (1-5), heavy weight, full recovery.', primerRounds: '2-3', complexReps: '2-3', strengthSets: '5-6', isolationRounds: '3', metconStyle: 'heavy-singles-doubles' },
   ATHLETIC_PERFORMANCE: { name: 'ATHLETIC PERFORMANCE', description: 'Sport-specific focus. Power, explosivity, functional movement patterns.', primerRounds: '3', complexReps: '4-5', strengthSets: '4', isolationRounds: '3-4', metconStyle: 'explosive-functional' },
   GENERAL_FITNESS: { name: 'GENERAL FITNESS', description: 'Balanced approach. Mixed rep ranges, balanced progression.', primerRounds: '3', complexReps: '3-4', strengthSets: '4', isolationRounds: '3', metconStyle: 'moderate-mixed' },
-};
-
-const MUSCLE_GROUP_TEMPLATES = {
-  CHEST: { primerMovements: ['Scapular Push-ups', 'Band Pull-aparts', 'Pec Flyes'], complexMovement: 'Bench Press Doubles', strengthExercise: 'Barbell Bench Press', isolationExercise: 'DB Incline Press', metconExample: 'Run 400m, 15 Burpees, 20 Push-ups' },
-  BACK: { primerMovements: ['Dead Bugs', 'Scapular Rows', 'Band Rows'], complexMovement: 'Deadlift Doubles', strengthExercise: 'Conventional Deadlift', isolationExercise: 'Barbell Rows', metconExample: 'Run 400m, 10 Deadlifts, 15 Box Jump Overs' },
-  LEGS: { primerMovements: ['Leg Swings', 'Goblet Squats', 'Single-Leg RDLs'], complexMovement: 'Squat Clean Doubles', strengthExercise: 'Back Squat', isolationExercise: 'DB Walking Lunges', metconExample: 'Run 400m, 15 Box Jumps, 10 Squat Cleans at 95lbs' },
-  SHOULDERS: { primerMovements: ['Arm Circles', 'Band Pull-aparts', 'Pike Push-ups'], complexMovement: 'Push Press Doubles', strengthExercise: 'Overhead Press', isolationExercise: 'DB Shoulder Raises', metconExample: '5 Rounds for Time: 10 Thrusters, 15 Overhead Walks' },
-  ARMS: { primerMovements: ['Scapular Hangs', 'Resistance Band Curls', 'Tricep Dips'], complexMovement: 'Power Clean Doubles', strengthExercise: 'Barbell Curls', isolationExercise: 'DB Hammer Curls', metconExample: '4 Rounds for Time: 12 Barbell Curls, 15 Dips, 400m Run' },
 };
 
 // Food macro lookup table - common foods with approximate macros per serving
@@ -403,7 +389,11 @@ const serializeMessages = (msgs: Message[]) =>
 const saveChatLocal = (opId: string, serialized: ReturnType<typeof serializeMessages>) => {
   try {
     localStorage.setItem(`gunny-chat-${opId}`, JSON.stringify(serialized));
-  } catch { /* storage full */ }
+  } catch (err) {
+    // Quota exceeded or storage disabled. Debounced API write will still fire,
+    // so the user doesn't lose chat history — they just lose offline coverage.
+    console.warn('[GunnyChat:saveChatLocal] localStorage write failed (quota?):', err);
+  }
 };
 
 // Async API write. `keepalive` lets the request complete even if the document
@@ -412,7 +402,7 @@ const saveChatRemote = (opId: string, chatType: string, serialized: ReturnType<t
   fetch('/api/chat', {
     method: 'PUT',
     keepalive: true,
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
     body: JSON.stringify({ operatorId: opId, chatType, messages: serialized }),
   }).catch(() => { /* API unavailable — localStorage will cover it */ });
 };
@@ -426,7 +416,7 @@ const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
 const loadChatFromAPI = async (opId: string, chatType: string): Promise<Message[] | null> => {
   try {
     const res = await fetch(`/api/chat?operatorId=${opId}&chatType=${chatType}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+      headers: { 'Authorization': `Bearer ${getAuthToken()}` },
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -631,7 +621,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
         try {
           const res = await fetch('/api/gunny', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
             body: JSON.stringify({
               messages: [{ role: 'user', text: 'I just signed up. Start my intake assessment.' }],
               tier: operator.tier,
@@ -771,77 +761,6 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     return isNaN(parsed) ? 0 : parsed;
   };
 
-  const getGoalPath = (userInput: string): string | null => {
-    const lower = userInput.toLowerCase();
-    if (lower.includes('hypertrophy') || lower.includes('muscle building') || lower.includes('size')) return 'HYPERTROPHY';
-    if (lower.includes('fat loss') || lower.includes('cut') || lower.includes('lean')) return 'FAT_LOSS';
-    if (lower.includes('strength') || lower.includes('powerlifting') || lower.includes('max')) return 'STRENGTH';
-    if (lower.includes('athletic') || lower.includes('sport') || lower.includes('performance')) return 'ATHLETIC_PERFORMANCE';
-    if (lower.includes('general') || lower.includes('balanced') || lower.includes('fitness')) return 'GENERAL_FITNESS';
-    return null;
-  };
-
-  const getMuscleGroup = (userInput: string): string | null => {
-    const lower = userInput.toLowerCase();
-    if (lower.includes('chest') || lower.includes('bench') || lower.includes('push day')) return 'CHEST';
-    if (lower.includes('back') || lower.includes('deadlift') || lower.includes('row') || lower.includes('pull day')) return 'BACK';
-    if (lower.includes('leg') || lower.includes('squat') || lower.includes('lunge')) return 'LEGS';
-    if (lower.includes('shoulder') || lower.includes('ohp')) return 'SHOULDERS';
-    if (lower.includes('arm') || lower.includes('bicep') || lower.includes('tricep')) return 'ARMS';
-    return null;
-  };
-
-  const buildWorkout = (muscleGroup: string, goalKey: string | null): WorkoutSession => {
-    const template = MUSCLE_GROUP_TEMPLATES[muscleGroup as keyof typeof MUSCLE_GROUP_TEMPLATES];
-    const goal = goalKey ? GOAL_PATHS[goalKey as keyof typeof GOAL_PATHS] : GOAL_PATHS.GENERAL_FITNESS;
-    const readiness = operator.profile?.readiness || 75;
-    return {
-      muscleGroup, goal: goal.name,
-      warmup: '10 MIN CARDIO WARMUP\nLight jog, rowing machine, or assault bike. Dynamic mobility work.',
-      primer: { movements: template.primerMovements, rounds: goal.primerRounds },
-      complex: { movement: template.complexMovement, reps: `${goal.complexReps} reps`, timing: 'every 90 seconds x 4 sets' },
-      strength: { exercise: template.strengthExercise, sets: goal.strengthSets, rest: readiness > 75 ? '60 seconds' : '90 seconds' },
-      isolation: { exercise: template.isolationExercise, reps: '10-12 reps', rest: '45 seconds', rounds: goal.isolationRounds },
-      metcon: { format: '3 rounds for time', movements: [template.metconExample] },
-    };
-  };
-
-  const formatWorkout = (workout: WorkoutSession): string => {
-    return `════════════════════════════════════════
-WORKOUT OF THE DAY — ${workout.muscleGroup} FOCUS
-Goal Path: ${workout.goal}
-════════════════════════════════════════
-
-A. WARMUP
-${workout.warmup}
-
-B. PRIMER — ${workout.primer.rounds} rounds (not for time)
-${workout.primer.movements.map((m) => `   • ${m}`).join('\n')}
-Rest 60-90 sec between rounds.
-
-C. COMPLEX MOVEMENT
-${workout.complex.movement} — ${workout.complex.reps} ${workout.complex.timing}
-Rest 90 sec between sets.
-
-D. STRENGTH
-${workout.strength.exercise}
-Sets: ${workout.strength.sets} | Rest: ${workout.strength.rest}
-Target: challenging weight, technical execution
-
-E. ISOLATION
-${workout.isolation.exercise} — ${workout.isolation.reps}
-${workout.isolation.rounds} rounds | Rest: ${workout.isolation.rest}
-
-F. METCON
-${workout.metcon.format}
-${workout.metcon.movements.map((m) => `   ${m}`).join('\n')}
-Track splits — compete with yesterday's time.
-
-════════════════════════════════════════
-Notes: Follow form over ego. Hydrate. Stay locked in.
-════════════════════════════════════════`;
-  };
-
   const generateGunnyResponse = (userMessage: string): { response: string; updatedOperator?: Operator } => {
     const lower = userMessage.toLowerCase();
 
@@ -937,15 +856,6 @@ Total: ${clients.length} active clients`;
 
       return { response };
     }
-
-    // NOTE: the old "build me a workout" branch used to intercept here and return a
-    // hard-coded template from buildWorkout/MUSCLE_GROUP_TEMPLATES, ignoring the
-    // operator's goals/PRs/injuries/preferences. Users reported it as "a generic
-    // workout." Routing these requests to the LLM (the fallthrough path below) lets
-    // Gunny generate a personalized workout using the full operator context built by
-    // buildFullGunnyContext. The dead helpers (buildWorkout/formatWorkout/
-    // getMuscleGroup/getGoalPath/MUSCLE_GROUP_TEMPLATES/WorkoutSession) will be
-    // removed in the sprint 6 dead-code pass.
 
     if (lower.includes('goal path') || lower.includes('goal paths') || lower === 'paths' || lower === 'show me goal paths') {
       return { response: `Roger that, champ. Here's what I've got:\n\nHYPERTROPHY — ${GOAL_PATHS.HYPERTROPHY.description}\n\nFAT LOSS — ${GOAL_PATHS.FAT_LOSS.description}\n\nSTRENGTH — ${GOAL_PATHS.STRENGTH.description}\n\nATHLETIC PERFORMANCE — ${GOAL_PATHS.ATHLETIC_PERFORMANCE.description}\n\nGENERAL FITNESS — ${GOAL_PATHS.GENERAL_FITNESS.description}\n\nTell me your target and I'll build accordingly. Copy that?` };
@@ -1269,7 +1179,7 @@ ${mealSuggestion}`;
 
       const res = await fetch('/api/gunny', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
         body: JSON.stringify({
           messages: recentMessages,
           tier: operator.tier,
@@ -1335,7 +1245,7 @@ ${mealSuggestion}`;
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
           'Accept': 'text/event-stream',
         },
         body: JSON.stringify({

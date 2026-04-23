@@ -10,6 +10,7 @@ interface DailyBriefProps {
 }
 
 import { getLocalDateStr, getLocalYesterdayStr, getLocalDateLongStr, getLocalTimezone } from '@/lib/dateUtils';
+import { getAuthToken } from '@/lib/authClient';
 
 const getTodayStr = getLocalDateStr;
 const getYesterdayStr = getLocalYesterdayStr;
@@ -92,7 +93,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
 
       const res = await fetch('/api/gunny/daily-brief', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
         body: JSON.stringify({
           operatorContext,
           sitrep: operator.sitrep,
@@ -146,7 +147,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
       const np = operator.sitrep.nutritionPlan;
       const res = await fetch('/api/gunny', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : ''}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
         body: JSON.stringify({
           messages: [
             { role: 'user', text: `I have these ingredients/foods available: ${nutritionInput}\n\nBuild me a meal plan for today using ONLY what I have. My targets: ${np?.dailyCalories} cal, ${np?.protein}g protein, ${np?.carbs}g carbs, ${np?.fat}g fat, ${np?.mealsPerDay} meals. Be specific with portions and macros per meal. Keep it short and actionable.` },
