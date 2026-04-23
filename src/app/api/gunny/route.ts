@@ -361,6 +361,36 @@ start workout mode for that day.
 
 After emitting <workout_modification>, confirm the change in plain text (e.g. "Roger. Lat Pulldown swapped for Cable Row — 4x10 at 140.").
 
+VOICE OUTPUT — YOU HAVE IT (HANDS-FREE TTS):
+The GUNS UP app renders your responses as text AND can speak them aloud via
+OpenAI TTS (with a browser-speech fallback). This is a real feature, not
+something the operator has to cobble together with iOS/Android accessibility
+settings. Never tell the operator "I'm text-only" or "turn on Accessibility
+Spoken Content" — that's factually wrong and sends them out of the app.
+
+There is a mic icon (🔊 when on, 🔇 when muted) in the top-right of the
+Gunny chat header. Tapping it toggles voice on/off globally — it mutes every
+speech callsite in the app (workout-mode rest-timer countdowns, set-logged
+confirmations, etc.) at once.
+
+When the operator asks you to turn voice on/off explicitly — "speak out loud",
+"talk to me", "speaker on", "voice on", "enable voice", "mute", "shut up",
+"text only", "quiet mode" — emit a <voice_control> block so the client can
+flip the toggle without them hunting for the icon:
+
+<voice_control>
+{ "action": "enable" }
+</voice_control>
+
+Valid actions: "enable" | "disable".
+
+Then confirm in plain text, e.g. "Voice online, RAMPAGE. I'll read my replies
+and workout callouts aloud from here on. Tap the mic icon to mute."
+
+If the operator has NOT asked to change voice state, do NOT emit voice_control.
+Do NOT emit it as a side-effect of other commands. It's reserved for explicit
+voice on/off requests.
+
 POST-WORKOUT ANALYSIS PROTOCOL:
 When the operator says "analyze my workout", "how did I do", "review my session", "workout sitrep", or similar — provide a FULL PERFORMANCE SITREP grounded in their ACTUAL logged data (from COMPLETED WORKOUT ANALYSIS in the context block).
 
@@ -992,6 +1022,18 @@ ${operatorContext.recentDayTags}
 ${operatorContext.lastCompletedWorkout ? `${operatorContext.lastCompletedWorkout}
 ` : ''}
 
+${Array.isArray(operatorContext.completedWorkoutLogs) && operatorContext.completedWorkoutLogs.length > 0 ? `═══ COMPLETED WORKOUT LOGS (last ${operatorContext.completedWorkoutLogs.length}, newest first) ═══
+These entries contain the operator's ACTUAL logged sets — weight × reps per set.
+When the operator asks about past weights ("what did I lift last Monday", "pull
+my numbers from last week's bench", "show my baseline"), SEARCH THESE BLOCKS by
+date + workout title for the specific exercise. The Actual: line on each
+exercise is the canonical source of truth. Do NOT say "no sets were recorded"
+unless the Actual line for the exercise literally reads "no sets logged."
+
+${operatorContext.completedWorkoutLogs.map((log: string, i: number) => `--- LOG ${i + 1} ---
+${log}`).join('\n\n')}
+` : ''}
+
 ${operatorContext.workoutExecution ? `${operatorContext.workoutExecution}
 ` : ''}
 
@@ -1132,11 +1174,16 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const mealMatch = responseText.match(/<meal_json>([\s\S]*?)<\/meal_json>/);
       if (mealMatch) { try { mealData = JSON.parse(mealMatch[1].trim()); } catch { /* ignore */ } }
 
+      let voiceControl: { action?: string } | null = null;
+      const voiceMatch = responseText.match(/<voice_control>([\s\S]*?)<\/voice_control>/);
+      if (voiceMatch) { try { voiceControl = JSON.parse(voiceMatch[1].trim()); } catch { /* ignore */ } }
+
       const cleanResponse = responseText
         .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
         .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
         .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
         .replace(/<meal_json>[\s\S]*?<\/meal_json>/, '')
+        .replace(/<voice_control>[\s\S]*?<\/voice_control>/, '')
         .trim();
 
       return NextResponse.json({
@@ -1145,6 +1192,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         workoutModification,
         profileData,
         mealData,
+        voiceControl,
         model: finalModel,
         usage: { input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens },
       });
@@ -1209,12 +1257,20 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             try { mealData = JSON.parse(mm[1].trim()); } catch { /* invalid JSON */ }
           }
 
+          // Extract voice-control command if present (enable/disable TTS)
+          let voiceControl: { action?: string } | null = null;
+          const vm = fullText.match(/<voice_control>([\s\S]*?)<\/voice_control>/);
+          if (vm) {
+            try { voiceControl = JSON.parse(vm[1].trim()); } catch { /* invalid JSON */ }
+          }
+
           // Strip JSON blocks from the visible text
           const cleanText = fullText
             .replace(/<workout_json>[\s\S]*?<\/workout_json>/, '')
             .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/, '')
             .replace(/<profile_json>[\s\S]*?<\/profile_json>/, '')
             .replace(/<meal_json>[\s\S]*?<\/meal_json>/, '')
+            .replace(/<voice_control>[\s\S]*?<\/voice_control>/, '')
             .trim();
 
           controller.enqueue(
@@ -1225,6 +1281,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 workoutModification,
                 profileData,
                 mealData,
+                voiceControl,
                 model: finalModel,
                 usage: {
                   input_tokens: final.usage.input_tokens,

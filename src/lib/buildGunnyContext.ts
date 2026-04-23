@@ -77,6 +77,20 @@ export interface GunnyOperatorContext {
   totalWorkoutsCompleted: number;
   recentDayTags: string | null;
   lastCompletedWorkout: string | null;
+  /**
+   * Detailed analysis (via buildWorkoutAnalysis) for up to the last 5 COMPLETED
+   * workouts, newest first. Each entry is a pre-formatted multi-line string
+   * containing the planned vs actual sets, volume, PR flags, and progressive
+   * overload delta. Gunny uses this to answer specific "what did I lift last
+   * week?" / "pull my weights from last Monday" / "how much did I press for
+   * baseline?" questions with real numbers instead of saying "data isn't there."
+   *
+   * Why this exists: recentWorkoutHistory already lists dates + exercises but
+   * only renders the PRESCRIPTION, not the logged sets. If the user asks about
+   * last week's actual loads and the most-recent workout is today's upper body,
+   * lastCompletedWorkout (singular) pulls today's and misses last week entirely.
+   */
+  completedWorkoutLogs: string[];
   workoutExecution: string | null;
 }
 
@@ -148,6 +162,26 @@ export function buildFullGunnyContext(
     const target = todayWorkout?.completed ? todayWorkout : findMostRecentCompletedWorkout(operator);
     if (!target) return null;
     return buildWorkoutAnalysis(target, operator.prs || [], (operator.workouts || {}) as AnyRec);
+  })();
+
+  // Multi-workout history: buildWorkoutAnalysis for the last 5 completed workouts
+  // (newest first). Used by Gunny to answer "pull my weights from last week's X"
+  // questions with real set-by-set data instead of defaulting to prescription.
+  const completedWorkoutLogs: string[] = (() => {
+    const completed = Object.entries(workouts)
+      .filter(([, w]) => (w as AnyRec)?.completed && (w as AnyRec)?.results)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .slice(0, 5)
+      .map(([, w]) => w);
+    if (!completed.length) return [];
+    const prsList = operator.prs || [];
+    const allWorkouts = workouts;
+    // buildWorkoutAnalysis wants a structured Workout; we store it as JSONB
+    // (hence AnyRec). Cast via unknown — by this point we've already filtered
+    // to rows with .completed + .results so the shape is good enough.
+    return completed
+      .map(w => buildWorkoutAnalysis(w as unknown as import('./types').Workout, prsList, allWorkouts as Record<string, import('./types').Workout>))
+      .filter(s => s && s.length > 0);
   })();
 
   const workoutExecution = (() => {
@@ -278,6 +312,7 @@ export function buildFullGunnyContext(
         .join('\n');
     })(),
     lastCompletedWorkout,
+    completedWorkoutLogs,
     workoutExecution,
   };
 }
