@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
-import { applyWorkoutModification, type WorkoutModification } from '@/lib/workoutModification';
+import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
+import { dispatchPrefillWeights } from '@/lib/workoutEvents';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
@@ -1553,18 +1554,26 @@ ${mealSuggestion}`;
 
       // SURGICAL MODIFICATION — apply targeted change to today's active workout
       let wasModification = false;
-      if (apiResult?.workoutModification && onUpdateOperator) {
-        const today = getLocalDateStr();
-        const current = operator.workouts?.[today];
-        if (current) {
-          try {
-            const modified = applyWorkoutModification(current, apiResult.workoutModification as unknown as WorkoutModification);
-            const updated = { ...operator };
-            updated.workouts = { ...updated.workouts, [today]: modified };
-            onUpdateOperator(updated);
-            wasModification = true;
-          } catch (e) {
-            console.error('applyWorkoutModification failed:', e);
+      if (apiResult?.workoutModification) {
+        const mod = apiResult.workoutModification as unknown as WorkoutModification;
+        if (mod?.type === 'prefill_weights') {
+          // Live prefill of workout-mode inputs — Planner's listener handles it.
+          // Does not mutate the persisted workout, does not need onUpdateOperator.
+          dispatchPrefillWeights(mod as PrefillWeightsMod);
+          wasModification = true;
+        } else if (onUpdateOperator) {
+          const today = getLocalDateStr();
+          const current = operator.workouts?.[today];
+          if (current) {
+            try {
+              const modified = applyWorkoutModification(current, mod);
+              const updated = { ...operator };
+              updated.workouts = { ...updated.workouts, [today]: modified };
+              onUpdateOperator(updated);
+              wasModification = true;
+            } catch (e) {
+              console.error('applyWorkoutModification failed:', e);
+            }
           }
         }
       }
@@ -1717,18 +1726,24 @@ ${mealSuggestion}`;
       });
 
       let wasModification = false;
-      if (apiResult?.workoutModification && onUpdateOperator) {
-        const today = getLocalDateStr();
-        const current = operator.workouts?.[today];
-        if (current) {
-          try {
-            const modified = applyWorkoutModification(current, apiResult.workoutModification as unknown as WorkoutModification);
-            const updated = { ...operator };
-            updated.workouts = { ...updated.workouts, [today]: modified };
-            onUpdateOperator(updated);
-            wasModification = true;
-          } catch (e) {
-            console.error('applyWorkoutModification (quick action) failed:', e);
+      if (apiResult?.workoutModification) {
+        const mod = apiResult.workoutModification as unknown as WorkoutModification;
+        if (mod?.type === 'prefill_weights') {
+          dispatchPrefillWeights(mod as PrefillWeightsMod);
+          wasModification = true;
+        } else if (onUpdateOperator) {
+          const today = getLocalDateStr();
+          const current = operator.workouts?.[today];
+          if (current) {
+            try {
+              const modified = applyWorkoutModification(current, mod);
+              const updated = { ...operator };
+              updated.workouts = { ...updated.workouts, [today]: modified };
+              onUpdateOperator(updated);
+              wasModification = true;
+            } catch (e) {
+              console.error('applyWorkoutModification (quick action) failed:', e);
+            }
           }
         }
       }
