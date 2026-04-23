@@ -15,6 +15,7 @@ import HRZoneGauge from '@/components/HRZoneGauge';
 import WorkoutPTT from '@/components/WorkoutPTT';
 import { parseMovementText } from '@/lib/parseMovementText';
 import { buildSearchUrl } from '@/lib/videoUrl';
+import { getAuthToken } from '@/lib/authClient';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
@@ -469,7 +470,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+            'Authorization': `Bearer ${getAuthToken()}`,
           },
           body: JSON.stringify({ operatorId: operator.id }),
         });
@@ -1268,7 +1269,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         osc.start(start);
         osc.stop(start + toneDur);
       });
-    } catch {}
+    } catch { /* AudioContext unavailable — HTML5 Audio fallback below picks up */ }
     // Fallback HTML5 Audio (for browsers where AudioContext fails silently)
     try {
       if (fallbackAudioRef.current) {
@@ -1276,13 +1277,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         fallbackAudioRef.current.volume = 1.0;
         void fallbackAudioRef.current.play();
       }
-    } catch {}
+    } catch { /* audio blocked by autoplay policy — vibration fallback below */ }
     // Vibration pattern: long-short-long-short-long (attention-grabbing)
     try {
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         navigator.vibrate([400, 120, 400, 120, 600]);
       }
-    } catch {}
+    } catch { /* vibrate API unavailable — silent */ }
   };
 
   // Rest timer countdown
@@ -1314,13 +1315,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
         osc.start();
         osc.stop(ctx.currentTime + 0.25);
-      } catch {}
+      } catch { /* AudioContext unavailable — skip countdown beep */ }
       // Short vibration tick on final countdown (if supported)
       try {
         if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
           navigator.vibrate(80);
         }
-      } catch {}
+      } catch { /* vibrate API unavailable */ }
     }
     const interval = setInterval(() => setRestTimer(prev => prev - 1), 1000);
     return () => clearInterval(interval);
@@ -1338,7 +1339,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             wakeLockRef.current = null;
           });
         }
-      } catch {}
+      } catch { /* wakeLock API unsupported / denied — screen may sleep during rest */ }
     };
     const release = async () => {
       try {
@@ -1346,7 +1347,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           await wakeLockRef.current.release();
           wakeLockRef.current = null;
         }
-      } catch {}
+      } catch { /* already released or API unavailable */ }
     };
     if (shouldLock) {
       void acquire();

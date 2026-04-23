@@ -2,6 +2,8 @@
 // Uses OpenAI TTS API with fallback to browser speechSynthesis
 // Voices: onyx (deep male), nova (clear female), echo (warm male), fable (british), shimmer (soft female), alloy (neutral)
 
+import { getAuthToken } from './authClient';
+
 let audioQueue: HTMLAudioElement[] = [];
 let isPlaying = false;
 let audioContextUnlocked = false;
@@ -61,7 +63,7 @@ function playNext() {
   if (audioQueue.length === 0) {
     isPlaying = false;
     // Notify listeners that all speech is done
-    onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch {} });
+    onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch (err) { console.warn('[tts] queue-empty callback threw:', err); } });
     return;
   }
   isPlaying = true;
@@ -86,7 +88,7 @@ export async function speak(text: string, voice?: GunnyVoice) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': typeof localStorage !== 'undefined'
-          ? `Bearer ${localStorage.getItem('authToken') || ''}`
+          ? `Bearer ${getAuthToken()}`
           : '',
       },
       body: JSON.stringify({ text, voice: selectedVoice, speed: 1.1 }),
@@ -144,7 +146,7 @@ function browserSpeak(text: string, voice: GunnyVoice) {
   utterance.onend = () => {
     if (audioQueue.length === 0) {
       isPlaying = false;
-      onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch {} });
+      onQueueEmptyCallbacks.forEach(cb => { try { cb(); } catch (err) { console.warn('[tts] queue-empty callback threw:', err); } });
     }
   };
   window.speechSynthesis.speak(utterance);

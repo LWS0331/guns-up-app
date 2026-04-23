@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Operator, TIER_CONFIGS, AiTier, OPS_CENTER_ACCESS } from '@/lib/types';
+import { getAuthToken } from '@/lib/authClient';
 
 type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'MARKETING';
 
@@ -102,7 +103,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     setMetricsLoading(true);
     try {
       const res = await fetch(`/api/ops?operatorId=${currentUser.id}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -196,7 +197,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify(updated),
       });
@@ -225,7 +226,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+            'Authorization': `Bearer ${getAuthToken()}`,
           },
           body: JSON.stringify(updated),
         });
@@ -245,7 +246,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+            'Authorization': `Bearer ${getAuthToken()}`,
           },
           body: JSON.stringify(updated),
         });
@@ -267,7 +268,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify(updated),
       });
@@ -287,7 +288,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify({
           operatorId: currentUser.id,
@@ -322,7 +323,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify(updated),
       });

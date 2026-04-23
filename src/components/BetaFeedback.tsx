@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { getAuthToken } from '@/lib/authClient';
 
 interface FeedbackEntry {
   id: string;
@@ -68,7 +69,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
       try {
         setLoading(true);
         const res = await fetch(`/api/beta-feedback?operatorId=${operatorId}`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+          headers: { 'Authorization': `Bearer ${getAuthToken()}` },
         });
         if (res.ok) {
           const data = await res.json();
@@ -117,7 +118,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify({ operatorId, callsign, type: feedbackType, category, description, screenshot }),
       });
@@ -131,7 +132,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
       if (fileInputRef.current) fileInputRef.current.value = '';
       // Refresh
       const refreshRes = await fetch(`/api/beta-feedback?operatorId=${operatorId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` },
       });
       if (refreshRes.ok) {
         const newData = await refreshRes.json();

@@ -11,6 +11,7 @@ import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
+import { getAuthToken } from '@/lib/authClient';
 
 /** Format a meal.time for display — handles ISO, legacy locale strings, and bare times. */
 const formatMealTime = (raw: string | undefined): string => {
@@ -1234,7 +1235,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+            'Authorization': `Bearer ${getAuthToken()}`,
           },
           body: JSON.stringify({ image: base64, mimeType }),
         });
@@ -1292,7 +1293,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     setUsdaSearching(true);
     try {
       const res = await fetch(`/api/nutrition/search?q=${encodeURIComponent(usdaSearch)}&limit=8`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}` },
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` },
       });
       const data = await res.json();
       if (data.success && data.foods) {
