@@ -6,6 +6,7 @@ import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
+import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
@@ -475,6 +476,41 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
 
   // Track which operator ID we've initialized — only reset chat on actual user switch
   const initOperatorRef = useRef<string>('');
+
+  // Mirror the global TTS toggle so the header mic icon re-renders when any
+  // component (this one, the panel, a voice_control command) flips it.
+  const [ttsOn, setTtsOn] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return isTtsEnabled();
+  });
+
+  useEffect(() => {
+    const unsub = onTtsEnabledChange((enabled) => setTtsOn(enabled));
+    return unsub;
+  }, []);
+
+  const toggleTts = () => {
+    const next = !ttsOn;
+    setTtsEnabled(next); // persists + broadcasts via onTtsEnabledChange
+    if (next) unlockAudioContext(); // warm audio on the gesture so next speak() plays
+  };
+
+  /**
+   * Apply a <voice_control> command emitted by Gunny. We trust the server-side
+   * parser to have already parsed the JSON and validated action is a string.
+   * Called after every callGunnyAPIStreaming return on the off chance the user
+   * asked Gunny to toggle voice in this turn.
+   */
+  const applyVoiceControl = (vc: { action?: string } | undefined) => {
+    if (!vc || typeof vc.action !== 'string') return;
+    const action = vc.action.toLowerCase();
+    if (action === 'enable' || action === 'on') {
+      setTtsEnabled(true);
+      unlockAudioContext();
+    } else if (action === 'disable' || action === 'off' || action === 'mute') {
+      setTtsEnabled(false);
+    }
+  };
 
   // Apply profile data from onboarding AI response
   const applyProfileData = (profileData: Record<string, unknown>) => {
@@ -1222,6 +1258,7 @@ ${mealSuggestion}`;
     workoutModification?: Record<string, unknown>;
     profileData?: Record<string, unknown>;
     mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string };
+    voiceControl?: { action?: string };
   } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map((m) => ({
@@ -1282,6 +1319,7 @@ ${mealSuggestion}`;
           workoutModification: data.workoutModification,
           profileData: data.profileData,
           mealData: data.mealData,
+          voiceControl: data.voiceControl,
         };
       }
 
@@ -1327,6 +1365,8 @@ ${mealSuggestion}`;
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
                 .replace(/<meal_json>[\s\S]*$/, '')
+                .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
+                .replace(/<voice_control>[\s\S]*$/, '')
                 // Strip trailing half-streamed markdown table row (pipe-led line missing its closing pipe)
                 .replace(/\n\|[^\n|]*$/, '');
               opts.onDelta(visible);
@@ -1354,6 +1394,7 @@ ${mealSuggestion}`;
           workoutModification: finalPayload.workoutModification,
           profileData: finalPayload.profileData,
           mealData: finalPayload.mealData,
+          voiceControl: finalPayload.voiceControl,
         };
       }
       return { response: accumulated };
@@ -1476,6 +1517,7 @@ ${mealSuggestion}`;
       if (apiResult?.profileData) {
         applyProfileData(apiResult.profileData);
       }
+      applyVoiceControl(apiResult?.voiceControl);
       if (!apiResult) {
         const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
           ? formatOwnerDiagnostic(errorInfo)
@@ -1551,6 +1593,8 @@ ${mealSuggestion}`;
         },
         onError: (info) => { errorInfo = info; },
       });
+
+      applyVoiceControl(apiResult?.voiceControl);
 
       // SURGICAL MODIFICATION — apply targeted change to today's active workout
       let wasModification = false;
@@ -1724,6 +1768,8 @@ ${mealSuggestion}`;
         },
         onError: (info) => { errorInfo = info; },
       });
+
+      applyVoiceControl(apiResult?.voiceControl);
 
       let wasModification = false;
       if (apiResult?.workoutModification) {
@@ -2010,6 +2056,35 @@ ${mealSuggestion}`;
               {t('gunny.online')}
             </span>
           </div>
+
+          {/* Voice toggle — flips the global TTS gate (lib/tts.ts).
+             Muting silences every speak() in the app: this chat, the panel,
+             workout-mode rest-timer countdowns, set-logged callouts,
+             TacticalRadio. Tapping here is a user gesture so we also warm the
+             iOS audio context for the NEXT speak() call to play reliably. */}
+          <button
+            onClick={toggleTts}
+            title={ttsOn ? 'Voice ON — tap to mute' : 'Voice OFF — tap to unmute'}
+            aria-label={ttsOn ? 'Mute Gunny voice' : 'Unmute Gunny voice'}
+            aria-pressed={ttsOn}
+            style={{
+              background: ttsOn ? 'rgba(0,255,65,0.12)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${ttsOn ? 'rgba(0,255,65,0.4)' : 'rgba(255,255,255,0.15)'}`,
+              borderRadius: '4px',
+              color: ttsOn ? '#00ff41' : '#666',
+              fontSize: '16px',
+              cursor: 'pointer',
+              padding: '4px 10px',
+              minWidth: '40px',
+              minHeight: '32px',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {ttsOn ? '🔊' : '🔇'}
+          </button>
         </div>
       </div>
 

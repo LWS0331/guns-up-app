@@ -622,6 +622,13 @@ const AppShell: React.FC<AppShellProps> = ({
     const op = freshOperator || selectedOperator;
     // Shared builder is the source of truth (Task 12/13).
     // We wrap it to inject UI-local state (language, active workout mode).
+    // Cast via unknown: the shared GunnyOperatorContext keeps `sitrep` as a loose
+    // AnyRec (so every Operator shape round-trips through it cleanly), while the
+    // local OperatorContextData types sitrep as a structured battle-plan object.
+    // They're compatible at runtime — this file's callers read fields from
+    // either shape — but TS needs the double-cast to acknowledge the structural
+    // difference. Adding completedWorkoutLogs to the shared context pushed TS
+    // past the "sufficiently overlap" threshold so a direct cast now errors.
     return buildFullGunnyContext(op, {
       language: language || 'en',
       workoutExecution: workoutModeState?.active ? {
@@ -629,7 +636,7 @@ const AppShell: React.FC<AppShellProps> = ({
         workoutTitle: workoutModeState.workoutTitle,
         exercises: workoutModeState.exercises,
       } : null,
-    }) as OperatorContextData;
+    }) as unknown as OperatorContextData;
   };
 
   // LEGACY builder retained for reference — remove in next cleanup pass.
@@ -917,6 +924,7 @@ const AppShell: React.FC<AppShellProps> = ({
           if (data.mealData) handlePanelMealData(data.mealData);
           if (data.workoutModification) handlePanelWorkoutMod(data.workoutModification);
           else if (data.workoutData) handlePanelWorkoutData(data.workoutData);
+          applyPanelVoiceControl(data.voiceControl);
         }
         return;
       }
@@ -996,6 +1004,7 @@ const AppShell: React.FC<AppShellProps> = ({
         if (finalPayload.mealData) handlePanelMealData(finalPayload.mealData);
         if (finalPayload.workoutModification) handlePanelWorkoutMod(finalPayload.workoutModification);
         else if (finalPayload.workoutData) handlePanelWorkoutData(finalPayload.workoutData);
+        applyPanelVoiceControl(finalPayload.voiceControl);
       } else if (!accumulated) {
         setGunnyMessages(prev => prev.map(m =>
           (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
@@ -1042,6 +1051,24 @@ const AppShell: React.FC<AppShellProps> = ({
         },
       };
       onUpdateOperator(updated);
+    }
+  };
+
+  // Helper: handle <voice_control> command from streaming final payload.
+  // Gunny emits voice_control when the user explicitly asks to turn voice
+  // on/off (see gunny route's VOICE OUTPUT section). We trust the server to
+  // have parsed the JSON; here we just map the action to setTtsEnabled and
+  // warm the iOS audio context on an enable so the confirmation TTS plays.
+  const applyPanelVoiceControl = (vc: unknown) => {
+    if (!vc || typeof vc !== 'object') return;
+    const action = (vc as { action?: string }).action;
+    if (typeof action !== 'string') return;
+    const a = action.toLowerCase();
+    if (a === 'enable' || a === 'on') {
+      setTtsEnabledGlobal(true);
+      unlockAudioContext();
+    } else if (a === 'disable' || a === 'off' || a === 'mute') {
+      setTtsEnabledGlobal(false);
     }
   };
 
