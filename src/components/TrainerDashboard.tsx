@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Operator, TIER_CONFIGS, TEAMS, getTrainerRank, TRAINER_RANKS } from '@/lib/types';
+import { formatLocalDateKey } from '@/lib/dateUtils';
 
 interface TrainerDashboardProps {
   trainer: Operator;
@@ -39,12 +40,15 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
     return { totalMonthly, byTier };
   };
 
-  // Get last workout date for a client
+  // Get last workout date for a client. The workouts record is keyed by
+  // YYYY-MM-DD in the operator's local timezone; passing that to new Date()
+  // parses as UTC and shifts the display date west for non-UTC viewers.
+  // formatLocalDateKey constructs the Date at local midnight so "Apr 22"
+  // stays "Apr 22" for PST (and everywhere else).
   const getLastWorkoutDate = (client: Operator): string => {
     const workouts = Object.keys(client.workouts || {}).sort().reverse();
     if (workouts.length === 0) return 'Never';
-    const date = new Date(workouts[0]);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return formatLocalDateKey(workouts[0]);
   };
 
   // Get workouts this week
