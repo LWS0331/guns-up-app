@@ -21,10 +21,20 @@ export function getNotificationPermission(): string {
   return Notification.permission;
 }
 
-// Schedule a local notification (uses service worker for reliability)
+// Schedule a local notification (uses service worker for reliability).
+//
+// IMPORTANT: this function does NOT request permission. Chrome and Safari
+// reject Notification.requestPermission() calls that aren't triggered by a
+// direct user gesture (click/tap), so attempting to prompt from a timer or
+// async effect either rejects silently or throws "NotAllowedError" — and
+// even when it works, it surprises the user with an "Allow notifications?"
+// popup in the middle of an unrelated flow (e.g. mid-chat or post-meal-log).
+// If permission isn't already granted, we no-op. The actual permission
+// prompt lives behind the "REQUEST PERMISSION" button in NotificationSettings
+// (COCDashboard), which is guaranteed user-initiated.
 export async function sendLocalNotification(title: string, body: string, tag?: string): Promise<void> {
-  const hasPermission = await requestNotificationPermission();
-  if (!hasPermission) return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
 
   if ('serviceWorker' in navigator) {
     const reg = await navigator.serviceWorker.ready;
