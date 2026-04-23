@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/requireAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
+import { validateOperatorJsonFields } from '@/lib/operatorValidation';
 
 // Field sets per actor. Admins can set everything; self can set profile + identity
 // but NOT privilege/billing fields; trainers of the target can only set training-facing
@@ -82,6 +83,19 @@ export async function PUT(
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: 'No updatable fields in request' }, { status: 400 });
+    }
+
+    // Shape-check JSON columns before they hit Prisma. Without this, a caller
+    // could PUT { profile: "oops" } and store a string where code expects an
+    // object, producing a NPE on next read. We only validate container shape
+    // (object/array), not nested schema — see operatorValidation.ts.
+    const issues = validateOperatorJsonFields(data as Record<string, unknown>);
+    if (issues.length > 0) {
+      console.warn('[api/operators/:id PUT] shape validation failed', { actor: auth.operatorId, target: id, issues });
+      return NextResponse.json(
+        { error: 'Invalid JSON field shape', issues },
+        { status: 400 },
+      );
     }
 
     const updated = await prisma.operator.update({ where: { id }, data });
