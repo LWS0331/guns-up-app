@@ -922,7 +922,12 @@ const AppShell: React.FC<AppShellProps> = ({
           speakGunny(replyText);
           // Handle meal/workout data from JSON fallback
           if (data.mealData) handlePanelMealData(data.mealData);
-          if (data.workoutModification) handlePanelWorkoutMod(data.workoutModification);
+          // Prefer the plural array if present (route returns both for
+          // backwards compat). Falls back to the single mod for older servers.
+          const mods = Array.isArray(data.workoutModifications)
+            ? data.workoutModifications
+            : (data.workoutModification ? [data.workoutModification] : []);
+          if (mods.length > 0) handlePanelWorkoutMods(mods);
           else if (data.workoutData) handlePanelWorkoutData(data.workoutData);
           applyPanelVoiceControl(data.voiceControl);
         }
@@ -1002,7 +1007,10 @@ const AppShell: React.FC<AppShellProps> = ({
         ));
         speakGunny(finalPayload.cleanText);
         if (finalPayload.mealData) handlePanelMealData(finalPayload.mealData);
-        if (finalPayload.workoutModification) handlePanelWorkoutMod(finalPayload.workoutModification);
+        const fmods = Array.isArray(finalPayload.workoutModifications)
+          ? finalPayload.workoutModifications
+          : (finalPayload.workoutModification ? [finalPayload.workoutModification] : []);
+        if (fmods.length > 0) handlePanelWorkoutMods(fmods);
         else if (finalPayload.workoutData) handlePanelWorkoutData(finalPayload.workoutData);
         applyPanelVoiceControl(finalPayload.voiceControl);
       } else if (!accumulated) {
@@ -1072,29 +1080,39 @@ const AppShell: React.FC<AppShellProps> = ({
     }
   };
 
-  // Helper: handle workout modification from streaming final payload
-  const handlePanelWorkoutMod = (workoutMod: unknown) => {
-    const mod = workoutMod as WorkoutModification;
-
-    // prefill_weights doesn't mutate the persisted workout — it targets the
-    // Planner's live workoutResults state via a CustomEvent. Dispatch and exit.
-    if (mod?.type === 'prefill_weights') {
-      dispatchPrefillWeights(mod as PrefillWeightsMod);
-      return;
-    }
-
+  // Helper: handle workout modifications (ARRAY) from streaming final payload.
+  // Gunny may emit multiple <workout_modification> blocks in one response — most
+  // commonly a prefill_weights per exercise when the operator asks for "fill
+  // every lift." We apply prefills via the Planner event bus (they don't touch
+  // the persisted workout) and fold every block-shape mod into a single
+  // operator update so React only renders once.
+  const handlePanelWorkoutMods = (mods: unknown[]) => {
+    if (!Array.isArray(mods) || mods.length === 0) return;
     const today = getLocalDateStr();
-    const current = currentSelectedOp.workouts?.[today];
-    if (current) {
+    let workingOp = currentSelectedOp;
+    let touched = false;
+
+    for (const raw of mods) {
+      const mod = raw as WorkoutModification;
+      if (!mod || typeof mod !== 'object') continue;
+
+      if (mod.type === 'prefill_weights') {
+        dispatchPrefillWeights(mod as PrefillWeightsMod);
+        continue;
+      }
+
+      const current = workingOp.workouts?.[today];
+      if (!current) continue;
       try {
         const modified = applyWorkoutModification(current, mod);
-        const updated = { ...currentSelectedOp };
-        updated.workouts = { ...updated.workouts, [today]: modified };
-        onUpdateOperator(updated);
+        workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
+        touched = true;
       } catch (e) {
         console.error('applyWorkoutModification failed:', e);
       }
     }
+
+    if (touched) onUpdateOperator(workingOp);
   };
 
   // Helper: handle new workout data from streaming final payload
@@ -1239,24 +1257,11 @@ const AppShell: React.FC<AppShellProps> = ({
               }
             }
 
-            if (data.workoutModification) {
-              const mod = data.workoutModification as WorkoutModification;
-              if (mod?.type === 'prefill_weights') {
-                dispatchPrefillWeights(mod as PrefillWeightsMod);
-              } else {
-                const today = getLocalDateStr();
-                const current = currentSelectedOp.workouts?.[today];
-                if (current) {
-                  try {
-                    const modified = applyWorkoutModification(current, mod);
-                    const updated = { ...currentSelectedOp };
-                    updated.workouts = { ...updated.workouts, [today]: modified };
-                    onUpdateOperator(updated);
-                  } catch (e) {
-                    console.error('applyWorkoutModification (voice) failed:', e);
-                  }
-                }
-              }
+            const voiceMods: unknown[] = Array.isArray(data.workoutModifications)
+              ? data.workoutModifications
+              : (data.workoutModification ? [data.workoutModification] : []);
+            if (voiceMods.length > 0) {
+              handlePanelWorkoutMods(voiceMods);
             } else if (data.workoutData) {
               const today = getLocalDateStr();
               const wd = data.workoutData as Record<string, unknown>;
