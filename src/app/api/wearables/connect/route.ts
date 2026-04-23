@@ -2,14 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Vital } from '@tryvital/vital-node';
 import { prisma } from '@/lib/db';
 import { getVitalClient, SUPPORTED_PROVIDERS } from '@/lib/vital';
+import { requireAuth } from '@/lib/requireAuth';
+import { OPS_CENTER_ACCESS } from '@/lib/types';
 
-// POST /api/wearables/connect — Register operator in Junction + return connect link
+// POST /api/wearables/connect — Register operator in Junction + return connect link.
+// AUTH: caller must be authenticated AND connecting for their own operator id
+// (admins can initiate connection flows for any operator). Previously this route
+// accepted any operatorId and would happily create Junction users + burn Vital
+// API quota for unauthenticated callers.
 export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { operatorId, provider } = await req.json();
 
     if (!operatorId) {
       return NextResponse.json({ error: 'operatorId required' }, { status: 400 });
+    }
+
+    const isSelf = auth.operatorId === operatorId;
+    const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
+    if (!isSelf && !isAdmin) {
+      console.warn('[api/wearables/connect] FORBIDDEN', { actor: auth.operatorId, target: operatorId });
+      return NextResponse.json({ error: 'Forbidden: cannot initiate wearable connection for another operator' }, { status: 403 });
     }
 
     if (!process.env.VITAL_API_KEY) {

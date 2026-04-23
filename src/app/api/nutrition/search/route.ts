@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/requireAuth';
 
 const USDA_API_KEY = process.env.USDA_API_KEY || 'DEMO_KEY';
 const USDA_BASE = 'https://api.nal.usda.gov/fdc/v1';
@@ -48,7 +49,14 @@ function extractMacros(nutrients: USDANutrient[]) {
   };
 }
 
+// GET /api/nutrition/search — proxy to USDA FDC search.
+// AUTH: required. This endpoint burns external API quota (shared DEMO_KEY when
+// USDA_API_KEY isn't set) so we gate it behind auth to prevent anonymous rate
+// drain. IntelCenter's food-search UI already sends the Authorization header.
 export async function GET(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const query = req.nextUrl.searchParams.get('q');
     const pageSize = req.nextUrl.searchParams.get('limit') || '10';

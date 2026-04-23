@@ -1,18 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getVitalClient } from '@/lib/vital';
+import { requireAuth } from '@/lib/requireAuth';
+import { OPS_CENTER_ACCESS } from '@/lib/types';
+import { getLocalDateStr, getLocalDateStrOffset } from '@/lib/dateUtils';
 
 // Conversion helpers
 const kgToLbs = (kg: number) => Math.round(kg * 2.20462);
 const secondsToHours = (sec: number) => Math.round((sec / 3600) * 10) / 10;
 
-// POST /api/wearables/sync — Pull latest health data from Junction for an operator
+// POST /api/wearables/sync — Pull latest health data from Junction for an operator.
+// AUTH: caller must be authenticated AND operate on their own operator record
+// (admins can sync for any operator). Before this check the route accepted any
+// operatorId from the body, so anyone could trigger a Vital API sync for a
+// random operator and overwrite that operator's profile.weight / readiness /
+// sleep / bodyFat with whatever their scale + sleep tracker reported.
 export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { operatorId } = await req.json();
 
     if (!operatorId) {
       return NextResponse.json({ error: 'operatorId required' }, { status: 400 });
+    }
+
+    const isSelf = auth.operatorId === operatorId;
+    const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
+    if (!isSelf && !isAdmin) {
+      console.warn('[api/wearables/sync] FORBIDDEN', { actor: auth.operatorId, target: operatorId });
+      return NextResponse.json({ error: 'Forbidden: cannot sync wearables for another operator' }, { status: 403 });
     }
 
     if (!process.env.VITAL_API_KEY) {
@@ -31,9 +49,14 @@ export async function POST(req: NextRequest) {
     const vital = getVitalClient();
     const vitalUserId = connections[0].vitalUserId;
 
-    // Date range: last 7 days
-    const endDate = new Date().toISOString().split('T')[0];
-    const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // Date range: last 7 days in the USER's local timezone. new Date().toISOString()
+    // would give us UTC dates, which for viewers west of UTC after 5pm local would
+    // skip today's data. Vital's API accepts YYYY-MM-DD and treats the range as
+    // inclusive, so local-tz strings match the operator's expectation.
+    const endDate = getLocalDateStr();
+    const startDate = getLocalDateStrOffset(-7);
+    // endDate is informational — vital.{sleep|activity|body}.get below only needs startDate
+    void endDate;
 
     // Pull all available data types in parallel
     const [sleepData, activityData, bodyData] = await Promise.allSettled([
