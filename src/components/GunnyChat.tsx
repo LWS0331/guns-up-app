@@ -9,7 +9,7 @@ import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
-import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
+import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, formatLocalDateKey } from '@/lib/dateUtils';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -330,7 +330,9 @@ const formatPersonalizedWorkout = (
   clientInjuries: Array<{ restrictions: string[] }>,
   trainerNotes?: string
 ): string => {
-  const workoutDate = new Date(trainerWorkout.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  // trainerWorkout.date is a YYYY-MM-DD local key; parse in local tz so PST
+  // viewers don't see the date shifted one day earlier.
+  const workoutDate = formatLocalDateKey(trainerWorkout.date, { weekday: 'short', month: 'short', day: 'numeric' });
 
   let output = `YOUR TRAINER'S WORKOUT — ${workoutDate}
 ━━━━━━━━━━━━━━━━━━
@@ -639,6 +641,13 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
           });
           if (res.ok) {
             const data = await res.json();
+            // Guard against 200 OK with empty/missing response — without this,
+            // an empty body would render a blank Gunny bubble and the user sees
+            // nothing during onboarding. Throw so the catch fires the hardcoded
+            // fallback greeting below.
+            if (!data?.response || typeof data.response !== 'string' || !data.response.trim()) {
+              throw new Error('Empty onboarding response');
+            }
             const greeting: Message = {
               id: 'onboard-greeting-' + Date.now(),
               role: 'gunny',
@@ -840,7 +849,7 @@ Notes: Follow form over ego. Hydrate. Stay locked in.
           .reverse()[0];
 
         response += `${client.callsign} — ${client.name}
-  Tier: ${client.tier.toUpperCase()} | Last Workout: ${lastWorkoutDate ? new Date(lastWorkoutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'None'}
+  Tier: ${client.tier.toUpperCase()} | Last Workout: ${lastWorkoutDate ? formatLocalDateKey(lastWorkoutDate) : 'None'}
   Goals: ${client.profile.goals?.join(', ') || 'TBD'}
   Readiness: ${client.profile.readiness}% | Streak: ${streak} days
   Notes: ${client.trainerNotes || 'No custom directives set'}
@@ -915,16 +924,14 @@ Total: ${clients.length} active clients`;
       return { response };
     }
 
-    if (lower.includes('build a workout') || lower.includes('build me a') || lower.includes('build a wod') ||
-        lower.includes('build workout') || lower.includes('give me a workout') || lower.includes('create a workout') ||
-        (lower.includes('build') && getMuscleGroup(userMessage))) {
-      const muscleGroup = getMuscleGroup(userMessage);
-      const goalKey = getGoalPath(userMessage);
-      if (muscleGroup) {
-        return { response: formatWorkout(buildWorkout(muscleGroup, goalKey)) };
-      }
-      return { response: "Roger that, champ. Need to know your target — CHEST, BACK, LEGS, SHOULDERS, or ARMS? Ask me to BUILD A CHEST WORKOUT or similar and I'll lock it in." };
-    }
+    // NOTE: the old "build me a workout" branch used to intercept here and return a
+    // hard-coded template from buildWorkout/MUSCLE_GROUP_TEMPLATES, ignoring the
+    // operator's goals/PRs/injuries/preferences. Users reported it as "a generic
+    // workout." Routing these requests to the LLM (the fallthrough path below) lets
+    // Gunny generate a personalized workout using the full operator context built by
+    // buildFullGunnyContext. The dead helpers (buildWorkout/formatWorkout/
+    // getMuscleGroup/getGoalPath/MUSCLE_GROUP_TEMPLATES/WorkoutSession) will be
+    // removed in the sprint 6 dead-code pass.
 
     if (lower.includes('goal path') || lower.includes('goal paths') || lower === 'paths' || lower === 'show me goal paths') {
       return { response: `Roger that, champ. Here's what I've got:\n\nHYPERTROPHY — ${GOAL_PATHS.HYPERTROPHY.description}\n\nFAT LOSS — ${GOAL_PATHS.FAT_LOSS.description}\n\nSTRENGTH — ${GOAL_PATHS.STRENGTH.description}\n\nATHLETIC PERFORMANCE — ${GOAL_PATHS.ATHLETIC_PERFORMANCE.description}\n\nGENERAL FITNESS — ${GOAL_PATHS.GENERAL_FITNESS.description}\n\nTell me your target and I'll build accordingly. Copy that?` };
@@ -1498,6 +1505,10 @@ ${mealSuggestion}`;
   };
 
   const handleSendMessage = async () => {
+    // Guard against double-submit: if a request is already in-flight (thinking
+    // indicator up, or streaming into a placeholder), ignore this tap so the
+    // user can't stack duplicate messages while waiting for Gunny's reply.
+    if (isTyping) return;
     if (!inputValue.trim() && !pendingImage) return;
     const text = inputValue || (pendingImage ? 'Analyze this image' : '');
     const lower = text.toLowerCase();
@@ -1741,6 +1752,9 @@ ${mealSuggestion}`;
   };
 
   const handleQuickAction = async (action: string) => {
+    // Guard double-submit — same as handleSendMessage. A user tapping BUILD WOD
+    // while a previous request is in-flight would stack calls otherwise.
+    if (isTyping) return;
     const userMessage: Message = { id: 'user-' + Date.now(), role: 'user', text: action, timestamp: new Date() };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
@@ -1899,10 +1913,14 @@ ${mealSuggestion}`;
           align-items: center;
           gap: 6px;
         }
-        .quick-btn:hover {
+        .quick-btn:hover:not(:disabled) {
           background: rgba(0,255,65,0.08);
           border-color: rgba(0,255,65,0.3);
           box-shadow: 0 0 12px rgba(0,255,65,0.15);
+        }
+        .quick-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
         }
         .send-btn {
           padding: 10px 20px;
@@ -1915,10 +1933,24 @@ ${mealSuggestion}`;
           font-weight: 800;
           letter-spacing: 2px;
           transition: all 0.2s ease;
+          min-width: 70px;
         }
-        .send-btn:hover {
+        .send-btn:hover:not(:disabled) {
           background: #33ff77;
           box-shadow: 0 0 20px rgba(0,255,65,0.5);
+        }
+        .send-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .send-btn[aria-busy="true"] {
+          background: #0a7a1e;
+          color: #aaffcc;
+          animation: sendBtnPulse 1.2s ease-in-out infinite;
+        }
+        @keyframes sendBtnPulse {
+          0%, 100% { opacity: 0.65; }
+          50% { opacity: 1; }
         }
         .chat-input {
           flex: 1;
@@ -2072,7 +2104,7 @@ ${mealSuggestion}`;
           backgroundColor: 'rgba(0,255,65,0.01)',
         }}>
           {quickActions.map((action) => (
-            <button key={action.id} className="quick-btn" onClick={() => handleQuickActionById(action.id)}>
+            <button key={action.id} className="quick-btn" onClick={() => handleQuickActionById(action.id)} disabled={isTyping}>
               <span style={{ color: '#00ff41', fontSize: '15px', opacity: 0.6 }}>{action.icon}</span>
               {action.label}
             </button>
@@ -2420,8 +2452,13 @@ ${mealSuggestion}`;
         >
           📷
         </button>
-        <button onClick={handleSendMessage} className="send-btn" disabled={!inputValue.trim() && !pendingImage}>
-          SEND
+        <button
+          onClick={handleSendMessage}
+          className="send-btn"
+          disabled={isTyping || (!inputValue.trim() && !pendingImage)}
+          aria-busy={isTyping || undefined}
+        >
+          {isTyping ? '…' : 'SEND'}
         </button>
       </div>
       {/* Image preview */}

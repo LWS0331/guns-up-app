@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, TIER_CONFIGS } from '@/lib/types';
 import NotificationSettings from '@/components/NotificationSettings';
+import { formatLocalDateKey } from '@/lib/dateUtils';
 
 interface COCDashboardProps {
   operator: Operator;
@@ -166,7 +167,10 @@ function getRecentPRs(operator: Operator, limit: number = 5) {
 }
 
 function formatPRDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // PRRecord.date is stored as a YYYY-MM-DD local key (see lib/types.ts and the
+  // PR-logging path that uses getLocalDateStr). Use the local-aware formatter so
+  // PST viewers don't see PRs shifted a day earlier.
+  return formatLocalDateKey(dateStr);
 }
 
 function isToday(date: Date): boolean {

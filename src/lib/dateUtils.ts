@@ -70,3 +70,37 @@ export function getLocalDateLongStr(): string {
     day: 'numeric',
   });
 }
+
+/**
+ * Parse a YYYY-MM-DD date key into a Date anchored at LOCAL midnight.
+ *
+ * CRITICAL: `new Date('2026-04-22')` parses as UTC midnight, then any subsequent
+ * `.toLocaleDateString(...)` conversion shifts it back in time for viewers west
+ * of UTC — so a workout keyed 2026-04-22 renders as "Apr 21" in PST. This helper
+ * constructs the Date in the viewer's local timezone so the displayed date
+ * matches the stored key.
+ *
+ * Returns null for malformed input.
+ */
+export function parseLocalDateKey(key: string | undefined | null): Date | null {
+  if (!isValidDateStr(key)) return null;
+  const [y, m, d] = (key as string).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/**
+ * Format a YYYY-MM-DD date key in the viewer's local timezone.
+ *
+ * Safe replacement for `new Date(dateKey).toLocaleDateString(...)` which has
+ * the UTC-parse bug described in parseLocalDateKey. Returns the original key
+ * if it's malformed so you can still render something rather than crashing.
+ */
+export function formatLocalDateKey(
+  key: string | undefined | null,
+  options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' },
+  locale: string = 'en-US',
+): string {
+  const parsed = parseLocalDateKey(key);
+  if (!parsed) return key ?? '';
+  return parsed.toLocaleDateString(locale, options);
+}
