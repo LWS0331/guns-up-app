@@ -1,4 +1,6 @@
 // User / Operator types
+import { TIER_MODEL_MAP } from './models';
+
 export type UserRole = 'trainer' | 'client';
 export type AiTier = 'haiku' | 'sonnet' | 'opus' | 'white_glove';
 export type TrainerRank = 'recruit' | 'sergeant' | 'lieutenant' | 'captain' | 'general';
@@ -496,12 +498,18 @@ export interface Goal {
   name: string;
 }
 
-// Tier configuration with pricing and features (updated March 2026 with real API costs + caching)
+// Tier configuration with pricing and features (updated March 2026 with real API costs + caching).
+// Model IDs are sourced from lib/models.ts — the central map — to avoid drift.
+// Previously `haiku` here was set to the short string `claude-haiku-4-5`, which
+// doesn't match the real Anthropic model ID `claude-haiku-4-5-20251001` used at
+// the API boundary; any UI that displayed this value next to a tier was also
+// showing the wrong string, and had anything tried to pass it to the SDK we'd
+// have gotten a 404.
 export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
   haiku: {
     name: 'RECON',
     codename: 'RECON',
-    model: 'claude-haiku-4-5',
+    model: TIER_MODEL_MAP.haiku,
     monthlyPrice: 2.00,
     annualPrice: 20.00, // $1.67/mo — 17% off
     trainerShare: 0.50,
@@ -515,7 +523,7 @@ export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
   sonnet: {
     name: 'OPERATOR',
     codename: 'OPERATOR',
-    model: 'claude-sonnet-4-6',
+    model: TIER_MODEL_MAP.sonnet,
     monthlyPrice: 5.00,
     annualPrice: 50.00, // $4.17/mo — 17% off
     trainerShare: 1.50,
@@ -529,7 +537,7 @@ export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
   opus: {
     name: 'COMMANDER',
     codename: 'COMMANDER',
-    model: 'claude-opus-4-6',
+    model: TIER_MODEL_MAP.opus,
     monthlyPrice: 15.00,
     annualPrice: 150.00, // $12.50/mo — 17% off
     trainerShare: 3.00,
@@ -543,7 +551,7 @@ export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
   white_glove: {
     name: 'WARFIGHTER',
     codename: 'WARFIGHTER',
-    model: 'claude-opus-4-6',
+    model: TIER_MODEL_MAP.white_glove,
     monthlyPrice: 49.99,
     annualPrice: 499.00, // $41.58/mo — 17% off
     trainerShare: 20.00,

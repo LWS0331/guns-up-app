@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/requireAuth';
 
 // OpenAI TTS — "onyx" voice for Gunny (deep, authoritative male)
 // Voices: alloy, echo, fable, onyx, nova, shimmer
 // onyx = deepest male voice, perfect for military DI character
-
+//
+// AUTH: required. This endpoint burns OpenAI API credits on every call, so we
+// gate it behind auth to keep the cost tied to a known operator and so a
+// future rate-limit bucket can attribute usage correctly. lib/tts.ts already
+// sends the Authorization header via authHeaders().
 export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
