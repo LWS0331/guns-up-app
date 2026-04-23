@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
+import { resolveTierModel } from '@/lib/models';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -22,18 +23,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing operator context or SITREP' }, { status: 400 });
     }
 
-    // Tier-based model selection for Daily Briefs
-    // RECON (haiku): Haiku — fast, cheap, runs every login
-    // OPERATOR (sonnet): Sonnet — sharper daily adjustments, better adaptation logic
-    // COMMANDER (opus): Opus — premium daily coaching with deep personalization
-    // WARFIGHTER (white_glove): Opus — premier white-glove daily intel
-    const modelMap: Record<string, string> = {
-      haiku: 'claude-haiku-4-5-20251001',
-      sonnet: 'claude-sonnet-4-6',
-      opus: 'claude-opus-4-6',
-      white_glove: 'claude-opus-4-6',
-    };
-    const model = modelMap[tier] || 'claude-haiku-4-5-20251001';
+    // Tier-based model selection for Daily Briefs.
+    // RECON (haiku) / OPERATOR (sonnet) / COMMANDER (opus) / WARFIGHTER (white_glove).
+    // Actual model IDs live in lib/models.ts — update there when Anthropic deprecates.
+    const model = resolveTierModel(tier);
 
     // Compact SITREP context — only send what the AI needs for workout generation
     const sitrepContext = {

@@ -2,18 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
-
-// Map app tiers to Anthropic models
-const TIER_MODEL_MAP: Record<string, string> = {
-  haiku: 'claude-haiku-4-5-20251001',
-  sonnet: 'claude-sonnet-4-6',
-  opus: 'claude-opus-4-6',
-  white_glove: 'claude-opus-4-6',
-};
 
 const SITREP_PREAMBLE = `YOU HAVE FULL ACCESS TO THIS OPERATOR'S PROFILE AND DATA. You are not a generic chatbot — you are a personal AI trainer with deep knowledge of this specific operator. You know their:
 - Physical stats, fitness level, and training age
@@ -760,6 +753,60 @@ RECENT TRAINER WORKOUTS (programming patterns to model):`;
   return dataset;
 }
 
+// Inspect the operator context for missing-but-promised fields and emit an
+// explicit gaps block. Placed between the system prompt (which contains the
+// absolutist SITREP_PREAMBLE) and the context block so the LLM sees the
+// reality check immediately after the "you KNOW all this" claim.
+// Returns '' when the operator has everything set up — in that case the
+// original preamble is already truthful and no override is needed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildDataGapsBlock(operatorContext: any): string {
+  if (!operatorContext) return '';
+
+  const gaps: string[] = [];
+
+  const goals = Array.isArray(operatorContext.goals) ? operatorContext.goals : [];
+  if (goals.length === 0) {
+    gaps.push('Goals — NOT SET (operator has not specified what they are training for)');
+  }
+
+  const prs = Array.isArray(operatorContext.prs) ? operatorContext.prs : [];
+  if (prs.length === 0) {
+    gaps.push('PRs — NONE LOGGED (no strength benchmarks recorded yet)');
+  }
+
+  const injuries = Array.isArray(operatorContext.injuries) ? operatorContext.injuries : [];
+  if (injuries.length === 0) {
+    gaps.push('Injuries — NONE LOGGED (assume unrestricted movement unless the operator says otherwise)');
+  }
+
+  if (!operatorContext.sitrep) {
+    gaps.push('Battle plan (SITREP) — NOT GENERATED YET (no training split, nutrition plan, or 30-day milestones on file)');
+  }
+
+  if (!operatorContext.dailyBrief) {
+    gaps.push("Daily Brief — NOT GENERATED FOR TODAY (no compliance score or today's adjustments available)");
+  }
+
+  if (!operatorContext.weight) {
+    gaps.push('Weight — UNKNOWN (do not fabricate; ask or skip weight-based prescriptions)');
+  }
+
+  if (!operatorContext.macroTargets) {
+    gaps.push('Macro targets — NOT SET (no daily calorie/protein/carb/fat anchors to reference)');
+  }
+
+  if (gaps.length === 0) return '';
+
+  return `
+
+DATA GAPS — OVERRIDE TO THE SITREP PREAMBLE:
+Despite the preamble's claims of full access, the following fields are EMPTY for this operator. Do NOT pretend you know them. Do NOT fabricate values. If a question would require one of these, say you need it and prompt the operator to provide it (or to complete intake / generate a SITREP), then answer whatever you can with the data you do have.
+${gaps.map(g => `  - ${g}`).join('\n')}
+
+`;
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireAuth(req);
   if (auth instanceof NextResponse) return auth;
@@ -801,11 +848,11 @@ export async function POST(req: NextRequest) {
     const isAssistantMode = mode === 'assistant';
     const isOnboardingMode = mode === 'onboarding';
     const isOpsMode = mode === 'ops';
-    const model = TIER_MODEL_MAP[tier] || 'claude-haiku-4-5-20251001';
+    const model = resolveTierModel(tier);
 
-    // Force Opus 4.6 for platform owner
+    // Force Opus for platform owner (highest-quality responses for QA).
     const ownerOverride = operatorContext?.callsign === 'RAMPAGE';
-    const finalModel = ownerOverride ? 'claude-opus-4-6' : model;
+    const finalModel = ownerOverride ? OWNER_OVERRIDE_MODEL : model;
 
     // Build rich context about the operator
     let contextBlock = '';
@@ -1016,6 +1063,15 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       systemPrompt = modePrefix ? (modePrefix + '\n\n' + SYSTEM_PROMPT) : SYSTEM_PROMPT;
     }
 
+    // Context-aware data gaps block. SITREP_PREAMBLE asserts "you KNOW their
+    // goals / PRs / injuries / battle plan / compliance score" unconditionally,
+    // which is a lie when the operator is new or hasn't completed intake yet —
+    // and the LLM either invents values or says "I don't actually have your goals,"
+    // contradicting the preamble. Computing the gaps from the live context and
+    // injecting them as an explicit override lets the LLM temper its claims
+    // without us having to rewrite the whole preamble.
+    const gapsBlock = buildDataGapsBlock(operatorContext);
+
     const maxTokens = ownerOverride ? 8192 : (isAssistantMode ? 1024 : isOnboardingMode ? 2048 : 4096);
 
     // Check if client wants SSE streaming
@@ -1027,7 +1083,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const response = await client.messages.create({
         model: finalModel,
         max_tokens: maxTokens,
-        system: systemPrompt + contextBlock,
+        system: systemPrompt + gapsBlock + contextBlock,
         messages: anthropicMessages,
       });
 

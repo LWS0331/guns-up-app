@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
+import { TIER_MODEL_MAP, SITREP_MODEL_FALLBACK } from '@/lib/models';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -22,13 +23,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing operator context' }, { status: 400 });
     }
 
-    const modelMap: Record<string, string> = {
-      haiku: 'claude-haiku-4-5-20251001',
-      sonnet: 'claude-sonnet-4-6',
-      opus: 'claude-opus-4-6',
-      white_glove: 'claude-opus-4-6',
-    };
-    const model = modelMap[tier] || 'claude-sonnet-4-6';
+    // Sitrep generation floors at sonnet even for haiku-tier users because
+    // the output is a long-lived battle plan, not a chat turn.
+    const model = (tier && tier in TIER_MODEL_MAP)
+      ? TIER_MODEL_MAP[tier as keyof typeof TIER_MODEL_MAP]
+      : SITREP_MODEL_FALLBACK;
 
     // Compact operator data — strip nulls to reduce prompt size
     const compactContext = JSON.stringify(operatorContext);
