@@ -9,9 +9,11 @@ const toJson = (val: any) => JSON.parse(JSON.stringify(val ?? {}));
 const toJsonArray = (val: any) => JSON.parse(JSON.stringify(val ?? []));
 
 // POST /api/seed — seed the database with default operators
-// Only inserts operators that don't already exist (won't overwrite user data)
+// Only inserts operators that don't already exist (won't overwrite user data unless ?force).
+// Requires ADMIN_SECRET in the `x-admin-secret` header. Query-param support was removed
+// so the secret doesn't leak into access logs.
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-admin-secret') || new URL(req.url).searchParams.get('secret');
+  const secret = req.headers.get('x-admin-secret');
   if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

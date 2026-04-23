@@ -29,12 +29,14 @@ export async function GET(req: NextRequest) {
       rows = me ? [me] : [];
     }
 
-    // Convert DB rows back to the app's Operator shape
+    // Convert DB rows back to the app's Operator shape.
+    // NEVER include `pin` or `passwordHash` — pins are credentials and must not leak
+    // to the client, even for admins browsing the OpsCenter. If pins are needed for
+    // debugging, use /api/admin/debug (admin-secret-gated).
     const operators = rows.map(row => ({
       id: row.id,
       name: row.name,
       callsign: row.callsign,
-      pin: row.pin,
       email: row.email,
       role: row.role,
       tier: row.tier,

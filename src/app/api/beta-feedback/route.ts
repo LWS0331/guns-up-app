@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireAuth } from '@/lib/requireAuth';
+import { OPS_CENTER_ACCESS } from '@/lib/types';
+
 function generateId(): string {
   return 'fb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
 }
@@ -16,16 +19,22 @@ interface BetaFeedbackEntry {
   status: 'NEW' | 'REVIEWING' | 'FIXED' | 'WONTFIX';
 }
 
-// GET: Fetch all feedback (optionally filtered by operatorId)
+// GET /api/beta-feedback — fetch feedback.
+// AUTH: required. Non-admins may only read their own feedback.
 export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const operatorId = request.nextUrl.searchParams.get('operatorId');
+    const requestedId = request.nextUrl.searchParams.get('operatorId');
+    const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
+
+    // Non-admins are locked to their own operatorId regardless of what they ask for.
+    const scopedId = isAdmin ? requestedId : auth.operatorId;
 
     const operators = await prisma.operator.findMany({
-      ...(operatorId && { where: { id: operatorId } }),
-      select: {
-        betaFeedback: true,
-      },
+      ...(scopedId && { where: { id: scopedId } }),
+      select: { betaFeedback: true },
     });
 
     const allFeedback: BetaFeedbackEntry[] = [];
@@ -43,13 +52,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Sort by timestamp, newest first
     allFeedback.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-    return NextResponse.json({
-      ok: true,
-      feedback: allFeedback,
-    });
+    return NextResponse.json({ ok: true, feedback: allFeedback });
   } catch (error) {
     console.error('GET /api/beta-feedback error:', error);
     return NextResponse.json(
@@ -59,31 +64,39 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Submit new feedback
+// POST /api/beta-feedback — submit new feedback.
+// AUTH: required. The caller's JWT operatorId is the source of truth; anything in the body
+// is ignored for identity so a user can't submit feedback as someone else.
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
-    const { operatorId, callsign, type, category, description, screenshot } = body;
+    const { type, category, description, screenshot } = body;
 
-    if (!operatorId || !callsign || !type || !description) {
-      return NextResponse.json(
-        { ok: false, error: 'Missing required fields' },
-        { status: 400 },
-      );
+    if (!type || !description) {
+      return NextResponse.json({ ok: false, error: 'Missing required fields' }, { status: 400 });
     }
 
-    if (description.length < 10) {
-      return NextResponse.json(
-        { ok: false, error: 'Description must be at least 10 characters' },
-        { status: 400 },
-      );
+    if (typeof description !== 'string' || description.length < 10) {
+      return NextResponse.json({ ok: false, error: 'Description must be at least 10 characters' }, { status: 400 });
     }
 
-    // Create feedback entry
+    // Look up callsign from DB — do NOT trust whatever the client sent.
+    const operator = await prisma.operator.findUnique({
+      where: { id: auth.operatorId },
+      select: { callsign: true, betaFeedback: true },
+    });
+
+    if (!operator) {
+      return NextResponse.json({ ok: false, error: 'Operator not found' }, { status: 404 });
+    }
+
     const feedbackEntry: BetaFeedbackEntry = {
       id: generateId(),
-      operatorId,
-      callsign,
+      operatorId: auth.operatorId,
+      callsign: operator.callsign,
       type,
       category: category || 'LOW',
       description,
@@ -92,21 +105,7 @@ export async function POST(request: NextRequest) {
       status: 'NEW',
     };
 
-    // Get operator and update betaFeedback array
-    const operator = await prisma.operator.findUnique({
-      where: { id: operatorId },
-      select: { betaFeedback: true },
-    });
-
-    if (!operator) {
-      return NextResponse.json(
-        { ok: false, error: 'Operator not found' },
-        { status: 404 },
-      );
-    }
-
-    // Parse existing feedback or start with empty array
-    let feedbackArray: BetaFeedbackEntry[] = [];
+    const feedbackArray: BetaFeedbackEntry[] = [];
     if (operator.betaFeedback && Array.isArray(operator.betaFeedback)) {
       for (const feedbackJson of operator.betaFeedback) {
         try {
@@ -116,28 +115,20 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-
-    // Add new entry
     feedbackArray.push(feedbackEntry);
 
-    // Convert back to JSON strings for storage
     const feedbackStrings = feedbackArray.map((fb) => JSON.stringify(fb));
 
-    // Update operator with new feedback
     await prisma.operator.update({
-      where: { id: operatorId },
+      where: { id: auth.operatorId },
       data: { betaFeedback: feedbackStrings },
     });
 
-    const response: any = {
+    const response: { ok: true; feedback: BetaFeedbackEntry; alert?: string } = {
       ok: true,
       feedback: feedbackEntry,
     };
-
-    // Flag critical issues
-    if (feedbackEntry.category === 'CRITICAL') {
-      response.alert = 'CRITICAL';
-    }
+    if (feedbackEntry.category === 'CRITICAL') response.alert = 'CRITICAL';
 
     return NextResponse.json(response);
   } catch (error) {

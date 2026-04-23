@@ -3,7 +3,51 @@ import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/requireAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 
-// PUT /api/operators/:id — update a single operator (auth required + ownership check)
+// Field sets per actor. Admins can set everything; self can set profile + identity
+// but NOT privilege/billing fields; trainers of the target can only set training-facing
+// data + trainerNotes. Anything not on the actor's list is dropped silently rather than
+// 403-ing, so legacy clients that PUT the whole operator object still succeed.
+const ADMIN_FIELDS = new Set([
+  'name', 'callsign', 'pin', 'email',
+  'role', 'tier', 'coupleWith', 'trainerId', 'clientIds', 'trainerNotes',
+  'betaUser', 'betaFeedback', 'betaStartDate', 'betaEndDate', 'isVanguard',
+  'tierLocked', 'promoActive', 'promoType', 'promoExpiry',
+  'intake', 'profile', 'nutrition', 'prs', 'injuries', 'preferences',
+  'workouts', 'dayTags', 'sitrep', 'dailyBrief',
+]);
+
+const SELF_FIELDS = new Set([
+  // Identity that the user owns
+  'name', 'callsign', 'pin', 'email',
+  // Training data
+  'intake', 'profile', 'nutrition', 'prs', 'injuries', 'preferences',
+  'workouts', 'dayTags', 'sitrep', 'dailyBrief',
+  // Self can pair up / pick a trainer
+  'coupleWith', 'trainerId',
+  // Feedback submissions (beta-feedback API is canonical, but keep writable here for compatibility)
+  'betaFeedback',
+]);
+
+const TRAINER_FIELDS = new Set([
+  // Coach-owned notes + training plan / profile data for assigned client
+  'trainerNotes',
+  'intake', 'profile', 'nutrition', 'prs', 'injuries', 'preferences',
+  'workouts', 'dayTags', 'sitrep', 'dailyBrief',
+]);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pickFields(body: Record<string, any>, allowed: Set<string>): Record<string, any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const out: Record<string, any> = {};
+  for (const key of Object.keys(body)) {
+    if (allowed.has(key)) out[key] = body[key];
+  }
+  return out;
+}
+
+// PUT /api/operators/:id — update a single operator (auth required + field-scoped to actor role)
+// Previously allowed any trainer-of-target (or self) to set every column — including
+// `role`, `tier`, `tierLocked`, `isVanguard`, `promo*` — which is privilege escalation.
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,8 +58,6 @@ export async function PUT(
   try {
     const { id } = await params;
 
-    // OWNERSHIP CHECK: allow if updating self OR caller is admin (OPS_CENTER_ACCESS)
-    // OR caller is the trainer of the target operator
     const isSelf = auth.operatorId === id;
     const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
     let isTrainerOfTarget = false;
@@ -33,39 +75,16 @@ export async function PUT(
 
     const body = await req.json();
 
-    const updated = await prisma.operator.update({
-      where: { id },
-      data: {
-        name: body.name,
-        callsign: body.callsign,
-        pin: body.pin,
-        role: body.role,
-        tier: body.tier,
-        coupleWith: body.coupleWith ?? null,
-        trainerId: body.trainerId ?? null,
-        clientIds: body.clientIds ?? [],
-        trainerNotes: body.trainerNotes ?? null,
-        betaUser: body.betaUser ?? false,
-        betaFeedback: body.betaFeedback ?? [],
-        betaStartDate: body.betaStartDate ?? null,
-        betaEndDate: body.betaEndDate ?? null,
-        isVanguard: body.isVanguard ?? false,
-        tierLocked: body.tierLocked ?? false,
-        promoActive: body.promoActive ?? false,
-        promoType: body.promoType ?? null,
-        promoExpiry: body.promoExpiry ?? null,
-        intake: body.intake ?? {},
-        profile: body.profile ?? {},
-        nutrition: body.nutrition ?? {},
-        prs: body.prs ?? [],
-        injuries: body.injuries ?? [],
-        preferences: body.preferences ?? {},
-        workouts: body.workouts ?? {},
-        dayTags: body.dayTags ?? {},
-        sitrep: body.sitrep ?? {},
-        dailyBrief: body.dailyBrief ?? {},
-      },
-    });
+    // Admin supersedes self/trainer. Self supersedes trainer (if a trainer edits their
+    // own profile we want the self set, not the trainer set).
+    const allowed = isAdmin ? ADMIN_FIELDS : isSelf ? SELF_FIELDS : TRAINER_FIELDS;
+    const data = pickFields(body, allowed);
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: 'No updatable fields in request' }, { status: 400 });
+    }
+
+    const updated = await prisma.operator.update({ where: { id }, data });
 
     return NextResponse.json({
       operator: {

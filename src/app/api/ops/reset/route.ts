@@ -1,22 +1,26 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireAuth } from '@/lib/requireAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 
 // POST /api/ops/reset — Reset all operator accounts to blank slate (except excluded IDs)
-export async function POST(req: Request) {
+// AUTH: caller must be authenticated AND in OPS_CENTER_ACCESS.
+// Previously trusted operatorId from the request body with no auth, which let an
+// unauthenticated attacker wipe every operator's data by POSTing any admin's id.
+export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  if (!OPS_CENTER_ACCESS.includes(auth.operatorId)) {
+    return NextResponse.json({ error: 'ACCESS DENIED' }, { status: 403 });
+  }
+
   try {
-    const body = await req.json();
-    const { operatorId, excludeIds } = body;
+    const body = await req.json().catch(() => ({}));
+    const excludeIds: string[] = Array.isArray(body?.excludeIds) ? body.excludeIds : ['op-ruben'];
 
-    if (!operatorId || !OPS_CENTER_ACCESS.includes(operatorId)) {
-      return NextResponse.json({ error: 'ACCESS DENIED' }, { status: 403 });
-    }
-
-    const exclude = excludeIds || ['op-ruben'];
-
-    // Reset all operators except excluded
     const allOps = await prisma.operator.findMany();
-    const toReset = allOps.filter(op => !exclude.includes(op.id));
+    const toReset = allOps.filter(op => !excludeIds.includes(op.id));
 
     let resetCount = 0;
     for (const op of toReset) {
@@ -39,17 +43,18 @@ export async function POST(req: Request) {
       resetCount++;
     }
 
-    // Clear all chat histories for reset operators
     const resetIds = toReset.map(op => op.id);
     const deletedChats = await prisma.chatHistory.deleteMany({
       where: { operatorId: { in: resetIds } },
     });
 
+    console.warn('[api/ops/reset] executed', { actor: auth.operatorId, resetCount, excluded: excludeIds });
+
     return NextResponse.json({
       success: true,
       resetCount,
       chatsCleared: deletedChats.count,
-      excluded: exclude,
+      excluded: excludeIds,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
