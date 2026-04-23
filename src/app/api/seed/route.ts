@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   try {
     let created = 0;
     let skipped = 0;
+    let identityUpdated = 0;
 
     for (const op of OPERATORS) {
       const existing = await prisma.operator.findUnique({ where: { id: op.id } });
@@ -34,25 +35,26 @@ export async function POST(req: NextRequest) {
 
       await prisma.operator.upsert({
         where: { id: op.id },
+        // `force` used to overwrite profile/nutrition/prs/injuries/preferences/
+        // workouts/dayTags with static seed values, which wiped every bit of user
+        // data for any operator already in the DB. Restrict the force-update set
+        // to identity + routing fields so operators can re-sync their name,
+        // callsign, role, tier, trainer relationships from the OPERATORS file
+        // without destroying their training history. User-generated JSON columns
+        // are left untouched on force.
         update: force ? {
           name: op.name,
           callsign: op.callsign,
-          pin: op.pin,
           role: op.role,
           tier: op.tier,
           coupleWith: op.coupleWith ?? null,
           trainerId: op.trainerId ?? null,
           clientIds: op.clientIds ?? [],
           trainerNotes: op.trainerNotes ?? null,
-          betaUser: op.betaUser ?? false,
-          betaFeedback: op.betaFeedback ?? [],
-          profile: toJson(op.profile),
-          nutrition: toJson(op.nutrition),
-          prs: toJsonArray(op.prs),
-          injuries: toJsonArray(op.injuries),
-          preferences: toJson(op.preferences),
-          workouts: toJson(op.workouts),
-          dayTags: toJson(op.dayTags),
+          // NOTE: `pin` intentionally excluded from force — overwriting PINs would
+          // silently reset user credentials. Use /api/admin/reset for that.
+          // NOTE: betaUser / betaFeedback / profile / nutrition / prs / injuries /
+          // preferences / workouts / dayTags all intentionally excluded.
         } : {},
         create: {
           id: op.id,
@@ -76,13 +78,15 @@ export async function POST(req: NextRequest) {
           dayTags: toJson(op.dayTags),
         },
       });
-      created++;
+      if (existing) identityUpdated++;
+      else created++;
     }
 
     return NextResponse.json({
       ok: true,
       created,
       skipped,
+      identityUpdated,
       total: OPERATORS.length,
     });
   } catch (error) {

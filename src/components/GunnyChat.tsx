@@ -577,7 +577,19 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     const shouldOnboard = needsOnboarding(operator);
     setIsOnboarding(shouldOnboard);
 
-    // Try API first, then localStorage, then generate greeting
+    // Pick whichever source (API or localStorage) holds the fresher conversation
+    // based on last-message timestamp. The old logic was "API first, localStorage
+    // fallback only when API was empty," which silently dropped unsent messages:
+    // a user who typed while offline had their messages in localStorage, but on
+    // reconnect the API's stale history would overwrite them. Comparing by last
+    // timestamp keeps the user's most recent work regardless of which side wrote
+    // it last, and then syncs the loser back up to the winner.
+    const lastTs = (msgs: Message[]): number => {
+      const last = msgs[msgs.length - 1];
+      const t = last?.timestamp ? new Date(last.timestamp).getTime() : 0;
+      return Number.isFinite(t) ? t : 0;
+    };
+
     const loadChat = async () => {
       // If onboarding needed, check for existing onboarding chat first
       if (shouldOnboard) {
@@ -590,26 +602,28 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
       }
 
       const apiMessages = await loadChatFromAPI(operator.id, 'gunny-tab');
-      if (apiMessages && apiMessages.length > 0) {
-        // If we have chat history but still need onboarding, don't load old chat — start onboarding
-        if (shouldOnboard) {
-          // Fall through to onboarding greeting below
+      const localMessages = !shouldOnboard ? loadChatFromLocalStorage(operator.id) : null;
+
+      const apiHas = !!apiMessages && apiMessages.length > 0;
+      const localHas = !!localMessages && localMessages.length > 0;
+
+      if (!shouldOnboard && (apiHas || localHas)) {
+        let winner: Message[];
+        if (apiHas && localHas) {
+          winner = lastTs(localMessages!) > lastTs(apiMessages!) ? localMessages! : apiMessages!;
         } else {
-          setMessages(apiMessages);
-          inputRef.current?.focus();
-          return;
+          winner = (apiHas ? apiMessages! : localMessages!);
         }
+        setMessages(winner);
+        // setMessages will trigger the persist effect (content-hash signature)
+        // which pushes winner to BOTH localStorage (immediate) and the API
+        // (debounced 600ms), keeping the loser side in sync automatically.
+        inputRef.current?.focus();
+        return;
       }
 
-      if (!shouldOnboard) {
-        const localMessages = loadChatFromLocalStorage(operator.id);
-        if (localMessages && localMessages.length > 0) {
-          setMessages(localMessages);
-          saveChatToStorage(operator.id, 'gunny-tab', localMessages);
-          inputRef.current?.focus();
-          return;
-        }
-      }
+      // API has data but we still need onboarding → fall through to onboarding block.
+      // (The old code had this intent but computed it in a more convoluted way.)
 
       if (shouldOnboard) {
         // Start onboarding — send initial message to Gunny API
