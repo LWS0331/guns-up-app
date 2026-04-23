@@ -2,17 +2,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import * as crypto from 'crypto';
 
-// Verify webhook signature from Junction/Vital
+// Verify webhook signature from Junction/Vital.
+// Fails closed: if no secret is configured in a deployed (non-dev) environment,
+// reject the request. In local dev, unsigned webhooks are only accepted when the
+// operator explicitly opts in via ALLOW_UNSIGNED_WEBHOOKS=true so staging cannot
+// silently accept spoofed events.
 function verifyWebhookSignature(payload: string, signature: string | null): boolean {
   const secret = process.env.VITAL_WEBHOOK_SECRET;
+
   if (!secret) {
-    // If no secret configured, log warning but allow in dev/sandbox
-    if (process.env.NODE_ENV === 'production') return false;
-    return true;
+    const allowUnsigned =
+      process.env.NODE_ENV !== 'production' &&
+      process.env.ALLOW_UNSIGNED_WEBHOOKS === 'true';
+    if (!allowUnsigned) {
+      console.warn('[wearables/webhook] VITAL_WEBHOOK_SECRET not set — rejecting request');
+    }
+    return allowUnsigned;
   }
+
   if (!signature) return false;
-  const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+
+  // timingSafeEqual throws if buffers differ in length — guard to return false instead
+  // so a short/malformed signature from an attacker doesn't surface as a 500.
+  const sigBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(
+    crypto.createHmac('sha256', secret).update(payload).digest('hex'),
+  );
+  if (sigBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(sigBuf, expectedBuf);
 }
 
 // POST /api/wearables/webhook — Receive Junction/Vital webhook events

@@ -21,6 +21,7 @@ import SitrepView from '@/components/SitrepView';
 import TacticalRadio from '@/components/TacticalRadio';
 import { speak as gunnySpeak } from '@/lib/tts';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
+import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
 import DailyBriefComponent from '@/components/DailyBrief';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
@@ -2173,7 +2174,7 @@ const AppShell: React.FC<AppShellProps> = ({
                 key={idx}
                 className={`gunny-message ${msg.role}`}
               >
-                {msg.text}
+                {msg.role === 'gunny' ? <GunnyMarkdown text={msg.text} accent="#ffb800" /> : msg.text}
               </div>
             ))}
             {gunnyLoading && (

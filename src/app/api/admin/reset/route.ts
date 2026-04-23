@@ -3,9 +3,11 @@ import { prisma } from '@/lib/db';
 import { OPERATORS } from '@/data/operators';
 
 // POST /api/admin/reset — wipe all user-generated data, preserve identity/auth
-// Requires ADMIN_SECRET header or query param
+// Requires ADMIN_SECRET in the `x-admin-secret` header.
+// Query-param support was removed — query strings leak to access/proxy logs and
+// browser history, which exposes the secret to anyone who can read them.
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-admin-secret') || new URL(req.url).searchParams.get('secret');
+  const secret = req.headers.get('x-admin-secret');
   if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

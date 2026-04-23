@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
-// GET /api/admin/debug — check operator PINs (requires ADMIN_SECRET)
+// GET /api/admin/debug — check operator PINs. Requires ADMIN_SECRET in the
+// `x-admin-secret` header only. Query-string secret was removed because it
+// would appear in access logs, proxy logs, and browser history — and this
+// endpoint returns PINs (equivalent to passwords), so leaking the secret is
+// account-takeover critical.
 export async function GET(req: NextRequest) {
-  const secret = new URL(req.url).searchParams.get('secret');
+  const secret = req.headers.get('x-admin-secret');
   if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
