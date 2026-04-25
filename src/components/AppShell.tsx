@@ -385,49 +385,144 @@ const AppShell: React.FC<AppShellProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [gunnyMessages, gunnyLoading]);
 
-  // Load saved panel chat or generate greeting when panel opens
+  // Load saved panel chat or generate greeting when panel opens.
+  //
+  // ─── ARCHITECTURE NOTE ────────────────────────────────────────────────
+  // The Gunny PANEL (this floating side overlay) AND the dedicated GUNNY
+  // TAB (rendered by GunnyChat.tsx) USED to write to two separate backend
+  // threads:
+  //   • Panel  → chatType: 'gunny-panel' / localStorage key gunny-panel-${id}
+  //   • Tab    → chatType: 'gunny-tab'   / localStorage key gunny-chat-${id}
+  // Same operator opening the panel on desktop and the tab on mobile saw
+  // two completely different chat histories. Bug:
+  //
+  //   "DESKTOP CHAT AND MOBILE CHAT IS NOT MATCHING. WHY IS THAT
+  //    HAPPENING IF ITS THE SAME USER"
+  //
+  // Fix: both surfaces now read/write the SAME chatType ('gunny-tab') and
+  // the SAME localStorage key ('gunny-chat-${id}'). The load path also
+  // runs a one-time per-operator migration: if the legacy 'gunny-panel'
+  // thread has messages, merge them into 'gunny-tab' (sort by timestamp,
+  // dedup by role+timestamp+text-prefix) before rendering, then mark
+  // migrated so the merge doesn't repeat. The legacy thread is cleared
+  // (written empty) after merge so the same content can't drift back in
+  // if a stale client hits the old chatType.
+  // ──────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!showGunnyPanel) return;
     // Only initialize once per operator
     if (panelInitRef.current === selectedOperator.id) return;
     panelInitRef.current = selectedOperator.id;
 
-    const loadPanelChat = async () => {
-      // Try API first
+    const opId = selectedOperator.id;
+    const CANONICAL_TYPE = 'gunny-tab';
+    const LEGACY_TYPE = 'gunny-panel';
+    const CANONICAL_KEY = `gunny-chat-${opId}`;
+    const LEGACY_KEY = `gunny-panel-${opId}`;
+    const MIGRATED_FLAG_KEY = `gunny-panel-migrated-${opId}`;
+
+    const fetchThread = async (chatType: string): Promise<ChatMessage[]> => {
       try {
-        const res = await fetch(`/api/chat?operatorId=${selectedOperator.id}&chatType=gunny-panel`, {
+        const res = await fetch(`/api/chat?operatorId=${opId}&chatType=${chatType}`, {
           headers: { 'Authorization': `Bearer ${getAuthToken()}` },
         });
-        if (res.ok) {
-          const data = await res.json();
-          const msgs = data.messages as ChatMessage[];
-          if (Array.isArray(msgs) && msgs.length > 0) {
-            setGunnyMessages(msgs);
-            setGunnyGreeted(true);
-            return;
-          }
-        }
-      } catch { /* API unavailable */ }
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+      } catch {
+        return [];
+      }
+    };
 
-      // Fallback to localStorage
+    const readLocalThread = (key: string): ChatMessage[] => {
       try {
-        const key = `gunny-panel-${selectedOperator.id}`;
         const raw = localStorage.getItem(key);
-        if (raw) {
-          const saved = JSON.parse(raw) as ChatMessage[];
-          if (Array.isArray(saved) && saved.length > 0) {
-            setGunnyMessages(saved);
-            setGunnyGreeted(true);
-            // Migrate to API
-            fetch('/api/chat', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
-              body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: saved }),
-            }).catch(() => {});
-            return;
-          }
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? (parsed as ChatMessage[]) : [];
+      } catch {
+        return [];
+      }
+    };
+
+    // Merge two message arrays by timestamp; dedup any pair that looks
+    // identical (same role + same timestamp + same first-40-char prefix).
+    // We can't use full-text equality because streaming deltas may have
+    // been truncated mid-write on one path and not the other.
+    const mergeThreads = (a: ChatMessage[], b: ChatMessage[]): ChatMessage[] => {
+      const all = [...a, ...b].sort((x, y) => (x.timestamp || 0) - (y.timestamp || 0));
+      const seen = new Set<string>();
+      const out: ChatMessage[] = [];
+      for (const m of all) {
+        const key = `${m.role}|${m.timestamp || 0}|${(m.text || '').slice(0, 40)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(m);
+      }
+      return out;
+    };
+
+    const loadPanelChat = async () => {
+      // Always load the canonical thread first.
+      let canonical = await fetchThread(CANONICAL_TYPE);
+
+      // One-time migration of the legacy 'gunny-panel' thread.
+      const alreadyMigrated = (() => {
+        try { return localStorage.getItem(MIGRATED_FLAG_KEY) === 'true'; }
+        catch { return false; }
+      })();
+
+      if (!alreadyMigrated) {
+        // Pull legacy from API + localStorage; whichever has more wins.
+        const legacyApi = await fetchThread(LEGACY_TYPE);
+        const legacyLocal = readLocalThread(LEGACY_KEY);
+        const legacy = legacyApi.length >= legacyLocal.length ? legacyApi : legacyLocal;
+
+        if (legacy.length > 0) {
+          canonical = mergeThreads(canonical, legacy);
+          // Persist merged → canonical thread + canonical localStorage key.
+          try { localStorage.setItem(CANONICAL_KEY, JSON.stringify(canonical)); }
+          catch (err) { console.warn('[AppShell:migrate] localStorage write failed:', err); }
+          fetch('/api/chat', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+            body: JSON.stringify({ operatorId: opId, chatType: CANONICAL_TYPE, messages: canonical }),
+          }).catch(() => {});
+          // Clear legacy thread so a stale client can't pull it again.
+          fetch('/api/chat', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+            body: JSON.stringify({ operatorId: opId, chatType: LEGACY_TYPE, messages: [] }),
+          }).catch(() => {});
         }
-      } catch { /* ignore */ }
+
+        // Always mark migrated to prevent re-running, and clear the
+        // legacy localStorage key so it doesn't bloat storage.
+        try {
+          localStorage.setItem(MIGRATED_FLAG_KEY, 'true');
+          localStorage.removeItem(LEGACY_KEY);
+        } catch { /* ignore */ }
+      }
+
+      if (canonical.length > 0) {
+        setGunnyMessages(canonical);
+        setGunnyGreeted(true);
+        return;
+      }
+
+      // Fallback: canonical-key localStorage covers offline-first writes
+      // from GunnyChat.tsx that haven't synced to the API yet.
+      const localCanonical = readLocalThread(CANONICAL_KEY);
+      if (localCanonical.length > 0) {
+        setGunnyMessages(localCanonical);
+        setGunnyGreeted(true);
+        fetch('/api/chat', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+          body: JSON.stringify({ operatorId: opId, chatType: CANONICAL_TYPE, messages: localCanonical }),
+        }).catch(() => {});
+        return;
+      }
 
       // No saved history — show context-aware greeting
       setGunnyGreeted(true);
@@ -449,7 +544,7 @@ const AppShell: React.FC<AppShellProps> = ({
       }]);
     };
     loadPanelChat();
-  }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign]);
+  }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign, activeTab]);
 
   // Persist panel messages — split strategy:
   // • localStorage: every content change (sync, cheap, survives unmount/refresh).
@@ -472,8 +567,14 @@ const AppShell: React.FC<AppShellProps> = ({
 
     const serialized = gunnyMessages;
 
+    // Persist to the CANONICAL chatType ('gunny-tab') + key
+    // ('gunny-chat-${id}'). Both surfaces — this floating panel and
+    // the dedicated GunnyChat tab — write to the same thread so the
+    // operator sees a single chat history regardless of which surface
+    // they used. See the load effect's architecture note above for
+    // the migration story off the legacy 'gunny-panel' thread.
     try {
-      localStorage.setItem(`gunny-panel-${selectedOperator.id}`, JSON.stringify(serialized));
+      localStorage.setItem(`gunny-chat-${selectedOperator.id}`, JSON.stringify(serialized));
     } catch (err) { console.warn('[AppShell:panel-persist] localStorage write failed (quota?):', err); }
     lastPanelPendingRef.current = { serialized };
 
@@ -486,7 +587,7 @@ const AppShell: React.FC<AppShellProps> = ({
         method: 'PUT',
         keepalive: true,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
-        body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: pending.serialized }),
+        body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-tab', messages: pending.serialized }),
       }).catch(() => {});
       lastPanelPendingRef.current = null;
     }, 600);
@@ -507,7 +608,7 @@ const AppShell: React.FC<AppShellProps> = ({
           method: 'PUT',
           keepalive: true,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
-          body: JSON.stringify({ operatorId, chatType: 'gunny-panel', messages: pending.serialized }),
+          body: JSON.stringify({ operatorId, chatType: 'gunny-tab', messages: pending.serialized }),
         }).catch(() => {});
         lastPanelPendingRef.current = null;
       }
