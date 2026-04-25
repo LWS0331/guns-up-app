@@ -473,6 +473,13 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
   const [isOnboarding, setIsOnboarding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Scrollable messages container ref + "scroll-to-bottom" FAB visibility.
+  // Long-running chats (months of conversation) make manual scrolling
+  // painful, so we surface a chevron-down FAB whenever the user has
+  // scrolled UP more than ~80px from the bottom. Tap → smooth-jump
+  // to the latest message.
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const [showScrollDownFab, setShowScrollDownFab] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Track which operator ID we've initialized — only reset chat on actual user switch
@@ -2146,6 +2153,15 @@ ${mealSuggestion}`;
                        .ds-card.bracket.amber-tone for the canonical
                        "important AI block" treatment. */}
       <div
+        ref={messagesScrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          // Show the FAB when the user is more than ~120px above
+          // the bottom — far enough that streaming a new message
+          // wouldn't bring them back into view automatically.
+          const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+          setShowScrollDownFab(distanceFromBottom > 120);
+        }}
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -2153,6 +2169,7 @@ ${mealSuggestion}`;
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
+          position: 'relative',
         }}
       >
         {messages.filter((m) => m.role === 'user' || m.text.length > 0).map((message) => {
@@ -2422,6 +2439,47 @@ ${mealSuggestion}`;
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Scroll-to-bottom FAB — circular green button anchored above
+          the composer. Only renders when the user is scrolled up
+          more than ~120px from the latest message. Tap → smooth
+          scroll the messages container all the way down. Months of
+          conversation in a single chat would otherwise require
+          manual swiping; this is the escape hatch. */}
+      {showScrollDownFab && (
+        <button
+          type="button"
+          onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })}
+          aria-label="Scroll to latest message"
+          style={{
+            position: 'absolute',
+            right: 18,
+            // Sit just above the composer (the composer is ~70px
+            // tall + 10px padding + tabbar safe-area). 100px keeps
+            // it clearly off the composer chrome on small screens.
+            bottom: 100,
+            zIndex: 8,
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            border: '1.5px solid var(--green)',
+            background: 'rgba(0, 255, 65, 0.15)',
+            color: 'var(--green)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 0 16px rgba(0, 255, 65, 0.4), 0 4px 12px rgba(0, 0, 0, 0.6), inset 0 0 8px rgba(0, 255, 65, 0.2)',
+            animation: 'msgSlideIn 0.25s ease-out',
+            // Strip iOS native button styling so the round shape
+            // doesn't get overridden by the white-pill default.
+            WebkitAppearance: 'none',
+            appearance: 'none',
+          }}
+        >
+          <Icon.ChevronDown size={20} />
+        </button>
+      )}
 
       {/* Composer — handoff "04 — Gunny Chat" mock: a single inset
           bar with a green ">>" prefix, the auto-resize textarea, the
