@@ -2,14 +2,68 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
 
+// SEO + social-share metadata. Logged-out visitors at `/` see the marketing
+// landing page, so this applies to public discovery (Google, Twitter, FB, etc).
+// Authed users see AppShell where these tags don't matter — their flow is
+// private. If we add tier-specific or campaign-specific landings later, give
+// them their own layout with overriding metadata.
+const SITE_URL = 'https://gunnyai.fit';
+const TITLE = 'GUNS UP — Military-precision fitness. AI-powered training.';
+const DESCRIPTION =
+  'Your personal AI operator (Gunny) knows every rep, every meal, every PR, every injury. ' +
+  'Built on Claude. USMC discipline + 16 expert sources. Start at $2/mo.';
+
 export const metadata: Metadata = {
-  title: "GUNS UP",
-  description: "Tactical Workout Command Center",
-  manifest: "/manifest.json",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: TITLE,
+    template: '%s · GUNS UP',
+  },
+  description: DESCRIPTION,
+  manifest: '/manifest.json',
+  applicationName: 'GUNS UP',
+  keywords: [
+    'AI personal trainer',
+    'AI fitness coach',
+    'Claude AI fitness',
+    'tactical workout app',
+    'Gunny AI',
+    'AI workout planner',
+    'macro tracking AI',
+    'crossfit AI',
+    'bodybuilding AI',
+    'military fitness',
+  ],
+  authors: [{ name: 'GUNS UP FITNESS' }],
+  openGraph: {
+    type: 'website',
+    url: SITE_URL,
+    siteName: 'GUNS UP',
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [
+      {
+        url: '/logo-glow.png',
+        width: 749,
+        height: 666,
+        alt: 'GUNS UP — Gunny AI',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ['/logo-glow.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
-    title: "GUNS UP",
+    statusBarStyle: 'black-translucent',
+    title: 'GUNS UP',
   },
 };
 
