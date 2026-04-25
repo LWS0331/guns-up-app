@@ -210,6 +210,12 @@ const AppShell: React.FC<AppShellProps> = ({
   const [selectedOperator, setSelectedOperator] = useState<Operator>(currentUser);
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  // iPad-class viewport flag — drives the .ipad scope helper from
+  // the design system so 28px H1 / 24px padding / 2-col grids
+  // activate at ≥768px. Spec calls 820px the canonical iPad width
+  // but treating anything 768px+ as "iPad-class" gives a smoother
+  // breakpoint than waiting for 820 exactly.
+  const [isIpadOrLarger, setIsIpadOrLarger] = useState(false);
   const lastWidthRef = useRef(0);
   const [showTrainerDashboard, setShowTrainerDashboard] = useState(false);
   const [showTOS, setShowTOS] = useState(false);
@@ -247,6 +253,7 @@ const AppShell: React.FC<AppShellProps> = ({
       if (w !== lastWidthRef.current) {
         lastWidthRef.current = w;
         setIsMobile(w < 768);
+        setIsIpadOrLarger(w >= 768);
       }
     };
     check();
@@ -1317,16 +1324,23 @@ const AppShell: React.FC<AppShellProps> = ({
     }, 50);
   }, [gunnyMessages, selectedOperator, operators, buildOperatorContext, getScreenContext, getGunnyMode, currentSelectedOp, onUpdateOperator, showGunnyVoiceResponse]);
 
-  const baseTabs: { id: AppTab; label: string; labelKey: string; icon: string }[] = [
-    { id: 'coc', label: t('nav.coc_short'), labelKey: 'nav.coc_short', icon: '◆' },
-    { id: 'planner', label: t('nav.planner'), labelKey: 'nav.planner', icon: '▦' },
-    { id: 'intel', label: t('nav.intel_short'), labelKey: 'nav.intel_short', icon: '◈' },
-    { id: 'gunny', label: t('nav.gunny_short'), labelKey: 'nav.gunny_short', icon: '▶' },
+  // Tab icons are SVG components from Icons.tsx per the canonical
+  // handoff spec — character glyphs (◆ ▦ ◈ ▶ ⬡) were the legacy
+  // placeholder. Each takes a `size` prop so the tabbar and the
+  // desktop top-nav strip can render at different scales without
+  // duplicating definitions. The Gunny center tab keeps its own
+  // logo-glow image treatment (rendered via .gunny-icon-wrap in
+  // the tabbar JSX); its `icon` prop here is unused in that path.
+  const baseTabs: { id: AppTab; label: string; labelKey: string; icon: React.ReactNode }[] = [
+    { id: 'coc',     label: t('nav.coc_short'),    labelKey: 'nav.coc_short',    icon: <Icon.Target /> },
+    { id: 'planner', label: t('nav.planner'),      labelKey: 'nav.planner',      icon: <Icon.Calendar /> },
+    { id: 'intel',   label: t('nav.intel_short'),  labelKey: 'nav.intel_short',  icon: <Icon.Stats /> },
+    { id: 'gunny',   label: t('nav.gunny_short'),  labelKey: 'nav.gunny_short',  icon: <Icon.Bolt /> },
   ];
 
-  // Conditionally add OPS tab for trainers and admins
+  // Conditionally add OPS tab for trainers and admins.
   const tabs = (OPS_CENTER_ACCESS.includes(currentUser.id) || currentUser.role === 'trainer')
-    ? [...baseTabs, { id: 'ops' as AppTab, label: 'OPS', labelKey: 'nav.ops', icon: '⬡' }]
+    ? [...baseTabs, { id: 'ops' as AppTab, label: 'OPS', labelKey: 'nav.ops', icon: <Icon.Settings /> }]
     : baseTabs;
 
   const renderTabContent = () => {
@@ -1485,48 +1499,24 @@ const AppShell: React.FC<AppShellProps> = ({
               <div style={{
                 display: 'flex',
                 gap: '10px',
-                padding: '15px 20px',
-                borderBottom: '1px solid #1a1a2e',
-                backgroundColor: '#0a0a0a',
+                padding: '14px 18px',
+                borderBottom: '1px solid var(--border-green-soft)',
+                background: 'var(--bg-card)',
               }}>
                 <button
+                  type="button"
                   onClick={() => setShowTrainerDashboard(false)}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: !showTrainerDashboard ? '#00ff41' : 'transparent',
-                    color: !showTrainerDashboard ? '#000' : '#888',
-                    border: '1px solid ' + (!showTrainerDashboard ? '#00ff41' : '#333'),
-                    borderRadius: '3px',
-                    cursor: 'pointer',
-                    fontFamily: '"Orbitron", sans-serif',
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    textTransform: 'uppercase',
-                    letterSpacing: '1px',
-                    transition: 'all 0.2s',
-                  }}
+                  className={`btn btn-sm ${!showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
                 >
-                  MY CLIENTS
+                  My Clients
                 </button>
                 {OPS_CENTER_ACCESS.includes(currentUser.id) && (
                   <button
+                    type="button"
                     onClick={() => setShowTrainerDashboard(true)}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: showTrainerDashboard ? '#00ff41' : 'transparent',
-                      color: showTrainerDashboard ? '#000' : '#888',
-                      border: '1px solid ' + (showTrainerDashboard ? '#00ff41' : '#333'),
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      fontFamily: '"Orbitron", sans-serif',
-                      fontSize: '11px',
-                      fontWeight: 'bold',
-                      textTransform: 'uppercase',
-                      letterSpacing: '1px',
-                      transition: 'all 0.2s',
-                    }}
+                    className={`btn btn-sm ${showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
                   >
-                    COMMAND CENTER
+                    Command Center
                   </button>
                 )}
               </div>
@@ -1549,23 +1539,29 @@ const AppShell: React.FC<AppShellProps> = ({
   // Show SITREP view after intake completion
   if (showSitrep) {
     return (
-      <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
+      <div
+        style={{
+          width: '100%',
+          minHeight: '100dvh',
+          background: 'var(--bg-base)',
+          color: 'var(--green)',
+          fontFamily: 'var(--body)',
+          overflow: 'auto',
+        }}
+      >
         <DataRain />
         <div style={{ position: 'relative', zIndex: 1, padding: '20px 0' }}>
           {sitrepLoading && !pendingSitrep ? (
-            <div style={{ maxWidth: 640, margin: '0 auto', padding: 40, textAlign: 'center' }}>
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 20, color: '#00ff41', letterSpacing: 3, marginBottom: 16 }}>
-                ⚔️ BUILDING YOUR BATTLE PLAN
+            <div style={{ maxWidth: 640, margin: '0 auto', padding: 36, textAlign: 'center' }}>
+              <div className="t-display-l" style={{ color: 'var(--green)', letterSpacing: 3, marginBottom: 14, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon.Sword size={18} />
+                Building Your Battle Plan
               </div>
-              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 13, color: '#888', marginBottom: 24, lineHeight: 1.8 }}>
-                Gunny AI is analyzing your intake data and building a personalized training and nutrition plan...
-              </div>
-              <div style={{ width: 200, height: 4, background: '#1a1a1a', borderRadius: 2, margin: '0 auto', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', background: '#00ff41', borderRadius: 2,
-                  animation: 'sitrep-load 2s ease-in-out infinite',
-                  width: '60%',
-                }} />
+              <p className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginBottom: 22, lineHeight: 1.8 }}>
+                Gunny AI is analyzing your intake data and building a personalized training and nutrition plan…
+              </p>
+              <div className="bar" style={{ width: 200, margin: '0 auto', height: 4 }}>
+                <span style={{ width: '60%', animation: 'sitrep-load 2s ease-in-out infinite' }} />
               </div>
               <style>{`@keyframes sitrep-load { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }`}</style>
             </div>
@@ -1578,16 +1574,38 @@ const AppShell: React.FC<AppShellProps> = ({
               loading={sitrepLoading}
             />
           ) : (
-            <div style={{ maxWidth: 640, margin: '0 auto', padding: 40, textAlign: 'center' }}>
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: '#ff4444', marginBottom: 16 }}>SITREP GENERATION FAILED</div>
-              <div style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>Gunny AI encountered an error. Try again or skip for now.</div>
+            <div style={{ maxWidth: 640, margin: '0 auto', padding: 36, textAlign: 'center' }}>
+              <div className="t-display-m" style={{ color: 'var(--danger)', marginBottom: 14 }}>
+                Sitrep Generation Failed
+              </div>
+              <p className="t-body-sm" style={{ color: 'var(--text-tertiary)', marginBottom: 14 }}>
+                Gunny AI encountered an error. Try again or skip for now.
+              </p>
               {sitrepError && (
-                <div style={{ fontSize: 10, color: '#ff6b6b', marginBottom: 16, padding: 8, background: 'rgba(255,0,0,0.05)', border: '1px solid rgba(255,0,0,0.15)', borderRadius: 4, fontFamily: 'Share Tech Mono, monospace', wordBreak: 'break-word' }}>
+                <div
+                  className="ds-card"
+                  style={{
+                    padding: 8,
+                    background: 'rgba(255, 0, 0, 0.05)',
+                    borderColor: 'rgba(255, 0, 0, 0.15)',
+                    fontFamily: 'var(--mono)',
+                    fontSize: 10,
+                    color: 'var(--danger)',
+                    marginBottom: 14,
+                    wordBreak: 'break-word',
+                  }}
+                >
                   {sitrepError}
                 </div>
               )}
-              <button onClick={() => generateSitrep(currentUser)} style={{ padding: '10px 20px', background: '#00ff41', color: '#000', border: 'none', fontFamily: 'Orbitron, sans-serif', fontSize: 11, borderRadius: 4, cursor: 'pointer', marginRight: 8 }}>RETRY</button>
-              <button onClick={() => { setShowSitrep(false); setActiveTab('coc'); }} style={{ padding: '10px 20px', background: 'transparent', color: '#888', border: '1px solid #333', fontFamily: 'Share Tech Mono, monospace', fontSize: 11, borderRadius: 4, cursor: 'pointer' }}>SKIP</button>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button type="button" onClick={() => generateSitrep(currentUser)} className="btn btn-primary btn-sm">
+                  Retry
+                </button>
+                <button type="button" onClick={() => { setShowSitrep(false); setActiveTab('coc'); }} className="btn btn-ghost btn-sm">
+                  Skip
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1617,16 +1635,19 @@ const AppShell: React.FC<AppShellProps> = ({
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      width: '100%',
-      height: '100dvh',
-      backgroundColor: '#030303',
-      color: '#00ff41',
-      fontFamily: '"Chakra Petch", sans-serif',
-      overflow: 'hidden',
-    }}>
+    <div
+      className={isIpadOrLarger ? 'ipad' : undefined}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%',
+        height: '100dvh',
+        backgroundColor: 'var(--bg-base, #030303)',
+        color: 'var(--text-primary, #00ff41)',
+        fontFamily: '"Chakra Petch", sans-serif',
+        overflow: 'hidden',
+      }}
+    >
 
       <style>{`
         @keyframes breathingGlow {
@@ -1939,13 +1960,32 @@ const AppShell: React.FC<AppShellProps> = ({
           transition: 'opacity 0.4s ease, transform 0.4s ease',
         }}
       >
-        {/* Left: Logo + GUNS UP / callsign brand stack — .ds-topbar-brand
-            handles type, glow, layout. */}
+        {/* Left: Logo + GUNS UP / callsign brand stack —
+            .ds-topbar-brand handles type, glow, layout. The pulsing
+            green dot before the callsign satisfies the spec's
+            "right-side callsign chip with pulsing dot animation
+            (opacity 1→0.4→1 over 2s)" — the chip is on the brand
+            stack rather than a separate right-side pill so it
+            doesn't compete with the existing UserSwitcher dropdown
+            on the right. */}
         <div className="ds-topbar-brand">
           <Logo size={isMobile ? 22 : 26} className="mark" />
           <div className="stack">
             <span className="guns-up-breathing t1">GUNS UP</span>
-            <span className="t2">{currentSelectedOp.callsign}</span>
+            <span className="t2" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span
+                aria-hidden
+                style={{
+                  width: 5,
+                  height: 5,
+                  background: 'var(--green)',
+                  borderRadius: '50%',
+                  boxShadow: '0 0 6px var(--green)',
+                  animation: 'dsPulseDot 2s ease-in-out infinite',
+                }}
+              />
+              {currentSelectedOp.callsign}
+            </span>
           </div>
         </div>
 
@@ -1987,8 +2027,16 @@ const AppShell: React.FC<AppShellProps> = ({
                     : { padding: '12px 18px' }
                 }
               >
-                <span style={{ fontSize: 14, opacity: isActive ? 1 : 0.5, marginRight: 6 }}>
-                  {tab.icon}
+                <span
+                  aria-hidden
+                  style={{
+                    opacity: isActive ? 1 : 0.5,
+                    marginRight: 6,
+                    display: 'inline-flex',
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 14 })}
                 </span>
                 {t(tab.labelKey)}
               </button>
@@ -2087,7 +2135,9 @@ const AppShell: React.FC<AppShellProps> = ({
                     <img src="/logo-glow.png" alt="" className="gunny-icon" />
                   </span>
                 ) : (
-                  <span style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</span>
+                  <span aria-hidden style={{ display: 'inline-flex', lineHeight: 1 }}>
+                    {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 22 })}
+                  </span>
                 )}
                 <span className="lbl">{t(tab.labelKey)}</span>
               </button>
