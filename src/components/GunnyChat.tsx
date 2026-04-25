@@ -1984,168 +1984,140 @@ ${mealSuggestion}`;
         .chat-input::placeholder { color: #333; }
       `}</style>
 
-      {/* Header */}
-      <div style={{
-        padding: '16px 20px',
-        borderBottom: '1px solid rgba(0,255,65,0.08)',
-        background: 'linear-gradient(180deg, rgba(8,8,8,0.95) 0%, rgba(3,3,3,0.98) 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '14px',
-      }}>
-        {/* Avatar */}
-        <div style={{
-          width: '40px',
-          height: '40px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #00ff41 0%, #00cc33 100%)',
+      {/* GunnyChat header — handoff "04 — Gunny Chat" mock: glowing
+          gunny-avatar circle on the left, GUNNY display title +
+          mono subtitle in the middle, tier badge + status pill +
+          TTS toggle on the right. */}
+      <div
+        style={{
+          padding: '12px 18px',
+          borderBottom: '1px solid var(--border-green-soft)',
+          background: 'rgba(3,3,3,0.85)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '26px',
-          fontWeight: 900,
-          color: '#030303',
-          fontFamily: '"Orbitron", sans-serif',
-          boxShadow: '0 0 16px rgba(0,255,65,0.3)',
-          flexShrink: 0,
-        }}>
-          G
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        {/* Glowing avatar — uses .gunny-avatar from the design system
+            (radial green wash, hard ring, inner+outer glow). */}
+        <div className="gunny-avatar" style={{ width: 40, height: 40, fontSize: 18 }}>
+          <span>G</span>
         </div>
 
-        <div style={{ flex: 1 }}>
-          <div style={{
-            fontSize: '26px',
-            fontFamily: '"Orbitron", sans-serif',
-            color: '#00ff41',
-            fontWeight: 900,
-            letterSpacing: '3px',
-            textShadow: '0 0 8px rgba(0,255,65,0.3)',
-          }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="t-display-l" style={{ color: 'var(--green)', textShadow: '0 0 8px rgba(0,255,65,0.3)', fontSize: 18 }}>
             GUNNY
           </div>
-          <div style={{
-            fontSize: '15px',
-            fontFamily: '"Share Tech Mono", monospace',
-            color: '#888',
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            marginTop: '2px',
-          }}>
+          <div className="t-mono-sm" style={{ marginTop: 2, color: 'var(--text-secondary)', letterSpacing: 1.5 }}>
             {isOnboarding ? 'INTAKE ASSESSMENT' : 'FUNCTIONAL BODYBUILDER TRAINER'}
           </div>
         </div>
 
-        {/* Tier Badge */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-        }}>
-          <div style={{
-            padding: '4px 10px',
-            fontSize: '14px',
-            fontWeight: 700,
-            letterSpacing: '1.5px',
-            fontFamily: '"Share Tech Mono", monospace',
-            border: `1px solid ${getTierColor(operator.tier)}`,
-            backgroundColor: `${getTierColor(operator.tier)}1a`,
-            color: getTierColor(operator.tier),
-            borderRadius: '2px',
-          }}>
-            {operator.tier.toUpperCase()}
-          </div>
-
-          {/* Status */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 10px',
-            border: '1px solid rgba(0,255,65,0.15)',
-            backgroundColor: 'rgba(0,255,65,0.03)',
-          }}>
-            <div style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              backgroundColor: '#00ff41',
-              boxShadow: '0 0 8px #00ff41',
-              animation: 'pulse 2s infinite',
-            }} />
-            <span style={{
-              fontSize: '15px',
+        {/* Right cluster: tier badge + online status + TTS toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span
+            className="chip"
+            style={{
+              borderColor: getTierColor(operator.tier),
+              background: `${getTierColor(operator.tier)}1a`,
+              color: getTierColor(operator.tier),
               fontWeight: 700,
-              color: '#00ff41',
-              letterSpacing: '1.5px',
-              fontFamily: '"Share Tech Mono", monospace',
-            }}>
-              {t('gunny.online')}
-            </span>
-          </div>
+              letterSpacing: 1.5,
+              textTransform: 'uppercase',
+            }}
+          >
+            {operator.tier}
+          </span>
+
+          {/* Online status pill — .status-pill.ok with the always-on
+              pulsing dot from the gunny-fab pulseDot animation. */}
+          <span className="status-pill ok">
+            <span
+              aria-hidden
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'var(--green)',
+                boxShadow: '0 0 6px var(--green)',
+                animation: 'dsPulseDot 2s ease-in-out infinite',
+              }}
+            />
+            {t('gunny.online')}
+          </span>
 
           {/* Voice toggle — flips the global TTS gate (lib/tts.ts).
-             Muting silences every speak() in the app: this chat, the panel,
-             workout-mode rest-timer countdowns, set-logged callouts,
-             TacticalRadio. Tapping here is a user gesture so we also warm the
-             iOS audio context for the NEXT speak() call to play reliably. */}
+              Muting silences every speak() in the app: this chat, the
+              panel, workout-mode rest-timer countdowns, set-logged
+              callouts, TacticalRadio. Tapping is a user gesture so we
+              also warm the iOS audio context for the NEXT speak() call. */}
           <button
+            type="button"
             onClick={toggleTts}
             title={ttsOn ? 'Voice ON — tap to mute' : 'Voice OFF — tap to unmute'}
             aria-label={ttsOn ? 'Mute Gunny voice' : 'Unmute Gunny voice'}
             aria-pressed={ttsOn}
-            style={{
-              background: ttsOn ? 'rgba(0,255,65,0.12)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${ttsOn ? 'rgba(0,255,65,0.4)' : 'rgba(255,255,255,0.15)'}`,
-              borderRadius: '4px',
-              color: ttsOn ? '#00ff41' : '#666',
-              fontSize: '16px',
-              cursor: 'pointer',
-              padding: '4px 10px',
-              minWidth: '40px',
-              minHeight: '32px',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            className={`btn btn-sm ${ttsOn ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ minWidth: 40, padding: '6px 10px' }}
           >
             {ttsOn ? '🔊' : '🔇'}
           </button>
         </div>
       </div>
 
-      {/* Quick Action Buttons — hidden during onboarding */}
+      {/* Quick action strip — hidden during onboarding (replaced by
+          a progress notice). Buttons use the design-system .gunny-quick
+          utility (10px Orbitron 700 / 1.5px LS, inner glow on active). */}
       {isOnboarding ? (
-        <div style={{
-          padding: '10px 20px',
-          borderBottom: '1px solid rgba(255,184,0,0.1)',
-          backgroundColor: 'rgba(255,184,0,0.03)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-        }}>
-          <div style={{
-            width: '8px', height: '8px', borderRadius: '50%',
-            background: '#ffb800', animation: 'typingDot 1.5s infinite',
-          }} />
-          <span style={{
-            fontFamily: '"Share Tech Mono", monospace',
-            fontSize: '13px', color: '#ffb800', letterSpacing: '1.5px',
-          }}>
+        <div
+          style={{
+            padding: '10px 20px',
+            borderBottom: '1px solid var(--border-amber)',
+            background: 'rgba(255,140,0,0.03)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: 'var(--amber)',
+              animation: 'typingDot 1.5s infinite',
+            }}
+          />
+          <span className="t-mono-sm" style={{ color: 'var(--amber)', letterSpacing: 1.5 }}>
             PROFILE INTAKE IN PROGRESS — Answer Gunny&apos;s questions to unlock full features
           </span>
         </div>
       ) : (
-        <div style={{
-          display: 'flex',
-          gap: '6px',
-          padding: '10px 20px',
-          borderBottom: '1px solid rgba(0,255,65,0.05)',
-          backgroundColor: 'rgba(0,255,65,0.01)',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            padding: '10px 18px',
+            borderBottom: '1px solid var(--border-green-soft)',
+            background: 'rgba(0,255,65,0.01)',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+          }}
+        >
           {quickActions.map((action) => (
-            <button key={action.id} className="quick-btn" onClick={() => handleQuickActionById(action.id)} disabled={isTyping}>
-              <span style={{ color: '#00ff41', fontSize: '15px', opacity: 0.6 }}>{action.icon}</span>
+            <button
+              key={action.id}
+              type="button"
+              className="gunny-quick"
+              onClick={() => handleQuickActionById(action.id)}
+              disabled={isTyping}
+              style={{ flexShrink: 0 }}
+            >
+              <span style={{ color: 'var(--green)', opacity: 0.7, marginRight: 6 }}>{action.icon}</span>
               {action.label}
             </button>
           ))}
@@ -2416,90 +2388,152 @@ ${mealSuggestion}`;
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      <div style={{
-        padding: '12px 20px',
-        borderTop: '1px solid rgba(0,255,65,0.08)',
-        background: 'linear-gradient(180deg, rgba(5,5,5,0.98) 0%, rgba(3,3,3,1) 100%)',
-        display: 'flex',
-        gap: '8px',
-        alignItems: 'center',
-      }}>
-        <div style={{
-          fontFamily: '"Share Tech Mono", monospace',
-          fontSize: '15px',
-          color: '#222',
-          marginRight: '4px',
-        }}>
-          {'>>'}
-        </div>
-        <textarea
-          ref={inputRef}
-          value={inputValue}
-          onChange={(e) => {
-            setInputValue(e.target.value);
-            e.target.style.height = 'auto';
-            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder="What's the mission, champ?"
-          className="chat-input"
-          rows={1}
-          style={{ resize: 'none', overflow: 'hidden', lineHeight: '1.4' }}
-        />
-        <VoiceInput
-          onTranscript={(text) => {
-            setInputValue(prev => prev ? prev + ' ' + text : text);
-          }}
-          onSendMessage={(text) => {
-            // "Over" trigger — auto-send without hitting button
-            setInputValue(text);
-            setTimeout(() => {
-              const sendBtn = document.querySelector('.send-btn') as HTMLButtonElement;
-              if (sendBtn) sendBtn.click();
-            }, 100);
-          }}
-          callSign={operator.callsign}
-        />
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return; }
-            const reader = new FileReader();
-            reader.onload = () => setPendingImage(reader.result as string);
-            reader.readAsDataURL(file);
-            e.target.value = '';
-          }}
-        />
-        <button
-          onClick={() => imageInputRef.current?.click()}
+      {/* Composer — handoff "04 — Gunny Chat" mock: a single inset
+          bar with a green ">>" prefix, the auto-resize textarea, the
+          voice/image tool buttons, and the solid-green Send button.
+          Uses .composer-bar / .composer-prefix / .composer-input /
+          .composer-tool / .composer-send from the design system. */}
+      <div
+        style={{
+          padding: '10px 12px',
+          background: 'linear-gradient(180deg, transparent 0%, rgba(3,3,3,0.95) 30%, rgba(3,3,3,0.98) 100%)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+        }}
+      >
+        <div
           style={{
-            background: pendingImage ? '#ff6b35' : 'transparent',
-            border: `1px solid ${pendingImage ? '#ff6b35' : '#333'}`,
-            borderRadius: 4,
-            padding: '6px 8px',
-            cursor: 'pointer',
-            fontSize: 16,
-            lineHeight: 1,
-            color: pendingImage ? '#fff' : '#666',
+            display: 'flex',
+            alignItems: 'stretch',
+            gap: 4,
+            border: '1px solid var(--border-green)',
+            background: 'rgba(0,0,0,0.6)',
+            padding: 4,
           }}
-          title="Attach image for analysis"
         >
-          📷
-        </button>
-        <button
-          onClick={handleSendMessage}
-          className="send-btn"
-          disabled={isTyping || (!inputValue.trim() && !pendingImage)}
-          aria-busy={isTyping || undefined}
-        >
-          {isTyping ? '…' : 'SEND'}
-        </button>
+          {/* ">>" prefix marker. .t-mono with green glow. */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0 8px',
+              fontFamily: 'var(--mono)',
+              fontSize: 14,
+              color: 'var(--green)',
+              textShadow: '0 0 4px var(--green)',
+            }}
+          >
+            {'>>'}
+          </div>
+
+          <textarea
+            ref={inputRef}
+            value={inputValue}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="What's the mission, champ?"
+            rows={1}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--mono)',
+              fontSize: 13,
+              padding: '8px 4px',
+              letterSpacing: '0.02em',
+              minWidth: 0,
+              resize: 'none',
+              overflow: 'hidden',
+              lineHeight: 1.4,
+            }}
+          />
+
+          <VoiceInput
+            onTranscript={(text) => {
+              setInputValue(prev => prev ? prev + ' ' + text : text);
+            }}
+            onSendMessage={(text) => {
+              // "Over" trigger — auto-send without hitting button.
+              setInputValue(text);
+              setTimeout(() => {
+                const sendBtn = document.querySelector('.composer-send') as HTMLButtonElement;
+                if (sendBtn) sendBtn.click();
+              }, 100);
+            }}
+            callSign={operator.callsign}
+          />
+
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return; }
+              const reader = new FileReader();
+              reader.onload = () => setPendingImage(reader.result as string);
+              reader.readAsDataURL(file);
+              e.target.value = '';
+            }}
+          />
+
+          {/* Image attach tool — uses .composer-tool styling but
+              flips to a danger-orange treatment when an image is
+              already pending so users see the attached state. */}
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            title="Attach image for analysis"
+            style={{
+              background: pendingImage ? 'rgba(255,107,53,0.4)' : 'rgba(0,255,65,0.08)',
+              border: `1px solid ${pendingImage ? '#ff6b35' : 'var(--border-green-soft)'}`,
+              color: pendingImage ? '#ff6b35' : 'var(--green)',
+              width: 32,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            📷
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSendMessage}
+            // Class kept as send-btn AND composer-send so the
+            // VoiceInput's auto-send query selector still works.
+            className="send-btn composer-send"
+            disabled={isTyping || (!inputValue.trim() && !pendingImage)}
+            aria-busy={isTyping || undefined}
+            style={{
+              background: 'var(--green)',
+              border: 'none',
+              color: '#000',
+              fontFamily: 'var(--display)',
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: 2,
+              padding: '0 16px',
+              cursor: 'pointer',
+              textShadow: 'none',
+              boxShadow: '0 0 12px rgba(0,255,65,0.45), inset 0 0 8px rgba(0,0,0,0.2)',
+              minWidth: 70,
+            }}
+          >
+            {isTyping ? '…' : 'SEND'}
+          </button>
+        </div>
       </div>
       {/* Image preview */}
       {pendingImage && (
