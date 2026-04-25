@@ -880,6 +880,27 @@
   margin-top: -14px;
   margin-bottom: -2px;
 }
+/* Inline desktop variant — used by the topbar horizontal nav so
+   the GUNNY tab matches the mobile bottom-tab hero treatment but
+   without the bottom-tab "pop out" margins. Smaller wrap + smaller
+   inner image so it sits inline next to the label like the other
+   SVG tab icons. */
+.gunny-icon-wrap.desktop {
+  width: 22px;
+  height: 22px;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.gunny-icon-wrap.desktop .gunny-icon {
+  width: 16px;
+  height: 16px;
+}
+.gunny-icon-wrap.desktop::before {
+  inset: -3px;
+  filter: blur(4px);
+}
 .gunny-icon-wrap::before {
   content: '';
   position: absolute;

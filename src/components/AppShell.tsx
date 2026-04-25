@@ -2018,11 +2018,12 @@ const AppShell: React.FC<AppShellProps> = ({
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             const isOps = tab.id === 'ops';
+            const isGunny = tab.id === 'gunny';
             return (
               <button
                 key={tab.id}
                 type="button"
-                className={`nav-tab ${isActive ? 'active' : ''}`}
+                className={`nav-tab ${isActive ? 'active' : ''} ${isGunny ? 'gunny-tab' : ''}`}
                 onClick={() => {
                   setActiveTab(tab.id);
                   trackEvent(EVENTS.TAB_CHANGED, { tab: tab.id });
@@ -2035,17 +2036,30 @@ const AppShell: React.FC<AppShellProps> = ({
                     : { padding: '12px 18px' }
                 }
               >
-                <span
-                  aria-hidden
-                  style={{
-                    opacity: isActive ? 1 : 0.5,
-                    marginRight: 6,
-                    display: 'inline-flex',
-                    verticalAlign: 'middle',
-                  }}
-                >
-                  {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 14 })}
-                </span>
+                {isGunny ? (
+                  // Match the mobile/iPad bottom-tab "hero Gunny"
+                  // treatment — the green-glowing logo image with
+                  // the radial halo behind it (.gunny-icon-wrap from
+                  // design-system.css). The .desktop modifier scales
+                  // the wrap down for the inline horizontal nav so
+                  // it doesn't pop out of the topbar like it does on
+                  // the mobile bottom bar.
+                  <span className="gunny-icon-wrap desktop" aria-hidden>
+                    <img src="/logo-glow.png" alt="" className="gunny-icon" />
+                  </span>
+                ) : (
+                  <span
+                    aria-hidden
+                    style={{
+                      opacity: isActive ? 1 : 0.5,
+                      marginRight: 6,
+                      display: 'inline-flex',
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 14 })}
+                  </span>
+                )}
                 {t(tab.labelKey)}
               </button>
             );
