@@ -1,0 +1,276 @@
+/* /contact — tactical-styled form. Reuses the design tokens + visual
+   language of the landing page (CRT aesthetic, green accents, Orbitron
+   labels) so the brand stays continuous when a visitor follows a CTA. */
+
+.root {
+  --bg-base: #030303;
+  --bg-card: #0a0a0a;
+  --green: #00ff41;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #707070;
+  --text-dim: #4a4a4a;
+  --danger: #ff4444;
+  --warn: #ffb800;
+  --mono: 'Share Tech Mono', ui-monospace, monospace;
+  --display: 'Orbitron', sans-serif;
+  --body: 'Chakra Petch', sans-serif;
+
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--body);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  background-image:
+    linear-gradient(rgba(0,255,65,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,65,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.scanlines {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+  z-index: 9998;
+  mix-blend-mode: multiply;
+}
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(3,3,3,0.75);
+  border-bottom: 1px solid rgba(0,255,65,0.08);
+}
+.navInner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 3px;
+  color: #fff;
+  text-decoration: none;
+}
+.brand img { width: 22px; height: 22px; filter: drop-shadow(0 0 6px rgba(0,255,65,0.6)); }
+.backLink {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  letter-spacing: 1px;
+}
+.backLink:hover { color: var(--green); }
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 60px 24px 80px;
+  position: relative;
+  z-index: 1;
+}
+
+.eyebrow {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3.5px;
+  text-transform: uppercase;
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.eyebrow::before {
+  content: '';
+  width: 18px;
+  height: 1px;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+
+.h1 {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: clamp(36px, 5vw, 56px);
+  line-height: 0.98;
+  text-transform: uppercase;
+  color: #fff;
+  margin-bottom: 16px;
+}
+.h1 em {
+  font-style: normal;
+  color: var(--green);
+  text-shadow: 0 0 18px rgba(0,255,65,0.3);
+}
+.lede {
+  color: var(--text-secondary);
+  font-size: 17px;
+  margin-bottom: 36px;
+  max-width: 560px;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid rgba(0,255,65,0.2);
+  box-shadow: 0 0 40px rgba(0,255,65,0.05), inset 0 0 30px rgba(0,255,65,0.015);
+  padding: 32px;
+  position: relative;
+}
+.card::before, .card::after, .card > .bl, .card > .br {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--green);
+  border-style: solid;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.card::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+.card::after { top: -1px; right: -1px; border-width: 1px 1px 0 0; }
+.card > .bl { bottom: -1px; left: -1px; border-width: 0 0 1px 1px; }
+.card > .br { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.field {
+  margin-bottom: 18px;
+}
+.label {
+  display: block;
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+.input, .select, .textarea {
+  width: 100%;
+  background: var(--bg-base);
+  border: 1px solid rgba(0,255,65,0.25);
+  color: var(--text-primary);
+  padding: 11px 14px;
+  font-family: var(--body);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(0,255,65,0.12);
+}
+.textarea {
+  min-height: 160px;
+  resize: vertical;
+  font-family: var(--body);
+  line-height: 1.55;
+}
+/* Honeypot — hidden from real users + screen readers, visible to bots
+   that parse the markup looking for input names. */
+.honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px dashed rgba(0,255,65,0.15);
+  flex-wrap: wrap;
+}
+.charCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.charCountWarn { color: var(--warn); }
+.submit {
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  padding: 13px 26px;
+  cursor: pointer;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: #000;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.submit:hover:not(:disabled) {
+  background: #000;
+  color: var(--green);
+  box-shadow: 0 0 18px rgba(0,255,65,0.4);
+}
+.submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 22px;
+  padding: 14px 18px;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+.statusOk {
+  border: 1px solid rgba(0,255,65,0.4);
+  background: rgba(0,255,65,0.05);
+  color: var(--green);
+}
+.statusErr {
+  border: 1px solid rgba(255,68,68,0.45);
+  background: rgba(255,68,68,0.05);
+  color: var(--danger);
+}
+
+.altContact {
+  margin-top: 28px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.altContact a { color: var(--green); text-decoration: none; }
+.altContact a:hover { text-decoration: underline; }
+
+@media (max-width: 600px) {
+  .fieldRow { grid-template-columns: 1fr; gap: 0; }
+  .card { padding: 22px 18px; }
+  .wrap { padding: 32px 16px 60px; }
+}

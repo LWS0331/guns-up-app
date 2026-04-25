@@ -21,10 +21,23 @@ import Link from 'next/link';
 import Image from 'next/image';
 import styles from './landing.module.css';
 import FounderRotator from './FounderRotator';
+import { trackEvent } from '@/lib/analytics';
 
 // Per-client monthly commission for Commander tier. Hard-coded in the design;
 // if tier pricing moves, update lib/types.ts::TIER_CONFIGS and mirror here.
 const COMMANDER_PER_CLIENT = 5.25;
+
+// Wrapper for landing-CTA analytics. We always emit the same event name with
+// a `cta` discriminator so the dashboards can group + filter without us
+// having to register a separate event per button. Wrapped in try/catch
+// because PostHog isn't init'd until /lib/analytics::initAnalytics has run
+// at the app root, and a logged-out user hitting a static landing page
+// may race that.
+function trackLandingCta(cta: string, extra?: Record<string, unknown>) {
+  try {
+    trackEvent('landing_cta_click', { cta, ...(extra || {}) });
+  } catch { /* analytics is best-effort; don't block navigation */ }
+}
 
 export default function LandingPage() {
   const [clients, setClients] = useState(50);
@@ -95,12 +108,23 @@ export default function LandingPage() {
             </p>
 
             <div className={styles.heroCtas}>
-              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/login">
+              <Link
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                href="/login"
+                onClick={() => trackLandingCta('hero_deploy')}
+              >
                 DEPLOY OPERATOR <span className={styles.arrow}>→</span>
               </Link>
-              <a className={`${styles.btn} ${styles.btnSecondary}`} href="#gunny">
+              {/* "REQUEST BRIEF" used to scroll to #gunny — moved to /contact
+                  with subject pre-filled so visitors who want a real
+                  conversation actually start one. */}
+              <Link
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                href="/contact?subject=brief"
+                onClick={() => trackLandingCta('hero_brief')}
+              >
                 REQUEST BRIEF
-              </a>
+              </Link>
             </div>
 
             <div className={`${styles.heroCreds} ${styles.bracket}`}>
@@ -363,7 +387,13 @@ export default function LandingPage() {
                 <ul className={styles.tierFeats}>
                   {t.feats.map((f) => <li key={f}>{f}</li>)}
                 </ul>
-                <Link className={styles.tierCta} href="/login">{t.cta}</Link>
+                <Link
+                  className={styles.tierCta}
+                  href="/login"
+                  onClick={() => trackLandingCta('tier_select', { tier: t.name.toLowerCase() })}
+                >
+                  {t.cta}
+                </Link>
               </article>
             ))}
           </div>
@@ -456,12 +486,25 @@ export default function LandingPage() {
           </div>
 
           <div style={{ marginTop: 60, textAlign: 'center' }}>
-            <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/login">
+            {/* Both trainer CTAs route to /contact with subject=trainer until
+                a dedicated trainer-application flow exists. The one-pager
+                button used to be a dead `#` anchor — now it triggers the same
+                contact form so we capture the lead instead of dropping it. */}
+            <Link
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              href="/contact?subject=trainer"
+              onClick={() => trackLandingCta('trainer_apply')}
+            >
               APPLY AS TRAINER <span className={styles.arrow}>→</span>
             </Link>
-            <a className={`${styles.btn} ${styles.btnSecondary}`} href="#" style={{ marginLeft: 10 }}>
+            <Link
+              className={`${styles.btn} ${styles.btnSecondary}`}
+              href="/contact?subject=trainer"
+              style={{ marginLeft: 10 }}
+              onClick={() => trackLandingCta('trainer_one_pager')}
+            >
               DOWNLOAD ONE-PAGER
-            </a>
+            </Link>
           </div>
         </div>
       </section>
@@ -527,10 +570,18 @@ export default function LandingPage() {
             <h2>You&apos;ve read the brief.<br /><em>Deploy, operator.</em></h2>
             <p>Start at $2/month. Gunny goes live the moment your intake is complete. 30-day milestones tracked from day one.</p>
             <div className="btns">
-              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/login">
+              <Link
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                href="/login"
+                onClick={() => trackLandingCta('final_deploy')}
+              >
                 DEPLOY NOW <span className={styles.arrow}>→</span>
               </Link>
-              <a className={`${styles.btn} ${styles.btnSecondary}`} href="#gunny">
+              <a
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                href="#gunny"
+                onClick={() => trackLandingCta('final_see_gunny')}
+              >
                 SEE GUNNY IN ACTION
               </a>
             </div>
@@ -561,15 +612,15 @@ export default function LandingPage() {
             <h5>For Trainers</h5>
             <a href="#trainers">Revenue Share</a>
             <a href="#trainers">Rank Bonuses</a>
-            <a href="#">Apply</a>
-            <a href="#">Marketing Playbook</a>
+            <Link href="/contact?subject=trainer">Apply</Link>
+            <Link href="/contact?subject=trainer">Marketing Playbook</Link>
           </div>
           <div className={styles.footCol}>
             <h5>Intel</h5>
-            <a href="#">Privacy</a>
-            <a href="#">Terms</a>
-            <a href="#">Beta Program</a>
-            <a href="#">Contact</a>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
+            <Link href="/contact?subject=beta">Beta Program</Link>
+            <Link href="/contact">Contact</Link>
           </div>
         </div>
         <div className={styles.footBottom}>
