@@ -23,9 +23,11 @@ import styles from './landing.module.css';
 import FounderRotator, { RUBEN_SLIDES, BRITNEY_SLIDES } from './FounderRotator';
 import { trackEvent } from '@/lib/analytics';
 
-// Per-client monthly commission for Commander tier. Hard-coded in the design;
-// if tier pricing moves, update lib/types.ts::TIER_CONFIGS and mirror here.
-const COMMANDER_PER_CLIENT = 5.25;
+// Per-client monthly commission for the Commander tier (drives the
+// landing-page revenue calculator). Pricing v1.0 (Apr 2026) lowered
+// Commander's trainer share from 35% → 20% — $14.99 × 20% = $3.00.
+// If tier pricing moves, update lib/types.ts::TIER_CONFIGS and mirror here.
+const COMMANDER_PER_CLIENT = 3.00;
 
 // Wrapper for landing-CTA analytics. We always emit the same event name with
 // a `cta` discriminator so the dashboards can group + filter without us
@@ -370,10 +372,14 @@ export default function LandingPage() {
               // `key` matches operator.tier + lib/stripe.ts::TIER_PRICES so the
               // CTA can hand it straight to /api/stripe/checkout. See the
               // tier-CTA Link href below for the routing contract.
-              { key: 'haiku', name: 'RECON', model: '// CLAUDE HAIKU', price: '$2', mo: '/mo', annual: '$19.92 annual · save $4', feats: ['Core Gunny AI (Haiku)', 'Full Planner + logging', 'Macro tracking', 'Profile-only context', 'Community feed'], cta: 'Enlist', featured: false },
-              { key: 'sonnet', name: 'OPERATOR', model: '// CLAUDE SONNET', price: '$5', mo: '/mo', annual: '$49.80 annual · save $10', feats: ['Everything in RECON', 'Gunny with Sonnet brain', 'SITREP battle plan', 'Workout history context', 'Injury-aware sub engine'], cta: 'Deploy', featured: false },
-              { key: 'opus', name: 'COMMANDER', model: '// CLAUDE OPUS', price: '$15', mo: '/mo', annual: '$149.40 annual · save $30', feats: ['Everything in OPERATOR', 'Gunny with Opus brain', 'Full nutrition context (72h)', 'Voice PTT + transcription', 'Wearable sync + HR zones', 'Priority Gunny response'], cta: 'Command', featured: true, badge: 'Most Deployed' },
-              { key: 'white_glove', name: 'WARFIGHTER', model: '// OPUS · WHITE GLOVE', price: '$49', mo: '.99/mo', annual: '$499.90 annual · save $100', feats: ['Everything in COMMANDER', 'Human trainer assignment', 'Weekly custom brief', 'Trainer note pipeline → Gunny', 'Beta feature access', 'Priority onboarding'], cta: 'Suit Up', featured: false },
+              // Pricing v1.0 (Apr 2026 strategy doc) — public-launch
+              // pricing benchmarked against 28 competitors. Annuals are
+              // 17% off monthly × 12. Don't drift these without updating
+              // lib/types.ts::TIER_CONFIGS first.
+              { key: 'haiku',       name: 'RECON',      model: '// CLAUDE HAIKU 4.5',  price: '$3',  mo: '.99/mo', annual: '$39.92 annual · save $7',   feats: ['Core Gunny AI (Haiku 4.5)', 'Full Planner + logging', 'Macro tracking', 'Profile-only context', 'Community feed'], cta: 'Enlist',  featured: false },
+              { key: 'sonnet',      name: 'OPERATOR',   model: '// CLAUDE SONNET 4.6', price: '$9',  mo: '.99/mo', annual: '$99.50 annual · save $20',  feats: ['Everything in RECON', 'Gunny with Sonnet 4.6 brain', 'SITREP battle plan', 'Workout history context', 'Injury-aware sub engine'], cta: 'Deploy',  featured: false },
+              { key: 'opus',        name: 'COMMANDER',  model: '// CLAUDE OPUS 4.6',   price: '$14', mo: '.99/mo', annual: '$149.40 annual · save $30', feats: ['Everything in OPERATOR', 'Gunny with Opus 4.6 brain', 'Full nutrition context (72h)', 'Voice PTT + transcription', 'Wearable sync + HR zones', 'Priority Gunny response'], cta: 'Command', featured: true, badge: 'Most Deployed' },
+              { key: 'white_glove', name: 'WARFIGHTER', model: '// OPUS · WHITE GLOVE', price: '$49', mo: '.99/mo', annual: '$497.90 annual · save $102', feats: ['Everything in COMMANDER', 'Human trainer assignment', 'Weekly custom brief', 'Trainer note pipeline → Gunny', 'Beta feature access', 'Priority onboarding'], cta: 'Suit Up', featured: false },
             ].map((t) => (
               <article
                 key={t.name}
@@ -450,9 +456,13 @@ export default function LandingPage() {
                 <span>Tier</span><span>Client Pays</span><span>Your Cut</span><span>Per Client</span>
               </div>
               {[
-                { tn: 'Recon', pays: '$2.00 / mo', cut: '25%', earn: '$0.50' },
-                { tn: 'Operator', pays: '$5.00 / mo', cut: '30%', earn: '$1.50' },
-                { tn: 'Commander', pays: '$15.00 / mo', cut: '35%', earn: '$5.25' },
+                // Pricing v1.0 (Apr 2026): trainer share % is 25/30/20/40
+                // — Commander dropped from 35% to 20% in the v1.0 doc
+                // because COMMANDER is the strategic anchor band where the
+                // platform earns its fattest margin.
+                { tn: 'Recon',      pays: '$3.99 / mo',  cut: '25%', earn: '$1.00' },
+                { tn: 'Operator',   pays: '$9.99 / mo',  cut: '30%', earn: '$3.00' },
+                { tn: 'Commander',  pays: '$14.99 / mo', cut: '20%', earn: '$3.00' },
                 { tn: 'Warfighter', pays: '$49.99 / mo', cut: '40%', earn: '$19.99' },
               ].map((r) => (
                 <div key={r.tn} className={styles.revRow}>
@@ -612,7 +622,7 @@ export default function LandingPage() {
             <span className="bl" /><span className="br" />
             <span className={styles.eyebrow}>// Final orders</span>
             <h2>You&apos;ve read the brief.<br /><em>Deploy, operator.</em></h2>
-            <p>Start at $2/month. Gunny goes live the moment your intake is complete. 30-day milestones tracked from day one.</p>
+            <p>Start at $3.99/month. Gunny goes live the moment your intake is complete. 30-day milestones tracked from day one.</p>
             <div className="btns">
               <Link
                 className={`${styles.btn} ${styles.btnPrimary}`}
