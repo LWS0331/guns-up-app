@@ -1316,45 +1316,74 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           </button>
 
           {photoResult && (
-            <div style={{ marginTop: 12, padding: 12, background: '#0a0a0a', border: '1px solid rgba(255, 107, 53, 0.2)', borderRadius: 4 }}>
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#888', letterSpacing: 1, marginBottom: 8 }}>
-                DETECTED ITEMS ({photoResult.confidence.toUpperCase()} CONFIDENCE)
+            // Detection result subcard — sits inside the parent
+            // PHOTO mode card, so we use a plain .ds-card with the
+            // orange tier-4 border to match the parent tone.
+            <div
+              className="ds-card"
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderColor: 'rgba(255, 107, 53, 0.3)',
+              }}
+            >
+              <div className="t-eyebrow" style={{ marginBottom: 8 }}>
+                Detected Items ({photoResult.confidence.toUpperCase()} confidence)
               </div>
               {photoResult.items.map((item, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
-                  <div>
-                    <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 12, color: '#e0e0e0' }}>{item.name}</span>
-                    <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#555', marginLeft: 8 }}>{item.portion}</span>
+                <div
+                  key={i}
+                  className="row-between"
+                  style={{ padding: '6px 0', borderBottom: '1px solid var(--border-green-soft)' }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <span className="t-mono-data" style={{ fontSize: 12 }}>{item.name}</span>
+                    <span className="t-mono-sm" style={{ color: 'var(--text-dim)', marginLeft: 8 }}>
+                      {item.portion}
+                    </span>
                   </div>
-                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, display: 'flex', gap: 8 }}>
-                    <span style={{ color: '#ffb800' }}>{item.calories}</span>
-                    <span style={{ color: '#00ff41' }}>{item.protein}P</span>
+                  <div style={{ display: 'flex', gap: 8 }} className="t-mono-data">
+                    <span style={{ color: 'var(--warn)' }}>{item.calories}</span>
+                    <span style={{ color: 'var(--green)' }}>{item.protein}P</span>
                     <span style={{ color: '#4ade80' }}>{item.carbs}C</span>
                     <span style={{ color: '#f97316' }}>{item.fat}F</span>
                   </div>
                 </div>
               ))}
-              <div style={{ marginTop: 8, padding: '8px 0', borderTop: '1px solid rgba(255,107,53,0.2)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Orbitron, sans-serif', fontSize: 12 }}>
-                  <span style={{ color: '#ff6b35' }}>TOTALS</span>
-                  <div style={{ display: 'flex', gap: 12, fontFamily: 'Share Tech Mono, monospace', fontSize: 12 }}>
-                    <span style={{ color: '#ffb800' }}>{photoResult.totals.calories} cal</span>
-                    <span style={{ color: '#00ff41' }}>{photoResult.totals.protein}g P</span>
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '8px 0',
+                  borderTop: '1px solid rgba(255, 107, 53, 0.2)',
+                }}
+              >
+                <div className="row-between">
+                  <span className="t-display-m" style={{ color: '#ff6b35', fontSize: 12 }}>
+                    Totals
+                  </span>
+                  <div style={{ display: 'flex', gap: 12 }} className="t-mono-data">
+                    <span style={{ color: 'var(--warn)' }}>{photoResult.totals.calories} cal</span>
+                    <span style={{ color: 'var(--green)' }}>{photoResult.totals.protein}g P</span>
                     <span style={{ color: '#4ade80' }}>{photoResult.totals.carbs}g C</span>
                     <span style={{ color: '#f97316' }}>{photoResult.totals.fat}g F</span>
                   </div>
                 </div>
               </div>
               {photoResult.notes && (
-                <div style={{ marginTop: 6, fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#666', fontStyle: 'italic' }}>
+                <div
+                  className="t-mono-sm"
+                  style={{ marginTop: 6, color: 'var(--text-tertiary)', fontStyle: 'italic' }}
+                >
                   {photoResult.notes}
                 </div>
               )}
-              <button onClick={handlePhotoResultLog} style={{
-                marginTop: 10, padding: '8px 20px', backgroundColor: '#00ff41', color: '#000', border: 'none',
-                fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700, cursor: 'pointer', borderRadius: 4, width: '100%',
-              }}>
-                LOG THIS MEAL
+              <button
+                type="button"
+                onClick={handlePhotoResultLog}
+                className="btn btn-primary btn-block btn-sm"
+                style={{ marginTop: 10 }}
+              >
+                Log This Meal
               </button>
             </div>
           )}
@@ -1416,30 +1445,61 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </button>
           </div>
           {usdaResults.length > 0 && (
+            // Result list — capped at 300px height with scroll. Each
+            // row is a tap-to-log .ds-card with hover border tint
+            // matching the tier-2 light-green accent.
             <div style={{ marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
               {usdaResults.map(food => (
-                <div key={food.id} style={{
-                  padding: '10px 12px', background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 4, marginBottom: 6,
-                  cursor: 'pointer', transition: 'border-color 0.2s',
-                }}
+                <div
+                  key={food.id}
+                  className="ds-card"
                   onClick={() => handleUsdaFoodLog(food)}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(74,222,128,0.4)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#1a1a1a'; }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(74, 222, 128, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-green-soft)';
+                  }}
+                  style={{
+                    padding: '10px 12px',
+                    marginBottom: 6,
+                    cursor: 'pointer',
+                    transition: 'border-color 0.2s',
+                  }}
                 >
-                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 12, color: '#e0e0e0', marginBottom: 4, textTransform: 'capitalize' }}>
+                  <div
+                    className="t-mono-data"
+                    style={{
+                      fontSize: 12,
+                      marginBottom: 4,
+                      textTransform: 'capitalize',
+                    }}
+                  >
                     {food.name.toLowerCase()}
-                    {food.brand && <span style={{ color: '#555', marginLeft: 6, fontSize: 10 }}>({food.brand})</span>}
+                    {food.brand && (
+                      <span
+                        className="t-mono-sm"
+                        style={{ color: 'var(--text-dim)', marginLeft: 6 }}
+                      >
+                        ({food.brand})
+                      </span>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: 12, fontFamily: 'Share Tech Mono, monospace', fontSize: 11 }}>
-                    <span style={{ color: '#ffb800' }}>{food.macros.calories} cal</span>
-                    <span style={{ color: '#00ff41' }}>{food.macros.protein}g P</span>
+                  <div style={{ display: 'flex', gap: 12 }} className="t-mono-data">
+                    <span style={{ color: 'var(--warn)' }}>{food.macros.calories} cal</span>
+                    <span style={{ color: 'var(--green)' }}>{food.macros.protein}g P</span>
                     <span style={{ color: '#4ade80' }}>{food.macros.carbs}g C</span>
                     <span style={{ color: '#f97316' }}>{food.macros.fat}g F</span>
-                    <span style={{ color: '#555' }}>per {food.servingSize}{food.servingUnit}</span>
+                    <span style={{ color: 'var(--text-dim)' }}>
+                      per {food.servingSize}{food.servingUnit}
+                    </span>
                   </div>
                 </div>
               ))}
-              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#444', textAlign: 'center', marginTop: 4 }}>
+              <div
+                className="t-mono-sm"
+                style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 4 }}
+              >
                 Tap a food to log it. Data: USDA FoodData Central
               </div>
             </div>
