@@ -1868,6 +1868,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               running → amber-tone bracket (matches the active-vital
                         "in-progress" tone elsewhere in the system)
               alarm   → danger-tone with a soft pulse animation
+            The card is `position: sticky` to the top of the workout
+            scroll area so the rest timer stays visible no matter
+            how far down the operator has scrolled into the
+            exercise blocks — this is the practical equivalent of
+            the handoff `.vitals-sticky` HUD bar without restructuring
+            the layout. Z-index sits above the cards but below the
+            modal/overlays.
             The countdown digits use .t-num-display sized big when
             running. Preset chips use .btn.btn-amber.btn-sm. */}
         <div
@@ -1878,10 +1885,21 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             textAlign: 'center',
             marginBottom: 20,
             padding: 16,
-            position: 'relative',
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            // Sticky cards leak through the scroll area unless they
+            // own their own background. .ds-card already sets
+            // var(--bg-card), but .amber-tone/.danger-tone are
+            // gradients-on-transparent, so we layer a solid base
+            // underneath via background-color when running so the
+            // exercise cards below don't bleed through.
+            backgroundColor: 'var(--bg-card)',
             transition: 'all 0.3s',
             animation: timerAlarm ? 'timerAlarmPulse 0.5s ease-in-out infinite' : undefined,
-            boxShadow: timerAlarm ? '0 0 24px rgba(255,68,68,0.6)' : undefined,
+            boxShadow: timerAlarm
+              ? '0 0 24px rgba(255,68,68,0.6), 0 4px 16px rgba(0,0,0,0.7)'
+              : '0 4px 16px rgba(0,0,0,0.7)',
           }}
         >
           <span className="bl" /><span className="br" />
