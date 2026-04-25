@@ -13,6 +13,7 @@ import VideoModal from '@/components/VideoModal';
 import WarmupMovementCard from '@/components/WarmupMovementCard';
 import HRZoneGauge from '@/components/HRZoneGauge';
 import VitalsSticky from '@/components/VitalsSticky';
+import Icon from '@/components/Icons';
 import WorkoutPTT from '@/components/WorkoutPTT';
 import { parseMovementText } from '@/lib/parseMovementText';
 import { buildSearchUrl } from '@/lib/videoUrl';
@@ -1760,15 +1761,58 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           {workout.title}
         </h3>
 
-        {/* The vitals-sticky HUD (PR #40) was removed because the
-            canonical April 24 Workout Mode mockup
-            (Screenshot 2026-04-24 at 8.31.07 PM) shows separate
-            stacked cards — Rest Timer card, HR Zone Tracker card,
-            then Warmup section — NOT a sticky HUD bar. The sticky
-            HUD was an over-implementation of the .vitals-sticky CSS
-            primitive. Reverting to the canonical stacked layout:
-            the standalone Rest Timer card and HR Zone Tracker card
-            below render the same data without the visual duplication. */}
+        {/* ═══ TACTICAL HUD — handoff .vitals-sticky module ═══
+            The canonical Workout Mode mockup DOES use this sticky
+            HUD bar (REST timer + HR readout + SET indicator with
+            zone strip + action row). Restored here after a brief
+            removal in PR #44 (which I'd reverted based on a
+            different earlier mockup that didn't show it). */}
+        {(() => {
+          // Compute current set position for the HUD's right slot.
+          const activeBlock = workout.blocks[activeBlockIdx];
+          let nowIdx = 0;
+          let totalSetsForBlock = 0;
+          if (activeBlock && activeBlock.type === 'exercise') {
+            const parsed = parseInt(activeBlock.prescription?.match(/(\d+)\s*x/)?.[1] || '3');
+            totalSetsForBlock = parsed;
+            const blockResults = workoutResults[activeBlock.id]?.sets ?? [];
+            const firstUndone = blockResults.findIndex(s => !s.completed);
+            nowIdx = firstUndone < 0 ? Math.max(0, parsed - 1) : firstUndone;
+          }
+          return (
+            <VitalsSticky
+              restTimer={restTimer}
+              restTimerMax={restTimerMax}
+              restRunning={restRunning}
+              timerAlarm={timerAlarm}
+              currentHR={currentHR}
+              targetZone={targetZone}
+              hrSource={hrSource}
+              zones={HR_ZONES}
+              hrHistory={hrHistory}
+              onSetTargetZone={setTargetZone}
+              onManualHR={(val) => {
+                setCurrentHR(val);
+                setHrSource('manual');
+                setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
+              }}
+              currentSetIndex={nowIdx}
+              totalSets={totalSetsForBlock}
+              onTalk={onOpenGunny}
+              onDemo={
+                activeBlock && activeBlock.type === 'exercise'
+                  ? () => openExerciseVideo(activeBlock.exerciseName, activeBlock.videoUrl)
+                  : undefined
+              }
+              hrExpanded={showHrPanel}
+              onToggleHrExpanded={() => setShowHrPanel(v => !v)}
+              workoutStartTime={workout.results?.startTime}
+              onPauseTimer={restRunning ? () => setRestRunning(false) : undefined}
+              onAddRest={restRunning ? () => setRestTimer(t => t + 30) : undefined}
+              onResetTimer={restRunning || restTimer > 0 ? () => { setRestTimer(0); setRestRunning(false); } : undefined}
+            />
+          );
+        })()}
 
         {/* ═══ WORKOUT PTT — floating voice button (replaces the old RADIO TAB banner) ═══ */}
         {/* Button itself is rendered at the end of renderWorkoutMode via <WorkoutPTT /> */}
@@ -1978,26 +2022,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         </div>
 
-        {/* HR Zone Tracker card — canonical handoff layout puts
-            this as a separate card directly under the Rest Timer.
-            Render via the dedicated HRZoneGauge component (which
-            already consumes the design system per PR #30). */}
-        {showHrPanel && (
-          <HRZoneGauge
-            currentHR={currentHR}
-            targetZone={targetZone}
-            hrSource={hrSource}
-            zones={HR_ZONES}
-            history={hrHistory}
-            onSetTargetZone={setTargetZone}
-            onManualSubmit={(val) => {
-              setCurrentHR(val);
-              setHrSource('manual');
-              setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
-            }}
-            onClose={() => setShowHrPanel(false)}
-          />
-        )}
+        {/* The expanded HR Zone Tracker card now lives inside the
+            VitalsSticky HUD's .vitals-expand region above (toggled
+            via the ▼ HUD action button). The duplicate render here
+            was removed — it would otherwise show two HR gauges
+            stacked on top of each other. */}
         {/* legacy inline HR panel — kept commented for reference */}
         {false && (
           <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: `1px solid ${currentHR ? getCurrentZone(currentHR).color : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
@@ -2268,129 +2297,249 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             blockResults.sets.push({ weight: 0, reps: 0, completed: false });
           }
 
-          // Active set logging card per the handoff Workout Mode
-          // mock: bracket card with display title + spec line + Demo
-          // button + notes input + S1/S2/S3 set rows. Active block
-          // gets the elevated tone with the strong border so the user
-          // sees which block they're currently in.
+          // Per the canonical April 24 Workout Mode mockup, the
+          // active exercise block uses a "NOW · SET X/Y" treatment:
+          //   - prominent green chip header showing current set
+          //   - exercise title + prescription spec
+          //   - SINGLE row of WEIGHT / REPS / RPE inputs (one set
+          //     at a time, not S1/S2/S3 stacked)
+          //   - "LOG SET & START REST →" big primary CTA
+          //   - "// SETS · THIS EXERCISE" history below showing
+          //     every set already logged (dimmed, mono)
+          // Inactive blocks render compact (title + spec only) so
+          // the user's eye lands on the NOW slot.
           const isActive = idx === activeBlockIdx;
+
+          // Find the first un-completed set — that's "NOW".
+          const firstUndone = blockResults.sets.findIndex(s => !s.completed);
+          const nowSetIdx = firstUndone < 0 ? Math.max(0, parsedSets - 1) : firstUndone;
+          const nowSet = blockResults.sets[nowSetIdx] ?? { weight: 0, reps: 0, completed: false };
+          const allDone = firstUndone < 0;
+
+          // Auto-start rest timer + advance "now" pointer when
+          // the user logs the active set. Extracted as a callback
+          // so the LOG SET button + Enter-key path can both call it.
+          const logCurrentSet = () => {
+            setResults(prev => {
+              const blockData = { ...(prev[block.id] || { sets: [] }) };
+              const sets = [...blockData.sets];
+              while (sets.length <= nowSetIdx) sets.push({ weight: 0, reps: 0, completed: false });
+              sets[nowSetIdx] = { ...sets[nowSetIdx], completed: true };
+              return { ...prev, [block.id]: { ...blockData, sets } };
+            });
+            // Auto-start rest from the prescription string.
+            const restMatch = block.prescription?.match(/(?:rest|Rest|REST)\s*:?\s*(\d+)\s*:?\s*(\d+)?/i);
+            if (restMatch) {
+              const mins = restMatch[2] !== undefined ? parseInt(restMatch[1]) : 0;
+              const secs = restMatch[2] !== undefined ? parseInt(restMatch[2]) : parseInt(restMatch[1]);
+              const totalSecs = mins * 60 + secs;
+              if (totalSecs > 0) {
+                setRestTimer(totalSecs);
+                setRestTimerMax(totalSecs);
+                setRestRunning(true);
+              }
+            }
+          };
+
+          // RPE field — separate state since the SetResult type
+          // doesn't track RPE today. We coerce via 'as any' on
+          // the per-set object cast so we don't break the existing
+          // schema. The value gets written to `set.rpe` and is
+          // surfaced in the sets-history rows below.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rpeOf = (s: any): number => (typeof s?.rpe === 'number' ? s.rpe : 0);
+
           return (
             <div
               key={block.id}
               className={`ds-card bracket ${isActive ? 'elevated' : ''}`}
-              style={{ marginBottom: 12, transition: 'all 0.2s', cursor: 'pointer' }}
-              onClick={() => setActiveBlockIdx(idx)}
+              style={{ marginBottom: 12, transition: 'all 0.2s', cursor: isActive ? 'default' : 'pointer', position: 'relative' }}
+              onClick={() => !isActive && setActiveBlockIdx(idx)}
             >
               <span className="bl" /><span className="br" />
-              <div className="row-between" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
-                <div className="t-display-m" style={{ color: 'var(--green)' }}>
+
+              {/* "NOW · SET X/Y" chip header — only on the active
+                  block. Anchored top-left as a tab-style label per
+                  the canonical mockup's set-now treatment. */}
+              {isActive && !allDone && (
+                <div
+                  className="t-display-m"
+                  style={{
+                    display: 'inline-block',
+                    background: 'var(--green)',
+                    color: '#000',
+                    padding: '4px 10px',
+                    fontSize: 9,
+                    letterSpacing: 2,
+                    marginBottom: 12,
+                  }}
+                >
+                  NOW · SET {nowSetIdx + 1}/{parsedSets}
+                </div>
+              )}
+              {isActive && allDone && (
+                <div
+                  className="t-display-m"
+                  style={{
+                    display: 'inline-block',
+                    background: 'var(--amber)',
+                    color: '#000',
+                    padding: '4px 10px',
+                    fontSize: 9,
+                    letterSpacing: 2,
+                    marginBottom: 12,
+                  }}
+                >
+                  ✓ ALL SETS COMPLETE
+                </div>
+              )}
+
+              <div className="row-between" style={{ marginBottom: 4, gap: 8, flexWrap: 'wrap' }}>
+                <div className="t-display-l" style={{ color: 'var(--green)', fontSize: 18 }}>
                   {block.exerciseName}
                 </div>
-                <span className="t-mono-sm" style={{ color: 'var(--text-secondary)' }}>
-                  {block.prescription}
-                </span>
               </div>
+              <div className="t-mono-sm" style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
+                {block.prescription}
+              </div>
+
               {(block.videoUrl || getVideoUrl(block.exerciseName)) && (
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
                   className="btn btn-amber btn-sm"
-                  style={{ marginTop: 4, padding: '6px 10px' }}
+                  style={{ marginBottom: 8, padding: '6px 10px' }}
                 >
-                  ▶ Form Demo
+                  <Icon.Play size={11} /> Form Demo
                 </button>
               )}
 
-              {/* Notes — intel for Gunny. Uses .ds-input but shrunk
-                  with smaller padding/font. */}
-              <input
-                type="text"
-                placeholder="Notes (e.g. banded felt hard, left knee tight)"
-                value={(results[block.id] as { sets: unknown[]; notes?: string })?.notes || ''}
-                onChange={e => {
-                  const notes = e.target.value;
-                  setResults(prev => ({
-                    ...prev,
-                    [block.id]: { ...prev[block.id], notes }
-                  }));
-                }}
-                className="ds-input"
-                style={{
-                  marginTop: 8,
-                  padding: '6px 10px',
-                  fontSize: 11,
-                  fontFamily: 'var(--mono)',
-                  color: 'var(--text-secondary)',
-                  borderColor: 'var(--border-green-soft)',
-                }}
-              />
-
-              <div style={{ marginTop: 8 }}>
-                {blockResults.sets.slice(0, parsedSets).map((set, si) => (
+              {isActive && !allDone && (
+                <>
+                  {/* Active set inputs — WEIGHT / REPS / RPE in a
+                      3-col grid with their own labels above each
+                      field. Matches the canonical mockup's tactical
+                      "data input panel" treatment. */}
                   <div
-                    key={si}
-                    style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: 8,
+                      marginBottom: 12,
+                    }}
                   >
-                    <span className="t-mono" style={{ color: 'var(--text-tertiary)', fontSize: 11, width: 30 }}>
-                      S{si + 1}
-                    </span>
-                    <input
-                      type="number"
-                      placeholder="lbs"
-                      value={set.weight || ''}
-                      onChange={e => handleWeightChange(block.id, si, parseFloat(e.target.value) || 0)}
-                      className="ds-input"
-                      style={{ width: 70, padding: '6px 6px', textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 13 }}
-                    />
-                    <span className="t-mono" style={{ color: 'var(--text-dim)', fontSize: 11 }}>×</span>
-                    <input
-                      type="number"
-                      placeholder="reps"
-                      value={set.reps || ''}
-                      onChange={e => {
-                        setResults(prev => {
-                          const blockData = { ...prev[block.id] };
-                          const sets = [...blockData.sets];
-                          sets[si] = { ...sets[si], reps: parseInt(e.target.value) || 0 };
-                          return { ...prev, [block.id]: { sets } };
-                        });
-                      }}
-                      className="ds-input"
-                      style={{ width: 60, padding: '6px 6px', textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 13 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const wasCompleted = set.completed;
-                        setResults(prev => {
-                          const blockData = { ...prev[block.id] };
-                          const sets = [...blockData.sets];
-                          sets[si] = { ...sets[si], completed: !wasCompleted };
-                          return { ...prev, [block.id]: { sets } };
-                        });
-                        // Auto-start rest timer from prescription when logging a set.
-                        if (!wasCompleted) {
-                          const restMatch = block.prescription?.match(/(?:rest|Rest|REST)\s*:?\s*(\d+)\s*:?\s*(\d+)?/i);
-                          if (restMatch) {
-                            const mins = restMatch[2] !== undefined ? parseInt(restMatch[1]) : 0;
-                            const secs = restMatch[2] !== undefined ? parseInt(restMatch[2]) : parseInt(restMatch[1]);
-                            const totalSecs = mins * 60 + secs;
-                            if (totalSecs > 0) {
-                              setRestTimer(totalSecs);
-                              setRestTimerMax(totalSecs);
-                              setRestRunning(true);
-                            }
-                          }
-                        }
-                      }}
-                      className={`btn btn-sm ${set.completed ? 'btn-primary' : 'btn-ghost'}`}
-                      style={{ padding: '6px 10px', minHeight: 28 }}
-                    >
-                      {set.completed ? 'Done' : 'Log'}
-                    </button>
+                    {[
+                      { label: 'WEIGHT', placeholder: 'lbs', value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
+                      { label: 'REPS',   placeholder: 'reps', value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
+                        const bd = { ...(prev[block.id] || { sets: [] }) };
+                        const ss = [...bd.sets];
+                        while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
+                        ss[nowSetIdx] = { ...ss[nowSetIdx], reps: v };
+                        return { ...prev, [block.id]: { ...bd, sets: ss } };
+                      }) },
+                      { label: 'RPE',    placeholder: '0-10', value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
+                        const bd = { ...(prev[block.id] || { sets: [] }) };
+                        const ss = [...bd.sets];
+                        while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (ss[nowSetIdx] as any).rpe = v;
+                        return { ...prev, [block.id]: { ...bd, sets: ss } };
+                      }) },
+                    ].map((f) => (
+                      <div key={f.label}>
+                        <div className="t-label" style={{ marginBottom: 4 }}>{f.label}</div>
+                        <input
+                          type="number"
+                          placeholder={f.placeholder}
+                          value={f.value || ''}
+                          onChange={(e) => f.onChange(parseFloat(e.target.value) || 0)}
+                          className="ds-input"
+                          style={{ textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 16, padding: '8px 10px' }}
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+
+                  {/* Big primary CTA — "LOG SET & START REST →".
+                      Auto-starts the rest timer from the prescription
+                      string and advances the "now" pointer to the
+                      next un-completed set. */}
+                  <button
+                    type="button"
+                    onClick={logCurrentSet}
+                    className="btn btn-primary btn-block"
+                    style={{ marginBottom: 12 }}
+                  >
+                    Log Set &amp; Start Rest →
+                  </button>
+                </>
+              )}
+
+              {/* "SETS · THIS EXERCISE" history — every previously-
+                  logged set in this block, dimmed mono. Helps the
+                  user remember what they just hit before logging
+                  the next set. */}
+              {isActive && blockResults.sets.some(s => s.completed) && (
+                <>
+                  <div className="t-eyebrow" style={{ marginTop: 8, marginBottom: 6 }}>
+                    Sets · This Exercise
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {blockResults.sets.slice(0, parsedSets).map((set, si) => set.completed && (
+                      <div
+                        key={si}
+                        className="t-mono-data"
+                        style={{
+                          display: 'flex',
+                          gap: 12,
+                          padding: '4px 6px',
+                          color: 'var(--text-secondary)',
+                          borderLeft: '2px solid var(--border-green-strong)',
+                          paddingLeft: 8,
+                        }}
+                      >
+                        <span style={{ color: 'var(--text-tertiary)', minWidth: 32 }}>S{si + 1}</span>
+                        <span>{set.weight} lbs</span>
+                        <span style={{ color: 'var(--text-dim)' }}>×</span>
+                        <span>{set.reps} reps</span>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {rpeOf(set as any) > 0 && (
+                          <span style={{ color: 'var(--amber)' }}>
+                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                            RPE {rpeOf(set as any)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Notes — intel for Gunny. Always visible on active
+                  block, hidden on inactive. */}
+              {isActive && (
+                <input
+                  type="text"
+                  placeholder="Notes (e.g. banded felt hard, left knee tight)"
+                  value={(results[block.id] as { sets: unknown[]; notes?: string })?.notes || ''}
+                  onChange={e => {
+                    const notes = e.target.value;
+                    setResults(prev => ({
+                      ...prev,
+                      [block.id]: { ...prev[block.id], notes }
+                    }));
+                  }}
+                  className="ds-input"
+                  style={{
+                    marginTop: 12,
+                    padding: '6px 10px',
+                    fontSize: 11,
+                    fontFamily: 'var(--mono)',
+                    color: 'var(--text-secondary)',
+                    borderColor: 'var(--border-green-soft)',
+                  }}
+                />
+              )}
             </div>
           );
         })}
