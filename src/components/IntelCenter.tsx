@@ -2598,622 +2598,415 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
   };
 
   const renderInjuriesTab = () => (
-    <div>
-      <div style={{ display: 'grid', gap: '16px', marginBottom: '16px' }}>
-        {state.injuries.map((injury, injuryIndex) => (
-          <div
-            key={injury.id}
-            style={{
-              padding: '16px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              borderRadius: '4px',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
-              <div style={{ flex: 1 }}>
-                {/* Injury Name */}
-                <input
-                  type="text"
-                  value={injury.name}
-                  onChange={(e) => updateInjury(injuryIndex, 'name', e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    fontFamily: 'Chakra Petch, sans-serif',
-                    fontSize: '26px',
-                    fontWeight: 'bold',
-                    backgroundColor: 'transparent',
-                    border: 'none',
-                    color: '#ddd',
-                    marginBottom: '8px',
-                    outline: 'none',
-                  }}
-                />
-
-                {/* Status */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                  <select
-                    value={injury.status}
-                    onChange={(e) =>
-                      updateInjury(
-                        injuryIndex,
-                        'status',
-                        e.target.value as 'active' | 'recovering' | 'cleared'
-                      )
-                    }
+    // Per the handoff Intel/Injuries spec: each injury renders as a
+    // danger-toned bracket card with name input, ACTIVE/RECOVERING/
+    // CLEARED status pill (solid color matches state), notes input,
+    // and a restrictions chip row. Cleared injuries flip to elevated
+    // green so users see they're "out of the way".
+    <div className="stack-4">
+      <div style={{ display: 'grid', gap: 16, marginBottom: 16 }}>
+        {state.injuries.map((injury, injuryIndex) => {
+          const cardClass = injury.status === 'cleared'
+            ? 'ds-card bracket elevated'
+            : injury.status === 'recovering'
+              ? 'ds-card bracket amber amber-tone'
+              : 'ds-card bracket danger danger-tone';
+          return (
+            <div key={injury.id} className={cardClass}>
+              <span className="bl" /><span className="br" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Injury name — display-l in white, no border;
+                      reads as the card title since the bracket card
+                      itself owns the visual frame. */}
+                  <input
+                    type="text"
+                    value={injury.name}
+                    onChange={(e) => updateInjury(injuryIndex, 'name', e.target.value)}
+                    className="t-display-l"
                     style={{
-                      padding: '6px 8px',
-                      fontFamily: 'Chakra Petch, sans-serif',
-                      fontSize: '26px',
-                      backgroundColor:
-                        injury.status === 'active'
-                          ? '#ff4444'
-                          : injury.status === 'recovering'
-                            ? '#ffb800'
-                            : '#00ff41',
-                      color: '#030303',
+                      width: '100%',
+                      padding: 4,
+                      background: 'transparent',
                       border: 'none',
-                      cursor: 'pointer',
-                      textTransform: 'uppercase',
-                      fontWeight: 'bold',
+                      color: 'var(--text-bright)',
+                      marginBottom: 8,
+                      outline: 'none',
                     }}
-                  >
-                    <option value="active">ACTIVE</option>
-                    <option value="recovering">RECOVERING</option>
-                    <option value="cleared">CLEARED</option>
-                  </select>
-                </div>
+                    placeholder="Injury name"
+                  />
 
-                {/* Notes */}
-                <textarea
-                  value={injury.notes}
-                  onChange={(e) => updateInjury(injuryIndex, 'notes', e.target.value)}
-                  placeholder="Notes..."
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    fontFamily: 'Chakra Petch, sans-serif',
-                    fontSize: '15px',
-                    backgroundColor: 'rgba(0,255,65,0.02)',
-                    border: '1px solid rgba(0,255,65,0.06)',
-                    color: '#ddd',
-                    marginBottom: '8px',
-                    minHeight: '60px',
-                    boxSizing: 'border-box',
-                    resize: 'none',
-                    outline: 'none',
-                    transition: 'border-color 0.2s',
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(0,255,65,0.2)';
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(0,255,65,0.06)';
-                  }}
-                />
+                  {/* Status pill — solid danger/warn/green per state.
+                      <select> styled to look like a button. The
+                      handoff "ACTIVE status pill (solid danger)"
+                      maps directly to this. */}
+                  <div style={{ marginBottom: 12 }}>
+                    <select
+                      value={injury.status}
+                      onChange={(e) =>
+                        updateInjury(
+                          injuryIndex,
+                          'status',
+                          e.target.value as 'active' | 'recovering' | 'cleared'
+                        )
+                      }
+                      className="t-display-m"
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: 11,
+                        background:
+                          injury.status === 'active'
+                            ? 'var(--danger)'
+                            : injury.status === 'recovering'
+                              ? 'var(--warn)'
+                              : 'var(--green)',
+                        color: '#030303',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: 800,
+                        letterSpacing: 2,
+                      }}
+                    >
+                      <option value="active">ACTIVE</option>
+                      <option value="recovering">RECOVERING</option>
+                      <option value="cleared">CLEARED</option>
+                    </select>
+                  </div>
 
-                {/* Restrictions */}
-                <div>
-                  <label
-                    style={{
-                      fontFamily: 'Orbitron, sans-serif',
-                      fontSize: '15px',
-                      color: '#888',
-                      display: 'block',
-                      marginBottom: '8px',
-                      textTransform: 'uppercase',
-                      letterSpacing: '1px',
-                    }}
-                  >
-                    RESTRICTIONS
-                  </label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                  {/* Notes — .ds-textarea, condensed for inline use. */}
+                  <textarea
+                    value={injury.notes}
+                    onChange={(e) => updateInjury(injuryIndex, 'notes', e.target.value)}
+                    placeholder="Description, mechanism, what hurts, what helps…"
+                    className="ds-textarea"
+                    style={{ marginBottom: 12, minHeight: 60, resize: 'vertical' }}
+                  />
+
+                  {/* Restrictions chip group — danger-toned chips
+                      with × close. Add input → .btn.btn-danger.btn-sm. */}
+                  <span className="t-label" style={{ marginBottom: 8, display: 'block' }}>
+                    Restrictions
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                     {injury.restrictions?.map((restriction, restrictionIndex) => (
-                      <div
-                        key={restrictionIndex}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 10px',
-                          backgroundColor: 'transparent',
-                          border: '1px solid #ff4444',
-                          borderRadius: '4px',
-                          fontFamily: 'Chakra Petch, sans-serif',
-                          fontSize: '15px',
-                          color: '#ff4444',
-                        }}
-                      >
+                      <span key={restrictionIndex} className="chip danger">
                         <span>{restriction}</span>
                         <button
+                          type="button"
                           onClick={() => removeRestriction(injuryIndex, restrictionIndex)}
+                          aria-label={`Remove restriction ${restriction}`}
+                          className="chip-x"
                           style={{
                             background: 'none',
                             border: 'none',
-                            color: '#ff4444',
+                            color: 'var(--danger)',
                             cursor: 'pointer',
-                            fontSize: '15px',
                             padding: 0,
                           }}
                         >
                           ×
                         </button>
-                      </div>
+                      </span>
                     ))}
                   </div>
                   <button
+                    type="button"
                     onClick={() => addRestriction(injuryIndex)}
-                    style={{
-                      padding: '6px 12px',
-                      fontFamily: 'Chakra Petch, sans-serif',
-                      fontSize: '15px',
-                      backgroundColor: 'transparent',
-                      border: '1px solid #ff4444',
-                      color: '#ff4444',
-                      cursor: 'pointer',
-                      textTransform: 'uppercase',
-                      letterSpacing: '1px',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255,68,68,0.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
+                    className="btn btn-danger-outline btn-sm"
                   >
-                    + ADD
+                    + Add Restriction
                   </button>
                 </div>
-              </div>
 
-              {/* Delete Button */}
-              <button
-                onClick={() => removeInjury(injury.id)}
-                style={{
-                  padding: '8px 12px',
-                  fontFamily: 'Chakra Petch, sans-serif',
-                  fontSize: '26px',
-                  backgroundColor: '#ff4444',
-                  border: 'none',
-                  color: '#030303',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  alignSelf: 'flex-start',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#ff6666';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#ff4444';
-                }}
-              >
-                DELETE
-              </button>
+                {/* Delete card — danger button so the destructive
+                    action reads loud and consistent. */}
+                <button
+                  type="button"
+                  onClick={() => removeInjury(injury.id)}
+                  className="btn btn-danger btn-sm"
+                  aria-label={`Delete injury ${injury.name}`}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <button
+        type="button"
         onClick={addInjury}
-        style={{
-          padding: '10px 16px',
-          fontFamily: 'Chakra Petch, sans-serif',
-          fontSize: '26px',
-          backgroundColor: 'transparent',
-          border: '1px solid #ff4444',
-          color: '#ff4444',
-          cursor: 'pointer',
-          textTransform: 'uppercase',
-          letterSpacing: '1px',
-          transition: 'all 0.2s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'rgba(255,68,68,0.1)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
+        className="btn btn-danger-outline"
       >
-        + ADD INJURY
+        + Add Injury
       </button>
     </div>
   );
 
   const renderPreferencesTab = () => (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+    // Per the handoff Intel/Preferences spec: training split + duration
+    // + days/week fields, Equipment Arsenal grid (tap-to-select chips
+    // + custom add input), Weak Points + Movements to Avoid sections.
+    <div
+      className="stack-4"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: 14,
+      }}
+    >
       {/* Training Split */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Training Split
-        </label>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="prefs-split">Training Split</label>
         <input
+          id="prefs-split"
           type="text"
           value={state.preferences.trainingSplit}
           onChange={(e) => handlePreferencesChange('trainingSplit', e.target.value)}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
+          className="ds-input"
         />
       </div>
 
       {/* Session Duration */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Session Duration (min)
-        </label>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="prefs-duration">Session Duration (min)</label>
         <input
+          id="prefs-duration"
           type="number"
           value={state.preferences.sessionDuration}
           onChange={(e) => handlePreferencesChange('sessionDuration', parseInt(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
+          className="ds-input"
         />
       </div>
 
       {/* Days Per Week */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Days Per Week
-        </label>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="prefs-days">Days Per Week</label>
         <input
+          id="prefs-days"
           type="number"
-          min="1"
-          max="7"
+          min={1}
+          max={7}
           value={state.preferences.daysPerWeek}
           onChange={(e) => handlePreferencesChange('daysPerWeek', parseInt(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
+          className="ds-input"
         />
       </div>
 
-      {/* Equipment - full width — Smart Equipment System */}
-      <div style={{ gridColumn: '1 / -1' }}>
-        <label style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '15px', color: '#888', display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+      {/* Equipment Arsenal — preset chip grid + custom add. Wrapped
+          in a full-width bracket card so it reads as one block. */}
+      <div className="ds-card bracket" style={{ gridColumn: '1 / -1' }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 6, display: 'inline-flex' }}>
           Equipment Arsenal
-        </label>
-        <div style={{ fontSize: '11px', color: '#555', marginBottom: '12px', fontFamily: 'Share Tech Mono, monospace' }}>
+        </span>
+        <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginBottom: 12 }}>
           Tap common gear below or type your own. Describe it however you want — Gunny will figure it out.
         </div>
 
-        {/* Quick-add preset buttons */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
-          {['Full Commercial Gym', 'Barbell + Rack', 'Dumbbells', 'Kettlebells', 'Pull-up Bar', 'Resistance Bands', 'Cable Machine', 'Smith Machine', 'Bench (Flat/Incline)', 'Assault Bike / Rower', 'Treadmill', 'TRX / Suspension', 'Medicine Ball', 'Landmine Attachment', 'Leg Press', 'Hack Squat', 'Dip Station', 'Bodyweight Only'].map(preset => {
-            const alreadyAdded = state.preferences.equipment.some(e => e.toLowerCase() === preset.toLowerCase());
+        {/* Preset quick-add buttons. Already-added presets show as
+            green-filled chips with a check; not-yet-added ones are
+            outlined ghost chips with a +. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+          {[
+            'Full Commercial Gym', 'Barbell + Rack', 'Dumbbells', 'Kettlebells',
+            'Pull-up Bar', 'Resistance Bands', 'Cable Machine', 'Smith Machine',
+            'Bench (Flat/Incline)', 'Assault Bike / Rower', 'Treadmill', 'TRX / Suspension',
+            'Medicine Ball', 'Landmine Attachment', 'Leg Press', 'Hack Squat',
+            'Dip Station', 'Bodyweight Only',
+          ].map(preset => {
+            const alreadyAdded = state.preferences.equipment.some(
+              e => e.toLowerCase() === preset.toLowerCase()
+            );
             return (
-              <button key={preset} onClick={() => {
-                if (!alreadyAdded) {
-                  setState(prev => ({ ...prev, preferences: { ...prev.preferences, equipment: [...prev.preferences.equipment, preset] } }));
-                }
-              }} style={{
-                padding: '5px 10px', fontSize: '11px', fontFamily: 'Chakra Petch, sans-serif',
-                backgroundColor: alreadyAdded ? 'rgba(0,255,65,0.12)' : 'transparent',
-                border: `1px solid ${alreadyAdded ? '#00ff41' : 'rgba(0,255,65,0.12)'}`,
-                color: alreadyAdded ? '#00ff41' : '#666', cursor: alreadyAdded ? 'default' : 'pointer',
-                transition: 'all 0.2s', opacity: alreadyAdded ? 0.7 : 1,
-              }}
-              onMouseEnter={e => { if (!alreadyAdded) { e.currentTarget.style.borderColor = 'rgba(0,255,65,0.3)'; e.currentTarget.style.color = '#aaa'; } }}
-              onMouseLeave={e => { if (!alreadyAdded) { e.currentTarget.style.borderColor = 'rgba(0,255,65,0.12)'; e.currentTarget.style.color = '#666'; } }}
-              >{alreadyAdded ? '✓ ' : '+ '}{preset}</button>
+              <button
+                key={preset}
+                type="button"
+                onClick={() => {
+                  if (!alreadyAdded) {
+                    setState(prev => ({
+                      ...prev,
+                      preferences: {
+                        ...prev.preferences,
+                        equipment: [...prev.preferences.equipment, preset],
+                      },
+                    }));
+                  }
+                }}
+                className={alreadyAdded ? 'chip green' : 'chip'}
+                disabled={alreadyAdded}
+                style={{
+                  cursor: alreadyAdded ? 'default' : 'pointer',
+                  opacity: alreadyAdded ? 0.85 : 1,
+                  background: alreadyAdded ? 'rgba(0,255,65,0.08)' : 'transparent',
+                }}
+              >
+                {alreadyAdded ? '✓ ' : '+ '}
+                {preset}
+              </button>
             );
           })}
         </div>
 
-        {/* Current equipment list */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+        {/* Current equipment list — green chips with × close. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {state.preferences.equipment.length === 0 && (
+            <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
+              No equipment selected yet — Gunny will assume bodyweight only.
+            </span>
+          )}
           {state.preferences.equipment.map((equip) => (
-            <div key={equip} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px', backgroundColor: 'rgba(0,255,65,0.04)', border: '1px solid #00ff41', borderRadius: '4px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '12px', color: '#00ff41' }}>
+            <span key={equip} className="chip green">
               <span>{equip}</span>
-              <button onClick={() => removeEquipment(equip)} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '14px', padding: 0 }}>×</button>
-            </div>
-          ))}
-        </div>
-
-        {/* Custom equipment input with description support */}
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            type="text"
-            placeholder="Type equipment name or describe it (e.g. 'the dual cable pulley machine')..."
-            value={state.newEquipment}
-            onChange={(e) => setState((prev) => ({ ...prev, newEquipment: e.target.value }))}
-            onKeyPress={(e) => { if (e.key === 'Enter') addEquipment(); }}
-            style={{ flex: 1, padding: '8px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '13px', backgroundColor: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)', color: '#ddd', boxSizing: 'border-box', transition: 'border-color 0.2s' }}
-            onFocus={(e) => { e.target.style.borderColor = 'rgba(0,255,65,0.2)'; }}
-            onBlur={(e) => { e.target.style.borderColor = 'rgba(0,255,65,0.06)'; }}
-          />
-          <button onClick={addEquipment} style={{ padding: '8px 16px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '13px', backgroundColor: 'transparent', border: '1px solid #00ff41', color: '#00ff41', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px', transition: 'all 0.2s' }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.1)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-          >+ ADD</button>
-        </div>
-        <div style={{ fontSize: '10px', color: '#444', marginTop: '6px', fontFamily: 'Share Tech Mono, monospace' }}>
-          Don&apos;t know the name? Just describe it. &quot;The thing where you pull the bar down&quot; = Lat Pulldown. Gunny figures it out.
-        </div>
-      </div>
-
-      {/* Weak Points - full width */}
-      <div style={{ gridColumn: '1 / -1' }}>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '8px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Weak Points
-        </label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-          {state.preferences.weakPoints.map((point) => (
-            <div
-              key={point}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 10px',
-                backgroundColor: 'transparent',
-                border: '1px solid #ffb800',
-                borderRadius: '4px',
-                fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '26px',
-                color: '#ffb800',
-              }}
-            >
-              <span>{point}</span>
               <button
-                onClick={() => removeWeakPoint(point)}
+                type="button"
+                onClick={() => removeEquipment(equip)}
+                aria-label={`Remove ${equip}`}
+                className="chip-x"
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#ff4444',
+                  color: 'var(--danger)',
                   cursor: 'pointer',
-                  fontSize: '26px',
                   padding: 0,
                 }}
               >
                 ×
               </button>
-            </div>
+            </span>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+
+        {/* Custom add — .ds-input + .btn.btn-primary.btn-sm. */}
+        <div style={{ display: 'flex', gap: 8 }}>
           <input
             type="text"
-            placeholder="Add weak point..."
-            value={state.newWeakPoint}
-            onChange={(e) => setState((prev) => ({ ...prev, newWeakPoint: e.target.value }))}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') addWeakPoint();
-            }}
-            style={{
-              flex: 1,
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
+            placeholder="Type equipment name or describe it (e.g. 'the dual cable pulley machine')…"
+            value={state.newEquipment}
+            onChange={(e) => setState((prev) => ({ ...prev, newEquipment: e.target.value }))}
+            onKeyPress={(e) => { if (e.key === 'Enter') addEquipment(); }}
+            className="ds-input"
+            style={{ flex: 1 }}
           />
           <button
-            onClick={addWeakPoint}
-            style={{
-              padding: '8px 16px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
-              backgroundColor: 'transparent',
-              border: '1px solid #ffb800',
-              color: '#ffb800',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255,184,0,0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
+            type="button"
+            onClick={addEquipment}
+            className="btn btn-primary btn-sm"
           >
-            + ADD
+            + Add
+          </button>
+        </div>
+        <div className="t-mono-sm" style={{ marginTop: 6, color: 'var(--text-dim)' }}>
+          Don&apos;t know the name? Just describe it. &ldquo;The thing where you pull the bar
+          down&rdquo; = Lat Pulldown. Gunny figures it out.
+        </div>
+      </div>
+
+      {/* Weak Points — amber chip group, full-width row. */}
+      <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+        <label htmlFor="prefs-new-weak">Weak Points</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {state.preferences.weakPoints.length === 0 && (
+            <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
+              No weak points logged. Add areas you want to bring up.
+            </span>
+          )}
+          {state.preferences.weakPoints.map((point) => (
+            <span key={point} className="chip amber">
+              <span>{point}</span>
+              <button
+                type="button"
+                onClick={() => removeWeakPoint(point)}
+                aria-label={`Remove weak point ${point}`}
+                className="chip-x"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--danger)',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            id="prefs-new-weak"
+            type="text"
+            placeholder="Add weak point…"
+            value={state.newWeakPoint}
+            onChange={(e) => setState((prev) => ({ ...prev, newWeakPoint: e.target.value }))}
+            onKeyPress={(e) => { if (e.key === 'Enter') addWeakPoint(); }}
+            className="ds-input"
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            onClick={addWeakPoint}
+            className="btn btn-amber btn-sm"
+          >
+            + Add
           </button>
         </div>
       </div>
 
-      {/* Movements to Avoid - full width */}
-      <div style={{ gridColumn: '1 / -1' }}>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '8px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Movements to Avoid
-        </label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+      {/* Movements to Avoid — danger chip group. */}
+      <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+        <label htmlFor="prefs-new-avoid">Movements to Avoid</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {state.preferences.movementsToAvoid.length === 0 && (
+            <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
+              Nothing on the do-not-program list yet.
+            </span>
+          )}
           {state.preferences.movementsToAvoid.map((movement) => (
-            <div
-              key={movement}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 10px',
-                backgroundColor: 'transparent',
-                border: '1px solid #ff4444',
-                borderRadius: '4px',
-                fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '26px',
-                color: '#ff4444',
-              }}
-            >
+            <span key={movement} className="chip danger">
               <span>{movement}</span>
               <button
+                type="button"
                 onClick={() => removeMovementToAvoid(movement)}
+                aria-label={`Remove ${movement}`}
+                className="chip-x"
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#ff4444',
+                  color: 'var(--danger)',
                   cursor: 'pointer',
-                  fontSize: '26px',
                   padding: 0,
                 }}
               >
                 ×
               </button>
-            </div>
+            </span>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           <input
+            id="prefs-new-avoid"
             type="text"
-            placeholder="Add movement..."
+            placeholder="Add movement…"
             value={state.newMovementToAvoid}
             onChange={(e) => setState((prev) => ({ ...prev, newMovementToAvoid: e.target.value }))}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') addMovementToAvoid();
-            }}
-            style={{
-              flex: 1,
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
+            onKeyPress={(e) => { if (e.key === 'Enter') addMovementToAvoid(); }}
+            className="ds-input"
+            style={{ flex: 1 }}
           />
           <button
+            type="button"
             onClick={addMovementToAvoid}
-            style={{
-              padding: '8px 16px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
-              backgroundColor: 'transparent',
-              border: '1px solid #ff4444',
-              color: '#ff4444',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255,68,68,0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
+            className="btn btn-danger-outline btn-sm"
           >
-            + ADD
+            + Add
           </button>
         </div>
       </div>
     </div>
   );
+
 
   const renderContent = () => {
     switch (activeTab) {
