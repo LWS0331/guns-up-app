@@ -1730,32 +1730,34 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           preload="auto"
           src="data:audio/wav;base64,UklGRnQFAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YVAFAACAgIGChIaHiYqMjY6QkZKTlJWVlpaXl5eXlpaVlZSTkpGPjo2Li4qJiIeHhoaFhYWEhISEhISEhYWGhoeIiYqKi4yNjo6PkJGSk5OUlZaWl5eYmJiYmJiYmJeXlpaVlJOSkZCPjo2MjIuKiYiHh4aGhoWFhYWFhYWFhYaGh4eIiImJioqLi4yMjY2Ojo+Pj5CQkJCRkZGRkZGRkZGRkZCQkJCPj4+OjY2MjIuLiomJiIiHh4eGhoaGhoaGhoaGhoaGh4eHh4iIiIiJiYmKioqLi4uLjIyMjIyNjY2NjY2NjY2Njo6Ojo2NjY2NjIyMjIuLioqKiYmJiYiIiIiHh4eHh4eHh4eHh4eHh4eHh4eIiIiIiImJiYmJiYqKioqKiouLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4qKioqKiYmJiYmIiIiIiIeHh4eHh4eHh4eHh4eHh4eHiIiIiIiIiImJiYmJiYqKioqKiouLi4uLi4uMjIyMjIyMjIyMjIyMjIyMjIyMjIyLi4uLi4uKioqKioqJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiJiYmJiYmJiYqKioqKiouLi4uLi4yMjIyMjIyMjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjIyMjIyMjIuLi4uLi4qKioqKiomJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiIiIiIiJiYmJiYmKioqKiouLi4uMjIyMjIyNjY2NjY2Ojo6Ojo6Ojo+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj46Ojo6Ojo6NjY2NjY2MjIyMi4uLi4uKioqKioqJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiYmJiYmJiYqKioqKioqLi4uLi4uLjIyMjIyMjIyNjY2NjY2NjY2Njo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6NjY2NjY2MjIyMjIyMi4uLi4uLi4uKioqKioqKiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmKioqKioqKiouLi4uLi4uLjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIuLi4uLi4uLioqKioqKiomJiYmJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiImJiYmJiYmJiYqKioqKiouLi4uLi4yMjIyMjIyNjY2NjY2OjY2Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo2NjY2NjY2NjY2MjIyMjIyMi4uLi4uLioqKioqKiYmJiYmJiIiIiIiIiIiIiIiIiIiIiIiIiIiIiImJiYmJiYmKioqKioqKi4uLi4uLi4yMjIyMjIyMjIyMjIyMjIyMjIyMjIyLi4uLi4uLi4qKioqKioqKiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmKioqKioqKiouLi4uLi4uMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyLi4uLi4uKioqKioqKiomJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiomJiYmJiYmKioqKioqKi4uLi4uLjIyMjIyMjY2NjY2Njo6Ojo6Ojo+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Ojo6Ojo6Ojo6NjY2NjY2MjIyMjIuLi4uLioqKioqJiYmJiYmIiIiIiIiIiIiIiIiIiIiIiImJiYmJiYqKioqKi4uLi4uMjIyMjIyNjY2NjY2Ojo6Ojo6Ojo6Ojo6Ojo6NjY2NjY2MjIyMjIuLi4uKioqKiYmJiYiIiIiIh4eHh4eHh4eHh4eHh4eHh4eHh4eHiIiIiImJiYmJioqKioqLi4uLi4yMjIyMjI2NjY2Nj"
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#FF8C00', fontSize: 18, margin: 0 }}>WORKOUT MODE</h2>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {/* Workout-Mode header — handoff "02 — Workout Mode" mock:
+            amber eyebrow ("Workout Mode · Active") + Gunny + Exit
+            buttons inline. Workout title sits below as the
+            screen-head sub mono. */}
+        <div className="row-between" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <span className="t-eyebrow amber">Workout Mode · Active</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {onOpenGunny && (
               <button
+                type="button"
                 onClick={onOpenGunny}
-                style={{
-                  padding: '4px 10px',
-                  background: 'linear-gradient(135deg, rgba(255,184,0,0.2), rgba(255,184,0,0.1))',
-                  border: '1px solid rgba(255,184,0,0.5)',
-                  color: '#ffb800',
-                  fontFamily: 'Orbitron, sans-serif',
-                  fontSize: 9,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                  cursor: 'pointer',
-                  borderRadius: 4,
-                }}
+                className="btn btn-amber btn-sm"
               >
-                ⚡ GUNNY
+                ⚡ Gunny
               </button>
             )}
-            <button onClick={() => { setWorkoutMode(false); /* activeListening removed — use Radio tab */ }} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #666', color: '#888', fontFamily: 'Share Tech Mono', cursor: 'pointer', fontSize: 11 }}>EXIT</button>
+            <button
+              type="button"
+              onClick={() => { setWorkoutMode(false); }}
+              className="btn btn-ghost btn-sm"
+            >
+              Exit
+            </button>
           </div>
         </div>
-        <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 16, margin: '0 0 12px 0' }}>{workout.title}</h3>
+        <h3 className="t-display-l" style={{ color: 'var(--green)', marginBottom: 12 }}>
+          {workout.title}
+        </h3>
 
         {/* ═══ WORKOUT PTT — floating voice button (replaces the old RADIO TAB banner) ═══ */}
         {/* Button itself is rendered at the end of renderWorkoutMode via <WorkoutPTT /> */}
@@ -1860,22 +1862,46 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* Rest Timer with countdown ring + audio */}
-        <div style={{
-          textAlign: 'center', marginBottom: 20, padding: 16,
-          background: timerAlarm ? '#3a0a0a' : restRunning ? '#1a1a0a' : '#0a0a0a',
-          border: `${timerAlarm ? 3 : 1}px solid ${timerAlarm ? '#ff4444' : restRunning ? '#FF8C00' : '#333'}`,
-          borderRadius: 8,
-          transition: 'all 0.3s',
-          position: 'relative',
-          animation: timerAlarm ? 'timerAlarmPulse 0.5s ease-in-out infinite' : undefined,
-          boxShadow: timerAlarm ? '0 0 24px rgba(255,68,68,0.6)' : undefined,
-        }}>
+        {/* Rest Timer card — handoff treatment: bracket card that
+            shifts tone with state.
+              idle    → default green soft bracket
+              running → amber-tone bracket (matches the active-vital
+                        "in-progress" tone elsewhere in the system)
+              alarm   → danger-tone with a soft pulse animation
+            The countdown digits use .t-num-display sized big when
+            running. Preset chips use .btn.btn-amber.btn-sm. */}
+        <div
+          className={`ds-card bracket ${
+            timerAlarm ? 'danger danger-tone' : restRunning ? 'amber amber-tone' : ''
+          }`}
+          style={{
+            textAlign: 'center',
+            marginBottom: 20,
+            padding: 16,
+            position: 'relative',
+            transition: 'all 0.3s',
+            animation: timerAlarm ? 'timerAlarmPulse 0.5s ease-in-out infinite' : undefined,
+            boxShadow: timerAlarm ? '0 0 24px rgba(255,68,68,0.6)' : undefined,
+          }}
+        >
+          <span className="bl" /><span className="br" />
           <style>{`@keyframes timerAlarmPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }`}</style>
+
           {restRunning && restTimerMax > 0 && (
-            <svg width="100" height="100" viewBox="0 0 100 100" style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', opacity: 0.3 }}>
-              <circle cx="50" cy="50" r="44" fill="none" stroke="#333" strokeWidth="4" />
-              <circle cx="50" cy="50" r="44" fill="none" stroke={restTimer <= 10 ? '#ff4444' : '#FF8C00'} strokeWidth="4"
+            <svg
+              width="100"
+              height="100"
+              viewBox="0 0 100 100"
+              style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', opacity: 0.3 }}
+            >
+              <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
+              <circle
+                cx="50"
+                cy="50"
+                r="44"
+                fill="none"
+                stroke={restTimer <= 10 ? 'var(--danger)' : 'var(--amber)'}
+                strokeWidth="4"
                 strokeDasharray={`${2 * Math.PI * 44}`}
                 strokeDashoffset={`${2 * Math.PI * 44 * (1 - restTimer / restTimerMax)}`}
                 strokeLinecap="round"
@@ -1884,20 +1910,46 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               />
             </svg>
           )}
-          <div style={{ fontFamily: 'Orbitron', fontSize: restRunning ? 48 : 24, color: restTimer <= 3 && restRunning ? '#ff4444' : restTimer <= 10 && restRunning ? '#FF8C00' : '#FF8C00', transition: 'all 0.3s', position: 'relative', zIndex: 1 }}>
+
+          <div
+            style={{
+              fontFamily: 'var(--mono)',
+              fontSize: restRunning ? 48 : 24,
+              color: restTimer <= 3 && restRunning
+                ? 'var(--danger)'
+                : restTimer <= 10 && restRunning
+                  ? 'var(--amber)'
+                  : 'var(--amber)',
+              textShadow: restRunning ? '0 0 12px rgba(255,140,0,0.5)' : undefined,
+              transition: 'all 0.3s',
+              position: 'relative',
+              zIndex: 1,
+              lineHeight: 1,
+            }}
+          >
             {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8, position: 'relative', zIndex: 1 }}>
+
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 12, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
             {[30, 60, 90, 120, 180].map(sec => (
-              <button key={sec} onClick={() => { setRestTimer(sec); setRestTimerMax(sec); setRestRunning(true); }}
-                style={{ padding: '4px 8px', background: '#1a1a1a', border: '1px solid #444', color: '#ccc', fontFamily: 'Share Tech Mono', fontSize: 11, cursor: 'pointer', borderRadius: 4 }}>
+              <button
+                key={sec}
+                type="button"
+                onClick={() => { setRestTimer(sec); setRestTimerMax(sec); setRestRunning(true); }}
+                className="btn btn-amber btn-sm"
+                style={{ padding: '6px 10px' }}
+              >
                 {sec < 60 ? `${sec}s` : `${sec / 60}m`}
               </button>
             ))}
             {restRunning && (
-              <button onClick={() => { setRestRunning(false); setRestTimer(0); }}
-                style={{ padding: '4px 8px', background: '#ff4444', border: 'none', color: '#fff', fontFamily: 'Share Tech Mono', fontSize: 11, cursor: 'pointer', borderRadius: 4 }}>
-                STOP
+              <button
+                type="button"
+                onClick={() => { setRestRunning(false); setRestTimer(0); }}
+                className="btn btn-danger btn-sm"
+                style={{ padding: '6px 10px' }}
+              >
+                Stop
               </button>
             )}
           </div>
@@ -2115,31 +2167,42 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           if (block.type !== 'exercise') {
             const condBlock = block as ConditioningBlock;
             const blockData = results[block.id] || { sets: [{ weight: 0, reps: 0, completed: false }] };
+            const isDone = !!blockData.sets[0]?.completed;
             return (
-              <div key={block.id} style={{
-                padding: 16, marginBottom: 12,
-                background: blockData.sets[0]?.completed ? 'rgba(255,140,0,0.08)' : '#0a0a0a',
-                border: `2px solid ${blockData.sets[0]?.completed ? '#00ff41' : '#FF8C00'}`,
-                borderRadius: 8,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div style={{ fontFamily: 'Orbitron', color: '#FF8C00', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 }}>
-                    GO TIME
-                  </div>
-                  <div style={{ fontFamily: 'Orbitron', color: '#FF8C00', fontSize: 12 }}>
+              // Conditioning block ("GO TIME") — bracket card with
+              // amber tone (active) → flips to elevated green wash
+              // once marked complete, mirroring the .ds-card states
+              // used everywhere else in the app.
+              <div
+                key={block.id}
+                className={`ds-card bracket ${isDone ? 'elevated' : 'amber amber-tone'}`}
+                style={{ marginBottom: 12 }}
+              >
+                <span className="bl" /><span className="br" />
+                <div className="row-between" style={{ marginBottom: 8 }}>
+                  <span className="t-eyebrow amber">GO TIME</span>
+                  <span className="t-mono-data" style={{ color: 'var(--amber)' }}>
                     {condBlock.format}
-                  </div>
+                  </span>
                 </div>
-                <div style={{
-                  fontFamily: 'Share Tech Mono', color: '#e0e0e0', fontSize: 14,
-                  lineHeight: 1.8, whiteSpace: 'pre-line', marginBottom: 12,
-                  padding: '8px 12px', background: 'rgba(255,140,0,0.04)',
-                  borderLeft: '3px solid #FF8C00', borderRadius: '0 4px 4px 0',
-                }}>
+                <div
+                  className="t-body-sm"
+                  style={{
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.7,
+                    whiteSpace: 'pre-line',
+                    marginBottom: 12,
+                    padding: '8px 12px',
+                    background: 'rgba(255,140,0,0.04)',
+                    borderLeft: '3px solid var(--amber)',
+                  }}
+                >
                   {condBlock.description?.replace(/\\n/g, '\n')}
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input type="text" placeholder="Time / Rounds / Score"
+                  <input
+                    type="text"
+                    placeholder="Time / Rounds / Score"
                     value={blockData.sets[0]?.reps ? `${blockData.sets[0].reps}` : ''}
                     onChange={e => {
                       const val = e.target.value;
@@ -2148,29 +2211,24 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                         [block.id]: { sets: [{ weight: 0, reps: parseInt(val) || 0, completed: blockData.sets[0]?.completed || false }] }
                       }));
                     }}
+                    className="ds-input"
                     style={{
-                      flex: 1, padding: '8px 10px', background: '#000',
-                      border: '1px solid #FF8C00', color: '#e0e0e0',
-                      fontFamily: 'Share Tech Mono', fontSize: 14, borderRadius: 4,
+                      flex: 1,
+                      borderColor: 'var(--border-amber)',
+                      fontFamily: 'var(--mono)',
                     }}
                   />
                   <button
+                    type="button"
                     onClick={() => {
                       setResults(prev => ({
                         ...prev,
                         [block.id]: { sets: [{ ...blockData.sets[0], completed: !blockData.sets[0]?.completed }] }
                       }));
                     }}
-                    style={{
-                      padding: '8px 16px',
-                      background: blockData.sets[0]?.completed ? '#00ff41' : '#FF8C00',
-                      border: 'none',
-                      color: '#000',
-                      fontFamily: 'Orbitron', fontSize: 12, fontWeight: 700,
-                      cursor: 'pointer', borderRadius: 4,
-                    }}
+                    className={`btn btn-sm ${isDone ? 'btn-primary' : 'btn-amber'}`}
                   >
-                    {blockData.sets[0]?.completed ? 'DONE' : 'COMPLETE'}
+                    {isDone ? 'Done' : 'Complete'}
                   </button>
                 </div>
               </div>
@@ -2184,82 +2242,125 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             blockResults.sets.push({ weight: 0, reps: 0, completed: false });
           }
 
+          // Active set logging card per the handoff Workout Mode
+          // mock: bracket card with display title + spec line + Demo
+          // button + notes input + S1/S2/S3 set rows. Active block
+          // gets the elevated tone with the strong border so the user
+          // sees which block they're currently in.
+          const isActive = idx === activeBlockIdx;
           return (
-            <div key={block.id} style={{ padding: 12, marginBottom: 12, background: idx === activeBlockIdx ? '#0a1a0a' : '#0a0a0a', border: `1px solid ${idx === activeBlockIdx ? '#00ff41' : '#333'}`, borderRadius: 4, transition: 'all 0.2s' }}
-              onClick={() => setActiveBlockIdx(idx)}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 14, fontWeight: 'bold' }}>{block.exerciseName}</div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#888', fontSize: 11 }}>{block.prescription}</div>
+            <div
+              key={block.id}
+              className={`ds-card bracket ${isActive ? 'elevated' : ''}`}
+              style={{ marginBottom: 12, transition: 'all 0.2s', cursor: 'pointer' }}
+              onClick={() => setActiveBlockIdx(idx)}
+            >
+              <span className="bl" /><span className="br" />
+              <div className="row-between" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                <div className="t-display-m" style={{ color: 'var(--green)' }}>
+                  {block.exerciseName}
+                </div>
+                <span className="t-mono-sm" style={{ color: 'var(--text-secondary)' }}>
+                  {block.prescription}
+                </span>
               </div>
               {(block.videoUrl || getVideoUrl(block.exerciseName)) && (
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
-                  style={{ fontSize: 10, padding: '3px 10px', marginTop: 4, background: 'rgba(255,184,0,0.08)', border: '1px solid rgba(255,184,0,0.4)', color: '#ffb800', fontFamily: 'Share Tech Mono', cursor: 'pointer', borderRadius: 4 }}>
-                  ▶ FORM DEMO
+                  className="btn btn-amber btn-sm"
+                  style={{ marginTop: 4, padding: '6px 10px' }}
+                >
+                  ▶ Form Demo
                 </button>
               )}
-              {/* Exercise notes — intel for Gunny */}
-              <div style={{ marginTop: 6 }}>
-                <input
-                  type="text"
-                  placeholder="Notes (e.g. banded felt hard, left knee tight)"
-                  value={(results[block.id] as { sets: unknown[]; notes?: string })?.notes || ''}
-                  onChange={e => {
-                    const notes = e.target.value;
-                    setResults(prev => ({
-                      ...prev,
-                      [block.id]: { ...prev[block.id], notes }
-                    }));
-                  }}
-                  style={{
-                    width: '100%', padding: '4px 8px', background: '#000',
-                    border: '1px solid #222', color: '#999',
-                    fontFamily: 'Share Tech Mono', fontSize: 10,
-                    borderRadius: 3, boxSizing: 'border-box',
-                  }}
-                />
-              </div>
+
+              {/* Notes — intel for Gunny. Uses .ds-input but shrunk
+                  with smaller padding/font. */}
+              <input
+                type="text"
+                placeholder="Notes (e.g. banded felt hard, left knee tight)"
+                value={(results[block.id] as { sets: unknown[]; notes?: string })?.notes || ''}
+                onChange={e => {
+                  const notes = e.target.value;
+                  setResults(prev => ({
+                    ...prev,
+                    [block.id]: { ...prev[block.id], notes }
+                  }));
+                }}
+                className="ds-input"
+                style={{
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  fontSize: 11,
+                  fontFamily: 'var(--mono)',
+                  color: 'var(--text-secondary)',
+                  borderColor: 'var(--border-green-soft)',
+                }}
+              />
+
               <div style={{ marginTop: 8 }}>
                 {blockResults.sets.slice(0, parsedSets).map((set, si) => (
-                  <div key={si} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontFamily: 'Share Tech Mono', color: '#666', fontSize: 11, width: 30 }}>S{si + 1}</span>
-                    <input type="number" placeholder="lbs" value={set.weight || ''} onChange={e => handleWeightChange(block.id, si, parseFloat(e.target.value) || 0)}
-                      style={{ width: 60, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 13, textAlign: 'center' }} />
-                    <span style={{ color: '#444', fontSize: 11 }}>x</span>
-                    <input type="number" placeholder="reps" value={set.reps || ''} onChange={e => {
-                      setResults(prev => {
-                        const blockData = { ...prev[block.id] };
-                        const sets = [...blockData.sets];
-                        sets[si] = { ...sets[si], reps: parseInt(e.target.value) || 0 };
-                        return { ...prev, [block.id]: { sets } };
-                      });
-                    }}
-                      style={{ width: 50, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 13, textAlign: 'center' }} />
-                    <button onClick={() => {
-                      const wasCompleted = set.completed;
-                      setResults(prev => {
-                        const blockData = { ...prev[block.id] };
-                        const sets = [...blockData.sets];
-                        sets[si] = { ...sets[si], completed: !wasCompleted };
-                        return { ...prev, [block.id]: { sets } };
-                      });
-                      // Auto-start rest timer from prescription when logging a set
-                      if (!wasCompleted) {
-                        const restMatch = block.prescription?.match(/(?:rest|Rest|REST)\s*:?\s*(\d+)\s*:?\s*(\d+)?/i);
-                        if (restMatch) {
-                          const mins = restMatch[2] !== undefined ? parseInt(restMatch[1]) : 0;
-                          const secs = restMatch[2] !== undefined ? parseInt(restMatch[2]) : parseInt(restMatch[1]);
-                          const totalSecs = mins * 60 + secs;
-                          if (totalSecs > 0) {
-                            setRestTimer(totalSecs);
-                            setRestTimerMax(totalSecs);
-                            setRestRunning(true);
+                  <div
+                    key={si}
+                    style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}
+                  >
+                    <span className="t-mono" style={{ color: 'var(--text-tertiary)', fontSize: 11, width: 30 }}>
+                      S{si + 1}
+                    </span>
+                    <input
+                      type="number"
+                      placeholder="lbs"
+                      value={set.weight || ''}
+                      onChange={e => handleWeightChange(block.id, si, parseFloat(e.target.value) || 0)}
+                      className="ds-input"
+                      style={{ width: 70, padding: '6px 6px', textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 13 }}
+                    />
+                    <span className="t-mono" style={{ color: 'var(--text-dim)', fontSize: 11 }}>×</span>
+                    <input
+                      type="number"
+                      placeholder="reps"
+                      value={set.reps || ''}
+                      onChange={e => {
+                        setResults(prev => {
+                          const blockData = { ...prev[block.id] };
+                          const sets = [...blockData.sets];
+                          sets[si] = { ...sets[si], reps: parseInt(e.target.value) || 0 };
+                          return { ...prev, [block.id]: { sets } };
+                        });
+                      }}
+                      className="ds-input"
+                      style={{ width: 60, padding: '6px 6px', textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 13 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const wasCompleted = set.completed;
+                        setResults(prev => {
+                          const blockData = { ...prev[block.id] };
+                          const sets = [...blockData.sets];
+                          sets[si] = { ...sets[si], completed: !wasCompleted };
+                          return { ...prev, [block.id]: { sets } };
+                        });
+                        // Auto-start rest timer from prescription when logging a set.
+                        if (!wasCompleted) {
+                          const restMatch = block.prescription?.match(/(?:rest|Rest|REST)\s*:?\s*(\d+)\s*:?\s*(\d+)?/i);
+                          if (restMatch) {
+                            const mins = restMatch[2] !== undefined ? parseInt(restMatch[1]) : 0;
+                            const secs = restMatch[2] !== undefined ? parseInt(restMatch[2]) : parseInt(restMatch[1]);
+                            const totalSecs = mins * 60 + secs;
+                            if (totalSecs > 0) {
+                              setRestTimer(totalSecs);
+                              setRestTimerMax(totalSecs);
+                              setRestRunning(true);
+                            }
                           }
                         }
-                      }
-                    }}
-                      style={{ padding: '2px 8px', background: set.completed ? '#00ff41' : '#1a1a1a', border: `1px solid ${set.completed ? '#00ff41' : '#444'}`, color: set.completed ? '#000' : '#888', fontFamily: 'Share Tech Mono', fontSize: 11, cursor: 'pointer', borderRadius: 4 }}>
-                      {set.completed ? 'DONE' : 'LOG'}
+                      }}
+                      className={`btn btn-sm ${set.completed ? 'btn-primary' : 'btn-ghost'}`}
+                      style={{ padding: '6px 10px', minHeight: 28 }}
+                    >
+                      {set.completed ? 'Done' : 'Log'}
                     </button>
                   </div>
                 ))}
@@ -2268,40 +2369,51 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           );
         })}
 
-        {/* Mid-workout edit controls */}
+        {/* Mid-workout edit controls — secondary affordances styled
+            as ghost (add) and danger-outline (remove) buttons. The
+            dashed-border treatment from the legacy is preserved
+            via inline style since it's a subtle "in-progress edit"
+            cue not in the canonical .btn variants. */}
         <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 4 }}>
-          <button onClick={() => {
-            const newBlock: ExerciseBlock = {
-              type: 'exercise', id: `block-live-${Date.now()}`, sortOrder: workout.blocks.length,
-              exerciseName: '', prescription: '3x10', isLinkedToNext: false,
-            };
-            const dateStr = selectedDate || formatDate(currentDate);
-            const updated = { ...operator };
-            updated.workouts = { ...updated.workouts };
-            updated.workouts[dateStr] = { ...workout, blocks: [...workout.blocks, newBlock] };
-            onUpdateOperator(updated);
-            // Initialize results for new block
-            setWorkoutResults(prev => ({ ...prev, [newBlock.id]: { sets: [{ weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }], notes: '' } }));
-          }}
-            style={{ flex: 1, padding: '6px 8px', background: '#0a0a0a', border: '1px dashed #333', color: '#666', fontFamily: 'Share Tech Mono', fontSize: 10, cursor: 'pointer', borderRadius: 4 }}>
-            + ADD EXERCISE
+          <button
+            type="button"
+            onClick={() => {
+              const newBlock: ExerciseBlock = {
+                type: 'exercise', id: `block-live-${Date.now()}`, sortOrder: workout.blocks.length,
+                exerciseName: '', prescription: '3x10', isLinkedToNext: false,
+              };
+              const dateStr = selectedDate || formatDate(currentDate);
+              const updated = { ...operator };
+              updated.workouts = { ...updated.workouts };
+              updated.workouts[dateStr] = { ...workout, blocks: [...workout.blocks, newBlock] };
+              onUpdateOperator(updated);
+              setWorkoutResults(prev => ({ ...prev, [newBlock.id]: { sets: [{ weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }], notes: '' } }));
+            }}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: 1, borderStyle: 'dashed' }}
+          >
+            + Add Exercise
           </button>
-          <button onClick={() => {
-            if (workout.blocks.length <= 1) return;
-            const dateStr = selectedDate || formatDate(currentDate);
-            const removedId = workout.blocks[workout.blocks.length - 1].id;
-            const updated = { ...operator };
-            updated.workouts = { ...updated.workouts };
-            updated.workouts[dateStr] = { ...workout, blocks: workout.blocks.slice(0, -1) };
-            onUpdateOperator(updated);
-            setWorkoutResults(prev => {
-              const next = { ...prev };
-              delete next[removedId];
-              return next;
-            });
-          }}
-            style={{ padding: '6px 8px', background: '#0a0a0a', border: '1px dashed #442222', color: '#884444', fontFamily: 'Share Tech Mono', fontSize: 10, cursor: 'pointer', borderRadius: 4 }}>
-            - REMOVE LAST
+          <button
+            type="button"
+            onClick={() => {
+              if (workout.blocks.length <= 1) return;
+              const dateStr = selectedDate || formatDate(currentDate);
+              const removedId = workout.blocks[workout.blocks.length - 1].id;
+              const updated = { ...operator };
+              updated.workouts = { ...updated.workouts };
+              updated.workouts[dateStr] = { ...workout, blocks: workout.blocks.slice(0, -1) };
+              onUpdateOperator(updated);
+              setWorkoutResults(prev => {
+                const next = { ...prev };
+                delete next[removedId];
+                return next;
+              });
+            }}
+            className="btn btn-danger-outline btn-sm"
+            style={{ borderStyle: 'dashed' }}
+          >
+            − Remove Last
           </button>
         </div>
 
@@ -2342,17 +2454,29 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           title={videoModalState?.title}
         />
 
-        {/* Ask Gunny — mid-workout coaching access */}
+        {/* Ask Gunny — mid-workout coaching access. Uses .btn-amber
+            full-width to match the floating GUNNY pill's tone. */}
         {onOpenGunny && (
-          <button onClick={onOpenGunny}
-            style={{ width: '100%', padding: 12, background: 'linear-gradient(135deg, rgba(255,184,0,0.15), rgba(255,184,0,0.08))', color: '#ffb800', border: '1px solid rgba(255,184,0,0.4)', fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, cursor: 'pointer', borderRadius: 4, marginTop: 12 }}>
-            ⚡ NEED HELP? ASK GUNNY
+          <button
+            type="button"
+            onClick={onOpenGunny}
+            className="btn btn-amber btn-block"
+            style={{ marginTop: 12 }}
+          >
+            ⚡ Need Help? Ask Gunny
           </button>
         )}
 
-        <button onClick={handleSaveResults}
-          style={{ width: '100%', padding: 14, background: '#00ff41', color: '#000', border: 'none', fontFamily: 'Orbitron', fontSize: 14, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', borderRadius: 4, marginTop: 12 }}>
-          COMPLETE WORKOUT
+        {/* Complete Workout — primary save action. Bigger padding
+            via inline override since this is a high-stakes action
+            and visually anchors the bottom of the screen. */}
+        <button
+          type="button"
+          onClick={handleSaveResults}
+          className="btn btn-primary btn-block"
+          style={{ marginTop: 12, padding: 14, fontSize: 12, letterSpacing: 2 }}
+        >
+          Complete Workout
         </button>
 
         {/* ═══ Floating Push-To-Talk — voice to Gunny without leaving workout mode ═══ */}
