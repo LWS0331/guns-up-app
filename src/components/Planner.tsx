@@ -1760,61 +1760,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           {workout.title}
         </h3>
 
-        {/* ═══ TACTICAL HUD — handoff .vitals-sticky module ═══
-            Mounts at the top of Workout Mode as a sticky bar:
-              left   = rest timer countdown + progress
-              center = compact HR readout (tap to expand panel below)
-              right  = current set indicator + per-set pip strip
-              below  = HR zone strip + ammo-strip action row
-            The expanded HR panel is hosted inside VitalsSticky's
-            .vitals-expand region; we keep the toggle in sync with
-            the legacy showHrPanel state so the standalone panel
-            below stays consistent. */}
-        {(() => {
-          // Compute current set position for the HUD's right slot.
-          // Uses the active exercise block's logged sets — scans
-          // forward to the first un-completed set (== "now"). Falls
-          // back to 0/0 for non-exercise blocks or empty workouts.
-          const activeBlock = workout.blocks[activeBlockIdx];
-          let nowIdx = 0;
-          let totalSetsForBlock = 0;
-          if (activeBlock && activeBlock.type === 'exercise') {
-            const parsed = parseInt(activeBlock.prescription?.match(/(\d+)\s*x/)?.[1] || '3');
-            totalSetsForBlock = parsed;
-            const blockResults = workoutResults[activeBlock.id]?.sets ?? [];
-            const firstUndone = blockResults.findIndex(s => !s.completed);
-            nowIdx = firstUndone < 0 ? Math.max(0, parsed - 1) : firstUndone;
-          }
-          return (
-            <VitalsSticky
-              restTimer={restTimer}
-              restTimerMax={restTimerMax}
-              restRunning={restRunning}
-              timerAlarm={timerAlarm}
-              currentHR={currentHR}
-              targetZone={targetZone}
-              hrSource={hrSource}
-              zones={HR_ZONES}
-              hrHistory={hrHistory}
-              onSetTargetZone={setTargetZone}
-              onManualHR={(val) => {
-                setCurrentHR(val);
-                setHrSource('manual');
-                setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
-              }}
-              currentSetIndex={nowIdx}
-              totalSets={totalSetsForBlock}
-              onTalk={onOpenGunny}
-              onDemo={
-                activeBlock && activeBlock.type === 'exercise'
-                  ? () => openExerciseVideo(activeBlock.exerciseName, activeBlock.videoUrl)
-                  : undefined
-              }
-              hrExpanded={showHrPanel}
-              onToggleHrExpanded={() => setShowHrPanel(v => !v)}
-            />
-          );
-        })()}
+        {/* The vitals-sticky HUD (PR #40) was removed because the
+            canonical April 24 Workout Mode mockup
+            (Screenshot 2026-04-24 at 8.31.07 PM) shows separate
+            stacked cards — Rest Timer card, HR Zone Tracker card,
+            then Warmup section — NOT a sticky HUD bar. The sticky
+            HUD was an over-implementation of the .vitals-sticky CSS
+            primitive. Reverting to the canonical stacked layout:
+            the standalone Rest Timer card and HR Zone Tracker card
+            below render the same data without the visual duplication. */}
 
         {/* ═══ WORKOUT PTT — floating voice button (replaces the old RADIO TAB banner) ═══ */}
         {/* Button itself is rendered at the end of renderWorkoutMode via <WorkoutPTT /> */}
@@ -2024,12 +1978,26 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         </div>
 
-        {/* HR Zone panel was rendered here standalone before
-            VitalsSticky landed. The expanded gauge now lives
-            inside VitalsSticky's .vitals-expand region (toggled
-            by tapping the center BPM readout in the HUD), so the
-            duplicate render here is gone. The showHrPanel state
-            stays — it's now the "is the HUD expanded" flag. */}
+        {/* HR Zone Tracker card — canonical handoff layout puts
+            this as a separate card directly under the Rest Timer.
+            Render via the dedicated HRZoneGauge component (which
+            already consumes the design system per PR #30). */}
+        {showHrPanel && (
+          <HRZoneGauge
+            currentHR={currentHR}
+            targetZone={targetZone}
+            hrSource={hrSource}
+            zones={HR_ZONES}
+            history={hrHistory}
+            onSetTargetZone={setTargetZone}
+            onManualSubmit={(val) => {
+              setCurrentHR(val);
+              setHrSource('manual');
+              setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
+            }}
+            onClose={() => setShowHrPanel(false)}
+          />
+        )}
         {/* legacy inline HR panel — kept commented for reference */}
         {false && (
           <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: `1px solid ${currentHR ? getCurrentZone(currentHR).color : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
