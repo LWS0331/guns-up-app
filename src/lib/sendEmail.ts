@@ -30,6 +30,11 @@ export interface SendEmailInput {
 
 export interface SendEmailResult {
   ok: boolean;
+  /** True when an email was actually handed to Resend; false when we no-op'd
+   *  because RESEND_API_KEY isn't configured. Callers use this to distinguish
+   *  "queued for manual follow-up" from "actually delivered" and tell the
+   *  user the truth. */
+  delivered: boolean;
   /** Resend message id when delivery succeeded; "noop" when no API key was set. */
   id?: string;
   error?: string;
@@ -42,16 +47,23 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
   if (!apiKey) {
     // No-op fallback so the contact form is shippable before Resend is set up.
-    // The submission isn't silently swallowed — it's logged with enough detail
-    // to recover manually if needed.
-    console.warn('[sendEmail] RESEND_API_KEY not set — would have sent:', {
-      to,
-      from,
-      subject: input.subject,
-      replyTo: input.replyTo,
-      preview: input.text.slice(0, 400),
-    });
-    return { ok: true, id: 'noop' };
+    // The submission isn't silently swallowed — it's logged with a grep-able
+    // prefix + the FULL message body so the founder can recover any
+    // submission from Railway logs and reply manually until Resend is wired.
+    //
+    // The console output is deliberately one big block so it's obvious in
+    // a log stream. Searching Railway for [CONTACT_QUEUED] surfaces every
+    // pre-Resend submission.
+    console.warn(
+      '\n========== [CONTACT_QUEUED] RESEND_API_KEY not set — submission logged only ==========\n' +
+      `To:        ${to}\n` +
+      `From:      ${from}\n` +
+      `ReplyTo:   ${input.replyTo || '(none)'}\n` +
+      `Subject:   ${input.subject}\n` +
+      `--- body (text) ---\n${input.text}\n` +
+      '======================================================================================\n'
+    );
+    return { ok: true, delivered: false, id: 'noop' };
   }
 
   try {
@@ -75,13 +87,13 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.error('[sendEmail] Resend rejected:', res.status, detail.slice(0, 300));
-      return { ok: false, error: `resend_${res.status}` };
+      return { ok: false, delivered: false, error: `resend_${res.status}` };
     }
 
     const data = (await res.json()) as { id?: string };
-    return { ok: true, id: data?.id };
+    return { ok: true, delivered: true, id: data?.id };
   } catch (err) {
     console.error('[sendEmail] network/parse error:', err);
-    return { ok: false, error: 'network_error' };
+    return { ok: false, delivered: false, error: 'network_error' };
   }
 }

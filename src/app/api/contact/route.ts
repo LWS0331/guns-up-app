@@ -171,5 +171,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, id: result.id });
+  // `delivered: false` means Resend isn't configured yet — the message was
+  // logged server-side but no email went out. The client uses this flag to
+  // tell the user the truth ("we got your message, our pipeline is being set
+  // up, we'll follow up shortly") instead of falsely promising delivery.
+  return NextResponse.json({ ok: true, delivered: result.delivered, id: result.id });
 }

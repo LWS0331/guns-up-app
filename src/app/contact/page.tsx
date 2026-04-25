@@ -86,7 +86,18 @@ function ContactInner() {
           // never see this branch (their honeypot is always empty).
           setStatus({ kind: 'ok', text: 'Message received. Stand by — we\'ll be in touch.' });
         } else {
-          setStatus({ kind: 'ok', text: 'Message received. Stand by — we\'ll be in touch.' });
+          // delivered === false means RESEND_API_KEY isn't set yet on the
+          // server; the message was logged server-side for manual recovery
+          // but no email went out. Tell the user the truth so they don't
+          // expect an immediate inbound.
+          if (data.delivered === false) {
+            setStatus({
+              kind: 'ok',
+              text: "Message received. Email pipeline is being configured — the founder will follow up directly. Sit tight.",
+            });
+          } else {
+            setStatus({ kind: 'ok', text: "Message received. Stand by — we'll be in touch." });
+          }
           setName('');
           setEmail('');
           setMessage('');
