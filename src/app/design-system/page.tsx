@@ -258,6 +258,97 @@ export default function DesignSystemPage() {
         </Row>
       </Section>
 
+      {/* Chrome — TopBar + TabBar + GunnyFab demos. These are the
+          full-width app chrome elements used by AppShell. Showing them
+          here as scoped previews (not full-viewport) so they sit inline
+          with the rest of the style guide. */}
+      <Section title="App chrome — TopBar / TabBar / GunnyFab">
+        <Row label=".ds-topbar">
+          <div className="ds-topbar" style={{ position: 'static' }}>
+            <div className="ds-topbar-brand">
+              <span
+                style={{
+                  width: 22,
+                  height: 22,
+                  display: 'inline-block',
+                  background: 'radial-gradient(circle, rgba(0,255,65,0.6), rgba(0,255,65,0.05) 70%)',
+                  borderRadius: '50%',
+                  filter: 'drop-shadow(0 0 4px rgba(0,255,65,0.5))',
+                }}
+              />
+              <div className="stack">
+                <span className="t1">GUNS UP</span>
+                <span className="t2">RAMPAGE</span>
+              </div>
+            </div>
+            <button className="ds-topbar-callsign">
+              <span className="dot" />
+              RAMPAGE
+            </button>
+          </div>
+        </Row>
+
+        <Row label=".ds-tabbar">
+          <div
+            className="ds-tabbar"
+            style={{
+              position: 'static',
+              padding: '8px 0 6px',
+              borderTop: '1px solid var(--border-green)',
+              borderBottom: '1px solid var(--border-green-soft)',
+            }}
+          >
+            <button className="active">
+              <span style={{ fontSize: 22 }}>◆</span>
+              <span className="lbl">COC</span>
+            </button>
+            <button>
+              <span style={{ fontSize: 22 }}>▦</span>
+              <span className="lbl">Planner</span>
+            </button>
+            <button className="gunny-tab">
+              <span className="gunny-icon-wrap">
+                <span
+                  className="gunny-icon"
+                  style={{
+                    background: 'radial-gradient(circle, rgba(0,255,65,0.9), rgba(0,255,65,0.1))',
+                    borderRadius: '50%',
+                    width: 24,
+                    height: 24,
+                    display: 'inline-block',
+                  }}
+                />
+              </span>
+              <span className="lbl">Gunny</span>
+            </button>
+            <button>
+              <span style={{ fontSize: 22 }}>◈</span>
+              <span className="lbl">Intel</span>
+            </button>
+            <button>
+              <span style={{ fontSize: 22 }}>⬡</span>
+              <span className="lbl">Ops</span>
+            </button>
+          </div>
+        </Row>
+
+        <Row label=".ds-gunny-fab">
+          <div
+            style={{
+              position: 'relative',
+              padding: '20px 14px',
+              border: '1px dashed var(--border-green-soft)',
+              minHeight: 80,
+            }}
+          >
+            <button className="ds-gunny-fab show" style={{ position: 'static' }}>
+              <span style={{ fontSize: 18 }}>⚡</span>
+              GUNNY
+            </button>
+          </div>
+        </Row>
+      </Section>
+
       {/* Form */}
       <Section title="Form fields">
         <div className="field-row" style={{ marginBottom: 4 }}>
