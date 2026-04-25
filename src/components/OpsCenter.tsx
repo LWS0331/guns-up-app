@@ -4,8 +4,16 @@ import React, { useState, useEffect } from 'react';
 import { Operator, TIER_CONFIGS, AiTier, OPS_CENTER_ACCESS } from '@/lib/types';
 import { getAuthToken } from '@/lib/authClient';
 import Icon from '@/components/Icons';
+import OpsRoadmap from '@/components/OpsRoadmap';
 
-type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'MARKETING';
+type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'MARKETING' | 'ROADMAP';
+
+// Hard-gated to the two founder operators ONLY. Even if OPS_CENTER_ACCESS
+// expands to include other admins later (env-configurable), the ROADMAP
+// tab stays scoped to Ruben + Britney. The strategy-doc content is
+// internal financial / hiring / fundraising info — not for general
+// admin consumption.
+const FOUNDER_IDS = ['op-ruben', 'op-britney'] as const;
 
 interface OpsCenterProps {
   currentUser: Operator;
@@ -857,6 +865,12 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       case 'PLATFORM': return renderPlatform();
       case 'BETA': return renderBeta();
       case 'MARKETING': return renderMarketing();
+      case 'ROADMAP':
+        // Defensive: even if activeTab is set to ROADMAP (state replay,
+        // dev hot-reload, etc.), the data only renders for founders.
+        return FOUNDER_IDS.includes(currentUser.id as typeof FOUNDER_IDS[number])
+          ? <OpsRoadmap />
+          : null;
       default: return null;
     }
   };
@@ -866,12 +880,16 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   // "$" for REVENUE is left as a glyph since there's no money icon
   // in the design-system set yet; we render it inside a styled span
   // so it visually matches the SVG siblings.
+  // ROADMAP is conditionally appended — only the two founders
+  // (op-ruben + op-britney) ever see it.
+  const isFounder = FOUNDER_IDS.includes(currentUser.id as typeof FOUNDER_IDS[number]);
   const tabConfig: { id: OpsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'REVENUE', label: 'REVENUE', icon: <span className="t-mono" style={{ fontSize: 14 }}>$</span> },
     { id: 'USERS', label: 'USERS', icon: <Icon.User /> },
     { id: 'PLATFORM', label: 'PLATFORM', icon: <Icon.Settings /> },
     { id: 'BETA', label: 'BETA', icon: <Icon.Bolt /> },
     { id: 'MARKETING', label: 'MARKETING', icon: <Icon.Send /> },
+    ...(isFounder ? [{ id: 'ROADMAP' as OpsTab, label: 'ROADMAP', icon: <Icon.Target /> }] : []),
   ];
 
   return (

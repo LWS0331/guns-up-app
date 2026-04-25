@@ -498,52 +498,61 @@ export interface Goal {
   name: string;
 }
 
-// Tier configuration with pricing and features (updated March 2026 with real API costs + caching).
+// Tier configuration with pricing and features.
+// ─── PRICING v1.0 (April 2026, per GUNS_UP_Pricing_Strategy_v1.docx) ───
+// The previous March 2026 numbers ($2 / $5 / $15 / $49.99) were the
+// beta-launch internal pricing; the v1.0 strategy doc locked in the
+// public-launch pricing below after benchmarking against 28 competitors
+// in the AI fitness market. Key changes:
+//   • RECON       $2.00  → $3.99   (still under every competitor except GymGenie)
+//   • OPERATOR    $5.00  → $9.99   (matches Hevy Pro / Apple Fitness+ / MacroFactor)
+//   • COMMANDER   $15.00 → $14.99  ($0.01 trim for psych pricing — anchor band)
+//   • WARFIGHTER  $49.99 unchanged (lifts to $79.99 in Phase DELTA, April 2027)
+// Annual is 17% off the monthly × 12 — not the legacy 16.7%.
+// Trainer share % per the v1.0 doc: 25 / 30 / 20 / 40 (was 25 / 30 / 35 / 40).
+// API costs assume 60% prompt-cache hit rate, validated in beta.
+// Margins are recomputed end-to-end in the doc's unit-economics waterfall.
+//
 // Model IDs are sourced from lib/models.ts — the central map — to avoid drift.
-// Previously `haiku` here was set to the short string `claude-haiku-4-5`, which
-// doesn't match the real Anthropic model ID `claude-haiku-4-5-20251001` used at
-// the API boundary; any UI that displayed this value next to a tier was also
-// showing the wrong string, and had anything tried to pass it to the SDK we'd
-// have gotten a 404.
 export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
   haiku: {
     name: 'RECON',
     codename: 'RECON',
     model: TIER_MODEL_MAP.haiku,
-    monthlyPrice: 2.00,
-    annualPrice: 20.00, // $1.67/mo — 17% off
-    trainerShare: 0.50,
-    platformShare: 0.97,
+    monthlyPrice: 3.99,
+    annualPrice: 39.92, // 17% off
+    trainerShare: 1.00,  // 25%
+    platformShare: 2.40,
     apiCostEstimate: 0.07,
-    stripeFee: 0.36,
+    stripeFee: 0.42,     // 2.9% + $0.30
     infraCost: 0.10,
-    margin: 48.5,
+    margin: 60.2,
     features: ['Gunny AI Chat', 'Workout Builder', 'Macro Estimation', 'Trainer Workout Feed'],
   },
   sonnet: {
     name: 'OPERATOR',
     codename: 'OPERATOR',
     model: TIER_MODEL_MAP.sonnet,
-    monthlyPrice: 5.00,
-    annualPrice: 50.00, // $4.17/mo — 17% off
-    trainerShare: 1.50,
-    platformShare: 2.61,
+    monthlyPrice: 9.99,
+    annualPrice: 99.50, // 17% off
+    trainerShare: 3.00,  // 30%
+    platformShare: 5.96,
     apiCostEstimate: 0.34,
-    stripeFee: 0.45,
+    stripeFee: 0.59,
     infraCost: 0.10,
-    margin: 52.2,
+    margin: 59.7,
     features: ['Gunny AI Chat', 'Workout Builder', 'Macro Estimation', 'Trainer Workout Feed', 'Weekly Programming', 'Goal Path Planning'],
   },
   opus: {
     name: 'COMMANDER',
     codename: 'COMMANDER',
     model: TIER_MODEL_MAP.opus,
-    monthlyPrice: 15.00,
-    annualPrice: 150.00, // $12.50/mo — 17% off
-    trainerShare: 3.00,
+    monthlyPrice: 14.99,
+    annualPrice: 149.40, // 17% off
+    trainerShare: 3.00,  // 20%
     platformShare: 10.60,
     apiCostEstimate: 0.56,
-    stripeFee: 0.74,
+    stripeFee: 0.73,
     infraCost: 0.10,
     margin: 70.7,
     features: ['Gunny AI Chat', 'Workout Builder', 'Macro Estimation', 'Trainer Workout Feed', 'Weekly Programming', 'Goal Path Planning', 'PR Tracking & Analysis', 'Injury Workarounds', 'Periodization Engine'],
@@ -553,8 +562,8 @@ export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
     codename: 'WARFIGHTER',
     model: TIER_MODEL_MAP.white_glove,
     monthlyPrice: 49.99,
-    annualPrice: 499.00, // $41.58/mo — 17% off
-    trainerShare: 20.00,
+    annualPrice: 497.90, // 17% off — Phase DELTA (Apr 2027) lifts to $79.99/mo, $797.90 annual
+    trainerShare: 20.00, // 40%
     platformShare: 27.58,
     apiCostEstimate: 0.56,
     stripeFee: 1.75,
