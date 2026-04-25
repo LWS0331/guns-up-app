@@ -1,0 +1,679 @@
+/* ==========================================================================
+   GUNS UP — DESIGN SYSTEM
+   --------------------------------------------------------------------------
+   Ported from the App Redesign handoff bundle (design_handoff_app_redesign/
+   app/app-system.css). Single source of truth for design tokens + utility
+   classes used across both marketing surfaces (/landing, /contact) and the
+   in-app shell.
+   --------------------------------------------------------------------------
+   How to use:
+     1. Tokens live as CSS custom properties (--green, --amber, --bg-card…).
+        Reach for these in component styles instead of hardcoding hex/rgba.
+     2. Utility classes (.btn, .card, .bracket, .t-eyebrow, .field, .chip…)
+        provide the visual language. Compose them in JSX:
+          <div className="card bracket elevated">
+            <span className="bl"/><span className="br"/>
+            <span className="t-eyebrow">Section</span>
+            <button className="btn btn-primary btn-sm">Go</button>
+          </div>
+     3. Bracket cards need TWO helper spans (.bl + .br) inside the card
+        because the corner brackets use ::before/::after for top corners
+        and these spans for bottom corners. Forget them and you get a
+        half-bracketed card.
+     4. Globals (resets, body bg, CRT scanline + vignette) live in
+        globals.css. Don't double them up here.
+     5. Type scale is locked. If a screen needs a size that isn't here,
+        push back on the design before inventing one.
+   --------------------------------------------------------------------------
+   Color tokens overlap globals.css in name (--green-*) but are intentionally
+   the canonical set going forward. Both files exist while the codebase
+   migrates; eventually globals.css's older alias names get retired.
+   ========================================================================== */
+
+:root {
+  /* Brand accent — driven by JS-tweakable in handoff prototype, locked here */
+  --accent: #00ff41;
+  --accent-rgb: 0, 255, 65;
+  --btn-alpha: 0.18;
+  --btn-border-alpha: 0.55;
+  --btn-text: #b6ffce;
+
+  /* Surfaces */
+  --bg-base: #030303;
+  --bg-surface: #080808;
+  --bg-elevated: #0e0e0e;
+  --bg-card: #0a0a0a;
+  --bg-input: #050505;
+
+  /* Brand greens */
+  --green: #00ff41;
+  --green-bright: #00e639;
+  --green-muted: #00cc33;
+  --green-dim: #003d10;
+  --green-glow: rgba(0, 255, 65, 0.5);
+
+  /* Text */
+  --text-bright: #ffffff;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #707070;
+  --text-dim: #4a4a4a;
+
+  /* Status */
+  --amber: #ff8c00;
+  --warn: #ffb800;
+  --danger: #ff4444;
+
+  /* Borders — always derived from accent at fixed alpha */
+  --border-green: rgba(0, 255, 65, 0.18);
+  --border-green-soft: rgba(0, 255, 65, 0.10);
+  --border-green-strong: rgba(0, 255, 65, 0.35);
+  --border-amber: rgba(255, 140, 0, 0.30);
+  --border-danger: rgba(255, 68, 68, 0.35);
+
+  /* Type stacks */
+  --mono: 'Share Tech Mono', ui-monospace, monospace;
+  --display: 'Orbitron', sans-serif;
+  --body: 'Chakra Petch', sans-serif;
+
+  /* Spacing scale — use these only */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 14px;
+  --s-5: 18px;
+  --s-6: 22px;
+  --s-7: 28px;
+  --s-8: 36px;
+
+  /* Radii — locked at 0 for tactical feel; rare 2px on inputs */
+  --r-0: 0;
+  --r-1: 2px;
+}
+
+/* ============================================================
+   TYPE — locked scale. Use these classes; don't invent sizes.
+   ============================================================ */
+
+.t-display-xl {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 22px;
+  line-height: 1.05;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+.t-display-l {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1.05;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+.t-display-m {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.1;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+
+.t-eyebrow {
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.t-eyebrow::before {
+  content: '';
+  width: 14px;
+  height: 1px;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.t-eyebrow.amber { color: var(--amber); }
+.t-eyebrow.amber::before { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.t-eyebrow.danger { color: var(--danger); }
+.t-eyebrow.danger::before { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+
+.t-label {
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.t-body {
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+.t-body-sm {
+  font-family: var(--body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.t-mono { font-family: var(--mono); letter-spacing: 0.02em; }
+.t-mono-sm {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+.t-mono-data {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.t-num-display {
+  font-family: var(--mono);
+  font-size: 24px;
+  color: var(--green);
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.35);
+  line-height: 1;
+}
+.t-num-large {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--text-bright);
+}
+
+/* iPad bumps H1 to 28px — applied via .ipad scope on the screen wrapper. */
+.ipad .t-display-xl { font-size: 28px; }
+
+/* Color helpers — semantic, not invent-your-own. */
+.ds-green { color: var(--green); }
+.ds-amber { color: var(--amber); }
+.ds-danger { color: var(--danger); }
+.ds-dim { color: var(--text-tertiary); }
+.ds-muted { color: var(--text-secondary); }
+
+/* ============================================================
+   CARD with corner brackets
+   ============================================================ */
+
+.ds-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-green-soft);
+  padding: 16px;
+  position: relative;
+}
+.ds-card.elevated {
+  background: linear-gradient(180deg, rgba(0, 255, 65, 0.025), transparent);
+  border-color: var(--border-green);
+}
+.ds-card.amber-tone {
+  border-color: var(--border-amber);
+  background: linear-gradient(180deg, rgba(255, 140, 0, 0.04), transparent);
+}
+.ds-card.danger-tone {
+  border-color: var(--border-danger);
+  background: linear-gradient(180deg, rgba(255, 68, 68, 0.03), transparent);
+}
+
+.bracket { position: relative; }
+.bracket::before,
+.bracket::after,
+.bracket > .bl,
+.bracket > .br {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: var(--green);
+  border-style: solid;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.bracket::before { top: -1px; left: -1px;  border-width: 1px 0 0 1px; }
+.bracket::after  { top: -1px; right: -1px; border-width: 1px 1px 0 0; }
+.bracket > .bl   { bottom: -1px; left: -1px;  border-width: 0 0 1px 1px; }
+.bracket > .br   { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+.bracket.amber::before,
+.bracket.amber::after,
+.bracket.amber > .bl,
+.bracket.amber > .br { border-color: var(--amber); }
+
+.bracket.danger::before,
+.bracket.danger::after,
+.bracket.danger > .bl,
+.bracket.danger > .br { border-color: var(--danger); }
+
+/* ============================================================
+   BUTTONS — single source of truth. Tactical/translucent fill,
+   stenciled type, faint inner glow. Min hit-target 44px.
+   ============================================================ */
+
+.btn {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  cursor: pointer;
+  border: 1px solid;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  background: transparent;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  min-height: 44px;
+}
+
+.btn-primary {
+  background: rgba(var(--accent-rgb), var(--btn-alpha));
+  color: var(--btn-text);
+  border-color: rgba(var(--accent-rgb), var(--btn-border-alpha));
+  text-shadow: 0 0 6px rgba(var(--accent-rgb), 0.35);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 0 16px rgba(var(--accent-rgb), 0.08),
+    0 0 0 1px rgba(var(--accent-rgb), 0.05);
+}
+.btn-primary:active {
+  background: rgba(var(--accent-rgb), calc(var(--btn-alpha) + 0.12));
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-primary);
+  border-color: rgba(var(--accent-rgb), calc(var(--btn-border-alpha) - 0.2));
+}
+.btn-secondary:active {
+  background: rgba(var(--accent-rgb), 0.06);
+  color: var(--btn-text);
+}
+
+.btn-ghost {
+  background: rgba(var(--accent-rgb), calc(var(--btn-alpha) * 0.5));
+  color: var(--btn-text);
+  border-color: rgba(var(--accent-rgb), calc(var(--btn-border-alpha) - 0.15));
+}
+.btn-ghost:active {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.btn-amber {
+  background: rgba(255, 140, 0, var(--btn-alpha));
+  color: #ffd9a8;
+  border-color: rgba(255, 140, 0, var(--btn-border-alpha));
+  text-shadow: 0 0 6px rgba(255, 140, 0, 0.35);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 0 16px rgba(255, 140, 0, 0.08);
+}
+.btn-amber:active {
+  background: rgba(255, 140, 0, calc(var(--btn-alpha) + 0.12));
+}
+
+.btn-danger {
+  background: rgba(255, 68, 68, var(--btn-alpha));
+  color: #ffb8b8;
+  border-color: rgba(255, 68, 68, var(--btn-border-alpha));
+  text-shadow: 0 0 6px rgba(255, 68, 68, 0.35);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 0 16px rgba(255, 68, 68, 0.08);
+}
+.btn-danger:active {
+  background: rgba(255, 68, 68, calc(var(--btn-alpha) + 0.12));
+}
+
+.btn-danger-outline {
+  background: rgba(255, 68, 68, calc(var(--btn-alpha) * 0.4));
+  color: #ffb8b8;
+  border-color: rgba(255, 68, 68, calc(var(--btn-border-alpha) - 0.15));
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 10px;
+  min-height: 36px;
+  letter-spacing: 1.6px;
+}
+.btn-block { width: 100%; }
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   SCREEN HEADERS — consistent across every screen
+   ============================================================ */
+
+.screen-pad { padding: 16px; }
+
+.screen-head {
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--border-green-soft);
+  background: linear-gradient(180deg, rgba(0, 255, 65, 0.02), transparent);
+}
+.screen-head .crumb {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.2px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.screen-head .crumb b {
+  color: var(--green);
+  font-weight: normal;
+}
+.screen-head h1 {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 22px;
+  line-height: 1.05;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+.screen-head h1 em {
+  font-style: normal;
+  color: var(--green);
+  text-shadow: 0 0 12px rgba(0, 255, 65, 0.35);
+}
+.screen-head .sub {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  letter-spacing: 0.05em;
+}
+
+/* Section block within scroll area */
+.block { padding: 14px 16px 6px; }
+.block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.block-head h3 {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.block-head .meta {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
+   SUBTABS — horizontal scrollable tab strip
+   ============================================================ */
+
+.subtabs {
+  display: flex;
+  overflow-x: auto;
+  gap: 0;
+  border-bottom: 1px solid var(--border-green-soft);
+  padding: 0 10px;
+  scrollbar-width: none;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+.subtabs button {
+  background: none;
+  border: none;
+  padding: 12px;
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  position: relative;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-height: 44px;
+  cursor: pointer;
+}
+.subtabs button.active { color: var(--green); }
+.subtabs button.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+
+/* ============================================================
+   SEGMENTED control (Month/Week/Day/Today)
+   ============================================================ */
+
+.segmented {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.segmented .seg {
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-green-soft);
+  min-height: 36px;
+  cursor: pointer;
+}
+.segmented .seg.active {
+  color: var(--green);
+  border-color: var(--green);
+  background: rgba(0, 255, 65, 0.05);
+}
+
+/* ============================================================
+   CHIPS — tags / filters / equipment selectors
+   ============================================================ */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-green);
+  color: var(--text-secondary);
+  background: rgba(0, 255, 65, 0.025);
+}
+.chip.green {
+  color: var(--green);
+  border-color: var(--border-green-strong);
+}
+.chip.amber {
+  color: var(--amber);
+  border-color: var(--border-amber);
+  background: rgba(255, 140, 0, 0.04);
+}
+.chip.danger {
+  color: var(--danger);
+  border-color: var(--border-danger);
+  background: rgba(255, 68, 68, 0.03);
+}
+.chip-x {
+  margin-left: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ============================================================
+   FORM — field group + input + label + textarea + select
+   ============================================================ */
+
+.field { margin-bottom: 14px; }
+.field > label,
+.field > .field-label {
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 6px;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ds-input {
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-green);
+  padding: 11px 12px;
+  font-size: 14px;
+  outline: none;
+  border-radius: var(--r-0);
+  width: 100%;
+}
+.ds-input:focus,
+.ds-textarea:focus,
+.ds-select:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px rgba(0, 255, 65, 0.2);
+}
+.ds-textarea {
+  font-family: var(--body);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-green);
+  padding: 11px 12px;
+  font-size: 14px;
+  outline: none;
+  border-radius: var(--r-0);
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+}
+.ds-select {
+  font-family: var(--mono);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-green);
+  padding: 11px 12px;
+  font-size: 14px;
+  outline: none;
+  border-radius: var(--r-1);
+  width: 100%;
+}
+
+/* ============================================================
+   PROGRESS BAR
+   ============================================================ */
+
+.bar {
+  height: 6px;
+  background: rgba(0, 255, 65, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+.bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.bar.amber > span {
+  background: var(--amber);
+  box-shadow: 0 0 6px rgba(255, 140, 0, 0.5);
+}
+.bar.danger > span {
+  background: var(--danger);
+  box-shadow: 0 0 6px rgba(255, 68, 68, 0.5);
+}
+
+/* ============================================================
+   STATUS PILLS
+   ============================================================ */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  background: transparent;
+  text-shadow: 0 0 4px currentColor;
+  cursor: pointer;
+}
+.status-pill.danger { color: var(--danger); }
+.status-pill.ok { color: var(--green); }
+.status-pill.ghost {
+  color: var(--text-secondary);
+  border-color: var(--border-green);
+  text-shadow: none;
+}
+
+/* ============================================================
+   LAYOUT UTILITIES
+   ============================================================ */
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.stack-2 > * + * { margin-top: 8px; }
+.stack-3 > * + * { margin-top: 12px; }
+.stack-4 > * + * { margin-top: 16px; }
+.stack-5 > * + * { margin-top: 20px; }
+
+/* iPad: wider layouts via 2-column grid helpers + larger paddings.
+   Apply via class or `data-device="ipad"` on the screen wrapper. */
+.ipad .screen-pad { padding: 24px; }
+.ipad .screen-head { padding: 24px 24px 18px; }
+.ipad .screen-head h1 { font-size: 28px; }
+.ipad .block { padding: 18px 24px 6px; }
+.grid-2-md { display: block; }
+.ipad .grid-2-md {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}

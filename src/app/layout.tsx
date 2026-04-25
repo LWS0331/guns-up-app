@@ -1,5 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+// Design-system tokens + utility classes (.btn, .ds-card, .bracket,
+// .t-eyebrow, .field, .chip, etc.) ported from the App Redesign handoff.
+// Loaded after globals.css so its tokens take precedence on overlapping
+// names (e.g. --green-bright, --amber). See src/styles/design-system.css
+// for the canonical color/type/spacing scale.
+import "@/styles/design-system.css";
 import { LanguageProvider } from "@/lib/i18n";
 
 // SEO + social-share metadata. Logged-out visitors at `/` see the marketing
