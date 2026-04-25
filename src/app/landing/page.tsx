@@ -20,6 +20,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import styles from './landing.module.css';
+import FounderRotator from './FounderRotator';
 
 // Per-client monthly commission for Commander tier. Hard-coded in the design;
 // if tier pricing moves, update lib/types.ts::TIER_CONFIGS and mirror here.
@@ -472,24 +473,9 @@ export default function LandingPage() {
         </div>
         <div className={styles.sectionWrap}>
           <div className={styles.founder}>
-            <div className={`${styles.founderPhoto} ${styles.bracket}`}>
-              <span className="bl" /><span className="br" />
-              {/* Founder portrait — Ruben on deployment, NVGs / rifle / wire.
-                  Source is 600×450 landscape; the slot is 4:5 portrait, so
-                  Image with fill + objectFit:cover crops to the subject in
-                  the center. Replace `priority` to false if hero LCP isn't
-                  affected — keeping it on for now since the section is
-                  prominent on first scroll. */}
-              <Image
-                src="/founder-portrait.jpg"
-                alt="Founder Ruben on deployment"
-                fill
-                sizes="(max-width: 1100px) 100vw, 50vw"
-                className={styles.founderPhotoImg}
-                priority={false}
-              />
-              <div className="badge">// FOUNDER · USMC NCO</div>
-            </div>
+            {/* Founder rotator — three eras, B&W, glitch transitions, HUD
+                chrome. See FounderRotator.tsx + design-handoff README §9. */}
+            <FounderRotator />
             <div className={styles.founderContent}>
               <span className={styles.label}>// Founder&apos;s brief</span>
               <div className={styles.founderQuote}>
