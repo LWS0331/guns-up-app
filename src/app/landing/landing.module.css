@@ -1048,6 +1048,34 @@
   display: flex;
   align-items: flex-end;
   padding: 18px;
+  overflow: hidden; /* clip the cover-fit Image inside the 4:5 slot */
+}
+
+/* Photo fills the 4:5 slot. Source is 600×450 landscape so cover-crops to the
+   center subject. Slight green tint via filter + dim overlay keeps the
+   founder photo on-brand with the rest of the green-on-black palette without
+   touching the original asset. */
+.founderPhotoImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  filter: contrast(1.05) saturate(0.85);
+}
+.founderPhoto::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(3,3,3,0.15) 0%, rgba(3,3,3,0.55) 80%, rgba(3,3,3,0.85) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+/* Badge + remaining decorations sit above the image + gradient. */
+.founderPhoto :global(.badge),
+.founderPhoto :global(.lbl) {
+  z-index: 2;
 }
 .founderPhoto :global(.lbl) {
   font-family: var(--mono);
