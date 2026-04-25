@@ -943,3 +943,279 @@
   60%  { opacity: 1; transform: translateX(4px) scale(1.05); }
   100% { opacity: 1; transform: translateX(0) scale(1); }
 }
+
+/* ============================================================
+   VITALS-STICKY HUD — Workout Mode tactical heads-up bar
+   --------------------------------------------------------------
+   Ported from the App Redesign handoff app-system.css. Used by
+   <VitalsSticky> at the top of Workout Mode. Three-region grid:
+     timer (left) | gauge (center) | set indicator (right)
+   Below: optional zone strip + action button row.
+
+   The sticky scan-line animation (.vitals-sticky::before) gives
+   the HUD its signature "live data" feel — a thin green sweep
+   crosses the top edge every 4 seconds.
+
+   Z-index sits above scrollable content but below modals.
+   ============================================================ */
+
+.vitals-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  background: linear-gradient(180deg, rgba(8, 8, 8, 0.98) 0%, rgba(3, 3, 3, 0.96) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-green);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.7),
+    inset 0 0 30px rgba(0, 255, 65, 0.025);
+}
+
+/* Tactical scan line on the top edge — sweeps down, fades in/out. */
+.vitals-sticky::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.5), transparent);
+  top: 0;
+  animation: dsVitalScan 4s linear infinite;
+  pointer-events: none;
+}
+@keyframes dsVitalScan {
+  0%   { top: 0%;   opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Multiply-blended subtle scanline across the whole bar. */
+.vitals-sticky::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.12) 2px,
+    rgba(0, 0, 0, 0.12) 3px
+  );
+  mix-blend-mode: multiply;
+}
+
+.vitals-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 14px 5px;
+  border-bottom: 1px solid var(--border-green-soft);
+  font-family: var(--display);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--green);
+  text-transform: uppercase;
+  position: relative;
+}
+.vitals-head .live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--danger);
+  font-weight: 700;
+}
+.vitals-head .live::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background: var(--danger);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--danger);
+  animation: dsPulseDot 1.2s ease-in-out infinite;
+}
+
+.vitals-grid {
+  display: grid;
+  grid-template-columns: 1fr 1px 110px 1px 1fr;
+  align-items: stretch;
+  position: relative;
+}
+.vitals-grid .div {
+  background: var(--border-green-soft);
+  width: 1px;
+}
+
+/* Timer side */
+.vital-timer {
+  padding: 10px 12px 12px;
+  position: relative;
+}
+.vital-timer .lbl {
+  font-family: var(--display);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.vital-timer .val {
+  font-family: var(--mono);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--amber);
+  text-shadow: 0 0 10px rgba(255, 140, 0, 0.5);
+  letter-spacing: 0.04em;
+}
+.vital-timer .val.danger {
+  color: var(--danger);
+  text-shadow: 0 0 12px rgba(255, 68, 68, 0.6);
+  animation: dsPulseDot 0.8s ease-in-out infinite;
+}
+.vital-timer .target {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  letter-spacing: 0.05em;
+}
+.vital-timer .progress {
+  margin-top: 8px;
+  height: 3px;
+  background: rgba(255, 140, 0, 0.12);
+  position: relative;
+  overflow: hidden;
+}
+.vital-timer .progress > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+}
+
+/* Center radar gauge */
+.vital-gauge {
+  padding: 8px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Set indicator side */
+.vital-set {
+  padding: 10px 12px 12px;
+  text-align: right;
+}
+.vital-set .lbl {
+  font-family: var(--display);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.vital-set .num {
+  font-family: var(--mono);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--green);
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+.vital-set .num small {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+  text-shadow: none;
+}
+.vital-set .pips {
+  display: flex;
+  gap: 3px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.vital-set .pips span {
+  width: 14px;
+  height: 4px;
+  background: rgba(0, 255, 65, 0.12);
+}
+.vital-set .pips span.done {
+  background: var(--green);
+  box-shadow: 0 0 4px var(--green);
+}
+.vital-set .pips span.now {
+  background: var(--amber);
+  box-shadow: 0 0 4px var(--amber);
+  animation: dsPulseDot 1.4s ease-in-out infinite;
+}
+
+/* Zone strip — 5-col HR zones, active zone fills + glows. */
+.vital-zonestrip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  padding: 0 14px 6px;
+  position: relative;
+}
+.vital-zonestrip > div {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: rgba(255, 255, 255, 0.45);
+  position: relative;
+}
+.vital-zonestrip > div.active {
+  color: #000;
+  box-shadow: 0 0 8px currentColor, inset 0 0 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Action row — ammo-strip-style 4-button bar. */
+.vitals-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1px;
+  background: var(--border-green-soft);
+  border-top: 1px solid var(--border-green-soft);
+}
+.vitals-actions button {
+  background: var(--bg-card);
+  border: none;
+  padding: 9px 4px;
+  font-family: var(--display);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  cursor: pointer;
+}
+.vitals-actions button.primary { color: var(--amber); }
+.vitals-actions button.primary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--amber);
+  border-radius: 50%;
+  box-shadow: 0 0 4px var(--amber);
+}
+.vitals-actions button:active { background: rgba(0, 255, 65, 0.06); }
+
+.vitals-expand {
+  border-top: 1px solid var(--border-green-soft);
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.4);
+}

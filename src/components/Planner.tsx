@@ -12,6 +12,7 @@ import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_
 import VideoModal from '@/components/VideoModal';
 import WarmupMovementCard from '@/components/WarmupMovementCard';
 import HRZoneGauge from '@/components/HRZoneGauge';
+import VitalsSticky from '@/components/VitalsSticky';
 import WorkoutPTT from '@/components/WorkoutPTT';
 import { parseMovementText } from '@/lib/parseMovementText';
 import { buildSearchUrl } from '@/lib/videoUrl';
@@ -1759,6 +1760,62 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           {workout.title}
         </h3>
 
+        {/* ═══ TACTICAL HUD — handoff .vitals-sticky module ═══
+            Mounts at the top of Workout Mode as a sticky bar:
+              left   = rest timer countdown + progress
+              center = compact HR readout (tap to expand panel below)
+              right  = current set indicator + per-set pip strip
+              below  = HR zone strip + ammo-strip action row
+            The expanded HR panel is hosted inside VitalsSticky's
+            .vitals-expand region; we keep the toggle in sync with
+            the legacy showHrPanel state so the standalone panel
+            below stays consistent. */}
+        {(() => {
+          // Compute current set position for the HUD's right slot.
+          // Uses the active exercise block's logged sets — scans
+          // forward to the first un-completed set (== "now"). Falls
+          // back to 0/0 for non-exercise blocks or empty workouts.
+          const activeBlock = workout.blocks[activeBlockIdx];
+          let nowIdx = 0;
+          let totalSetsForBlock = 0;
+          if (activeBlock && activeBlock.type === 'exercise') {
+            const parsed = parseInt(activeBlock.prescription?.match(/(\d+)\s*x/)?.[1] || '3');
+            totalSetsForBlock = parsed;
+            const blockResults = workoutResults[activeBlock.id]?.sets ?? [];
+            const firstUndone = blockResults.findIndex(s => !s.completed);
+            nowIdx = firstUndone < 0 ? Math.max(0, parsed - 1) : firstUndone;
+          }
+          return (
+            <VitalsSticky
+              restTimer={restTimer}
+              restTimerMax={restTimerMax}
+              restRunning={restRunning}
+              timerAlarm={timerAlarm}
+              currentHR={currentHR}
+              targetZone={targetZone}
+              hrSource={hrSource}
+              zones={HR_ZONES}
+              hrHistory={hrHistory}
+              onSetTargetZone={setTargetZone}
+              onManualHR={(val) => {
+                setCurrentHR(val);
+                setHrSource('manual');
+                setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
+              }}
+              currentSetIndex={nowIdx}
+              totalSets={totalSetsForBlock}
+              onTalk={onOpenGunny}
+              onDemo={
+                activeBlock && activeBlock.type === 'exercise'
+                  ? () => openExerciseVideo(activeBlock.exerciseName, activeBlock.videoUrl)
+                  : undefined
+              }
+              hrExpanded={showHrPanel}
+              onToggleHrExpanded={() => setShowHrPanel(v => !v)}
+            />
+          );
+        })()}
+
         {/* ═══ WORKOUT PTT — floating voice button (replaces the old RADIO TAB banner) ═══ */}
         {/* Button itself is rendered at the end of renderWorkoutMode via <WorkoutPTT /> */}
 
@@ -1885,21 +1942,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             textAlign: 'center',
             marginBottom: 20,
             padding: 16,
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-            // Sticky cards leak through the scroll area unless they
-            // own their own background. .ds-card already sets
-            // var(--bg-card), but .amber-tone/.danger-tone are
-            // gradients-on-transparent, so we layer a solid base
-            // underneath via background-color when running so the
-            // exercise cards below don't bleed through.
-            backgroundColor: 'var(--bg-card)',
+            position: 'relative',
+            // Sticky positioning was removed when VitalsSticky landed
+            // — the HUD's left slot now owns the always-visible
+            // countdown. This card stays in the scroll flow as the
+            // "rest controls" panel: preset chips + Stop button +
+            // big readout for at-rest reference.
             transition: 'all 0.3s',
             animation: timerAlarm ? 'timerAlarmPulse 0.5s ease-in-out infinite' : undefined,
-            boxShadow: timerAlarm
-              ? '0 0 24px rgba(255,68,68,0.6), 0 4px 16px rgba(0,0,0,0.7)'
-              : '0 4px 16px rgba(0,0,0,0.7)',
+            boxShadow: timerAlarm ? '0 0 24px rgba(255, 68, 68, 0.6)' : undefined,
           }}
         >
           <span className="bl" /><span className="br" />
@@ -1973,23 +2024,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         </div>
 
-        {/* HR Zone Tracking Panel */}
-        {showHrPanel && (
-          <HRZoneGauge
-            currentHR={currentHR}
-            targetZone={targetZone}
-            hrSource={hrSource}
-            zones={HR_ZONES}
-            history={hrHistory}
-            onSetTargetZone={setTargetZone}
-            onManualSubmit={(val) => {
-              setCurrentHR(val);
-              setHrSource('manual');
-              setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
-            }}
-            onClose={() => setShowHrPanel(false)}
-          />
-        )}
+        {/* HR Zone panel was rendered here standalone before
+            VitalsSticky landed. The expanded gauge now lives
+            inside VitalsSticky's .vitals-expand region (toggled
+            by tapping the center BPM readout in the HUD), so the
+            duplicate render here is gone. The showHrPanel state
+            stays — it's now the "is the HUD expanded" flag. */}
         {/* legacy inline HR panel — kept commented for reference */}
         {false && (
           <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: `1px solid ${currentHR ? getCurrentZone(currentHR).color : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
