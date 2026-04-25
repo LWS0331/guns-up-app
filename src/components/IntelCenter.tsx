@@ -84,6 +84,56 @@ interface LocalState {
   newMovementToAvoid: string;
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Design-system field helper. Wraps a label + input in the .field
+// utility from design-system.css so each form field shrinks from
+// ~30 lines of inline-style boilerplate to a single component call.
+//
+// Why a local component instead of pulling from a shared lib: every
+// field in this screen has the same shape (label above, single input
+// below). A typed helper here documents that pattern in-file without
+// adding a new module to import. If a second screen needs the same
+// thing, promote it then.
+// ─────────────────────────────────────────────────────────────────
+type DsFieldProps = {
+  label: string;
+  type?: 'text' | 'number' | 'tel';
+  value: string | number;
+  onChange: (next: string) => void;
+  onBlur?: (v: string) => void;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number | string;
+  maxLength?: number;
+  inputMode?: 'numeric' | 'text' | 'tel';
+  pattern?: string;
+  htmlId?: string;
+};
+const DsField: React.FC<DsFieldProps> = ({
+  label, type = 'text', value, onChange, onBlur, placeholder,
+  min, max, step, maxLength, inputMode, pattern, htmlId,
+}) => (
+  <div className="field" style={{ marginBottom: 0 }}>
+    <label htmlFor={htmlId}>{label}</label>
+    <input
+      id={htmlId}
+      className="ds-input"
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      min={min}
+      max={max}
+      step={step}
+      maxLength={maxLength}
+      inputMode={inputMode}
+      pattern={pattern}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur ? (e) => onBlur(e.target.value) : undefined}
+    />
+  </div>
+);
+
 const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpdateOperator, onRequestIntake }) => {
   const isAdmin = currentUser?.role === 'trainer';
   const { t } = useLanguage();
@@ -527,7 +577,18 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
   // Render functions
   const renderProfileTab = () => (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+    // Two-column grid; .grid-2-md only kicks in on .ipad scope so this
+    // stays single-column on mobile. We force 2-col here because Intel
+    // already lives behind the desktop sidebar and the profile is the
+    // canonical "form-only" screen the handoff README calls out.
+    <div
+      className="stack-4"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: '14px',
+      }}
+    >
       {/* Billing affordance — top of profile so it's the first thing the
           operator sees when they're managing account-level stuff. Hides
           itself for non-owners (a trainer viewing a client shouldn't see
@@ -536,509 +597,183 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         <BillingPanel operator={operator} />
       )}
 
-      {/* Callsign - full width */}
-      <div style={{ gridColumn: '1 / -1', marginBottom: '8px' }}>
+      {/* Callsign — full-width display block. Admins can edit inline;
+          everyone else sees a read-only .t-display-xl (the canonical
+          green-glow heading from the design system). The mono "name //
+          role" sub-line replaces the old hand-rolled meta string. */}
+      <div style={{ gridColumn: '1 / -1' }}>
         {isAdmin ? (
           <input
             type="text"
             value={state.profile.callsign}
             onChange={(e) => handleProfileChange('callsign', e.target.value)}
+            className="ds-input"
             style={{
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: '26px',
+              fontFamily: 'var(--display)',
+              fontSize: 26,
               fontWeight: 900,
-              color: '#00ff41',
-              marginBottom: '4px',
+              color: 'var(--green)',
               textTransform: 'uppercase',
-              letterSpacing: '4px',
+              letterSpacing: 4,
               textShadow: '0 0 8px rgba(0,255,65,0.3)',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              padding: '8px',
-              boxSizing: 'border-box',
-              width: '100%',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
+              padding: 8,
             }}
           />
         ) : (
-          <div style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '26px',
-            fontWeight: 900,
-            color: '#00ff41',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '4px',
-            textShadow: '0 0 8px rgba(0,255,65,0.3)',
-          }}>
+          <h2 className="t-display-xl" style={{ color: 'var(--green)', textShadow: '0 0 12px rgba(0,255,65,0.35)', letterSpacing: 4, fontSize: 26 }}>
             {operator.callsign}
-          </div>
+          </h2>
         )}
-        <div style={{
-          fontFamily: 'Share Tech Mono, monospace',
-          fontSize: '15px',
-          color: '#666',
-          letterSpacing: '1px',
-          marginTop: '4px',
-        }}>
+        <div className="t-mono-sm" style={{ marginTop: 6, color: 'var(--text-tertiary)' }}>
           {state.profile.name} // {operator.role.toUpperCase()}
         </div>
       </div>
 
-      {/* Name */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Name
-        </label>
-        <input
-          type="text"
-          value={state.profile.name}
-          onChange={(e) => handleProfileChange('name', e.target.value)}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '16px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.1)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-          }}
-        />
-      </div>
+      {/* Identity & vitals — every field uses the .field/.ds-input
+          utility. handleProfileChange takes (field, value) and casts
+          numbers itself; we keep that contract by parsing in the
+          onChange where needed. */}
+      <DsField
+        label="Name"
+        value={state.profile.name}
+        onChange={(v) => handleProfileChange('name', v)}
+        htmlId="intel-name"
+      />
 
-      {/* Access PIN - admin only */}
       {isAdmin && (
-        <div>
-          <label
-            style={{
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: '15px',
-              color: '#888',
-              display: 'block',
-              marginBottom: '4px',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-            }}
-          >
-            Access PIN
-          </label>
-          <input
-            type="text"
-            maxLength={4}
-            pattern="[0-9]*"
-            inputMode="numeric"
-            value={state.profile.pin}
-            onChange={(e) => handleProfileChange('pin', e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
-          />
-        </div>
+        <DsField
+          label="Access PIN"
+          value={state.profile.pin}
+          onChange={(v) => handleProfileChange('pin', v)}
+          maxLength={4}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          htmlId="intel-pin"
+        />
       )}
 
-      {/* Age */}
-      <div>
-        <label
+      <DsField
+        label="Age"
+        type="number"
+        value={state.profile.age}
+        onChange={(v) => handleProfileChange('age', parseInt(v))}
+        htmlId="intel-age"
+      />
+
+      <DsField
+        label="Height"
+        value={state.profile.height}
+        onChange={(v) => handleProfileChange('height', v)}
+        onBlur={(v) => handleProfileChange('height', formatHeightInput(v))}
+        placeholder={`511 → 5'11"`}
+        htmlId="intel-height"
+      />
+
+      <DsField
+        label="Weight (lbs)"
+        type="number"
+        value={state.profile.weight}
+        onChange={(v) => handleProfileChange('weight', parseInt(v))}
+        htmlId="intel-weight"
+      />
+
+      <DsField
+        label="Body Fat (%)"
+        type="number"
+        step={0.1}
+        value={state.profile.bodyFat}
+        onChange={(v) => handleProfileChange('bodyFat', parseFloat(v))}
+        htmlId="intel-bf"
+      />
+
+      <DsField
+        label="Training Age (years)"
+        type="number"
+        value={state.profile.trainingAge}
+        onChange={(v) => handleProfileChange('trainingAge', parseInt(v))}
+        htmlId="intel-training-age"
+      />
+
+      {/* Readiness / Sleep / Stress — wrapped in a single bracket card
+          so the recovery-vitals trio reads as one HUD block per the
+          handoff Daily-Brief pattern. */}
+      <div className="ds-card bracket" style={{ gridColumn: '1 / -1' }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>Recovery</span>
+        <div
           style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 14,
           }}
         >
-          Age
-        </label>
-        <input
-          type="number"
-          value={state.profile.age}
-          onChange={(e) => handleProfileChange('age', parseInt(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
+          <DsField
+            label="Readiness (0-100)"
+            type="number"
+            min={0}
+            max={100}
+            value={state.profile.readinessScore}
+            onChange={(v) => handleProfileChange('readinessScore', parseInt(v))}
+            htmlId="intel-readiness"
+          />
+          <DsField
+            label="Sleep (0-10)"
+            type="number"
+            min={0}
+            max={10}
+            value={state.profile.sleepQuality}
+            onChange={(v) => handleProfileChange('sleepQuality', parseInt(v))}
+            htmlId="intel-sleep"
+          />
+          <DsField
+            label="Stress (0-10)"
+            type="number"
+            min={0}
+            max={10}
+            value={state.profile.stressLevel}
+            onChange={(v) => handleProfileChange('stressLevel', parseInt(v))}
+            htmlId="intel-stress"
+          />
+        </div>
       </div>
 
-      {/* Height */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Height
-        </label>
-        <input
-          type="text"
-          value={state.profile.height}
-          onChange={(e) => handleProfileChange('height', e.target.value)}
-          placeholder="511 → 5'11&quot;"
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            handleProfileChange('height', formatHeightInput(e.target.value));
-          }}
-        />
-      </div>
+      {/* Goals — chip group + add input. Per the handoff, equipment /
+          tag style selectors render as .chip.green with a .chip-x close
+          button. The add input is the canonical .ds-input + .btn so
+          it matches every other form-add affordance in the system. */}
+      <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+        <label htmlFor="intel-new-goal">Goals</label>
 
-      {/* Weight */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Weight (lbs)
-        </label>
-        <input
-          type="number"
-          value={state.profile.weight}
-          onChange={(e) => handleProfileChange('weight', parseInt(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
-      </div>
-
-      {/* Body Fat */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Body Fat (%)
-        </label>
-        <input
-          type="number"
-          step="0.1"
-          value={state.profile.bodyFat}
-          onChange={(e) => handleProfileChange('bodyFat', parseFloat(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
-      </div>
-
-      {/* Training Age */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Training Age (years)
-        </label>
-        <input
-          type="number"
-          value={state.profile.trainingAge}
-          onChange={(e) => handleProfileChange('trainingAge', parseInt(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
-      </div>
-
-      {/* Readiness Score */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Readiness (0-100)
-        </label>
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={state.profile.readinessScore}
-          onChange={(e) => handleProfileChange('readinessScore', parseInt(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
-      </div>
-
-      {/* Sleep Quality */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Sleep (0-10)
-        </label>
-        <input
-          type="number"
-          min="0"
-          max="10"
-          value={state.profile.sleepQuality}
-          onChange={(e) => handleProfileChange('sleepQuality', parseInt(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
-      </div>
-
-      {/* Stress Level */}
-      <div>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '4px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Stress (0-10)
-        </label>
-        <input
-          type="number"
-          min="0"
-          max="10"
-          value={state.profile.stressLevel}
-          onChange={(e) => handleProfileChange('stressLevel', parseInt(e.target.value))}
-          style={{
-            width: '100%',
-            padding: '8px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '15px',
-            backgroundColor: 'rgba(0,255,65,0.02)',
-            border: '1px solid rgba(0,255,65,0.06)',
-            color: '#ddd',
-            boxSizing: 'border-box',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-          }}
-        />
-      </div>
-
-      {/* Goals - full width */}
-      <div style={{ gridColumn: '1 / -1' }}>
-        <label
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#888',
-            display: 'block',
-            marginBottom: '8px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          Goals
-        </label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {state.profile.goals.length === 0 && (
+            <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
+              No goals set yet. Add one below.
+            </span>
+          )}
           {state.profile.goals.map((goal) => (
-            <div
-              key={goal.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 10px',
-                backgroundColor: 'transparent',
-                border: '1px solid #00ff41',
-                borderRadius: '4px',
-                fontFamily: 'Chakra Petch, sans-serif',
-                fontSize: '26px',
-                color: '#00ff41',
-              }}
-            >
+            <span key={goal.id} className="chip green">
               <span>{goal.name}</span>
               <button
                 onClick={() => removeGoal(goal.id)}
+                className="chip-x"
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#ff4444',
-                  cursor: 'pointer',
-                  fontSize: '26px',
+                  color: 'var(--danger)',
                   padding: 0,
+                  cursor: 'pointer',
                 }}
+                aria-label={`Remove goal ${goal.name}`}
               >
                 ×
               </button>
-            </div>
+            </span>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+
+        <div style={{ display: 'flex', gap: 8 }}>
           <input
+            id="intel-new-goal"
             type="text"
             placeholder="Add goal..."
             value={state.newGoal}
@@ -1046,89 +781,45 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             onKeyPress={(e) => {
               if (e.key === 'Enter') addGoal();
             }}
-            style={{
-              flex: 1,
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
+            className="ds-input"
+            style={{ flex: 1 }}
           />
-          <button
-            onClick={addGoal}
-            style={{
-              padding: '8px 16px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
-              backgroundColor: 'transparent',
-              border: '1px solid #00ff41',
-              color: '#00ff41',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            + ADD
+          <button onClick={addGoal} className="btn btn-primary btn-sm" type="button">
+            + Add
           </button>
         </div>
       </div>
 
-      {/* Update Assessment Button */}
-      <div style={{ gridColumn: '1 / -1', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(0,255,65,0.08)' }}>
+      {/* Intake assessment — full-width ghost CTA. Always-on in the
+          bottom of the profile so operators can re-run their intake
+          without hunting through tabs. The button uses .btn.btn-ghost
+          so it sits visually subordinate to the Save Changes primary
+          in the screen header. */}
+      <div
+        style={{
+          gridColumn: '1 / -1',
+          marginTop: 8,
+          paddingTop: 16,
+          borderTop: '1px solid var(--border-green-soft)',
+        }}
+      >
         <button
+          type="button"
           onClick={() => onRequestIntake?.()}
-          style={{
-            width: '100%',
-            padding: '12px 20px',
-            fontFamily: 'Chakra Petch, sans-serif',
-            fontSize: '13px',
-            fontWeight: 600,
-            backgroundColor: 'transparent',
-            border: '1px solid rgba(0,255,65,0.15)',
-            color: '#888',
-            cursor: 'pointer',
-            textTransform: 'uppercase',
-            letterSpacing: '2px',
-            transition: 'all 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.05)';
-            e.currentTarget.style.borderColor = 'rgba(0,255,65,0.3)';
-            e.currentTarget.style.color = '#00ff41';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.borderColor = 'rgba(0,255,65,0.15)';
-            e.currentTarget.style.color = '#888';
-          }}
+          className="btn btn-ghost btn-block"
         >
-          <span style={{ fontSize: '16px' }}>↻</span>
-          {(operator.intake?.completed || operator.profile?.intakeCompleted) ? 'UPDATE FITNESS ASSESSMENT' : 'COMPLETE FITNESS ASSESSMENT'}
+          <span aria-hidden style={{ fontSize: 16 }}>↻</span>
+          {(operator.intake?.completed || operator.profile?.intakeCompleted)
+            ? 'Update Fitness Assessment'
+            : 'Complete Fitness Assessment'}
         </button>
         {(operator.intake?.completedDate || operator.profile?.intakeCompletedDate) && (
-          <div style={{ fontSize: '11px', color: '#555', textAlign: 'center', marginTop: '6px', fontFamily: 'Share Tech Mono, monospace' }}>
-            Last completed: {new Date(operator.intake?.completedDate || operator.profile?.intakeCompletedDate).toLocaleDateString()}
+          <div
+            className="t-mono-sm"
+            style={{ textAlign: 'center', marginTop: 6, color: 'var(--text-dim)' }}
+          >
+            Last completed:{' '}
+            {new Date(operator.intake?.completedDate || operator.profile?.intakeCompletedDate).toLocaleDateString()}
           </div>
         )}
       </div>
@@ -3592,46 +3283,26 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         position: 'relative',
       }}
     >
-      {/* Sidebar (desktop) / Top tabs (mobile) */}
+      {/* Sidebar (desktop) / Top tabs (mobile). The mobile strip uses
+          the canonical .subtabs utility — horizontal scrollable, 2px
+          glowing underline on active, hidden scrollbar — so it
+          matches Planner's sub-nav and any future tabbed screens. */}
       {isMobile ? (
-        <div className="horizontal-scroll" style={{
-          display: 'flex',
-          overflowX: 'auto',
-          borderBottom: '1px solid rgba(0,255,65,0.06)',
-          background: 'rgba(8,8,8,0.5)',
-          flexShrink: 0,
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          gap: '0px',
-        }}>
+        <nav className="subtabs" aria-label="Intel sub-navigation">
           {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
                 key={tab}
+                type="button"
+                className={isActive ? 'active' : ''}
                 onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: '8px 10px',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  borderBottom: isActive ? '2px solid #00ff41' : '2px solid transparent',
-                  color: isActive ? '#00ff41' : '#777',
-                  cursor: 'pointer',
-                  fontFamily: 'Share Tech Mono, monospace',
-                  fontSize: '11px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  whiteSpace: 'nowrap',
-                  minHeight: '36px',
-                  flexShrink: 0,
-                  transition: 'all 0.2s ease',
-                }}
               >
                 {getTabLabels()[tab]}
               </button>
             );
           })}
-        </div>
+        </nav>
       ) : (
         <div
           style={{
@@ -3683,34 +3354,25 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
       {/* Main Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Header with Save Button */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: isMobile ? '10px 16px' : '12px 24px',
-          borderBottom: '1px solid rgba(0,255,65,0.06)',
-          background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
-        }}>
-          <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '15px', color: '#666', letterSpacing: '1px' }}>
+        {/* Save bar — sticky-ish header with breadcrumb mono line on
+            the left and the primary save button on the right. The
+            crumb format mirrors the screen-head .crumb pattern from
+            the design system. */}
+        <div
+          className="row-between"
+          style={{
+            padding: isMobile ? '10px 16px' : '12px 24px',
+            borderBottom: '1px solid var(--border-green-soft)',
+            background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
+          }}
+        >
+          <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
             {operator.callsign} // {activeTab.replace('_', ' ')}
           </div>
           <button
+            type="button"
             onClick={handleSave}
-            style={{
-              padding: '8px 18px',
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: '15px',
-              backgroundColor: '#00ff41',
-              border: 'none',
-              color: '#030303',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '2px',
-              fontWeight: 800,
-              transition: 'all 0.2s ease',
-              minHeight: '36px',
-            }}
+            className="btn btn-primary btn-sm"
           >
             {t('intel.save_changes')}
           </button>
