@@ -16,9 +16,29 @@ interface BattlePlanRefProps {
   onUpdateOperator?: (updated: Operator) => void;
 }
 
-export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, operator, onUpdateOperator }: BattlePlanRefProps) {
+/**
+ * BattlePlanRef — surfaces the operator's active SITREP as the
+ * canonical "Active Battle Plan" card from the design handoff
+ * Planner Month mock. Per the README:
+ *   - eyebrow header ("Active Battle Plan")
+ *   - mono metadata (generated date · operator level)
+ *   - tabbed training / nutrition sections (.subtabs)
+ *
+ * Used in:
+ *   - Planner header (above segmented Month/Week/Day nav)
+ *   - AppShell COC tab
+ */
+export default function BattlePlanRef({
+  sitrep,
+  focus = 'all',
+  compact = false,
+  operator,
+  onUpdateOperator,
+}: BattlePlanRefProps) {
   const [expanded, setExpanded] = useState(!compact);
-  const [activeSection, setActiveSection] = useState<'training' | 'nutrition'>(focus === 'nutrition' ? 'nutrition' : 'training');
+  const [activeSection, setActiveSection] = useState<'training' | 'nutrition'>(
+    focus === 'nutrition' ? 'nutrition' : 'training'
+  );
 
   // Check if Day 1 workout already loaded in planner
   const todayStr = getLocalDateStr();
@@ -37,51 +57,54 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
   const showTraining = focus === 'all' || focus === 'training';
   const showNutrition = focus === 'all' || focus === 'nutrition';
 
-  const s = {
-    container: {
-      background: '#0a0a0a', border: '1px solid rgba(0,255,65,0.12)', borderRadius: 8,
-      marginBottom: 16, overflow: 'hidden',
-    } as React.CSSProperties,
-    header: {
-      padding: '12px 16px', cursor: compact ? 'pointer' : 'default',
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    } as React.CSSProperties,
-    label: {
-      fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#888',
-      letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' as const,
-    },
-    card: {
-      padding: 12, background: '#050505', border: '1px solid #1a1a1a',
-      borderRadius: 6, marginBottom: 8,
-    } as React.CSSProperties,
-    macroBox: (color: string) => ({
-      padding: '10px 6px', background: `${color}08`, border: `1px solid ${color}25`,
-      borderRadius: 6, textAlign: 'center' as const,
-    }),
-    macroNum: (color: string) => ({
-      fontFamily: 'Orbitron, sans-serif', fontSize: 16, color, fontWeight: 700 as const,
-    }),
-    macroLabel: { fontFamily: 'Share Tech Mono, monospace', fontSize: 8, color: '#555', marginTop: 2 },
-    exerciseRow: {
-      padding: '6px 10px', borderBottom: '1px solid #111',
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    } as React.CSSProperties,
-    tabBtn: (active: boolean) => ({
-      flex: 1, padding: '8px 6px', fontFamily: 'Orbitron, sans-serif', fontSize: 9,
-      fontWeight: 700 as const, background: active ? '#00ff4115' : 'transparent',
-      color: active ? '#00ff41' : '#555', border: `1px solid ${active ? '#00ff4130' : '#1a1a1a'}`,
-      borderRadius: 4, cursor: 'pointer', letterSpacing: 0.5,
-    }),
-  };
+  // Macro accent helper — keeps the per-macro color system from
+  // the legacy (calories/amber, protein/green, carbs/light-green,
+  // fat/orange) but reads colors from semantic tokens.
+  const macroBox = (color: string, value: string | number, label: string) => (
+    <div
+      style={{
+        padding: '10px 6px',
+        background: `${color}10`,
+        border: `1px solid ${color}30`,
+        textAlign: 'center',
+      }}
+    >
+      <div
+        className="t-num-display"
+        style={{ color, fontSize: 16, textShadow: `0 0 6px ${color}55` }}
+      >
+        {value}
+      </div>
+      <div className="t-mono-sm" style={{ marginTop: 2, color: 'var(--text-dim)', fontSize: 8 }}>
+        {label}
+      </div>
+    </div>
+  );
 
   const renderExercise = (ex: SitrepExercise, i: number) => (
-    <div key={i} style={s.exerciseRow}>
-      <div style={{ flex: 1 }}>
-        <span style={{ fontSize: 12, color: '#ddd' }}>{i + 1}. {ex.name}</span>
-        {ex.notes && <div style={{ fontSize: 9, color: '#555', marginTop: 1 }}>{ex.notes}</div>}
+    <div
+      key={i}
+      style={{
+        padding: '6px 10px',
+        borderBottom: '1px solid var(--border-green-soft)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 10,
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span className="t-body-sm" style={{ color: 'var(--text-primary)' }}>
+          {i + 1}. {ex.name}
+        </span>
+        {ex.notes && (
+          <div className="t-mono-sm" style={{ color: 'var(--text-dim)', marginTop: 1 }}>
+            {ex.notes}
+          </div>
+        )}
       </div>
-      <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#00ff41' }}>
-        {ex.sets}x{ex.reps}{ex.weight ? ` @ ${ex.weight}` : ''}
+      <span className="t-mono-data" style={{ color: 'var(--green)', fontSize: 11 }}>
+        {ex.sets}×{ex.reps}{ex.weight ? ` @ ${ex.weight}` : ''}
       </span>
     </div>
   );
@@ -91,89 +114,148 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
   const tp = sitrep.trainingPlan;
 
   return (
-    <div style={s.container}>
-      {/* Header */}
-      <div style={s.header} onClick={() => compact && setExpanded(!expanded)}>
+    <div
+      className="ds-card bracket elevated"
+      style={{ marginBottom: 16, padding: 0, overflow: 'hidden' }}
+    >
+      <span className="bl" /><span className="br" />
+
+      {/* Header — eyebrow + mono metadata. Cursor flips to pointer
+          in compact mode so the collapsed header is interactive. */}
+      <div
+        onClick={() => compact && setExpanded(!expanded)}
+        style={{
+          padding: '12px 16px',
+          cursor: compact ? 'pointer' : 'default',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 10,
+        }}
+      >
         <div>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00ff41', letterSpacing: 1 }}>
-            ⚔️ ACTIVE BATTLE PLAN
-          </div>
-          <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#555', marginTop: 2 }}>
-            Generated {new Date(sitrep.generatedDate).toLocaleDateString()} • {(sitrep.operatorLevel || 'beginner').toUpperCase()}
+          <span className="t-eyebrow" style={{ marginBottom: 4 }}>
+            Active Battle Plan
+          </span>
+          <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>
+            Generated {new Date(sitrep.generatedDate).toLocaleDateString()} ·{' '}
+            {(sitrep.operatorLevel || 'beginner').toUpperCase()}
           </div>
         </div>
         {compact && (
-          <span style={{ fontSize: 11, color: '#555' }}>{expanded ? '▲' : '▼'}</span>
+          <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
+            {expanded ? '▲' : '▼'}
+          </span>
         )}
       </div>
 
       {expanded && (
         <div style={{ padding: '0 16px 16px' }}>
-          {/* Section tabs — only if showing both */}
+          {/* Section tabs — only when both training + nutrition are
+              shown. Uses the canonical .subtabs utility. */}
           {showTraining && showNutrition && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-              <button onClick={() => setActiveSection('training')} style={s.tabBtn(activeSection === 'training')}>
-                🏋️ TRAINING
+            <nav
+              className="subtabs"
+              style={{ marginBottom: 12, padding: 0, borderBottom: 'none' }}
+              aria-label="Battle plan sections"
+            >
+              <button
+                type="button"
+                className={activeSection === 'training' ? 'active' : ''}
+                onClick={() => setActiveSection('training')}
+              >
+                🏋️ Training
               </button>
-              <button onClick={() => setActiveSection('nutrition')} style={s.tabBtn(activeSection === 'nutrition')}>
-                🍽️ NUTRITION
+              <button
+                type="button"
+                className={activeSection === 'nutrition' ? 'active' : ''}
+                onClick={() => setActiveSection('nutrition')}
+              >
+                🍽️ Nutrition
               </button>
-            </div>
+            </nav>
           )}
 
           {/* TRAINING SECTION */}
           {((showTraining && activeSection === 'training') || (showTraining && !showNutrition)) && (
             <div>
-              {/* Training Plan Overview */}
+              {/* Training Plan Overview — 3-col mini stat grid. */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
-                <div style={{ textAlign: 'center', padding: 8, background: '#050505', borderRadius: 4, border: '1px solid #1a1a1a' }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: '#00ff41' }}>{tp?.daysPerWeek || 0}</div>
-                  <div style={{ fontSize: 8, color: '#555' }}>DAYS/WK</div>
+                <div className="ds-card" style={{ textAlign: 'center', padding: 8 }}>
+                  <div className="t-num-display" style={{ fontSize: 16 }}>
+                    {tp?.daysPerWeek || 0}
+                  </div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2 }}>
+                    DAYS/WK
+                  </div>
                 </div>
-                <div style={{ textAlign: 'center', padding: 8, background: '#050505', borderRadius: 4, border: '1px solid #1a1a1a' }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00ff41' }}>{tp?.split || 'TBD'}</div>
-                  <div style={{ fontSize: 8, color: '#555' }}>SPLIT</div>
+                <div className="ds-card" style={{ textAlign: 'center', padding: 8 }}>
+                  <div className="t-display-m" style={{ color: 'var(--green)', fontSize: 11 }}>
+                    {tp?.split || 'TBD'}
+                  </div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2 }}>
+                    SPLIT
+                  </div>
                 </div>
-                <div style={{ textAlign: 'center', padding: 8, background: '#050505', borderRadius: 4, border: '1px solid #1a1a1a' }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#facc15' }}>{tp?.sessionDuration || 'TBD'}</div>
-                  <div style={{ fontSize: 8, color: '#555' }}>DURATION</div>
+                <div className="ds-card" style={{ textAlign: 'center', padding: 8 }}>
+                  <div className="t-display-m" style={{ color: 'var(--warn)', fontSize: 11 }}>
+                    {tp?.sessionDuration || 'TBD'}
+                  </div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)', fontSize: 8, marginTop: 2 }}>
+                    DURATION
+                  </div>
                 </div>
               </div>
 
               {/* Progression + Deload */}
-              <div style={s.card}>
-                <div style={s.label}>PROGRESSION</div>
-                <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.5, marginBottom: 6 }}>{tp?.progressionStrategy || ''}</div>
-                <div style={s.label}>DELOAD</div>
-                <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.5 }}>{tp?.deloadProtocol || ''}</div>
+              <div className="ds-card" style={{ padding: 12, marginBottom: 8 }}>
+                <span className="t-eyebrow" style={{ marginBottom: 6 }}>Progression</span>
+                <p className="t-body-sm" style={{ color: 'var(--text-primary)', marginBottom: 6 }}>
+                  {tp?.progressionStrategy || ''}
+                </p>
+                <span className="t-eyebrow" style={{ marginBottom: 6 }}>Deload</span>
+                <p className="t-body-sm" style={{ color: 'var(--text-primary)' }}>
+                  {tp?.deloadProtocol || ''}
+                </p>
               </div>
 
               {/* Today's Workout from SITREP */}
               {today && (
-                <div style={s.card}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={s.label}>DAY 1 — {(today.dayName || '').toUpperCase()}: {today.title}</div>
-                    {today.duration && <span style={{ fontSize: 9, color: '#555' }}>{today.duration}</span>}
+                <div className="ds-card" style={{ padding: 12, marginBottom: 8 }}>
+                  <div className="row-between" style={{ marginBottom: 8 }}>
+                    <span className="t-eyebrow">
+                      Day 1 — {(today.dayName || '').toUpperCase()}: {today.title}
+                    </span>
+                    {today.duration && (
+                      <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
+                        {today.duration}
+                      </span>
+                    )}
                   </div>
-                  {today.warmup && <div style={{ fontSize: 10, color: '#888', marginBottom: 6 }}>Warmup: {today.warmup}</div>}
+                  {today.warmup && (
+                    <div className="t-body-sm" style={{ color: 'var(--text-tertiary)', marginBottom: 6 }}>
+                      Warmup: {today.warmup}
+                    </div>
+                  )}
                   {(today.exercises || []).map((ex, i) => renderExercise(ex, i))}
-                  {today.cooldown && <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>Cooldown: {today.cooldown}</div>}
+                  {today.cooldown && (
+                    <div className="t-body-sm" style={{ color: 'var(--text-tertiary)', marginTop: 6 }}>
+                      Cooldown: {today.cooldown}
+                    </div>
+                  )}
 
-                  {/* Load Day 1 to Planner */}
+                  {/* Load Day 1 to Planner — primary CTA, flips to
+                      a "loaded" affordance once the workout is in
+                      the planner so users see confirmation. */}
                   {operator && onUpdateOperator && (
                     <button
+                      type="button"
                       onClick={handleLoadDay1}
                       disabled={workoutAlreadyLoaded}
-                      style={{
-                        width: '100%', marginTop: 8, padding: 8,
-                        background: workoutAlreadyLoaded ? 'rgba(0,255,65,0.08)' : '#00ff41',
-                        color: workoutAlreadyLoaded ? '#00ff41' : '#000',
-                        border: workoutAlreadyLoaded ? '1px solid rgba(0,255,65,0.2)' : 'none',
-                        borderRadius: 4, cursor: workoutAlreadyLoaded ? 'default' : 'pointer',
-                        fontFamily: 'Orbitron, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1,
-                      }}
+                      className={`btn btn-sm btn-block ${workoutAlreadyLoaded ? 'btn-secondary' : 'btn-primary'}`}
+                      style={{ marginTop: 8 }}
                     >
-                      {workoutAlreadyLoaded ? '✓ LOADED IN PLANNER' : '⚔️ LOAD DAY 1 TO PLANNER'}
+                      {workoutAlreadyLoaded ? '✓ Loaded in Planner' : '⚔️ Load Day 1 to Planner'}
                     </button>
                   )}
                 </div>
@@ -181,11 +263,16 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
 
               {/* Priority Focus */}
               {(sitrep.priorityFocus || []).length > 0 && (
-                <div style={s.card}>
-                  <div style={s.label}>PRIORITY FOCUS</div>
+                <div className="ds-card" style={{ padding: 12, marginBottom: 8 }}>
+                  <span className="t-eyebrow" style={{ marginBottom: 6 }}>Priority Focus</span>
                   {sitrep.priorityFocus.map((p, i) => (
-                    <div key={i} style={{ fontSize: 11, color: '#ccc', padding: '3px 0' }}>
-                      <span style={{ color: '#00ff41', marginRight: 6 }}>{i + 1}.</span>{p}
+                    <div
+                      key={i}
+                      className="t-body-sm"
+                      style={{ color: 'var(--text-primary)', padding: '3px 0' }}
+                    >
+                      <span style={{ color: 'var(--green)', marginRight: 6 }}>{i + 1}.</span>
+                      {p}
                     </div>
                   ))}
                 </div>
@@ -196,62 +283,71 @@ export default function BattlePlanRef({ sitrep, focus = 'all', compact = false, 
           {/* NUTRITION SECTION */}
           {((showNutrition && activeSection === 'nutrition') || (showNutrition && !showTraining)) && np && (
             <div>
-              {/* Macro Targets */}
+              {/* Macro Targets — 4-col grid with per-macro color. */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
-                <div style={s.macroBox('#ffb800')}>
-                  <div style={s.macroNum('#ffb800')}>{np.dailyCalories}</div>
-                  <div style={s.macroLabel}>CAL</div>
-                </div>
-                <div style={s.macroBox('#00ff41')}>
-                  <div style={s.macroNum('#00ff41')}>{np.protein}g</div>
-                  <div style={s.macroLabel}>PROTEIN</div>
-                </div>
-                <div style={s.macroBox('#4ade80')}>
-                  <div style={s.macroNum('#4ade80')}>{np.carbs}g</div>
-                  <div style={s.macroLabel}>CARBS</div>
-                </div>
-                <div style={s.macroBox('#ff6b35')}>
-                  <div style={s.macroNum('#ff6b35')}>{np.fat}g</div>
-                  <div style={s.macroLabel}>FAT</div>
-                </div>
+                {macroBox('#ffb800', np.dailyCalories, 'CAL')}
+                {macroBox('#00ff41', `${np.protein}g`, 'PROTEIN')}
+                {macroBox('#4ade80', `${np.carbs}g`, 'CARBS')}
+                {macroBox('#ff6b35', `${np.fat}g`, 'FAT')}
               </div>
 
               {/* Strategy */}
-              <div style={s.card}>
-                <div style={s.label}>NUTRITION STRATEGY</div>
-                <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.5, marginBottom: 6 }}>{np.approach}</div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 10 }}>
-                  <span style={{ color: '#00ff41' }}>💧 {np.hydrationOz}oz/day</span>
-                  <span style={{ color: '#facc15' }}>🍽️ {np.mealsPerDay} meals/day</span>
+              <div className="ds-card" style={{ padding: 12, marginBottom: 8 }}>
+                <span className="t-eyebrow" style={{ marginBottom: 6 }}>Nutrition Strategy</span>
+                <p className="t-body-sm" style={{ color: 'var(--text-primary)', marginBottom: 6 }}>
+                  {np.approach}
+                </p>
+                <div style={{ display: 'flex', gap: 12 }} className="t-mono-sm">
+                  <span style={{ color: 'var(--green)' }}>💧 {np.hydrationOz}oz/day</span>
+                  <span style={{ color: 'var(--warn)' }}>🍽️ {np.mealsPerDay} meals/day</span>
                 </div>
               </div>
 
               {/* Sample Day */}
               {(np.sampleDay || []).length > 0 && (
-                <div style={s.card}>
-                  <div style={s.label}>SAMPLE DAY</div>
+                <div className="ds-card" style={{ padding: 12, marginBottom: 8 }}>
+                  <span className="t-eyebrow" style={{ marginBottom: 6 }}>Sample Day</span>
                   {np.sampleDay.map((meal, i) => (
-                    <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid #111' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                        <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#facc15' }}>{meal.time} — {meal.name}</span>
-                        <span style={{ fontSize: 9, color: '#888' }}>{meal.calories} cal</span>
+                    <div
+                      key={i}
+                      style={{ padding: '6px 0', borderBottom: '1px solid var(--border-green-soft)' }}
+                    >
+                      <div className="row-between" style={{ marginBottom: 2 }}>
+                        <span className="t-display-m" style={{ color: 'var(--warn)', fontSize: 9 }}>
+                          {meal.time} — {meal.name}
+                        </span>
+                        <span className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
+                          {meal.calories} cal
+                        </span>
                       </div>
-                      <div style={{ fontSize: 10, color: '#aaa', marginBottom: 2 }}>{meal.description}</div>
-                      <div style={{ display: 'flex', gap: 8, fontSize: 9 }}>
-                        <span style={{ color: '#00ff41' }}>{meal.protein}g P</span>
+                      <div className="t-body-sm" style={{ color: 'var(--text-secondary)', marginBottom: 2 }}>
+                        {meal.description}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }} className="t-mono-sm">
+                        <span style={{ color: 'var(--green)' }}>{meal.protein}g P</span>
                         <span style={{ color: '#4ade80' }}>{meal.carbs}g C</span>
-                        <span style={{ color: '#ff6b35' }}>{meal.fat}g F</span>
+                        <span style={{ color: 'var(--amber)' }}>{meal.fat}g F</span>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Gunny Notes */}
+              {/* Gunny Notes — amber-toned subcard so it stands out
+                  as a coaching aside rather than reference data. */}
               {np.notes && (
-                <div style={{ ...s.card, borderColor: 'rgba(250,204,21,0.15)' }}>
-                  <div style={{ ...s.label, color: '#facc15' }}>GUNNY NOTES</div>
-                  <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.5 }}>{np.notes}</div>
+                <div
+                  className="ds-card"
+                  style={{
+                    padding: 12,
+                    background: 'rgba(255,140,0,0.04)',
+                    borderColor: 'var(--border-amber)',
+                  }}
+                >
+                  <span className="t-eyebrow amber" style={{ marginBottom: 6 }}>Gunny Notes</span>
+                  <p className="t-body-sm" style={{ color: 'var(--text-primary)' }}>
+                    {np.notes}
+                  </p>
                 </div>
               )}
             </div>
