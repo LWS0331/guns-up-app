@@ -367,10 +367,13 @@ export default function LandingPage() {
         <div className={styles.sectionWrap}>
           <div className={styles.tiers}>
             {[
-              { name: 'RECON', model: '// CLAUDE HAIKU', price: '$2', mo: '/mo', annual: '$19.92 annual · save $4', feats: ['Core Gunny AI (Haiku)', 'Full Planner + logging', 'Macro tracking', 'Profile-only context', 'Community feed'], cta: 'Enlist', featured: false },
-              { name: 'OPERATOR', model: '// CLAUDE SONNET', price: '$5', mo: '/mo', annual: '$49.80 annual · save $10', feats: ['Everything in RECON', 'Gunny with Sonnet brain', 'SITREP battle plan', 'Workout history context', 'Injury-aware sub engine'], cta: 'Deploy', featured: false },
-              { name: 'COMMANDER', model: '// CLAUDE OPUS', price: '$15', mo: '/mo', annual: '$149.40 annual · save $30', feats: ['Everything in OPERATOR', 'Gunny with Opus brain', 'Full nutrition context (72h)', 'Voice PTT + transcription', 'Wearable sync + HR zones', 'Priority Gunny response'], cta: 'Command', featured: true, badge: 'Most Deployed' },
-              { name: 'WARFIGHTER', model: '// OPUS · WHITE GLOVE', price: '$49', mo: '.99/mo', annual: '$499.90 annual · save $100', feats: ['Everything in COMMANDER', 'Human trainer assignment', 'Weekly custom brief', 'Trainer note pipeline → Gunny', 'Beta feature access', 'Priority onboarding'], cta: 'Suit Up', featured: false },
+              // `key` matches operator.tier + lib/stripe.ts::TIER_PRICES so the
+              // CTA can hand it straight to /api/stripe/checkout. See the
+              // tier-CTA Link href below for the routing contract.
+              { key: 'haiku', name: 'RECON', model: '// CLAUDE HAIKU', price: '$2', mo: '/mo', annual: '$19.92 annual · save $4', feats: ['Core Gunny AI (Haiku)', 'Full Planner + logging', 'Macro tracking', 'Profile-only context', 'Community feed'], cta: 'Enlist', featured: false },
+              { key: 'sonnet', name: 'OPERATOR', model: '// CLAUDE SONNET', price: '$5', mo: '/mo', annual: '$49.80 annual · save $10', feats: ['Everything in RECON', 'Gunny with Sonnet brain', 'SITREP battle plan', 'Workout history context', 'Injury-aware sub engine'], cta: 'Deploy', featured: false },
+              { key: 'opus', name: 'COMMANDER', model: '// CLAUDE OPUS', price: '$15', mo: '/mo', annual: '$149.40 annual · save $30', feats: ['Everything in OPERATOR', 'Gunny with Opus brain', 'Full nutrition context (72h)', 'Voice PTT + transcription', 'Wearable sync + HR zones', 'Priority Gunny response'], cta: 'Command', featured: true, badge: 'Most Deployed' },
+              { key: 'white_glove', name: 'WARFIGHTER', model: '// OPUS · WHITE GLOVE', price: '$49', mo: '.99/mo', annual: '$499.90 annual · save $100', feats: ['Everything in COMMANDER', 'Human trainer assignment', 'Weekly custom brief', 'Trainer note pipeline → Gunny', 'Beta feature access', 'Priority onboarding'], cta: 'Suit Up', featured: false },
             ].map((t) => (
               <article
                 key={t.name}
@@ -389,8 +392,13 @@ export default function LandingPage() {
                 </ul>
                 <Link
                   className={styles.tierCta}
-                  href="/login"
-                  onClick={() => trackLandingCta('tier_select', { tier: t.name.toLowerCase() })}
+                  // Tier CTA → /login carrying tier + cycle. After the user
+                  // authenticates, /login posts to /api/stripe/checkout with
+                  // these params and redirects to the Stripe-hosted checkout
+                  // session. If they're already logged in, /login auto-bounces
+                  // to / which honors the same params.
+                  href={`/login?tier=${t.key}&cycle=monthly`}
+                  onClick={() => trackLandingCta('tier_select', { tier: t.key })}
                 >
                   {t.cta}
                 </Link>
