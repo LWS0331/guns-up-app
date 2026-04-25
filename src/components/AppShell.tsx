@@ -101,6 +101,10 @@ interface ChatMessage {
   role: 'user' | 'gunny';
   text: string;
   timestamp?: number;
+  /** Optional base64 data-URL attached to a user message — forwarded
+   *  to /api/gunny as a Claude vision content block. Used by the
+   *  workout-mode form-check upload path. */
+  image?: string;
 }
 
 interface OperatorContextData {
@@ -1178,16 +1182,20 @@ const AppShell: React.FC<AppShellProps> = ({
   }, []);
 
   // Voice "over" trigger — sends directly to Gunny without touching the phone
-  // Does NOT open the Gunny panel — response shows as overlay on workout screen
-  const sendGunnyVoiceMessage = useCallback((text: string) => {
+  // Does NOT open the Gunny panel — response shows as overlay on workout screen.
+  // The optional `image` field is forwarded to /api/gunny which already
+  // accepts base64 images on user messages (route.ts:1090-1104) — used by
+  // NotesFormPopover's "Upload Form Check" path.
+  const sendGunnyVoiceMessage = useCallback((text: string, opts?: { image?: string }) => {
     if (!text.trim()) return;
     // DON'T open Gunny panel — keep workout screen focused
     // Still log to chat history so user can review later
     setTimeout(() => {
-      const userMessage: ChatMessage = {
+      const userMessage: ChatMessage & { image?: string } = {
         role: 'user',
         text: text,
         timestamp: Date.now(),
+        ...(opts?.image ? { image: opts.image } : {}),
       };
       setGunnyMessages(prev => [...prev, userMessage]);
       setGunnyInput('');

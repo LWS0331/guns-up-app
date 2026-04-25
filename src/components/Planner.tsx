@@ -14,7 +14,13 @@ import WarmupMovementCard from '@/components/WarmupMovementCard';
 import HRZoneGauge from '@/components/HRZoneGauge';
 import VitalsSticky from '@/components/VitalsSticky';
 import Icon from '@/components/Icons';
-import WorkoutPTT from '@/components/WorkoutPTT';
+// WorkoutPTT (right-side mic FAB) was removed per the canonical spec —
+// the only floating element on Workout Mode is the GunnyFab on the LEFT.
+// Voice commands are still parsed via VoiceInput.tsx wherever they're
+// triggered (chat composer long-press, Gunny panel) — see
+// src/components/VoiceInput.tsx for the parser. Form-check video upload
+// is handled inside the per-exercise NotesFormPopover instead.
+import NotesFormPopover from '@/components/NotesFormPopover';
 import { parseMovementText } from '@/lib/parseMovementText';
 import { buildSearchUrl } from '@/lib/videoUrl';
 import { getAuthToken } from '@/lib/authClient';
@@ -223,7 +229,10 @@ interface PlannerProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
   onOpenGunny?: () => void;
-  onSendGunnyMessage?: (text: string) => void;
+  /** Send a message to Gunny from inside Workout Mode. Opts.image is a
+   *  data-URL (base64) that gets attached as a Claude vision content
+   *  block — used by the form-check upload path in NotesFormPopover. */
+  onSendGunnyMessage?: (text: string, opts?: { image?: string }) => void;
   gunnyVoiceResponse?: string | null; // Gunny's spoken response — show as overlay
   onDismissGunnyResponse?: () => void;
   onWorkoutModeChange?: (state: WorkoutModeState) => void;
@@ -279,6 +288,20 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [autocompleteFor, setAutocompleteFor] = useState<number | null>(null);
   const [workoutMode, setWorkoutMode] = useState(false); // Workout execution mode
   const [activeBlockIdx, setActiveBlockIdx] = useState(0);
+
+  // ─── Workout-mode stepped flow ──────────────────────────────────────────
+  // Per the canonical spec, Workout Mode is a guided stepper — one screen at
+  // a time so the active phase always fits on iPhone + iPad without
+  // truncation or scroll-hidden affordances. Steps are derived from the
+  // workout's warmup / blocks / cooldown shape on each render. The stepIdx
+  // here is just the cursor; the steps[] array is computed inside
+  // renderWorkoutMode() so it stays in sync with the live workout edits
+  // (Add Exercise / Remove Last during execution).
+  const [stepIdx, setStepIdx] = useState(0);
+
+  // Notes / Form-Demo / Photo-Upload popover. Holds the active block id
+  // when open so the popover knows which exercise's notes to bind to.
+  const [notesPopoverFor, setNotesPopoverFor] = useState<string | null>(null);
   const [restTimer, setRestTimer] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
   const [restTimerMax, setRestTimerMax] = useState(0); // for progress ring calculation
@@ -1772,6 +1795,66 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       });
     };
 
+    // ─── Stepped flow scaffolding ──────────────────────────────────────────
+    // The canonical Workout Mode is a guided stepper. Steps are derived
+    // each render from the workout's warmup / blocks / cooldown shape so
+    // mid-workout edits (Add Exercise / Remove Last) re-flow cleanly.
+    type WorkoutStep =
+      | { kind: 'warmup' }
+      | { kind: 'exercise'; blockIdx: number }
+      | { kind: 'cooldown' };
+
+    const hasWarmup = !!workout.warmup && parseMovementText(workout.warmup).length > 0;
+    const hasCooldown = !!workout.cooldown && parseMovementText(workout.cooldown).length > 0;
+
+    const steps: WorkoutStep[] = [];
+    if (hasWarmup) steps.push({ kind: 'warmup' });
+    workout.blocks.forEach((_, i) => steps.push({ kind: 'exercise', blockIdx: i }));
+    if (hasCooldown) steps.push({ kind: 'cooldown' });
+    if (steps.length === 0) steps.push({ kind: 'exercise', blockIdx: 0 }); // fallback
+
+    const safeStepIdx = Math.max(0, Math.min(stepIdx, steps.length - 1));
+    const currentStep = steps[safeStepIdx];
+    const isLastStep = safeStepIdx === steps.length - 1;
+    const isFirstStep = safeStepIdx === 0;
+
+    // Sync activeBlockIdx with the cursor when we're on an exercise step
+    // so the existing "active block" highlighting + voice-command targeting
+    // stay aligned with the stepper position.
+    if (currentStep.kind === 'exercise' && currentStep.blockIdx !== activeBlockIdx) {
+      // Defer to a microtask to avoid a setState-during-render warning.
+      Promise.resolve().then(() => setActiveBlockIdx(currentStep.blockIdx));
+    }
+
+    const goPrev = () => {
+      if (!isFirstStep) setStepIdx(safeStepIdx - 1);
+    };
+    const goNext = () => {
+      if (!isLastStep) {
+        setStepIdx(safeStepIdx + 1);
+      } else {
+        // Last step's Next is "Complete Workout" — fire the existing save flow.
+        handleSaveResults();
+      }
+    };
+
+    // Compute % progress for the stepper readout. Counts logged sets across
+    // all exercise blocks plus a 1-step bonus each for warmup/cooldown
+    // when the user has scrolled past them.
+    const totalSets = workout.blocks.reduce((acc, b) => {
+      if (b.type === 'exercise') {
+        const ps = parseInt(b.prescription?.match(/(\d+)\s*x/)?.[1] || '3');
+        return acc + ps;
+      }
+      return acc + 1; // conditioning block counts as 1
+    }, 0);
+    const completedSetsCount = Object.values(results).reduce((acc, blockData) => {
+      return acc + (blockData.sets || []).filter(s => s.completed).length;
+    }, 0);
+    const progressPct = totalSets > 0
+      ? Math.round((completedSetsCount / totalSets) * 100)
+      : 0;
+
     return (
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
         {/* Fallback HTML5 audio — short data-URI beep (pure tone via WAV header) */}
@@ -1805,9 +1888,37 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             </button>
           </div>
         </div>
-        <h3 className="t-display-l" style={{ color: 'var(--green)', marginBottom: 12 }}>
+        <h3
+          className="t-display-l"
+          style={{
+            color: 'var(--green)',
+            marginBottom: 4,
+            textShadow: '0 0 12px rgba(0,255,65,0.5)', // canonical glow on accent text
+          }}
+        >
           {workout.title}
         </h3>
+        {/* Workout sub-line — mono metadata strip below the H1 per
+            the canonical screenshot 3. Composes the day tag note
+            (from operator.dayTags) + the active voice (Onyx /
+            Atlas / etc.) so the user sees the live "context strip"
+            for this session at a glance. Renders only the fragments
+            that have data — no orphan separators. */}
+        {(() => {
+          const tag = getDayTag(dateStr);
+          const fragments: string[] = [];
+          if (tag?.note) fragments.push(tag.note.toUpperCase());
+          if (selectedVoice) fragments.push(`Voice: ${selectedVoice}`);
+          if (fragments.length === 0) return null;
+          return (
+            <div
+              className="t-mono-sm"
+              style={{ color: 'var(--text-secondary)', marginBottom: 12, letterSpacing: 1 }}
+            >
+              {fragments.join(' · ')}
+            </div>
+          );
+        })()}
 
         {/* ═══ TACTICAL HUD — handoff .vitals-sticky module ═══
             The canonical Workout Mode mockup DOES use this sticky
@@ -1920,44 +2031,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* ═══ VOICE SELECTOR — design-system .chip group.
-            Each option is a .chip; the active voice gets the
-            green tone treatment. The label trigger is also a .chip
-            so the whole row reads as a chip group. */}
-        {workoutMode && (
-          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setShowVoiceSelect(!showVoiceSelect)}
-              className={`chip ${showVoiceSelect ? 'green' : ''}`}
-              aria-expanded={showVoiceSelect}
-              aria-label={`Voice: ${selectedVoice}, click to change`}
-            >
-              Voice: {selectedVoice.toUpperCase()}
-            </button>
-            {showVoiceSelect && (
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {VOICE_OPTIONS.map(v => (
-                  <button
-                    type="button"
-                    key={v.id}
-                    onClick={() => {
-                      setSelectedVoice(v.id);
-                      setPreferredVoice(v.id);
-                      setShowVoiceSelect(false);
-                      // Play a preview
-                      speak('Copy that.', v.id);
-                    }}
-                    className={`chip ${v.id === selectedVoice ? 'green' : ''}`}
-                    title={v.desc}
-                  >
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Voice selector lives inline in the workout sub-line above
+            now (just the active voice as readout). The picker chip
+            row was an orphan in the canonical layout — voice changes
+            move into a settings popover (TODO: add icon button in
+            the workout-mode header that pops a chip group). */}
 
         {/* Rest Timer card — handoff treatment: bracket card that
             shifts tone with state.
@@ -2238,9 +2316,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         {/* ═══ WARMUP — single shared amber bracket card per spec.
             Canonical handoff renders the warmup as ONE card holding
             the entire movement list (eyebrow + Demo buttons inline),
-            not a card-per-movement. The header doubles as the
-            collapse/expand control. */}
-        {workout.warmup && parseMovementText(workout.warmup).length > 0 && (
+            not a card-per-movement. Per the stepped-flow spec,
+            warmup is its own step — only renders when stepIdx is on
+            the warmup phase. Always-expanded on its dedicated step
+            (collapse control becomes a no-op visual cue). */}
+        {currentStep.kind === 'warmup' && workout.warmup && parseMovementText(workout.warmup).length > 0 && (
           <div className="ds-card bracket amber amber-tone" style={{ marginBottom: 12, padding: 0 }}>
             <button
               onClick={() => setWarmupExpanded(v => !v)}
@@ -2289,8 +2369,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* Exercise blocks in execution mode */}
-        {workout.blocks.map((block, idx) => {
+        {/* Exercise blocks in execution mode — stepped: only the
+            block matching the current step renders. Inactive blocks
+            are skipped entirely (the stepper footer is the only
+            way to switch). The "click an inactive card to focus it"
+            affordance from the legacy long-scroll layout no longer
+            applies because there's only ever one card on screen. */}
+        {currentStep.kind === 'exercise' && workout.blocks.map((block, idx) => {
+          if (idx !== currentStep.blockIdx) return null;
           if (block.type !== 'exercise') {
             const condBlock = block as ConditioningBlock;
             const blockData = results[block.id] || { sets: [{ weight: 0, reps: 0, completed: false }] };
@@ -2391,7 +2477,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           // Auto-start rest timer + advance "now" pointer when
           // the user logs the active set. Extracted as a callback
           // so the LOG SET button + Enter-key path can both call it.
+          // After the LAST set of the block is logged, auto-advance
+          // the stepper cursor to the next step (next exercise or
+          // cooldown) — fewer taps per the canonical "active set is
+          // the primary item, navigate to the next" flow.
           const logCurrentSet = () => {
+            const isLastSetOfBlock = nowSetIdx === parsedSets - 1;
             setResults(prev => {
               const blockData = { ...(prev[block.id] || { sets: [] }) };
               const sets = [...blockData.sets];
@@ -2410,6 +2501,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 setRestTimerMax(totalSecs);
                 setRestRunning(true);
               }
+            }
+            // Stepped flow: if this was the last set of the block,
+            // auto-advance the stepper cursor to the next step. Defer
+            // by one tick so the rest timer + completion state finish
+            // committing first. If we're already on the final step,
+            // do nothing — the user explicitly hits "Complete" via
+            // the stepper footer to save and exit.
+            if (isLastSetOfBlock && !isLastStep) {
+              setTimeout(() => setStepIdx(prev => Math.min(prev + 1, steps.length - 1)), 50);
             }
           };
 
@@ -2466,16 +2566,38 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 </div>
               )}
 
-              <div className="row-between" style={{ marginBottom: 4, gap: 8, flexWrap: 'wrap' }}>
-                <div className="t-display-l" style={{ color: 'var(--green)', fontSize: 18 }}>
+              <div className="row-between" style={{ marginBottom: 4, gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <div className="t-display-l" style={{ color: 'var(--green)', fontSize: 18, flex: 1, minWidth: 0 }}>
                   {block.exerciseName}
                 </div>
+                {/* Notes / Form Demo / Form Check icon — single tap
+                    opens the NotesFormPopover holding the legacy
+                    inline notes field, the demo-video trigger, and
+                    the new "upload form check photo to Gunny" path.
+                    Putting these behind one icon keeps the active
+                    set card focused on WEIGHT / REPS / RPE / LOG. */}
+                {isActive && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setNotesPopoverFor(block.id); }}
+                    className="btn btn-ghost btn-sm"
+                    aria-label="Open notes, form demo, and form-check upload"
+                    style={{ padding: '6px 10px', flexShrink: 0 }}
+                  >
+                    <Icon.Edit size={11} /> Notes
+                  </button>
+                )}
               </div>
               <div className="t-mono-sm" style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
                 {block.prescription}
               </div>
 
-              {(block.videoUrl || getVideoUrl(block.exerciseName)) && (
+              {/* Inline Form Demo button kept ONLY for inactive blocks
+                  (out-of-step exercise cards rendered for any future
+                  case where multi-block render returns). For the
+                  active block, demo lives inside the NotesFormPopover
+                  to free up vertical space. */}
+              {!isActive && (block.videoUrl || getVideoUrl(block.exerciseName)) && (
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
@@ -2587,40 +2709,19 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 </>
               )}
 
-              {/* Notes — intel for Gunny. Always visible on active
-                  block, hidden on inactive. */}
-              {isActive && (
-                <input
-                  type="text"
-                  placeholder="Notes (e.g. banded felt hard, left knee tight)"
-                  value={(results[block.id] as { sets: unknown[]; notes?: string })?.notes || ''}
-                  onChange={e => {
-                    const notes = e.target.value;
-                    setResults(prev => ({
-                      ...prev,
-                      [block.id]: { ...prev[block.id], notes }
-                    }));
-                  }}
-                  className="ds-input"
-                  style={{
-                    marginTop: 12,
-                    padding: '6px 10px',
-                    fontSize: 11,
-                    fontFamily: 'var(--mono)',
-                    color: 'var(--text-secondary)',
-                    borderColor: 'var(--border-green-soft)',
-                  }}
-                />
-              )}
+              {/* Inline notes input was removed — relocated into
+                  NotesFormPopover, opened via the "Notes" icon
+                  button in the card header. Keeps the active card
+                  focused on WEIGHT / REPS / RPE / LOG. */}
             </div>
           );
         })}
 
         {/* Mid-workout edit controls — secondary affordances styled
-            as ghost (add) and danger-outline (remove) buttons. The
-            dashed-border treatment from the legacy is preserved
-            via inline style since it's a subtle "in-progress edit"
-            cue not in the canonical .btn variants. */}
+            as ghost (add) and danger-outline (remove) buttons. Only
+            rendered on exercise steps so warmup/cooldown screens
+            stay focused on the movement list. */}
+        {currentStep.kind === 'exercise' && (
         <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 4 }}>
           <button
             type="button"
@@ -2663,9 +2764,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             − Remove Last
           </button>
         </div>
+        )}
 
-        {/* ═══ COOLDOWN — collapsible, auto-expands when last exercise set is completed ═══ */}
-        {workout.cooldown && parseMovementText(workout.cooldown).length > 0 && (() => {
+        {/* ═══ COOLDOWN — single amber bracket card per the stepped
+            flow spec. Only renders when the cursor is on the
+            cooldown phase. Same shape as warmup. */}
+        {currentStep.kind === 'cooldown' && workout.cooldown && parseMovementText(workout.cooldown).length > 0 && (() => {
           const lastExercise = [...workout.blocks].reverse().find(b => b.type === 'exercise') as ExerciseBlock | undefined;
           const lastDone = lastExercise ? (results[lastExercise.id]?.sets?.every(s => s.completed) ?? false) : false;
           const isExpanded = cooldownExpanded || lastDone;
@@ -2714,25 +2818,100 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </button>
         )}
 
-        {/* Complete Workout — primary save action. Bigger padding
-            via inline override since this is a high-stakes action
-            and visually anchors the bottom of the screen. */}
-        <button
-          type="button"
-          onClick={handleSaveResults}
-          className="btn btn-primary btn-block"
-          style={{ marginTop: 12, padding: 14, fontSize: 12, letterSpacing: 2 }}
-        >
-          Complete Workout
-        </button>
-
-        {/* ═══ Floating Push-To-Talk — voice to Gunny without leaving workout mode ═══ */}
-        <WorkoutPTT
-          onSend={(text) => {
-            if (onSendGunnyMessage) onSendGunnyMessage(text);
+        {/* ═══ STEPPER FOOTER — ← BACK · STEP X / Y · NEXT → ═══
+            Replaces the legacy "Complete Workout" CTA. The Next
+            button on the last step IS the Complete Workout action,
+            so the user always advances forward through the same
+            affordance. Sits in normal flow at the bottom of the
+            scroll container — combined with the sticky VitalsSticky
+            HUD at top, the active card is always sandwiched
+            between two anchors. */}
+        <div
+          className="workout-stepper"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto 1fr',
+            alignItems: 'center',
+            gap: 8,
+            marginTop: 16,
+            marginBottom: 12,
+            padding: '12px 0',
+            borderTop: '1px solid var(--border-green-soft)',
           }}
-          onLocalCommand={(cmd) => handleVoiceCommand(cmd)}
-        />
+        >
+          <button
+            type="button"
+            onClick={goPrev}
+            disabled={isFirstStep}
+            className="btn btn-ghost btn-sm"
+            aria-label="Previous step"
+            style={{ justifySelf: 'start' }}
+          >
+            <Icon.ArrowLeft size={12} /> Back
+          </button>
+          <div
+            className="t-mono-sm"
+            style={{
+              color: 'var(--text-secondary)',
+              textAlign: 'center',
+              letterSpacing: 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ color: 'var(--green)' }}>STEP {safeStepIdx + 1}</span>
+            <span style={{ color: 'var(--text-dim)' }}> / {steps.length}</span>
+            <span style={{ color: 'var(--text-tertiary)', marginLeft: 8 }}>· {progressPct}%</span>
+          </div>
+          <button
+            type="button"
+            onClick={goNext}
+            className={`btn btn-sm ${isLastStep ? 'btn-primary' : 'btn-amber'}`}
+            aria-label={isLastStep ? 'Complete workout' : 'Next step'}
+            style={{ justifySelf: 'end' }}
+          >
+            {isLastStep ? 'Complete' : 'Next'} <Icon.ArrowRight size={12} />
+          </button>
+        </div>
+
+        {/* ═══ NOTES / FORM-DEMO / FORM-CHECK popover ═══
+            Triggered by the "Notes" icon button on the active
+            exercise card. Bound to whichever block was the active
+            one at trigger time (notesPopoverFor stores its id). */}
+        {notesPopoverFor && (() => {
+          const popoverBlock = workout.blocks.find(b => b.id === notesPopoverFor);
+          if (!popoverBlock || popoverBlock.type !== 'exercise') return null;
+          const popoverNotes = (results[notesPopoverFor] as { sets: unknown[]; notes?: string })?.notes || '';
+          const hasVideo = !!(popoverBlock.videoUrl || getVideoUrl(popoverBlock.exerciseName));
+          return (
+            <NotesFormPopover
+              open={true}
+              onClose={() => setNotesPopoverFor(null)}
+              exerciseName={popoverBlock.exerciseName}
+              notes={popoverNotes}
+              onNotesChange={(next) => {
+                setResults(prev => ({
+                  ...prev,
+                  [notesPopoverFor]: { ...prev[notesPopoverFor], notes: next },
+                }));
+              }}
+              onPlayDemo={hasVideo
+                ? () => openExerciseVideo(popoverBlock.exerciseName, popoverBlock.videoUrl)
+                : undefined}
+              onUploadForm={onSendGunnyMessage
+                ? async (imageDataUrl, prompt) => {
+                    // Wire to the same Gunny chat sink the workout-mode
+                    // voice path uses — AppShell forwards the message
+                    // (with the image) to /api/gunny, which already
+                    // accepts base64 images on the user message
+                    // (route.ts:1090-1104). Open the panel so the
+                    // operator sees Gunny's reply land.
+                    onSendGunnyMessage(prompt, { image: imageDataUrl });
+                    if (onOpenGunny) onOpenGunny();
+                  }
+                : undefined}
+            />
+          );
+        })()}
 
         {/* ═══ MISSION COMPLETE overlay — shown after COMPLETE WORKOUT ═══ */}
         {showCompletionScreen && completionData && (
@@ -2918,6 +3097,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     unlockAudioContext();
                     setWorkoutMode(true);
                     setSelectedDate(dateStr);
+                    setStepIdx(0); // start the stepped flow at warmup (or first exercise if no warmup)
                   }}
                   className="btn btn-primary btn-sm"
                 >
