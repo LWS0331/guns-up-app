@@ -32,25 +32,28 @@ const getCategoryFromDescription = (description: string): 'CRITICAL' | 'HIGH' | 
   return 'LOW';
 };
 
-const CATEGORY_COLORS: Record<string, string> = {
-  CRITICAL: '#FF4444',
-  HIGH: '#FF8800',
-  MEDIUM: '#FFD700',
-  LOW: '#888888',
+// Tone routing — every chip drives off design tokens (var(--green) /
+// var(--amber) / var(--danger) / var(--text-tertiary)) so the color
+// never falls outside the palette.
+const CATEGORY_TONE: Record<string, { color: string; tone: string }> = {
+  CRITICAL: { color: 'var(--danger)', tone: 'danger' },
+  HIGH: { color: 'var(--amber)', tone: 'amber' },
+  MEDIUM: { color: 'var(--amber)', tone: 'amber' },
+  LOW: { color: 'var(--text-tertiary)', tone: 'neutral' },
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  NEW: '#00FF41',
-  REVIEWING: '#00ff41',
-  FIXED: '#FF8C00',
-  WONTFIX: '#555555',
+const STATUS_TONE: Record<string, { color: string; tone: string }> = {
+  NEW: { color: 'var(--green)', tone: 'green' },
+  REVIEWING: { color: 'var(--green)', tone: 'green' },
+  FIXED: { color: 'var(--amber)', tone: 'amber' },
+  WONTFIX: { color: 'var(--text-tertiary)', tone: 'neutral' },
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  BUG: '#FF4444',
-  RECOMMENDATION: '#00ff41',
-  'UI/UX': '#FF8C00',
-  PERFORMANCE: '#FFD700',
+const TYPE_TONE: Record<string, { color: string; tone: string }> = {
+  BUG: { color: 'var(--danger)', tone: 'danger' },
+  RECOMMENDATION: { color: 'var(--green)', tone: 'green' },
+  'UI/UX': { color: 'var(--amber)', tone: 'amber' },
+  PERFORMANCE: { color: 'var(--amber)', tone: 'amber' },
 };
 
 export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps) {
@@ -145,32 +148,61 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
     }
   };
 
+  // Token-driven badge — borrows the .chip palette without forcing
+  // a class because tone keys map 1:1 to design-system colors.
   const badge = (text: string, color: string) => (
-    <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: 3, fontSize: 10,
-      fontWeight: 700, letterSpacing: 1, backgroundColor: color + '22', color, border: `1px solid ${color}44`,
-    }}>{text}</span>
+    <span
+      className="t-mono-sm"
+      style={{
+        display: 'inline-block',
+        padding: '2px 8px',
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: 1,
+        backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`,
+        color,
+        border: `1px solid color-mix(in srgb, ${color} 27%, transparent)`,
+      }}
+    >
+      {text}
+    </span>
   );
 
-  const selectStyle: React.CSSProperties = {
-    background: '#1a1a1a', border: '1px solid #00ff4144', color: '#00ff41',
-    padding: '6px 10px', fontSize: 13, borderRadius: 3, width: '100%', outline: 'none',
-  };
+  const canSubmit = description.length >= 10 && !submitting;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16, background: '#0a0a0a', borderRadius: 6, border: '1px solid #00ff4133' }}>
+    <div className="ds-card bracket" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {toast && (
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '10px 20px', background: '#1a1a1a', border: '1px solid #00ff41', color: '#00ff41', borderRadius: 4, fontSize: 13, fontWeight: 600 }}>
+        <div
+          className="t-mono"
+          style={{
+            position: 'fixed',
+            top: 22,
+            right: 22,
+            zIndex: 9999,
+            padding: '12px 18px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-green-strong)',
+            color: 'var(--green)',
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: 1,
+          }}
+        >
           {toast}
         </div>
       )}
 
-      <div style={{ fontSize: 14, fontWeight: 700, color: '#00ff41', letterSpacing: 1 }}>SUBMIT FEEDBACK</div>
+      <div className="t-eyebrow">// Submit Feedback</div>
 
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 140 }}>
-          <div style={{ fontSize: 10, color: '#00ff41', marginBottom: 4, letterSpacing: 1 }}>TYPE</div>
-          <select value={feedbackType} onChange={(e) => setFeedbackType(e.target.value as typeof feedbackType)} style={selectStyle}>
+          <div className="t-label" style={{ marginBottom: 4 }}>Type</div>
+          <select
+            className="ds-input"
+            value={feedbackType}
+            onChange={(e) => setFeedbackType(e.target.value as typeof feedbackType)}
+          >
             <option value="BUG">BUG</option>
             <option value="RECOMMENDATION">RECOMMENDATION</option>
             <option value="UI/UX">UI/UX</option>
@@ -178,66 +210,140 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
           </select>
         </div>
         <div style={{ flex: 0 }}>
-          <div style={{ fontSize: 10, color: '#00ff41', marginBottom: 4, letterSpacing: 1 }}>SEVERITY</div>
-          {badge(category, CATEGORY_COLORS[category])}
+          <div className="t-label" style={{ marginBottom: 4 }}>Severity</div>
+          {badge(category, CATEGORY_TONE[category].color)}
         </div>
       </div>
 
       <div>
-        <div style={{ fontSize: 10, color: '#00ff41', marginBottom: 4, letterSpacing: 1 }}>DESCRIPTION ({description.length}/1000)</div>
+        <div className="t-label" style={{ marginBottom: 4 }}>
+          Description ({description.length}/1000)
+        </div>
         <textarea
+          className="ds-input"
           value={description}
           onChange={(e) => handleDescriptionChange(e.target.value)}
           placeholder="Describe the issue or suggestion... (min 10 characters)"
           maxLength={1000}
-          style={{ width: '100%', minHeight: 100, background: '#1a1a1a', border: '1px solid #00ff4144', color: '#fff', padding: 10, fontSize: 13, borderRadius: 3, resize: 'vertical', outline: 'none' }}
+          style={{ minHeight: 100, resize: 'vertical' }}
         />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleScreenshotChange} style={{ display: 'none' }} />
-        <button onClick={() => fileInputRef.current?.click()} style={{ padding: '6px 12px', fontSize: 11, background: '#00ff4122', color: '#00ff41', border: '1px solid #00ff4144', borderRadius: 3, cursor: 'pointer' }}>
-          {screenshot ? '✓ SCREENSHOT ADDED' : 'UPLOAD SCREENSHOT'}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleScreenshotChange}
+          style={{ display: 'none' }}
+        />
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {screenshot ? 'Screenshot Added' : 'Upload Screenshot'}
         </button>
         {screenshot && (
-          <button onClick={() => { setScreenshot(undefined); if (fileInputRef.current) fileInputRef.current.value = ''; }} style={{ padding: '6px 12px', fontSize: 11, background: 'transparent', color: '#FF4444', border: '1px solid #FF444444', borderRadius: 3, cursor: 'pointer' }}>
-            REMOVE
+          <button
+            type="button"
+            className="btn btn-sm btn-danger-outline"
+            onClick={() => {
+              setScreenshot(undefined);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            }}
+          >
+            Remove
           </button>
         )}
       </div>
 
       <button
+        type="button"
+        className="btn btn-primary"
         onClick={handleSubmit}
-        disabled={description.length < 10 || submitting}
-        style={{
-          width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, letterSpacing: 1,
-          background: description.length >= 10 ? '#00ff41' : '#333', color: description.length >= 10 ? '#0a0a0a' : '#666',
-          border: 'none', borderRadius: 3, cursor: description.length >= 10 ? 'pointer' : 'not-allowed',
-        }}
+        disabled={!canSubmit}
+        style={{ width: '100%' }}
       >
-        {submitting ? 'SUBMITTING...' : 'SUBMIT FEEDBACK'}
+        {submitting ? 'Submitting...' : 'Submit Feedback'}
       </button>
 
-      <div style={{ borderTop: '1px solid #00ff4122', paddingTop: 16, marginTop: 8 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>FEEDBACK HISTORY ({entries.length})</div>
+      <div
+        style={{
+          borderTop: '1px solid var(--border-green-soft)',
+          paddingTop: 18,
+          marginTop: 4,
+        }}
+      >
+        <div className="t-eyebrow" style={{ marginBottom: 12 }}>
+          // Feedback History ({entries.length})
+        </div>
 
         {loading ? (
-          <div style={{ color: '#00ff4155', textAlign: 'center', padding: 20 }}>Loading...</div>
+          <div
+            style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: 22 }}
+          >
+            Loading...
+          </div>
         ) : entries.length === 0 ? (
-          <div style={{ color: '#00ff4155', textAlign: 'center', padding: 20, fontSize: 12 }}>No feedback entries yet</div>
+          <div
+            style={{
+              color: 'var(--text-tertiary)',
+              textAlign: 'center',
+              padding: 22,
+              fontSize: 12,
+            }}
+          >
+            No feedback entries yet
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {entries.map((entry) => (
-              <div key={entry.id} style={{ padding: 12, background: '#1a1a1a', border: '1px solid #00ff4122', borderRadius: 3 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 4 }}>
+              <div
+                key={entry.id}
+                className="ds-card"
+                style={{ padding: 12 }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 8,
+                    flexWrap: 'wrap',
+                    gap: 4,
+                  }}
+                >
                   <div style={{ display: 'flex', gap: 6 }}>
-                    {badge(entry.type, TYPE_COLORS[entry.type] || '#888')}
-                    {badge(entry.category, CATEGORY_COLORS[entry.category])}
+                    {badge(
+                      entry.type,
+                      TYPE_TONE[entry.type]?.color || 'var(--text-tertiary)'
+                    )}
+                    {badge(entry.category, CATEGORY_TONE[entry.category].color)}
                   </div>
-                  {badge(entry.status, STATUS_COLORS[entry.status] || '#888')}
+                  {badge(
+                    entry.status,
+                    STATUS_TONE[entry.status]?.color || 'var(--text-tertiary)'
+                  )}
                 </div>
-                <div style={{ color: '#fff', fontSize: 13, marginBottom: 6 }}>{entry.description}</div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#00ff4155' }}>
+                <div
+                  style={{
+                    color: 'var(--text-primary)',
+                    fontSize: 13,
+                    marginBottom: 6,
+                  }}
+                >
+                  {entry.description}
+                </div>
+                <div
+                  className="t-mono-sm"
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    fontSize: 10,
+                    color: 'var(--text-tertiary)',
+                  }}
+                >
                   <span>{entry.callsign}</span>
                   <span>{new Date(entry.timestamp).toLocaleString()}</span>
                 </div>
