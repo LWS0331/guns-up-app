@@ -2421,202 +2421,191 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     const dateObj = selectedDate ? parseDate(selectedDate) : currentDate;
     const dateStr = formatDate(dateObj);
     const workout = getWorkoutForDate(dateStr);
-    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    // Split the day name into "Friday," and "April 24" so the date
+    // portion can render as the green-glow <em> per the handoff
+    // screen-head pattern: H1 "Friday, <em>April 24</em>".
+    const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+    const monthDay = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
     return (
-      <div>
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 10px 0', fontSize: '26px' }}>
-            {dayName}
+      <div className="stack-4">
+        {/* Day-view header — crumb + H1 + sub mono. Replaces the old
+            single-line green H2 with the canonical .screen-head
+            structure. */}
+        <header style={{ marginBottom: 8 }}>
+          <div className="t-mono-sm" style={{ marginBottom: 6, color: 'var(--text-tertiary)' }}>
+            <b style={{ color: 'var(--green)', fontWeight: 'normal' }}>//</b> Planner&nbsp;
+            <span style={{ color: 'var(--text-dim)' }}>/</span>&nbsp;Day
+          </div>
+          <h2 className="t-display-xl" style={{ fontSize: 22 }}>
+            {weekday}, <em style={{ fontStyle: 'normal', color: 'var(--green)', textShadow: '0 0 12px rgba(0,255,65,0.35)' }}>{monthDay}</em>
           </h2>
-        </div>
+          {workout && (
+            <div className="t-mono-sm" style={{ marginTop: 6, color: 'var(--text-secondary)' }}>
+              {workout.title}
+            </div>
+          )}
+        </header>
 
         {workoutMode && workout ? (
           renderWorkoutMode()
         ) : showWorkoutBuilder ? (
           renderWorkoutBuilder()
         ) : workout ? (
-          <div style={{ padding: '20px', backgroundColor: '#0a0a0a', border: '1px solid rgba(0, 255, 65, 0.3)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontFamily: 'Chakra Petch', color: '#00ff41', margin: 0 }}>{workout.title}</h3>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => handleEditWorkout(workout)}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: '#00ff41',
-                    color: '#000',
-                    border: 'none',
-                    fontFamily: 'Chakra Petch',
-                    cursor: 'pointer',
-                    fontSize: '15px',
-                    fontWeight: 'bold',
-                  }}
-                >
+          // Workout card — bracket card with elevated tone. Replaces
+          // the old border-rectangle. The action row uses ghost/primary/
+          // danger-outline button variants per the handoff mock.
+          <div className="ds-card bracket elevated">
+            <span className="bl" /><span className="br" />
+
+            <div className="row-between" style={{ marginBottom: 14, alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ flex: '1 1 160px' }}>
+                <div className="t-display-l" style={{ color: 'var(--green)', marginBottom: 4 }}>
+                  {workout.title}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button type="button" onClick={() => handleEditWorkout(workout)} className="btn btn-ghost btn-sm">
                   Edit
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
-                    unlockAudioContext(); // Pre-warm iOS audio on user gesture
+                    unlockAudioContext();
                     setWorkoutMode(true);
                     setSelectedDate(dateStr);
                   }}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: '#00ff41',
-                    color: '#000',
-                    border: 'none',
-                    fontFamily: 'Chakra Petch',
-                    cursor: 'pointer',
-                    fontSize: '15px',
-                    fontWeight: 'bold',
-                  }}
+                  className="btn btn-primary btn-sm"
                 >
-                  START
+                  Start
                 </button>
-                <button
-                  onClick={() => handleDeleteWorkout(dateStr)}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: '#ff4444',
-                    color: '#000',
-                    border: 'none',
-                    fontFamily: 'Chakra Petch',
-                    cursor: 'pointer',
-                    fontSize: '15px',
-                    fontWeight: 'bold',
-                  }}
-                >
+                <button type="button" onClick={() => handleDeleteWorkout(dateStr)} className="btn btn-danger-outline btn-sm">
                   Delete
                 </button>
               </div>
             </div>
 
             {workout.notes && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
-                  COACH'S NOTES
-                </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+              <>
+                <div className="t-label" style={{ color: 'var(--green)', marginBottom: 6 }}>// Coach's Notes</div>
+                <p className="t-body-sm" style={{ marginBottom: 16, whiteSpace: 'pre-wrap' }}>
                   {workout.notes}
-                </div>
-              </div>
+                </p>
+              </>
             )}
 
             {workout.warmup && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
-                  WARMUP
-                </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
-                  {workout.warmup}
-                </div>
-              </div>
+              <>
+                <div className="t-label" style={{ color: 'var(--amber)', marginBottom: 8 }}>// Warmup</div>
+                {/* Numbered list with mono-green index per the handoff
+                    Day mock. Falls back to plain pre-wrap if the warmup
+                    isn't multi-line. */}
+                <ul style={{ listStyle: 'none', paddingLeft: 0, marginBottom: 16 }} className="stack-2">
+                  {workout.warmup.split(/\n+/).filter(Boolean).map((line, i) => (
+                    <li key={i} className="t-body-sm" style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                      <span className="t-mono-sm" style={{ color: 'var(--green)', minWidth: 24 }}>
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <span style={{ color: 'var(--text-primary)' }}>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
 
             {workout.primer && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#FF8C00', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
-                  PRIMER
-                </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+              <>
+                <div className="t-label" style={{ color: 'var(--amber)', marginBottom: 8 }}>// Primer</div>
+                <p className="t-body-sm" style={{ marginBottom: 16, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
                   {workout.primer}
-                </div>
-              </div>
-            )}
-
-            {workout.blocks.length > 0 && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '13px', fontWeight: 'bold', marginBottom: '10px', letterSpacing: '1.5px' }}>
-                  WORKOUT BLOCKS
-                </div>
-                {workout.blocks.map((block, idx) => {
-                  const label = getBlockLabels(workout.blocks)[idx];
-                  if (block.type === 'exercise') {
-                    const vidUrl = block.videoUrl || getVideoUrl(block.exerciseName);
-                    const parsed = parsePrescription(block.prescription);
-                    return (
-                      <div key={block.id} style={{
-                        marginBottom: '8px',
-                        padding: '10px 12px',
-                        borderLeft: '3px solid #00ff41',
-                        background: 'rgba(0,255,65,0.04)',
-                        borderRadius: '0 4px 4px 0',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                          <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 700 }}>
-                            {label}) {block.exerciseName}
-                          </div>
-                          {vidUrl && (
-                            <a href={vidUrl} target="_blank" rel="noopener noreferrer" className="video-link" style={{ fontSize: '10px' }}>
-                              ▶ DEMO
-                            </a>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {parsed.map((tag, ti) => (
-                            <TagPill key={ti} tag={tag} />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  } else {
-                    return (
-                      <div key={block.id} style={{
-                        marginBottom: '8px',
-                        padding: '10px 12px',
-                        borderLeft: '3px solid #ffb800',
-                        background: 'rgba(255,184,0,0.04)',
-                        borderRadius: '0 4px 4px 0',
-                      }}>
-                        <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '15px', fontWeight: 700, marginBottom: '4px' }}>
-                          {block.format}
-                        </div>
-                        <div style={{
-                          fontFamily: 'Share Tech Mono',
-                          color: '#aaa',
-                          fontSize: '13px',
-                          lineHeight: '1.5',
-                          whiteSpace: 'pre-wrap',
-                        }}>
-                          {block.description}
-                        </div>
-                      </div>
-                    );
-                  }
-                })}
-              </div>
+                </p>
+              </>
             )}
 
             {workout.cooldown && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontFamily: 'Chakra Petch', color: '#ffb800', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1.5px' }}>
-                  COOLDOWN
-                </div>
-                <div style={{ fontFamily: 'Share Tech Mono', color: '#ddd', fontSize: '13px', marginTop: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+              <>
+                <div className="t-label" style={{ color: 'var(--amber)', marginBottom: 8 }}>// Cooldown</div>
+                <p className="t-body-sm" style={{ marginBottom: 0, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
                   {workout.cooldown}
-                </div>
-              </div>
+                </p>
+              </>
             )}
           </div>
         ) : (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-            <p style={{ fontFamily: 'Chakra Petch' }}>No workout for this day</p>
+          // Empty state — simple centered ghost card with a primary
+          // button to create the day's workout.
+          <div className="ds-card" style={{ textAlign: 'center', padding: 32 }}>
+            <p className="t-body-sm" style={{ color: 'var(--text-secondary)', marginBottom: 14 }}>
+              No workout for this day.
+            </p>
             <button
+              type="button"
               onClick={() => handleAddWorkout(dateStr)}
-              style={{
-                marginTop: '12px',
-                padding: '8px 16px',
-                backgroundColor: '#00ff41',
-                color: '#000',
-                border: 'none',
-                fontFamily: 'Chakra Petch',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-              }}
+              className="btn btn-primary btn-sm"
             >
               Create Workout
             </button>
+          </div>
+        )}
+
+        {/* Workout blocks — each rendered as its own bracket card so
+            every movement reads as an independent HUD tile per the
+            handoff "Movement card" pattern. Lives outside the main
+            workout card to give each block visual breathing room. */}
+        {workout && !workoutMode && !showWorkoutBuilder && workout.blocks.length > 0 && (
+          <div className="stack-3">
+            {workout.blocks.map((block, idx) => {
+              const label = getBlockLabels(workout.blocks)[idx];
+              if (block.type === 'exercise') {
+                const vidUrl = block.videoUrl || getVideoUrl(block.exerciseName);
+                const parsed = parsePrescription(block.prescription);
+                return (
+                  <div key={block.id} className="ds-card bracket">
+                    <span className="bl" /><span className="br" />
+                    <div className="row-between" style={{ marginBottom: 12, alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                      <div className="t-display-m" style={{ color: 'var(--green)' }}>
+                        {label}) {block.exerciseName}
+                      </div>
+                      {vidUrl && (
+                        <a
+                          href={vidUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-amber btn-sm"
+                          style={{ padding: '7px 10px' }}
+                        >
+                          ▶ Demo
+                        </a>
+                      )}
+                    </div>
+                    {/* Each prescription tag as a chip. TagPill is the
+                        legacy renderer; render its parsed values as
+                        plain .chip elements to match the handoff. */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {parsed.length > 0
+                        ? parsed.map((tag, ti) => <TagPill key={ti} tag={tag} />)
+                        : block.prescription && (
+                            <span className="chip" title="Prescription">
+                              {block.prescription}
+                            </span>
+                          )}
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div key={block.id} className="ds-card bracket amber amber-tone">
+                    <span className="bl" /><span className="br" />
+                    <div className="t-display-m" style={{ color: 'var(--amber)', marginBottom: 6 }}>
+                      {block.format}
+                    </div>
+                    <div className="t-body-sm" style={{ whiteSpace: 'pre-wrap' }}>
+                      {block.description}
+                    </div>
+                  </div>
+                );
+              }
+            })}
           </div>
         )}
       </div>
@@ -3287,85 +3276,54 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         <DailyBriefRef brief={operator.dailyBrief} focus="training" compact={true} />
       )}
 
-      {/* VIEW MODE + NAVIGATION */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', position: 'relative' }}>
+      {/* VIEW MODE + NAVIGATION — uses .segmented from the design
+          system. Layout matches the handoff Planner Day mock:
+          previous chevron · [Month][Week][Day] segmented · Today
+          accent button on the right. */}
+      <div className="row-between" style={{ marginBottom: 20 }}>
         <button
+          type="button"
           onClick={handleNavigatePrevious}
-          style={{
-            padding: '6px 14px',
-            backgroundColor: 'transparent',
-            color: '#888',
-            border: '1px solid rgba(0,255,65,0.08)',
-            fontFamily: 'Orbitron',
-            cursor: 'pointer',
-            fontSize: '15px',
-            fontWeight: 700,
-            transition: 'all 0.2s ease',
-          }}
+          className="seg"
+          aria-label="Previous"
+          style={{ padding: '9px 12px' }}
         >
           ◀
         </button>
 
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+        <div className="segmented">
           {(['month', 'week', 'day'] as ViewMode[]).map(mode => (
             <button
               key={mode}
+              type="button"
               onClick={() => handleViewModeChange(mode)}
-              style={{
-                padding: '6px 16px',
-                backgroundColor: viewMode === mode ? 'rgba(0,255,65,0.06)' : 'transparent',
-                color: viewMode === mode ? '#00ff41' : '#3a3a3a',
-                border: viewMode === mode ? '1px solid rgba(0,255,65,0.2)' : '1px solid transparent',
-                fontFamily: 'Orbitron',
-                fontSize: '15px',
-                fontWeight: viewMode === mode ? 800 : 500,
-                cursor: 'pointer',
-                textTransform: 'uppercase',
-                letterSpacing: '2px',
-                transition: 'all 0.2s ease',
-              }}
+              className={`seg ${viewMode === mode ? 'active' : ''}`}
             >
               {mode}
             </button>
           ))}
-
-          <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(0,255,65,0.1)', margin: '0 8px' }} />
-
-          <button
-            onClick={() => {
-              setCurrentDate(new Date());
-              setSelectedDate(null);
-            }}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: 'transparent',
-              color: '#00ff41',
-              border: '1px solid rgba(0,255,65,0.15)',
-              fontFamily: 'Share Tech Mono',
-              cursor: 'pointer',
-              fontSize: '15px',
-              fontWeight: 700,
-              letterSpacing: '1px',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            TODAY
-          </button>
         </div>
 
         <button
-          onClick={handleNavigateNext}
-          style={{
-            padding: '6px 14px',
-            backgroundColor: 'transparent',
-            color: '#888',
-            border: '1px solid rgba(0,255,65,0.08)',
-            fontFamily: 'Orbitron',
-            cursor: 'pointer',
-            fontSize: '15px',
-            fontWeight: 700,
-            transition: 'all 0.2s ease',
+          type="button"
+          onClick={() => {
+            setCurrentDate(new Date());
+            setSelectedDate(null);
           }}
+          className="seg"
+          // "Today" gets the accent treatment per the handoff mock —
+          // visually separates "jump to now" from the mode segments.
+          style={{ borderColor: 'var(--border-green-strong)', color: 'var(--green)' }}
+        >
+          Today
+        </button>
+
+        <button
+          type="button"
+          onClick={handleNavigateNext}
+          className="seg"
+          aria-label="Next"
+          style={{ padding: '9px 12px' }}
         >
           ▶
         </button>
