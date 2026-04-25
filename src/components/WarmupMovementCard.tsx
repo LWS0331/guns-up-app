@@ -11,44 +11,68 @@ interface WarmupMovementCardProps {
 
 /**
  * Single tappable warmup/cooldown movement card.
- * Shows movement name + prescription, with a PLAY button that
- * opens a YouTube search (or curated URL) in the in-app VideoModal.
+ * Shows movement name + prescription with a Demo button that opens
+ * the in-app VideoModal (YouTube search or curated URL).
+ *
+ * Uses the design system's tone-driven bracket cards:
+ *   - warmup   → amber bracket card (matches the "in-progress / warm
+ *                up" treatment used in workout-mode rest timers)
+ *   - cooldown → blue ghost card (the only non-handoff color in the
+ *                system, kept inline to signal "post-session
+ *                decompression" specifically)
  */
 export default function WarmupMovementCard({
   movement,
   onPlayVideo,
   variant = 'warmup',
 }: WarmupMovementCardProps) {
-  const accent = variant === 'warmup' ? '#ff8a3c' : '#60a5fa';
-  const bg = variant === 'warmup' ? 'rgba(255,138,60,0.06)' : 'rgba(96,165,250,0.06)';
+  const isCooldown = variant === 'cooldown';
 
   const handlePlay = () => {
     if (!onPlayVideo) return;
-    // Let the parent decide the URL: it can look up curated exercises,
-    // otherwise fall back to a YouTube search by movement name.
+    // Let the parent decide the URL: curated exercises win, fall
+    // back to a YouTube search by movement name.
     onPlayVideo(movement.name, movement.name);
   };
 
   return (
     <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 10,
-        padding: '10px 12px',
-        background: bg,
-        border: `1px solid ${accent}33`,
-        borderRadius: 10,
-      }}
+      // Cooldown variant uses inline styling for the cool-blue tone
+      // since the design system doesn't include a "blue" bracket
+      // tone — cooldowns are intentionally outside the standard
+      // amber/danger/green palette to signal "wind down."
+      className={isCooldown ? 'ds-card' : 'ds-card bracket amber amber-tone'}
+      style={
+        isCooldown
+          ? {
+              padding: '10px 12px',
+              background: 'rgba(96,165,250,0.06)',
+              borderColor: 'rgba(96,165,250,0.33)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+            }
+          : {
+              padding: '10px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+            }
+      }
     >
+      {!isCooldown && (
+        <>
+          <span className="bl" />
+          <span className="br" />
+        </>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
         <div
+          className="t-mono-data"
           style={{
-            color: '#e7e7e7',
-            fontFamily: 'monospace',
-            fontSize: 13,
-            letterSpacing: '0.04em',
             textTransform: 'uppercase',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -59,11 +83,11 @@ export default function WarmupMovementCard({
         </div>
         {movement.prescription && (
           <div
+            className="t-mono-sm"
             style={{
-              color: accent,
-              fontFamily: 'monospace',
-              fontSize: 12,
+              color: isCooldown ? '#60a5fa' : 'var(--amber)',
               marginTop: 2,
+              fontSize: 12,
               letterSpacing: '0.05em',
             }}
           >
@@ -74,23 +98,32 @@ export default function WarmupMovementCard({
 
       {onPlayVideo && movement.isExercise && (
         <button
+          type="button"
           onClick={handlePlay}
           aria-label={`Play demo video for ${movement.name}`}
-          style={{
-            flexShrink: 0,
-            background: accent,
-            color: '#111',
-            border: 'none',
-            borderRadius: 8,
-            padding: '6px 12px',
-            fontFamily: 'monospace',
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.05em',
-            cursor: 'pointer',
-          }}
+          // Cooldowns get a custom blue-filled button since none of
+          // the canonical .btn variants cover blue.
+          className={isCooldown ? undefined : 'btn btn-amber btn-sm'}
+          style={
+            isCooldown
+              ? {
+                  flexShrink: 0,
+                  background: '#60a5fa',
+                  color: '#111',
+                  border: 'none',
+                  padding: '6px 12px',
+                  fontFamily: 'var(--display)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 1.6,
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  minHeight: 32,
+                }
+              : { flexShrink: 0, padding: '6px 12px' }
+          }
         >
-          ▶ DEMO
+          ▶ Demo
         </button>
       )}
     </div>
