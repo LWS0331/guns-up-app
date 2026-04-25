@@ -2124,77 +2124,97 @@ ${mealSuggestion}`;
         </div>
       )}
 
-      {/* Messages Area */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '16px 20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-      }}>
-        {messages.filter((m) => m.role === 'user' || m.text.length > 0).map((message) => (
-          <div key={message.id} style={{
-            display: 'flex',
-            justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
-            alignItems: 'flex-start',
-            gap: '10px',
-            animation: 'msgSlideIn 0.3s ease-out',
-          }}>
-            {message.role === 'gunny' && (
-              <div style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #00ff41, #00cc33)',
+      {/* Messages Area — each row is the canonical .msg container
+          from the design system. Three visual variants:
+            user     → neutral white outline (.msg.user)
+            gunny    → green wash + green border + inset glow (.msg.gunny)
+            workout  → amber bracket card overlay; we still tag as
+                       .msg.gunny so the glow is consistent and
+                       layer the amber background+border on top via
+                       .ds-card.bracket.amber-tone for the canonical
+                       "important AI block" treatment. */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '16px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}
+      >
+        {messages.filter((m) => m.role === 'user' || m.text.length > 0).map((message) => {
+          const isUser = message.role === 'user';
+          const isWorkout = !!message.isWorkout;
+          // Compose the base .msg variant. Workout cards skip the
+          // .gunny green wash and instead get .bracket.amber so the
+          // corner brackets render amber. The amber background fill
+          // is applied inline below since .amber-tone is scoped to
+          // .ds-card and wouldn't take effect on a .msg.
+          const msgClass = isWorkout
+            ? 'msg bracket amber'
+            : `msg ${isUser ? 'user' : 'gunny'}`;
+          return (
+            <div
+              key={message.id}
+              style={{
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '26px',
-                fontWeight: 900,
-                color: '#030303',
-                flexShrink: 0,
-                fontFamily: '"Orbitron", sans-serif',
-                boxShadow: '0 0 8px rgba(0,255,65,0.2)',
-                marginTop: '2px',
-              }}>
-                G
-              </div>
-            )}
-
-            <div style={{
-              maxWidth: '75%',
-              padding: message.isWorkout ? '16px' : '10px 14px',
-              fontSize: '15px',
-              lineHeight: '1.65',
-              backgroundColor: message.role === 'user'
-                ? 'rgba(0,150,255,0.05)'
-                : message.isWorkout
-                  ? 'rgba(255,184,0,0.03)'
-                  : 'rgba(0,255,65,0.02)',
-              border: message.role === 'user'
-                ? '1px solid rgba(0,150,255,0.15)'
-                : message.isWorkout
-                  ? '1px solid rgba(255,184,0,0.15)'
-                  : '1px solid rgba(0,255,65,0.08)',
-              color: message.isWorkout ? '#e0a800' : message.role === 'user' ? '#bbb' : '#ccc',
-              whiteSpace: message.isWorkout ? 'pre-wrap' : 'normal',
-              wordWrap: 'break-word',
-              fontFamily: message.isWorkout ? '"Share Tech Mono", monospace' : '"Chakra Petch", sans-serif',
-              animation: message.isWorkout ? 'workoutCardGlow 3s ease-in-out infinite' : 'none',
-              position: 'relative',
-            }}>
-              {/* Workout card header accent */}
-              {message.isWorkout && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: '2px',
-                  background: 'linear-gradient(90deg, transparent, #ffb800, transparent)',
-                }} />
+                justifyContent: isUser ? 'flex-end' : 'flex-start',
+                alignItems: 'flex-start',
+                gap: 10,
+                animation: 'msgSlideIn 0.3s ease-out',
+              }}
+            >
+              {!isUser && (
+                // Inline gunny avatar — same .gunny-avatar utility as
+                // the header but shrunk to a 28px row marker. Keeps the
+                // radial wash + ring + animated pulse.
+                <div className="gunny-avatar" style={{ width: 28, height: 28, fontSize: 14, marginTop: 2 }}>
+                  <span>G</span>
+                </div>
               )}
+
+              <div
+                className={msgClass}
+                style={{
+                  maxWidth: '75%',
+                  padding: isWorkout ? 16 : '12px 14px',
+                  position: 'relative',
+                  // Workout cards keep the pre-wrap mono treatment for
+                  // line-by-line workout layout; everything else uses
+                  // body type from .t-body via the bubble itself.
+                  whiteSpace: isWorkout ? 'pre-wrap' : 'normal',
+                  wordWrap: 'break-word',
+                  fontFamily: isWorkout ? 'var(--mono)' : 'var(--body)',
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: isWorkout
+                    ? 'var(--amber)'
+                    : isUser
+                      ? 'var(--text-secondary)'
+                      : 'var(--text-primary)',
+                  // Amber tone fill for workout cards — replaces the
+                  // .amber-tone class which is scoped to .ds-card and
+                  // wouldn't apply on a .msg variant.
+                  ...(isWorkout
+                    ? {
+                        background: 'linear-gradient(180deg, rgba(255,140,0,0.04), transparent)',
+                        borderColor: 'var(--border-amber)',
+                      }
+                    : {}),
+                  animation: isWorkout ? 'workoutCardGlow 3s ease-in-out infinite' : undefined,
+                }}
+              >
+                {/* Workout cards get the bracket helper spans so the
+                    amber-toned bracket has all four corners (the
+                    .bracket pseudo-elements own top corners; .bl/.br
+                    own bottom). */}
+                {isWorkout && (
+                  <>
+                    <span className="bl" />
+                    <span className="br" />
+                  </>
+                )}
               {/* User-attached image */}
               {message.image && (
                 <img src={message.image} alt="User upload" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 4, marginBottom: 8, display: 'block' }} />
@@ -2362,19 +2382,22 @@ ${mealSuggestion}`;
                   {message.text}
                 </ReactMarkdown>
               )}
-              {/* Timestamp */}
-              <div style={{
-                fontSize: '15px',
-                color: '#666',
-                marginTop: '6px',
-                fontFamily: '"Share Tech Mono", monospace',
-                textAlign: message.role === 'user' ? 'right' : 'left',
-              }}>
+              {/* Timestamp — small mono caption pinned right for
+                  user, left for gunny per the handoff bubble layout. */}
+              <div
+                className="t-mono-sm"
+                style={{
+                  marginTop: 6,
+                  textAlign: isUser ? 'right' : 'left',
+                  color: 'var(--text-tertiary)',
+                }}
+              >
                 {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {/* Thinking indicator */}
         {isTyping && (
