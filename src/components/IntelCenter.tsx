@@ -1762,7 +1762,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           {isViewingToday ? 'Log Meal' : 'Past Meals'}
         </span>
 
-        {/* Log Form — only when viewing today */}
+        {/* Log Form — only when viewing today. Inputs migrated to
+            <DsField> so focus rings + labels stay consistent with
+            the rest of the Intel Center forms. The meal-name field
+            spans the full width via gridColumn: '1 / -1'. */}
         {isViewingToday ? (<div
           style={{
             display: 'grid',
@@ -1773,117 +1776,46 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             minWidth: 0,
           }}
         >
-          <input
-            type="text"
-            placeholder="Meal name"
-            value={state.nutrition.mealName}
-            onChange={(e) => handleNutritionChange('mealName', e.target.value)}
-            style={{
-              gridColumn: '1 / -1',
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-              minWidth: 0,
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
-          />
-          <input
+          <div style={{ gridColumn: '1 / -1' }}>
+            <DsField
+              label="Meal Name"
+              type="text"
+              value={state.nutrition.mealName}
+              onChange={(v) => handleNutritionChange('mealName', v)}
+              placeholder="e.g. Chicken bowl"
+            />
+          </div>
+          <DsField
+            label="Calories"
             type="number"
-            placeholder="Calories"
             value={state.nutrition.mealCalories}
-            onChange={(e) => handleNutritionChange('mealCalories', e.target.value)}
-            style={{
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
+            onChange={(v) => handleNutritionChange('mealCalories', v)}
+            placeholder="kcal"
+            inputMode="numeric"
           />
-          <input
+          <DsField
+            label="Protein"
             type="number"
-            placeholder="Protein"
             value={state.nutrition.mealProtein}
-            onChange={(e) => handleNutritionChange('mealProtein', e.target.value)}
-            style={{
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
+            onChange={(v) => handleNutritionChange('mealProtein', v)}
+            placeholder="g"
+            inputMode="numeric"
           />
-          <input
+          <DsField
+            label="Carbs"
             type="number"
-            placeholder="Carbs"
             value={state.nutrition.mealCarbs}
-            onChange={(e) => handleNutritionChange('mealCarbs', e.target.value)}
-            style={{
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
+            onChange={(v) => handleNutritionChange('mealCarbs', v)}
+            placeholder="g"
+            inputMode="numeric"
           />
-          <input
+          <DsField
+            label="Fat"
             type="number"
-            placeholder="Fat"
             value={state.nutrition.mealFat}
-            onChange={(e) => handleNutritionChange('mealFat', e.target.value)}
-            style={{
-              padding: '8px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '15px',
-              backgroundColor: 'rgba(0,255,65,0.02)',
-              border: '1px solid rgba(0,255,65,0.06)',
-              color: '#ddd',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.2)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(0,255,65,0.06)';
-            }}
+            onChange={(v) => handleNutritionChange('mealFat', v)}
+            placeholder="g"
+            inputMode="numeric"
           />
           <button
             onClick={addMeal}

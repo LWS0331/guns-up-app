@@ -1072,18 +1072,39 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     return (
       <div className="stack-3">
         {/* Month header — handoff "April **2026**" pattern: month
-            in white display type + year as green-glow <em>. */}
+            in white display type + year as green-glow <em>. The
+            Export ghost button sits to the right per the canonical
+            spec (mock shows the H1 left + Export right on the same
+            row). On mobile it stacks below the H1. */}
         <header style={{ marginBottom: 4 }}>
           <div className="t-mono-sm" style={{ marginBottom: 6, color: 'var(--text-tertiary)' }}>
             <b style={{ color: 'var(--green)', fontWeight: 'normal' }}>//</b> Planner&nbsp;
             <span style={{ color: 'var(--text-dim)' }}>/</span>&nbsp;Month
           </div>
-          <h2 className="t-display-xl" style={{ fontSize: 22, textAlign: 'center', letterSpacing: 2 }}>
-            {monthLabel}{' '}
-            <em style={{ fontStyle: 'normal', color: 'var(--green)', textShadow: '0 0 12px rgba(0,255,65,0.35)' }}>
-              {yearLabel}
-            </em>
-          </h2>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <h2 className="t-display-xl" style={{ fontSize: 22, letterSpacing: 2, margin: 0 }}>
+              {monthLabel}{' '}
+              <em style={{ fontStyle: 'normal', color: 'var(--green)', textShadow: '0 0 12px rgba(0,255,65,0.35)' }}>
+                {yearLabel}
+              </em>
+            </h2>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              onClick={handleExportJson}
+              aria-label="Export training plan as JSON"
+            >
+              Export
+            </button>
+          </div>
         </header>
 
         {/* Day-of-week header row — uses .t-label sizing for the
@@ -1225,6 +1246,33 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                       }}
                     >
                       {workout.title}
+                    </div>
+                  )}
+
+                  {/* "DAY" stencil — canonical spec marks workout days
+                      with a bottom-aligned stencil glyph so the
+                      calendar reads at-a-glance which days are loaded.
+                      Uses Orbitron 800 + heavy letter-spacing for the
+                      stenciled feel; ghosts the green token to ~22%
+                      so it sits behind the title without competing. */}
+                  {workout && (
+                    <div
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        bottom: isMobile ? 2 : 4,
+                        textAlign: 'center',
+                        fontFamily: '"Orbitron", sans-serif',
+                        fontWeight: 800,
+                        fontSize: isMobile ? 9 : 11,
+                        letterSpacing: isMobile ? 2 : 3,
+                        color: 'rgba(0,255,65,0.22)',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      DAY
                     </div>
                   )}
 
@@ -1872,24 +1920,26 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* ═══ VOICE SELECTOR (inline toggle) ═══ */}
+        {/* ═══ VOICE SELECTOR — design-system .chip group.
+            Each option is a .chip; the active voice gets the
+            green tone treatment. The label trigger is also a .chip
+            so the whole row reads as a chip group. */}
         {workoutMode && (
-          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <button
+              type="button"
               onClick={() => setShowVoiceSelect(!showVoiceSelect)}
-              style={{
-                padding: '2px 8px', background: 'transparent',
-                border: '1px solid #2A3A2A', borderRadius: 4,
-                color: '#6B7B6B', fontFamily: 'Share Tech Mono, monospace',
-                fontSize: 9, cursor: 'pointer', letterSpacing: 0.5,
-              }}
+              className={`chip ${showVoiceSelect ? 'green' : ''}`}
+              aria-expanded={showVoiceSelect}
+              aria-label={`Voice: ${selectedVoice}, click to change`}
             >
-              VOICE: {selectedVoice.toUpperCase()}
+              Voice: {selectedVoice.toUpperCase()}
             </button>
             {showVoiceSelect && (
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {VOICE_OPTIONS.map(v => (
                   <button
+                    type="button"
                     key={v.id}
                     onClick={() => {
                       setSelectedVoice(v.id);
@@ -1898,15 +1948,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                       // Play a preview
                       speak('Copy that.', v.id);
                     }}
-                    style={{
-                      padding: '2px 6px',
-                      background: v.id === selectedVoice ? 'rgba(0,255,65,0.1)' : 'transparent',
-                      border: `1px solid ${v.id === selectedVoice ? '#00ff41' : '#2A3A2A'}`,
-                      borderRadius: 3,
-                      color: v.id === selectedVoice ? '#00ff41' : '#6B7B6B',
-                      fontFamily: 'Share Tech Mono, monospace',
-                      fontSize: 8, cursor: 'pointer',
-                    }}
+                    className={`chip ${v.id === selectedVoice ? 'green' : ''}`}
                     title={v.desc}
                   >
                     {v.label}
@@ -2193,17 +2235,47 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           }}>SHOW HR TRACKER</button>
         )}
 
-        {/* ═══ WARMUP — collapsible, tappable movement cards with in-app video ═══ */}
+        {/* ═══ WARMUP — single shared amber bracket card per spec.
+            Canonical handoff renders the warmup as ONE card holding
+            the entire movement list (eyebrow + Demo buttons inline),
+            not a card-per-movement. The header doubles as the
+            collapse/expand control. */}
         {workout.warmup && parseMovementText(workout.warmup).length > 0 && (
-          <div style={{ marginBottom: 12, border: '1px solid rgba(255,138,60,0.35)', borderRadius: 8, overflow: 'hidden' }}>
+          <div className="ds-card bracket amber amber-tone" style={{ marginBottom: 12, padding: 0 }}>
             <button
               onClick={() => setWarmupExpanded(v => !v)}
-              style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255,138,60,0.08)', border: 'none', cursor: 'pointer', color: '#ff8a3c', fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 1.5 }}>
-              <span>WARMUP · {parseMovementText(workout.warmup).length} MOVEMENTS</span>
-              <span style={{ fontFamily: 'Share Tech Mono', fontSize: 14 }}>{warmupExpanded ? '▾' : '▸'}</span>
+              aria-expanded={warmupExpanded}
+              style={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 14px',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--amber)',
+                fontFamily: '"Orbitron", sans-serif',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 1.8,
+                textTransform: 'uppercase',
+              }}
+            >
+              <span>// Warmup · {parseMovementText(workout.warmup).length} Movements</span>
+              <span className="t-mono" style={{ fontSize: 14 }}>{warmupExpanded ? '▾' : '▸'}</span>
             </button>
             {warmupExpanded && (
-              <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, background: '#070707' }}>
+              <div
+                style={{
+                  padding: '0 14px 14px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                  borderTop: '1px solid color-mix(in srgb, var(--amber) 22%, transparent)',
+                  paddingTop: 10,
+                }}
+              >
                 {parseMovementText(workout.warmup).map((m, i) => (
                   <WarmupMovementCard
                     key={`warmup-${i}`}
