@@ -1189,15 +1189,34 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         })}
       </div>
 
-      {/* QUICK LOG MODE */}
+      {/* QUICK LOG MODE — yellow tier-3 (AI text parsing). Section
+          uses a tinted bracket card; tier badge is a .chip with
+          inline color override since the tier colors are outside
+          the canonical green/amber/danger palette. */}
       {nutritionLogMode === 'quick' && (
-        <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(250, 204, 21, 0.03)', border: '1px solid rgba(250, 204, 21, 0.15)', borderRadius: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#facc15', letterSpacing: 1, margin: 0 }}>QUICK LOG</h3>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#facc15', padding: '2px 6px', border: '1px solid rgba(250,204,21,0.3)', borderRadius: 3 }}>TIER 3 · ±15-25%</span>
+        <div
+          className="ds-card bracket"
+          style={{
+            marginBottom: 24,
+            padding: 16,
+            background: 'rgba(250, 204, 21, 0.03)',
+            borderColor: 'rgba(250, 204, 21, 0.3)',
+          }}
+        >
+          <span className="bl" /><span className="br" />
+          <div className="row-between" style={{ marginBottom: 8 }}>
+            <h3 className="t-display-m" style={{ color: '#facc15', margin: 0, fontSize: 12 }}>
+              Quick Log
+            </h3>
+            <span
+              className="chip"
+              style={{ color: '#facc15', borderColor: 'rgba(250,204,21,0.3)', fontSize: 9 }}
+            >
+              TIER 3 · ±15-25%
+            </span>
           </div>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontFamily: 'Share Tech Mono' }}>
-            Describe what you ate — e.g. &quot;2 eggs and toast&quot; or &quot;chicken breast with rice&quot;
+          <div className="t-mono-sm" style={{ marginBottom: 8, color: 'var(--text-tertiary)' }}>
+            Describe what you ate — e.g. &ldquo;2 eggs and toast&rdquo; or &ldquo;chicken breast with rice&rdquo;
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
@@ -1206,48 +1225,80 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               onChange={e => { setQuickFoodInput(e.target.value); setQuickFoodResult(null); }}
               onKeyDown={e => { if (e.key === 'Enter') handleQuickFoodLog(); }}
               placeholder="I had chicken breast and rice..."
-              style={{
-                flex: 1, padding: '10px 12px', backgroundColor: '#0a0a0a', border: '1px solid rgba(250, 204, 21, 0.3)',
-                color: '#e0e0e0', fontFamily: "'Share Tech Mono', monospace", fontSize: 14, borderRadius: 4, outline: 'none',
-              }}
+              className="ds-input"
+              style={{ flex: 1, borderColor: 'rgba(250, 204, 21, 0.3)', fontFamily: 'var(--mono)' }}
             />
-            <button onClick={handleQuickFoodLog} style={{
-              padding: '10px 16px', backgroundColor: '#facc15', color: '#000', border: 'none',
-              fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
-            }}>
-              SCAN
+            <button
+              type="button"
+              onClick={handleQuickFoodLog}
+              className="btn btn-sm"
+              // Tier-3 yellow filled button — bespoke since none of
+              // the canonical .btn variants cover yellow. Uses
+              // var(--display) + token-driven sizing.
+              style={{
+                background: '#facc15',
+                color: '#000',
+                border: 'none',
+                fontFamily: 'var(--display)',
+                fontWeight: 700,
+                letterSpacing: 1.6,
+                padding: '6px 14px',
+              }}
+            >
+              Scan
             </button>
           </div>
           {quickFoodResult && (
-            <div style={{ marginTop: 12, padding: 12, background: '#0a0a0a', border: '1px solid rgba(0, 255, 65, 0.2)', borderRadius: 4 }}>
-              <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: 13, marginBottom: 8 }}>
+            <div
+              className="ds-card"
+              style={{ marginTop: 12, padding: 12, borderColor: 'var(--border-green)' }}
+            >
+              <div className="t-display-m" style={{ color: 'var(--green)', fontSize: 13, marginBottom: 8 }}>
                 {quickFoodResult.name}
               </div>
-              <div style={{ display: 'flex', gap: 16, fontFamily: 'Share Tech Mono', fontSize: 12 }}>
-                <span style={{ color: '#ffb800' }}>{quickFoodResult.calories} cal</span>
-                <span style={{ color: '#00ff41' }}>{quickFoodResult.protein}g P</span>
+              <div style={{ display: 'flex', gap: 16 }} className="t-mono-data">
+                <span style={{ color: 'var(--warn)' }}>{quickFoodResult.calories} cal</span>
+                <span style={{ color: 'var(--green)' }}>{quickFoodResult.protein}g P</span>
                 <span style={{ color: '#4ade80' }}>{quickFoodResult.carbs}g C</span>
                 <span style={{ color: '#f97316' }}>{quickFoodResult.fat}g F</span>
               </div>
-              <button onClick={handleQuickFoodAdd} style={{
-                marginTop: 8, padding: '6px 16px', backgroundColor: '#00ff41', color: '#000', border: 'none',
-                fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
-              }}>
-                LOG MEAL
+              <button
+                type="button"
+                onClick={handleQuickFoodAdd}
+                className="btn btn-primary btn-sm"
+                style={{ marginTop: 8 }}
+              >
+                Log Meal
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* PHOTO SNAP MODE */}
+      {/* PHOTO SNAP MODE — orange tier-4 (AI vision). */}
       {nutritionLogMode === 'photo' && (
-        <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(255, 107, 53, 0.03)', border: '1px solid rgba(255, 107, 53, 0.15)', borderRadius: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff6b35', letterSpacing: 1, margin: 0 }}>PHOTO SNAP</h3>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#ff6b35', padding: '2px 6px', border: '1px solid rgba(255,107,53,0.3)', borderRadius: 3 }}>TIER 4 · ±20-40%</span>
+        <div
+          className="ds-card bracket"
+          style={{
+            marginBottom: 24,
+            padding: 16,
+            background: 'rgba(255, 107, 53, 0.03)',
+            borderColor: 'rgba(255, 107, 53, 0.3)',
+          }}
+        >
+          <span className="bl" /><span className="br" />
+          <div className="row-between" style={{ marginBottom: 8 }}>
+            <h3 className="t-display-m" style={{ color: '#ff6b35', margin: 0, fontSize: 12 }}>
+              Photo Snap
+            </h3>
+            <span
+              className="chip"
+              style={{ color: '#ff6b35', borderColor: 'rgba(255,107,53,0.3)', fontSize: 9 }}
+            >
+              TIER 4 · ±20-40%
+            </span>
           </div>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 12, fontFamily: 'Share Tech Mono' }}>
+          <div className="t-mono-sm" style={{ marginBottom: 12, color: 'var(--text-tertiary)' }}>
             Snap a photo of your plate. AI vision analyzes portion sizes and estimates macros. Best for quick ballpark tracking.
           </div>
           <input ref={photoInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
@@ -1310,14 +1361,30 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         </div>
       )}
 
-      {/* USDA SEARCH MODE */}
+      {/* USDA SEARCH MODE — light-green tier-2 (verified database). */}
       {nutritionLogMode === 'search' && (
-        <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(74, 222, 128, 0.03)', border: '1px solid rgba(74, 222, 128, 0.15)', borderRadius: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#4ade80', letterSpacing: 1, margin: 0 }}>USDA DATABASE</h3>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#4ade80', padding: '2px 6px', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 3 }}>TIER 2 · ±5-10%</span>
+        <div
+          className="ds-card bracket"
+          style={{
+            marginBottom: 24,
+            padding: 16,
+            background: 'rgba(74, 222, 128, 0.03)',
+            borderColor: 'rgba(74, 222, 128, 0.3)',
+          }}
+        >
+          <span className="bl" /><span className="br" />
+          <div className="row-between" style={{ marginBottom: 8 }}>
+            <h3 className="t-display-m" style={{ color: '#4ade80', margin: 0, fontSize: 12 }}>
+              USDA Database
+            </h3>
+            <span
+              className="chip"
+              style={{ color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)', fontSize: 9 }}
+            >
+              TIER 2 · ±5-10%
+            </span>
           </div>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontFamily: 'Share Tech Mono' }}>
+          <div className="t-mono-sm" style={{ marginBottom: 8, color: 'var(--text-tertiary)' }}>
             Search 380K+ FDA-verified foods. Macros per 100g standard serving.
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1327,16 +1394,25 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               onChange={e => setUsdaSearch(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleUsdaSearch(); }}
               placeholder="Search: chicken breast, brown rice, almonds..."
-              style={{
-                flex: 1, padding: '10px 12px', backgroundColor: '#0a0a0a', border: '1px solid rgba(74, 222, 128, 0.3)',
-                color: '#e0e0e0', fontFamily: "'Share Tech Mono', monospace", fontSize: 14, borderRadius: 4, outline: 'none',
-              }}
+              className="ds-input"
+              style={{ flex: 1, borderColor: 'rgba(74, 222, 128, 0.3)', fontFamily: 'var(--mono)' }}
             />
-            <button onClick={handleUsdaSearch} disabled={usdaSearching} style={{
-              padding: '10px 16px', backgroundColor: usdaSearching ? '#333' : '#4ade80', color: '#000', border: 'none',
-              fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 4,
-            }}>
-              {usdaSearching ? '...' : 'SEARCH'}
+            <button
+              type="button"
+              onClick={handleUsdaSearch}
+              disabled={usdaSearching}
+              className="btn btn-sm"
+              style={{
+                background: usdaSearching ? '#333' : '#4ade80',
+                color: '#000',
+                border: 'none',
+                fontFamily: 'var(--display)',
+                fontWeight: 700,
+                letterSpacing: 1.6,
+                padding: '6px 14px',
+              }}
+            >
+              {usdaSearching ? '…' : 'Search'}
             </button>
           </div>
           {usdaResults.length > 0 && (
@@ -1371,17 +1447,27 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         </div>
       )}
 
-      {/* MANUAL ENTRY MODE — highest accuracy, shown inline when selected */}
+      {/* MANUAL ENTRY MODE — green tier-1 (canonical accent).
+          Highest accuracy. Body just points users to the meal log
+          section below. */}
       {nutritionLogMode === 'manual' && (
-        <div style={{ marginBottom: 24, padding: 16, backgroundColor: 'rgba(0, 255, 65, 0.03)', border: '1px solid rgba(0, 255, 65, 0.15)', borderRadius: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, margin: 0 }}>MANUAL ENTRY</h3>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#00ff41', padding: '2px 6px', border: '1px solid rgba(0,255,65,0.3)', borderRadius: 3 }}>TIER 1 · ±1-3%</span>
+        <div
+          className="ds-card bracket elevated"
+          style={{ marginBottom: 24, padding: 16 }}
+        >
+          <span className="bl" /><span className="br" />
+          <div className="row-between" style={{ marginBottom: 8 }}>
+            <h3 className="t-display-m" style={{ color: 'var(--green)', margin: 0, fontSize: 12 }}>
+              Manual Entry
+            </h3>
+            <span className="chip green" style={{ fontSize: 9 }}>
+              TIER 1 · ±1-3%
+            </span>
           </div>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 12, fontFamily: 'Share Tech Mono' }}>
+          <div className="t-mono-sm" style={{ marginBottom: 12, color: 'var(--text-tertiary)' }}>
             Weigh your food and enter exact macros. Highest accuracy for serious tracking.
           </div>
-          <div style={{ fontSize: 10, color: '#555', fontFamily: 'Share Tech Mono, monospace', marginBottom: 8 }}>
+          <div className="t-mono-sm" style={{ color: 'var(--text-dim)', marginBottom: 8 }}>
             Use the meal log section below to enter exact values manually.
           </div>
         </div>
