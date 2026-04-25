@@ -593,7 +593,8 @@ export const OPERATORS: Operator[] = [
     callsign: 'WARDOG',
     pin: '1111',
     role: 'client',
-    tier: 'sonnet',
+    // Promoted to COMMANDER (opus) for beta testing — Apr 2026.
+    tier: 'opus',
     coupleWith: 'op-erika',
     trainerId: 'op-ruben',
     teamId: 'team-wolf-pack',
@@ -877,7 +878,8 @@ export const OPERATORS: Operator[] = [
     callsign: 'PHOENIX',
     pin: '2222',
     role: 'client',
-    tier: 'haiku',
+    // Promoted to COMMANDER (opus) for beta testing — Apr 2026.
+    tier: 'opus',
     coupleWith: 'op-efrain',
     trainerId: 'op-ruben',
     teamId: 'team-wolf-pack',
@@ -1142,7 +1144,8 @@ export const OPERATORS: Operator[] = [
     undefined, 'team-wolf-pack'),
 
   // Edgar + Patty (WOLF PACK)
-  makeClient('op-edgar', 'Edgar', 'VIPER', '3007', 'sonnet', 'op-patty', 'op-ruben', true,
+  // Edgar promoted to COMMANDER (opus) for beta testing — Apr 2026.
+  makeClient('op-edgar', 'Edgar', 'VIPER', '3007', 'opus', 'op-patty', 'op-ruben', true,
     { age: 34, height: "5'10\"", weight: 195, bodyFat: 19, trainingAge: '8 years', goals: ['strength', 'athletic performance'], readiness: 8, sleep: 7.5, stress: 3 },
     { split: 'Push/Pull/Legs', equipment: ['Barbell', 'Dumbbell', 'Cable', 'Kettlebell'], sessionDuration: 75, daysPerWeek: 5, weakPoints: ['Overhead mobility'], avoidMovements: [] },
     undefined, 'team-wolf-pack'),
@@ -1152,7 +1155,8 @@ export const OPERATORS: Operator[] = [
     undefined, 'team-wolf-pack'),
 
   // Aldo + Jasmine (WOLF PACK)
-  makeClient('op-aldo', 'Aldo', 'TITAN', '3009', 'sonnet', 'op-jasmine', 'op-ruben', true,
+  // Aldo promoted to COMMANDER (opus) for beta testing — Apr 2026.
+  makeClient('op-aldo', 'Aldo', 'TITAN', '3009', 'opus', 'op-jasmine', 'op-ruben', true,
     { age: 28, height: "6'0\"", weight: 205, bodyFat: 16, trainingAge: '10 years', goals: ['hypertrophy', 'aesthetics'], readiness: 8, sleep: 8, stress: 2 },
     { split: 'Bro Split', equipment: ['Barbell', 'Dumbbell', 'Cable', 'Machine'], sessionDuration: 90, daysPerWeek: 6, weakPoints: ['Calves', 'Rear delts'], avoidMovements: [] },
     undefined, 'team-wolf-pack'),
