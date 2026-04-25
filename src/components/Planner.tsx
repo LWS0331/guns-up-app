@@ -270,6 +270,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // Drag and drop state
   const [dragDate, setDragDate] = useState<string | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  // Touch drag-and-drop state. HTML5 native drag (the `draggable`
+  // attribute + onDragStart/onDrop) does NOT fire on mobile touch
+  // devices — iOS Safari and most Android browsers only synthesize
+  // drag events from mouse input. So we emulate drag on touch via a
+  // long-press → touchmove → touchend pipeline. The long-press timer
+  // ref distinguishes a tap (which should still navigate to Day view)
+  // from an intent-to-drag (~250ms hold).
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchDragActiveRef = useRef(false);
 
   // Workout builder state
   const [builderData, setBuilderData] = useState<Workout>({
@@ -330,6 +339,24 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   useEffect(() => {
     setSelectedVoice(getPreferredVoice());
   }, []);
+
+  // ─── Touch-drag scroll suppression ────────────────────────────────────
+  // React (since 17) attaches touch listeners as PASSIVE by default,
+  // which means `e.preventDefault()` inside an onTouchMove handler is
+  // silently ignored on mobile browsers. To stop the page from scrolling
+  // while a drag is active, we attach a NON-passive document-level
+  // touchmove listener that calls preventDefault for the duration of
+  // the drag. The listener auto-detaches on drag end (effect cleanup).
+  useEffect(() => {
+    if (!dragDate) return;
+    const onMove = (e: TouchEvent) => {
+      if (touchDragActiveRef.current) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('touchmove', onMove, { passive: false });
+    return () => document.removeEventListener('touchmove', onMove);
+  }, [dragDate]);
   const voiceFeedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
   const showVoiceFeedback = useCallback((msg: string) => {
@@ -1187,7 +1214,25 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               return (
                 <div
                   key={dateStr}
-                  onClick={() => { setSelectedDate(dateStr); setViewMode('day'); }}
+                  /* data-cal attributes power the touch-drag path —
+                     during a touch drag we use document.elementFromPoint
+                     to find the cell under the finger, then read its
+                     dataset.calDate to know the drop target. The HTML5
+                     drag path doesn't need them but they're harmless. */
+                  data-cal-cell="true"
+                  data-cal-date={dateStr}
+                  onClick={() => {
+                    // Suppress the click that fires after a touch drag
+                    // releases over a different cell (iOS Safari fires
+                    // the synthetic click on touchend → would navigate
+                    // the operator into Day view of the drop target).
+                    if (touchDragActiveRef.current) {
+                      touchDragActiveRef.current = false;
+                      return;
+                    }
+                    setSelectedDate(dateStr);
+                    setViewMode('day');
+                  }}
                   onContextMenu={e => { e.preventDefault(); setShowDayMenu(dateStr); }}
                   onDragOver={e => { e.preventDefault(); setDragOverDate(dateStr); }}
                   onDragEnter={e => { e.preventDefault(); setDragOverDate(dateStr); }}
@@ -1255,6 +1300,107 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                         e.dataTransfer.effectAllowed = 'move';
                       }}
                       onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
+                      /* ─── Touch drag emulation ───────────────────
+                         HTML5 drag doesn't fire from touch input on
+                         iOS Safari or most mobile browsers, so the
+                         desktop drag handlers above are dead weight
+                         on phones/iPads. These touch handlers form
+                         a parallel pipeline:
+                           • touchstart  → start a 250ms long-press
+                                            timer; if it fires,
+                                            activate drag (haptic
+                                            feedback + setDragDate)
+                           • touchmove   → if drag active, find the
+                                            cell under the finger via
+                                            document.elementFromPoint
+                                            and update dragOverDate.
+                                            Also calls preventDefault
+                                            to stop the page scroll
+                                            while dragging.
+                           • touchend    → if drag landed on a
+                                            different cell, call
+                                            handleMoveWorkout. Set
+                                            touchDragActiveRef so the
+                                            synthesized click that
+                                            iOS fires after touchend
+                                            doesn't navigate into the
+                                            drop-target's Day view.
+                           • touchcancel → wash everything.
+                         A short tap (no long-press) bypasses all of
+                         the above and bubbles up to the cell's
+                         onClick → navigates to Day view as before. */
+                      onTouchStart={e => {
+                        // If user is mid-scroll, the timer gets
+                        // canceled in touchmove before drag activates.
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                        }
+                        longPressTimerRef.current = setTimeout(() => {
+                          longPressTimerRef.current = null;
+                          touchDragActiveRef.current = true;
+                          setDragDate(dateStr);
+                          if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                            try { navigator.vibrate(40); } catch { /* noop */ }
+                          }
+                        }, 250);
+                      }}
+                      onTouchMove={e => {
+                        // Pre-activation: any movement = scroll intent,
+                        // cancel the long-press timer.
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                          return;
+                        }
+                        // Post-activation: track the cell under the
+                        // finger so the green-dashed drop highlight
+                        // follows correctly. Scroll suppression is
+                        // handled by the document-level non-passive
+                        // listener attached when dragDate is set —
+                        // this React-bound listener is passive so
+                        // calling preventDefault here would be a noop.
+                        if (!touchDragActiveRef.current) return;
+                        const touch = e.touches[0];
+                        if (!touch) return;
+                        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                        const cell = (el as HTMLElement | null)?.closest('[data-cal-cell]') as HTMLElement | null;
+                        const targetDate = cell?.dataset.calDate ?? null;
+                        if (targetDate !== dragOverDate) {
+                          setDragOverDate(targetDate);
+                        }
+                      }}
+                      onTouchEnd={() => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                          // Bail out — was a tap, not a drag. Let the
+                          // synthetic click reach the cell's onClick.
+                          touchDragActiveRef.current = false;
+                          return;
+                        }
+                        if (touchDragActiveRef.current && dragOverDate && dragOverDate !== dateStr) {
+                          handleMoveWorkout(dateStr, dragOverDate);
+                        }
+                        setDragDate(null);
+                        setDragOverDate(null);
+                        // touchDragActiveRef stays true through the
+                        // synthesized click that iOS fires next, then
+                        // the cell's onClick resets it. Belt + braces:
+                        // if no synthesized click fires, reset on a
+                        // microtask so the next interaction is clean.
+                        Promise.resolve().then(() => {
+                          touchDragActiveRef.current = false;
+                        });
+                      }}
+                      onTouchCancel={() => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                        touchDragActiveRef.current = false;
+                        setDragDate(null);
+                        setDragOverDate(null);
+                      }}
                       style={{
                         fontFamily: 'var(--body)',
                         fontSize: 12,
@@ -1268,6 +1414,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                         cursor: dragDate === dateStr ? 'grabbing' : 'grab',
                         opacity: dragDate === dateStr ? 0.6 : 1,
                         transition: 'opacity 0.2s ease',
+                        // touchAction: 'none' kills tap on iOS, so use
+                        // 'manipulation' which only blocks double-tap
+                        // zoom — preventDefault on touchmove handles
+                        // scroll suppression once drag is active.
+                        touchAction: 'manipulation',
+                        // Hint to iOS: this element is interactive and
+                        // shouldn't get the magnifier popover on
+                        // long-press of text content.
+                        WebkitUserSelect: 'none',
+                        userSelect: 'none',
+                        WebkitTouchCallout: 'none',
                       }}
                     >
                       {workout.title}
