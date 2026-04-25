@@ -279,6 +279,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // from an intent-to-drag (~250ms hold).
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchDragActiveRef = useRef(false);
+  // Records where the finger first landed so we can apply a movement
+  // threshold before cancelling the long-press. iOS Safari fires
+  // touchmove for sub-pixel jitter just from placing a finger on the
+  // screen — without a threshold the long-press timer was getting
+  // cancelled before the 250ms hold ever finished, so drag never
+  // activated. 10px tolerance is generous enough to absorb finger
+  // jitter but tight enough that a real drag-intent registers as one.
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Workout builder state
   const [builderData, setBuilderData] = useState<Workout>({
@@ -1245,8 +1253,103 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     setDragDate(null);
                     setDragOverDate(null);
                   }}
+                  /* ─── Touch drag emulation, cell-level ─────────────
+                     Moved up from the workout-title div in PR #54
+                     because (a) the title is a 12px hit target —
+                     unreliably tappable on phone, and (b) the previous
+                     handler cancelled the long-press timer on ANY
+                     touchmove, but iOS fires touchmove for sub-pixel
+                     finger jitter just from placing a finger. The
+                     long-press never reached 250ms.
+                     New behavior:
+                       • touchstart → record finger origin, start 250ms
+                                       long-press timer (only when the
+                                       cell has a workout to drag)
+                       • touchmove  → if finger moved >10px from origin,
+                                       cancel the long-press (treat as
+                                       scroll); otherwise let the timer
+                                       fire and activate drag. After
+                                       activation, track elementFromPoint
+                                       to update dragOverDate.
+                       • touchend   → if drag landed on a different cell,
+                                       handleMoveWorkout. Suppress the
+                                       iOS-synthesized click via
+                                       touchDragActiveRef.
+                       • touchcancel → wash all state.
+                     A short tap (no long-press) still bubbles to onClick
+                     above and navigates to Day view. */
+                  onTouchStart={workout ? e => {
+                    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                    const t = e.touches[0];
+                    if (t) touchStartPosRef.current = { x: t.clientX, y: t.clientY };
+                    longPressTimerRef.current = setTimeout(() => {
+                      longPressTimerRef.current = null;
+                      touchDragActiveRef.current = true;
+                      setDragDate(dateStr);
+                      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                        try { navigator.vibrate(40); } catch { /* noop */ }
+                      }
+                    }, 250);
+                  } : undefined}
+                  onTouchMove={workout ? e => {
+                    // Pre-activation: only cancel timer once finger
+                    // moves more than 10px from origin. Below that =
+                    // jitter, treat as still-holding.
+                    if (longPressTimerRef.current) {
+                      const t = e.touches[0];
+                      const start = touchStartPosRef.current;
+                      if (t && start) {
+                        const dx = t.clientX - start.x;
+                        const dy = t.clientY - start.y;
+                        if (Math.hypot(dx, dy) > 10) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }
+                      return;
+                    }
+                    // Post-activation: track the cell under the finger.
+                    // Scroll suppression is handled by the document-
+                    // level non-passive listener (effect attached when
+                    // dragDate is set).
+                    if (!touchDragActiveRef.current) return;
+                    const touch = e.touches[0];
+                    if (!touch) return;
+                    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const cell = (el as HTMLElement | null)?.closest('[data-cal-cell]') as HTMLElement | null;
+                    const targetDate = cell?.dataset.calDate ?? null;
+                    if (targetDate !== dragOverDate) setDragOverDate(targetDate);
+                  } : undefined}
+                  onTouchEnd={workout ? () => {
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                      touchDragActiveRef.current = false;
+                      touchStartPosRef.current = null;
+                      return; // tap, not a drag — let onClick fire
+                    }
+                    if (touchDragActiveRef.current && dragOverDate && dragOverDate !== dateStr) {
+                      handleMoveWorkout(dateStr, dragOverDate);
+                    }
+                    setDragDate(null);
+                    setDragOverDate(null);
+                    touchStartPosRef.current = null;
+                    Promise.resolve().then(() => {
+                      touchDragActiveRef.current = false;
+                    });
+                  } : undefined}
+                  onTouchCancel={workout ? () => {
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                    }
+                    touchDragActiveRef.current = false;
+                    setDragDate(null);
+                    setDragOverDate(null);
+                    touchStartPosRef.current = null;
+                  } : undefined}
                   style={{
-                    minHeight: isMobile ? 60 : 90,
+                    minHeight: isMobile ? 60 : 110,
                     padding: isMobile ? 4 : 8,
                     backgroundColor: cellBg,
                     border: cellBorder,
@@ -1254,6 +1357,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     position: 'relative',
                     transition: 'all 0.2s ease',
                     overflow: 'hidden',
+                    // Disable native long-press text-selection / magnifier
+                    // on cells that are draggable so iOS doesn't fight
+                    // the long-press-to-drag gesture.
+                    ...(workout ? {
+                      WebkitUserSelect: 'none' as const,
+                      userSelect: 'none' as const,
+                      WebkitTouchCallout: 'none' as const,
+                      touchAction: 'manipulation' as const,
+                    } : {}),
                   }}
                 >
                   {/* Today left accent stripe — kept as a separate
@@ -1293,142 +1405,100 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   </div>
 
                   {workout && (
-                    <div
-                      draggable={true}
-                      onDragStart={e => {
-                        setDragDate(dateStr);
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
-                      /* ─── Touch drag emulation ───────────────────
-                         HTML5 drag doesn't fire from touch input on
-                         iOS Safari or most mobile browsers, so the
-                         desktop drag handlers above are dead weight
-                         on phones/iPads. These touch handlers form
-                         a parallel pipeline:
-                           • touchstart  → start a 250ms long-press
-                                            timer; if it fires,
-                                            activate drag (haptic
-                                            feedback + setDragDate)
-                           • touchmove   → if drag active, find the
-                                            cell under the finger via
-                                            document.elementFromPoint
-                                            and update dragOverDate.
-                                            Also calls preventDefault
-                                            to stop the page scroll
-                                            while dragging.
-                           • touchend    → if drag landed on a
-                                            different cell, call
-                                            handleMoveWorkout. Set
-                                            touchDragActiveRef so the
-                                            synthesized click that
-                                            iOS fires after touchend
-                                            doesn't navigate into the
-                                            drop-target's Day view.
-                           • touchcancel → wash everything.
-                         A short tap (no long-press) bypasses all of
-                         the above and bubbles up to the cell's
-                         onClick → navigates to Day view as before. */
-                      onTouchStart={e => {
-                        // If user is mid-scroll, the timer gets
-                        // canceled in touchmove before drag activates.
-                        if (longPressTimerRef.current) {
-                          clearTimeout(longPressTimerRef.current);
-                        }
-                        longPressTimerRef.current = setTimeout(() => {
-                          longPressTimerRef.current = null;
-                          touchDragActiveRef.current = true;
+                    <>
+                      {/* Workout title strip — green-bordered green-text
+                          line. Keeps the HTML5 draggable + onDragStart/
+                          onDragEnd handlers for the DESKTOP path (mouse
+                          drag). The TOUCH drag pipeline lives on the
+                          parent cell so the whole cell is the long-press
+                          hit target on phone/iPad — see the cell's
+                          onTouchStart/Move/End above. */}
+                      <div
+                        draggable={true}
+                        onDragStart={e => {
                           setDragDate(dateStr);
-                          if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-                            try { navigator.vibrate(40); } catch { /* noop */ }
-                          }
-                        }, 250);
-                      }}
-                      onTouchMove={e => {
-                        // Pre-activation: any movement = scroll intent,
-                        // cancel the long-press timer.
-                        if (longPressTimerRef.current) {
-                          clearTimeout(longPressTimerRef.current);
-                          longPressTimerRef.current = null;
-                          return;
-                        }
-                        // Post-activation: track the cell under the
-                        // finger so the green-dashed drop highlight
-                        // follows correctly. Scroll suppression is
-                        // handled by the document-level non-passive
-                        // listener attached when dragDate is set —
-                        // this React-bound listener is passive so
-                        // calling preventDefault here would be a noop.
-                        if (!touchDragActiveRef.current) return;
-                        const touch = e.touches[0];
-                        if (!touch) return;
-                        const el = document.elementFromPoint(touch.clientX, touch.clientY);
-                        const cell = (el as HTMLElement | null)?.closest('[data-cal-cell]') as HTMLElement | null;
-                        const targetDate = cell?.dataset.calDate ?? null;
-                        if (targetDate !== dragOverDate) {
-                          setDragOverDate(targetDate);
-                        }
-                      }}
-                      onTouchEnd={() => {
-                        if (longPressTimerRef.current) {
-                          clearTimeout(longPressTimerRef.current);
-                          longPressTimerRef.current = null;
-                          // Bail out — was a tap, not a drag. Let the
-                          // synthetic click reach the cell's onClick.
-                          touchDragActiveRef.current = false;
-                          return;
-                        }
-                        if (touchDragActiveRef.current && dragOverDate && dragOverDate !== dateStr) {
-                          handleMoveWorkout(dateStr, dragOverDate);
-                        }
-                        setDragDate(null);
-                        setDragOverDate(null);
-                        // touchDragActiveRef stays true through the
-                        // synthesized click that iOS fires next, then
-                        // the cell's onClick resets it. Belt + braces:
-                        // if no synthesized click fires, reset on a
-                        // microtask so the next interaction is clean.
-                        Promise.resolve().then(() => {
-                          touchDragActiveRef.current = false;
-                        });
-                      }}
-                      onTouchCancel={() => {
-                        if (longPressTimerRef.current) {
-                          clearTimeout(longPressTimerRef.current);
-                          longPressTimerRef.current = null;
-                        }
-                        touchDragActiveRef.current = false;
-                        setDragDate(null);
-                        setDragOverDate(null);
-                      }}
-                      style={{
-                        fontFamily: 'var(--body)',
-                        fontSize: 12,
-                        color: 'var(--green)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        marginBottom: 4,
-                        paddingLeft: 6,
-                        borderLeft: '1px solid var(--border-green-strong)',
-                        cursor: dragDate === dateStr ? 'grabbing' : 'grab',
-                        opacity: dragDate === dateStr ? 0.6 : 1,
-                        transition: 'opacity 0.2s ease',
-                        // touchAction: 'none' kills tap on iOS, so use
-                        // 'manipulation' which only blocks double-tap
-                        // zoom — preventDefault on touchmove handles
-                        // scroll suppression once drag is active.
-                        touchAction: 'manipulation',
-                        // Hint to iOS: this element is interactive and
-                        // shouldn't get the magnifier popover on
-                        // long-press of text content.
-                        WebkitUserSelect: 'none',
-                        userSelect: 'none',
-                        WebkitTouchCallout: 'none',
-                      }}
-                    >
-                      {workout.title}
-                    </div>
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
+                        style={{
+                          fontFamily: 'var(--body)',
+                          fontSize: 12,
+                          color: 'var(--green)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          marginBottom: 4,
+                          paddingLeft: 6,
+                          borderLeft: '1px solid var(--border-green-strong)',
+                          cursor: dragDate === dateStr ? 'grabbing' : 'grab',
+                          opacity: dragDate === dateStr ? 0.6 : 1,
+                          transition: 'opacity 0.2s ease',
+                        }}
+                      >
+                        {workout.title}
+                      </div>
+                      {/* Abbreviated movement list per the user's
+                          CoachRX reference — top 3 exercise names with
+                          a tight prescription crumb. Phone cells are
+                          too small (~60-70px tall) to fit this without
+                          overflow, so it only renders at iPad+ widths
+                          (cell minHeight: 110px there, ~3 lines fit).
+                          Conditioning blocks render their format label
+                          (EMOM × 6) instead of an exercise name.
+                          Letter prefixes (A) / B) / C)) match the
+                          report-style Day view so the Month and Day
+                          views read as the same vocabulary. */}
+                      {!isMobile && workout.blocks && workout.blocks.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 6 }}>
+                          {workout.blocks.slice(0, 3).map((block, bi) => {
+                            const label = getBlockLabels(workout.blocks)[bi];
+                            const isExercise = block.type === 'exercise';
+                            const name = isExercise
+                              ? (block as ExerciseBlock).exerciseName
+                              : (block as ConditioningBlock).format;
+                            const rx = isExercise ? (block as ExerciseBlock).prescription : '';
+                            // Pull just the sets-x-reps fragment out of
+                            // the prescription for the crumb (e.g.
+                            // "4x6-8" out of "4x6-8 @ 195-225 lbs · RPE 7-9 · ...").
+                            const setsReps = rx?.match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i)?.[0] || '';
+                            return (
+                              <div
+                                key={block.id}
+                                style={{
+                                  fontFamily: 'var(--mono)',
+                                  fontSize: 9,
+                                  lineHeight: 1.3,
+                                  color: isExercise ? 'var(--text-secondary)' : 'var(--amber)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                <span style={{ color: 'var(--green)', marginRight: 4 }}>{label})</span>
+                                {name}
+                                {setsReps && (
+                                  <span style={{ color: 'var(--text-tertiary)', marginLeft: 4 }}>
+                                    · {setsReps}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {workout.blocks.length > 3 && (
+                            <div
+                              style={{
+                                fontFamily: 'var(--mono)',
+                                fontSize: 9,
+                                color: 'var(--text-dim)',
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              + {workout.blocks.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {/* The "DAY" stencil watermark (added in PR #48) was
@@ -1541,12 +1611,68 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
                 {workout ? (
                   <div>
-                    <div className="t-display-m" style={{ color: 'var(--green)', fontSize: 12, marginBottom: 4 }}>
+                    <div
+                      className="t-display-m"
+                      style={{
+                        color: 'var(--green)',
+                        fontSize: 12,
+                        marginBottom: 8,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
                       {workout.title}
                     </div>
-                    <div className="t-mono-sm">
-                      {workout.blocks.length} blocks
-                    </div>
+                    {/* Abbreviated movement list — same vocabulary as
+                        the Month cell version + the Day-view report
+                        list. Letter prefix in mono green, exercise name
+                        + sets-x-reps fragment for the crumb. Up to 5
+                        movements fit comfortably in the 200px Week cell
+                        on iPad+; phone gets fewer rows naturally
+                        through cell width compression. */}
+                    {workout.blocks.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {workout.blocks.slice(0, 5).map((block, bi) => {
+                          const label = getBlockLabels(workout.blocks)[bi];
+                          const isExercise = block.type === 'exercise';
+                          const name = isExercise
+                            ? (block as ExerciseBlock).exerciseName
+                            : (block as ConditioningBlock).format;
+                          const rx = isExercise ? (block as ExerciseBlock).prescription : '';
+                          const setsReps = rx?.match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i)?.[0] || '';
+                          return (
+                            <div
+                              key={block.id}
+                              className="t-mono-sm"
+                              style={{
+                                fontSize: 10,
+                                lineHeight: 1.35,
+                                color: isExercise ? 'var(--text-secondary)' : 'var(--amber)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              <span style={{ color: 'var(--green)', marginRight: 4, fontWeight: 700 }}>
+                                {label})
+                              </span>
+                              {name}
+                              {setsReps && (
+                                <span style={{ color: 'var(--text-tertiary)', marginLeft: 4 }}>
+                                  · {setsReps}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {workout.blocks.length > 5 && (
+                          <div className="t-mono-sm" style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+                            + {workout.blocks.length - 5} more
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : tag ? (
                   <div className="t-body-sm" style={{ color: getTagColor(tag.color) }}>
