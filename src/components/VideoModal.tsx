@@ -46,69 +46,62 @@ export default function VideoModal({ open, onClose, url, title }: VideoModalProp
         position: 'fixed',
         inset: 0,
         zIndex: 9999,
-        background: 'rgba(0,0,0,0.92)',
+        background: 'rgba(0, 0, 0, 0.92)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px',
+        padding: 16,
         paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
         paddingTop: 'calc(16px + env(safe-area-inset-top))',
       }}
     >
+      {/* Modal panel — uses .ds-card.bracket for the canonical
+          tactical surface treatment. The 14px radius here is the
+          one explicit handoff exception (rare 14px radius for
+          interactive surfaces, matching .ds-gunny-fab). */}
       <div
         onClick={(e) => e.stopPropagation()}
+        className="ds-card bracket elevated"
         style={{
           width: '100%',
           maxWidth: 960,
-          background: '#0b0b0b',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 14,
+          padding: 0,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)',
         }}
       >
+        <span className="bl" />
+        <span className="br" />
+
         <div
+          className="row-between"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
             padding: '10px 14px',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-            background: '#111',
+            borderBottom: '1px solid var(--border-green-soft)',
+            background: 'var(--bg-elevated)',
           }}
         >
           <div
+            className="t-eyebrow"
             style={{
-              color: '#e7e7e7',
-              fontFamily: 'monospace',
-              fontSize: 13,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               marginRight: 10,
             }}
           >
-            {title || 'EXERCISE DEMO'}
+            {title || 'Exercise Demo'}
           </div>
           <button
+            type="button"
             onClick={onClose}
             aria-label="Close video"
-            style={{
-              background: 'transparent',
-              color: '#fff',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: 6,
-              padding: '4px 10px',
-              fontFamily: 'monospace',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
+            className="btn btn-ghost btn-sm"
+            style={{ minHeight: 32, padding: '4px 10px' }}
           >
-            CLOSE ✕
+            Close ✕
           </button>
         </div>
 
@@ -129,21 +122,20 @@ export default function VideoModal({ open, onClose, url, title }: VideoModalProp
             />
           </div>
         ) : (
+          // Fallback panel — search query / unembeddable link. Uses
+          // amber tone since this is a "heads up, partial result"
+          // signal rather than a hard error.
           <div
             style={{
               padding: 28,
-              color: '#e7e7e7',
               textAlign: 'center',
-              fontFamily: 'monospace',
-              fontSize: 14,
-              lineHeight: 1.5,
             }}
           >
-            <div style={{ marginBottom: 16, color: '#ffb547' }}>
+            <p className="t-body-sm" style={{ color: 'var(--amber)', marginBottom: 16 }}>
               {source.kind === 'search'
                 ? `No direct video on file. Search YouTube for "${source.searchQuery}".`
                 : 'Video cannot be embedded in-app.'}
-            </div>
+            </p>
             <a
               href={
                 source.kind === 'search'
@@ -154,18 +146,10 @@ export default function VideoModal({ open, onClose, url, title }: VideoModalProp
               }
               target="_blank"
               rel="noopener noreferrer"
-              style={{
-                display: 'inline-block',
-                padding: '10px 18px',
-                background: '#c9a227',
-                color: '#111',
-                borderRadius: 8,
-                fontWeight: 700,
-                letterSpacing: '0.05em',
-                textDecoration: 'none',
-              }}
+              className="btn btn-amber"
+              style={{ display: 'inline-flex' }}
             >
-              OPEN ON YOUTUBE ↗
+              Open on YouTube ↗
             </a>
           </div>
         )}
