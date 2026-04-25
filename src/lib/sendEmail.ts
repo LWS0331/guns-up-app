@@ -2,19 +2,32 @@
 //
 // Uses Resend's HTTP API directly (https://resend.com/docs/api-reference/emails/send-email)
 // — no `resend` npm package is needed, which keeps the dependency tree
-// unchanged. The free tier (100 emails/day, 3,000/month) is plenty for
-// landing-page contact submissions in beta.
+// unchanged. (The Resend dashboard "Quick Start" snippet uses the official
+// SDK; this is the fetch equivalent. Same wire format, fewer dependencies.)
+// Free tier covers 100 emails/day, 3,000/month — plenty for landing-page
+// contact submissions in beta.
 //
-// Configuration (set on Railway):
-//   RESEND_API_KEY       — required for delivery. If unset the helper
-//                          logs the email server-side and returns ok:true
-//                          so the contact form still works during setup.
-//   CONTACT_FROM_EMAIL   — verified-domain "From" address. Defaults to
-//                          a Resend placeholder; replace once a domain is
-//                          verified in the Resend dashboard.
-//   CONTACT_TO_EMAIL     — destination inbox for landing-page contact
-//                          submissions. Falls back to a hard-coded address
-//                          so submissions never silently disappear.
+// Configuration — set these as RAILWAY ENV VARS (never commit the API key):
+//
+//   RESEND_API_KEY       — required for delivery. Get one at resend.com →
+//                          API Keys → Create. If unset the helper logs the
+//                          submission server-side under [CONTACT_QUEUED]
+//                          (see route handler) and returns ok:true so the
+//                          contact form still works during setup.
+//
+//   CONTACT_FROM_EMAIL   — "From" header. Defaults to Resend's public
+//                          onboarding sender ([email protected]) which
+//                          works without domain verification — fine for
+//                          immediate testing. Once gunnyai.fit is verified
+//                          in the Resend dashboard, override this to
+//                          something like 'GUNS UP <noreply@gunnyai.fit>'
+//                          so the From line matches the brand.
+//
+//   CONTACT_TO_EMAIL     — destination inbox. Falls back to the founder's
+//                          [email protected] address so submissions
+//                          land somewhere even before Railway env is set.
+//                          Override per-deployment if you need to route
+//                          submissions to a shared inbox.
 
 const DEFAULT_FROM = 'GUNS UP <[email protected]>';
 const DEFAULT_TO = '[email protected]';
