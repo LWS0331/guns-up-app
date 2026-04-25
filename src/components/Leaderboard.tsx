@@ -18,7 +18,11 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
       const workoutsCompleted = Object.values(op.workouts || {}).filter(w => w.completed).length;
       const todayStr = getLocalDateStr();
       const mealsLogged = Object.values(op.nutrition?.meals || {}).reduce((sum, meals) => sum + (Array.isArray(meals) ? meals.length : 0), 0);
-      const prsHit = (op.prs || []).length;
+      // Exclude milestone-type PRs that are explicitly not yet achieved
+      const prsHit = (op.prs || []).filter(pr => pr.achieved !== false).length;
+      // Wearable counts as connected if intake recorded a device other than "none"
+      const wearable = (op.intake?.wearableDevice ?? '').toLowerCase();
+      const wearableConnected = wearable !== '' && wearable !== 'none' && wearable !== 'no';
 
       // Calculate streak (consecutive days with completed workout)
       let streak = 0;
@@ -46,6 +50,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
       if (streak >= 30) points += LEADERBOARD_POINTS.streakBonus30;
       else if (streak >= 7) points += LEADERBOARD_POINTS.streakBonus7;
       if (op.intake?.completed) points += LEADERBOARD_POINTS.intakeCompleted;
+      if (wearableConnected) points += LEADERBOARD_POINTS.wearableConnected;
 
       // Find team
       const team = TEAMS.find(t => t.memberIds.includes(op.id));
@@ -167,7 +172,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
                   </span>
                 </div>
                 <div style={{ fontFamily: 'Share Tech Mono', fontSize: 10, color: '#666', marginTop: 2 }}>
-                  {entry.workoutsCompleted} workouts | {entry.streak}d streak | {entry.consistencyScore}% consistency
+                  {entry.workoutsCompleted} workouts | {entry.mealsLogged} meals | {entry.prsHit} PRs | {entry.streak}d streak | {entry.consistencyScore}% consistency
                 </div>
               </div>
 
@@ -185,7 +190,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
       <div style={{ marginTop: 20, padding: 12, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 4 }}>
         <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#666', letterSpacing: 1, marginBottom: 8 }}>HOW POINTS WORK</div>
         <div style={{ fontFamily: 'Share Tech Mono', fontSize: 11, color: '#888', lineHeight: 1.8 }}>
-          Workout Completed: +{LEADERBOARD_POINTS.workoutCompleted} | Meal Logged: +{LEADERBOARD_POINTS.mealLogged} | PR Hit: +{LEADERBOARD_POINTS.prHit} | 7-Day Streak: +{LEADERBOARD_POINTS.streakBonus7} | 30-Day Streak: +{LEADERBOARD_POINTS.streakBonus30} | Intake Done: +{LEADERBOARD_POINTS.intakeCompleted}
+          Workout Completed: +{LEADERBOARD_POINTS.workoutCompleted} | Meal Logged: +{LEADERBOARD_POINTS.mealLogged} | PR Hit: +{LEADERBOARD_POINTS.prHit} | 7-Day Streak: +{LEADERBOARD_POINTS.streakBonus7} | 30-Day Streak: +{LEADERBOARD_POINTS.streakBonus30} | Intake Done: +{LEADERBOARD_POINTS.intakeCompleted} | Wearable Connected: +{LEADERBOARD_POINTS.wearableConnected}
         </div>
       </div>
     </div>
