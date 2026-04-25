@@ -426,7 +426,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [currentHR, setCurrentHR] = useState<number | null>(null);
   const [targetZone, setTargetZone] = useState<number>(3); // default Zone 3
   const [hrSource, setHrSource] = useState<'wearable' | 'manual' | 'none'>('none');
-  const [showHrPanel, setShowHrPanel] = useState(true);
+  // showHrPanel was the toggle for the legacy expanded HR panel that
+  // was deleted when the HUD became the source of truth for HR data.
+  // State removed — kept the comment for future-grep.
   // ═══ Task 20/21: WARMUP + COOLDOWN collapsible + in-app video modal ═══
   const [videoModalState, setVideoModalState] = useState<{ url: string; title: string } | null>(null);
   const [warmupExpanded, setWarmupExpanded] = useState(true);
@@ -1963,8 +1965,6 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   ? () => openExerciseVideo(activeBlock.exerciseName, activeBlock.videoUrl)
                   : undefined
               }
-              hrExpanded={showHrPanel}
-              onToggleHrExpanded={() => setShowHrPanel(v => !v)}
               workoutStartTime={workout.results?.startTime}
               onPauseTimer={restRunning ? () => setRestRunning(false) : undefined}
               onAddRest={restRunning ? () => setRestTimer(t => t + 30) : undefined}
@@ -2037,281 +2037,27 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             move into a settings popover (TODO: add icon button in
             the workout-mode header that pops a chip group). */}
 
-        {/* Rest Timer card — handoff treatment: bracket card that
-            shifts tone with state.
-              idle    → default green soft bracket
-              running → amber-tone bracket (matches the active-vital
-                        "in-progress" tone elsewhere in the system)
-              alarm   → danger-tone with a soft pulse animation
-            The card is `position: sticky` to the top of the workout
-            scroll area so the rest timer stays visible no matter
-            how far down the operator has scrolled into the
-            exercise blocks — this is the practical equivalent of
-            the handoff `.vitals-sticky` HUD bar without restructuring
-            the layout. Z-index sits above the cards but below the
-            modal/overlays.
-            The countdown digits use .t-num-display sized big when
-            running. Preset chips use .btn.btn-amber.btn-sm. */}
-        <div
-          className={`ds-card bracket ${
-            timerAlarm ? 'danger danger-tone' : restRunning ? 'amber amber-tone' : ''
-          }`}
-          style={{
-            textAlign: 'center',
-            marginBottom: 20,
-            padding: 16,
-            position: 'relative',
-            // Sticky positioning was removed when VitalsSticky landed
-            // — the HUD's left slot now owns the always-visible
-            // countdown. This card stays in the scroll flow as the
-            // "rest controls" panel: preset chips + Stop button +
-            // big readout for at-rest reference.
-            transition: 'all 0.3s',
-            animation: timerAlarm ? 'timerAlarmPulse 0.5s ease-in-out infinite' : undefined,
-            boxShadow: timerAlarm ? '0 0 24px rgba(255, 68, 68, 0.6)' : undefined,
-          }}
-        >
-          <span className="bl" /><span className="br" />
-          <style>{`@keyframes timerAlarmPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }`}</style>
+        {/* Inner Rest Timer card was removed — the VitalsSticky HUD
+            up top owns the rest countdown (left slot) AND the
+            preset duration controls (the +30s button + the rest
+            timer chips that activate from the prescription's
+            "Rest 2:30" string when the user logs a set). The
+            duplicate card was redundant in screenshots from
+            production. Preset durations are still reachable
+            through the rest-timer auto-start logic in
+            logCurrentSet — manual preset selection is queued for
+            the HUD redesign if the team wants quick-pick chips
+            inside the HUD itself. */}
 
-          {restRunning && restTimerMax > 0 && (
-            <svg
-              width="100"
-              height="100"
-              viewBox="0 0 100 100"
-              style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', opacity: 0.3 }}
-            >
-              <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
-              <circle
-                cx="50"
-                cy="50"
-                r="44"
-                fill="none"
-                stroke={restTimer <= 10 ? 'var(--danger)' : 'var(--amber)'}
-                strokeWidth="4"
-                strokeDasharray={`${2 * Math.PI * 44}`}
-                strokeDashoffset={`${2 * Math.PI * 44 * (1 - restTimer / restTimerMax)}`}
-                strokeLinecap="round"
-                transform="rotate(-90 50 50)"
-                style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s' }}
-              />
-            </svg>
-          )}
-
-          <div
-            style={{
-              fontFamily: 'var(--mono)',
-              fontSize: restRunning ? 48 : 24,
-              color: restTimer <= 3 && restRunning
-                ? 'var(--danger)'
-                : restTimer <= 10 && restRunning
-                  ? 'var(--amber)'
-                  : 'var(--amber)',
-              textShadow: restRunning ? '0 0 12px rgba(255,140,0,0.5)' : undefined,
-              transition: 'all 0.3s',
-              position: 'relative',
-              zIndex: 1,
-              lineHeight: 1,
-            }}
-          >
-            {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}
-          </div>
-
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 12, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
-            {[30, 60, 90, 120, 180].map(sec => (
-              <button
-                key={sec}
-                type="button"
-                onClick={() => { setRestTimer(sec); setRestTimerMax(sec); setRestRunning(true); }}
-                className="btn btn-amber btn-sm"
-                style={{ padding: '6px 10px' }}
-              >
-                {sec < 60 ? `${sec}s` : `${sec / 60}m`}
-              </button>
-            ))}
-            {restRunning && (
-              <button
-                type="button"
-                onClick={() => { setRestRunning(false); setRestTimer(0); }}
-                className="btn btn-danger btn-sm"
-                style={{ padding: '6px 10px' }}
-              >
-                Stop
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* The expanded HR Zone Tracker card now lives inside the
-            VitalsSticky HUD's .vitals-expand region above (toggled
-            via the ▼ HUD action button). The duplicate render here
-            was removed — it would otherwise show two HR gauges
-            stacked on top of each other. */}
-        {/* legacy inline HR panel — kept commented for reference */}
-        {false && (
-          <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: `1px solid ${currentHR ? getCurrentZone(currentHR).color : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ fontFamily: 'Orbitron', fontSize: 11, color: '#888', letterSpacing: 1 }}>HR ZONE TRACKER</div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#555' }}>
-                  {hrSource === 'wearable' ? 'LIVE' : hrSource === 'manual' ? 'MANUAL' : 'NO DEVICE'}
-                </span>
-                <button onClick={() => setShowHrPanel(false)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
-              </div>
-            </div>
-
-            {/* Current HR display */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-              <div style={{ textAlign: 'center' }}>
-                {currentHR ? (
-                  <>
-                    <div style={{ fontFamily: 'Orbitron', fontSize: 36, color: getCurrentZone(currentHR).color, fontWeight: 700 }}>{currentHR}</div>
-                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: 10, color: '#666' }}>BPM</div>
-                  </>
-                ) : (
-                  <div style={{ fontFamily: 'Share Tech Mono', fontSize: 13, color: '#555' }}>
-                    <input type="number" placeholder="Enter HR"
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          const val = parseInt((e.target as HTMLInputElement).value);
-                          if (val > 0) {
-                            setCurrentHR(val);
-                            setHrSource('manual');
-                            setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
-                            (e.target as HTMLInputElement).value = '';
-                          }
-                        }
-                      }}
-                      style={{ width: 80, padding: '6px 8px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 16, textAlign: 'center', borderRadius: 4 }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {currentHR && (
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: 'Orbitron', fontSize: 13, color: getCurrentZone(currentHR).color, marginBottom: 4 }}>
-                    ZONE {getCurrentZone(currentHR).zone}: {getCurrentZone(currentHR).name}
-                  </div>
-                  {/* Zone alert — flash if outside target */}
-                  {getCurrentZone(currentHR).zone !== targetZone && (
-                    <div style={{
-                      fontFamily: 'Share Tech Mono', fontSize: 11,
-                      color: getCurrentZone(currentHR).zone > targetZone ? '#ff4444' : '#00ff41',
-                      animation: 'pulse 1s infinite',
-                    }}>
-                      {getCurrentZone(currentHR).zone > targetZone ? 'ABOVE TARGET — SLOW DOWN' : 'BELOW TARGET — PUSH HARDER'}
-                    </div>
-                  )}
-                  {getCurrentZone(currentHR).zone === targetZone && (
-                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: 11, color: '#00ff41' }}>ON TARGET</div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Zone bar visualization */}
-            <div style={{ display: 'flex', gap: 2, height: 24, borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-              {HR_ZONES.map(z => {
-                const isActive = currentHR ? getCurrentZone(currentHR).zone === z.zone : false;
-                const isTarget = z.zone === targetZone;
-                return (
-                  <div key={z.zone} onClick={() => setTargetZone(z.zone)} style={{
-                    flex: 1, background: isActive ? z.color : `${z.color}22`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    border: isTarget ? `2px solid ${z.color}` : '2px solid transparent',
-                    transition: 'all 0.3s', position: 'relative',
-                  }}>
-                    <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: isActive ? '#000' : z.color, fontWeight: isActive ? 700 : 400 }}>
-                      Z{z.zone}
-                    </span>
-                    {isTarget && (
-                      <div style={{ position: 'absolute', bottom: -1, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: `4px solid ${z.color}` }} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Zone range labels */}
-            <div style={{ display: 'flex', gap: 2 }}>
-              {HR_ZONES.map(z => (
-                <div key={z.zone} style={{ flex: 1, textAlign: 'center', fontFamily: 'Share Tech Mono', fontSize: 8, color: '#555' }}>
-                  {z.min}-{z.max}
-                </div>
-              ))}
-            </div>
-
-            {/* Manual HR update button when already has HR */}
-            {currentHR && hrSource === 'manual' && (
-              <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input type="number" placeholder="Update HR"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      const val = parseInt((e.target as HTMLInputElement).value);
-                      if (val > 0) {
-                        setCurrentHR(val);
-                        setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
-                        (e.target as HTMLInputElement).value = '';
-                      }
-                    }
-                  }}
-                  style={{ width: 70, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 12, textAlign: 'center', borderRadius: 4 }}
-                />
-                <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#555' }}>press Enter</span>
-              </div>
-            )}
-
-            {/* Mini HR history sparkline */}
-            {hrHistory.length > 1 && (
-              <div style={{ marginTop: 8 }}>
-                <svg width="100%" height="60" viewBox="0 0 200 60" preserveAspectRatio="none" style={{ display: 'block' }}>
-                  {(() => {
-                    const data = hrHistory.slice(-30);
-                    const minH = Math.min(...data.map(x => x.hr)) - 5;
-                    const maxH = Math.max(...data.map(x => x.hr)) + 5;
-                    const range = maxH - minH || 1;
-                    const points = data.map((h, i) => {
-                      const x = (i / (data.length - 1)) * 200;
-                      const y = 55 - ((h.hr - minH) / range) * 50;
-                      return `${x},${y}`;
-                    }).join(' ');
-                    const fillPoints = `0,55 ${points} 200,55`;
-                    const lastHr = data[data.length - 1];
-                    const lastColor = lastHr ? getCurrentZone(lastHr.hr).color : '#FF8C00';
-                    return (
-                      <>
-                        <defs>
-                          <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={lastColor} stopOpacity="0.3" />
-                            <stop offset="100%" stopColor={lastColor} stopOpacity="0" />
-                          </linearGradient>
-                        </defs>
-                        <polygon points={fillPoints} fill="url(#hrGrad)" />
-                        <polyline points={points} fill="none" stroke={lastColor} strokeWidth="2" strokeLinejoin="round" />
-                        {lastHr && (
-                          <circle cx={200} cy={55 - ((lastHr.hr - minH) / range) * 50} r="3" fill={lastColor} />
-                        )}
-                      </>
-                    );
-                  })()}
-                </svg>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Share Tech Mono', fontSize: 8, color: '#555' }}>
-                  <span>{hrHistory.length > 30 ? `${Math.round((Date.now() - hrHistory[hrHistory.length - 30].time) / 60000)}min ago` : 'start'}</span>
-                  <span>now</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* HR panel toggle when hidden */}
-        {!showHrPanel && workoutMode && (
-          <button onClick={() => setShowHrPanel(true)} style={{
-            marginBottom: 12, padding: '4px 10px', background: '#0a0a0a', border: '1px solid #333',
-            color: '#888', fontFamily: 'Share Tech Mono', fontSize: 10, cursor: 'pointer', borderRadius: 4,
-          }}>SHOW HR TRACKER</button>
-        )}
+        {/* Legacy inline HR panel + SHOW HR TRACKER toggle were
+            deleted in this cleanup pass. HR data lives entirely in
+            the VitalsSticky HUD center slot now (BPM digits + mini
+            sparkline + IN RANGE/ABOVE/BELOW range label) — there
+            was no longer a reason to keep the dead-code reference
+            block or the toggle button mounting empty UI.
+            If a richer HR panel is wanted later, build it as a
+            modal triggered from a HUD-level action — don't bring
+            back the inline render. */}
 
         {/* ═══ WARMUP — single shared amber bracket card per spec.
             Canonical handoff renders the warmup as ONE card holding
