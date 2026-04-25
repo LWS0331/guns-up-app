@@ -1046,9 +1046,16 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         <DailyBriefRef brief={operator.dailyBrief} focus="nutrition" compact={true} />
       )}
 
-      {/* ACCURACY TIER KEY */}
-      <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 8 }}>
-        <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#888', letterSpacing: 1, marginBottom: 8 }}>TRACKING ACCURACY TIERS</div>
+      {/* Accuracy tier key — bracket card listing the 4 tracking
+          modes (Manual / USDA / Quick / Photo) with their accuracy
+          bands. Each tier-row uses a tier-tinted background +
+          border via inline override since tier colors are dynamic
+          and outside the canonical green/amber/danger palette. */}
+      <div className="ds-card bracket" style={{ marginBottom: 16, padding: 12 }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 8, display: 'inline-flex' }}>
+          Tracking Accuracy Tiers
+        </span>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {[
             { tier: 1, label: 'MANUAL ENTRY', desc: 'You weigh + enter exact macros', color: '#00ff41', icon: '⚡', accuracy: '±1-3%' },
@@ -1056,135 +1063,130 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             { tier: 3, label: 'QUICK LOG', desc: 'AI text parsing from description', color: '#facc15', icon: '💬', accuracy: '±15-25%' },
             { tier: 4, label: 'PHOTO SNAP', desc: 'AI vision analysis of plate photo', color: '#ff6b35', icon: '📸', accuracy: '±20-40%' },
           ].map(t => (
-            <div key={t.tier} style={{
-              padding: '8px 10px', background: `${t.color}08`, border: `1px solid ${t.color}30`, borderRadius: 6,
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
+            <div
+              key={t.tier}
+              style={{
+                padding: '8px 10px',
+                background: `${t.color}08`,
+                border: `1px solid ${t.color}30`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
               <span style={{ fontSize: 16 }}>{t.icon}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: t.color, letterSpacing: 0.5 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="t-display-m" style={{ color: t.color, fontSize: 9, letterSpacing: 1 }}>
                   TIER {t.tier}: {t.label}
                 </div>
-                <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#555' }}>{t.desc}</div>
+                <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
+                  {t.desc}
+                </div>
               </div>
-              <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: t.color, fontWeight: 700 }}>{t.accuracy}</span>
+              <span className="t-mono-data" style={{ color: t.color, fontWeight: 700, fontSize: 10 }}>
+                {t.accuracy}
+              </span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ─── DATE NAVIGATOR ─── */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        padding: '10px 12px',
-        marginBottom: 12,
-        background: 'rgba(0,255,65,0.03)',
-        border: '1px solid rgba(0,255,65,0.10)',
-        borderRadius: 4,
-      }}>
+      {/* Date navigator — prev / day-label / next. Center cluster
+          shows the prominent .t-display-m label + small mono ISO
+          date below. Buttons use .btn.btn-ghost.btn-sm so they
+          read as "tap to navigate" without competing with primary
+          actions further down the screen. */}
+      <div
+        className="row-between"
+        style={{
+          gap: 8,
+          padding: '10px 12px',
+          marginBottom: 12,
+          background: 'rgba(0,255,65,0.03)',
+          border: '1px solid var(--border-green-soft)',
+        }}
+      >
         <button
+          type="button"
           onClick={() => shiftViewingDate(-1)}
-          style={{
-            padding: '6px 12px',
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: 11,
-            fontWeight: 700,
-            color: '#00ff41',
-            background: 'transparent',
-            border: '1px solid rgba(0,255,65,0.3)',
-            borderRadius: 3,
-            cursor: 'pointer',
-            letterSpacing: 1,
-          }}
           aria-label="Previous day"
+          className="btn btn-ghost btn-sm"
         >
-          ◀ PREV
+          ◀ Prev
         </button>
 
         <div style={{ textAlign: 'center', flex: 1 }}>
-          <div style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: 13,
-            fontWeight: 700,
-            color: '#00ff41',
-            letterSpacing: 2,
-          }}>
+          <div className="t-display-m" style={{ color: 'var(--green)', fontSize: 13, letterSpacing: 2 }}>
             {formatViewingDateLabel()}
           </div>
-          <div style={{
-            fontFamily: 'Share Tech Mono, monospace',
-            fontSize: 10,
-            color: '#666',
-            marginTop: 2,
-          }}>
+          <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginTop: 2 }}>
             {viewingDateStr}
           </div>
         </div>
 
         <button
+          type="button"
           onClick={() => shiftViewingDate(1)}
           disabled={isViewingToday}
-          style={{
-            padding: '6px 12px',
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: 11,
-            fontWeight: 700,
-            color: isViewingToday ? '#333' : '#00ff41',
-            background: 'transparent',
-            border: `1px solid ${isViewingToday ? '#1a1a1a' : 'rgba(0,255,65,0.3)'}`,
-            borderRadius: 3,
-            cursor: isViewingToday ? 'not-allowed' : 'pointer',
-            letterSpacing: 1,
-          }}
           aria-label="Next day"
+          className="btn btn-ghost btn-sm"
         >
-          NEXT ▶
+          Next ▶
         </button>
       </div>
 
-      {/* JUMP TO TODAY — only visible when viewing a past day */}
+      {/* Jump-to-today — only visible when viewing a past day.
+          Amber tone matches the canonical "warm/in-progress"
+          treatment used elsewhere for non-blocking attention CTAs. */}
       {!isViewingToday && (
         <button
+          type="button"
           onClick={() => setViewingDateStr(getTodayStr())}
-          style={{
-            width: '100%',
-            padding: '8px',
-            marginBottom: 12,
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: 10,
-            fontWeight: 700,
-            color: '#facc15',
-            background: 'rgba(250,204,21,0.05)',
-            border: '1px solid rgba(250,204,21,0.2)',
-            borderRadius: 3,
-            cursor: 'pointer',
-            letterSpacing: 1.5,
-          }}
+          className="btn btn-amber btn-block btn-sm"
+          style={{ marginBottom: 12 }}
         >
-          ↻ JUMP TO TODAY
+          ↻ Jump to Today
         </button>
       )}
 
-      {/* LOG MODE SELECTOR — only when viewing today */}
+      {/* Log mode selector — only when viewing today. Four-mode
+          toggle (Quick / Photo / USDA / Manual) where each mode
+          tracks the per-tier color (yellow / orange / light-green
+          / green). The active button shows the tier color via
+          inline override; the rest stay as the default segmented
+          chrome. */}
       {isViewingToday && (<>
-      <div style={{ marginBottom: 16, display: 'flex', gap: 6 }}>
+      <div className="segmented" style={{ marginBottom: 16, gap: 6 }}>
         {([
-          { id: 'quick' as const, label: '💬 QUICK', color: '#facc15' },
-          { id: 'photo' as const, label: '📸 PHOTO', color: '#ff6b35' },
+          { id: 'quick' as const, label: '💬 Quick', color: '#facc15' },
+          { id: 'photo' as const, label: '📸 Photo', color: '#ff6b35' },
           { id: 'search' as const, label: '🔬 USDA', color: '#4ade80' },
-          { id: 'manual' as const, label: '⚡ MANUAL', color: '#00ff41' },
-        ]).map(m => (
-          <button key={m.id} onClick={() => setNutritionLogMode(m.id)} style={{
-            flex: 1, padding: '8px 4px', fontFamily: 'Orbitron, sans-serif', fontSize: 9, fontWeight: 700,
-            background: nutritionLogMode === m.id ? `${m.color}20` : '#0a0a0a',
-            color: nutritionLogMode === m.id ? m.color : '#555',
-            border: `1px solid ${nutritionLogMode === m.id ? m.color : '#222'}`,
-            borderRadius: 4, cursor: 'pointer', letterSpacing: 0.5, transition: 'all 0.2s',
-          }}>{m.label}</button>
-        ))}
+          { id: 'manual' as const, label: '⚡ Manual', color: '#00ff41' },
+        ]).map(m => {
+          const isActive = nutritionLogMode === m.id;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setNutritionLogMode(m.id)}
+              className={`seg ${isActive ? 'active' : ''}`}
+              style={{
+                flex: 1,
+                padding: '8px 4px',
+                fontSize: 10,
+                ...(isActive
+                  ? {
+                      color: m.color,
+                      borderColor: m.color,
+                      background: `${m.color}20`,
+                    }
+                  : {}),
+              }}
+            >
+              {m.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* QUICK LOG MODE */}
