@@ -247,162 +247,139 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
         pointerEvents: 'none',
       }} />
 
-      {/* Operator banner */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '24px',
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : 'translateY(-10px)',
-        transition: 'all 0.5s ease',
-        position: 'relative',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+      {/* Operator banner — handoff "callsign hero" pattern. Big
+          green-glow callsign as .t-display-xl + mono meta line +
+          tier/beta chips + date stamp on the right. */}
+      <div
+        className="row-between"
+        style={{
+          marginBottom: 24,
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: 16,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(-10px)',
+          transition: 'all 0.5s ease',
+          position: 'relative',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <div style={{
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: '26px',
-              fontWeight: 900,
-              color: '#00ff41',
-              letterSpacing: '4px',
-              textShadow: '0 0 12px rgba(0,255,65,0.3)',
-            }}>
+            <h1
+              className="t-display-xl"
+              style={{ color: 'var(--green)', textShadow: '0 0 12px rgba(0, 255, 65, 0.35)', letterSpacing: 4, fontSize: 26 }}
+            >
               {operator.callsign}
-            </div>
-            <div style={{
-              fontFamily: 'Share Tech Mono, monospace',
-              fontSize: '15px',
-              color: '#777',
-              letterSpacing: '1px',
-              marginTop: '4px',
-            }}>
-              {operator.name} // {operator.role.toUpperCase()} // {(operator.profile?.goals || []).join(' + ').toUpperCase()}
+            </h1>
+            <div className="t-mono-sm" style={{ marginTop: 4, color: 'var(--text-tertiary)' }}>
+              {operator.name} // {operator.role.toUpperCase()} //{' '}
+              {(operator.profile?.goals || []).join(' + ').toUpperCase()}
             </div>
           </div>
-          {/* Tier/Beta Badge */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            alignItems: 'flex-start',
-          }}>
-            <div style={{
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: '12px',
-              fontWeight: 700,
-              letterSpacing: '1.5px',
-              color: getTierBadgeColor(operator.tier),
-              padding: '4px 8px',
-              border: `1px solid ${getTierBadgeColor(operator.tier)}60`,
-              backgroundColor: `${getTierBadgeColor(operator.tier)}08`,
-              textShadow: `0 0 4px ${getTierBadgeColor(operator.tier)}40`,
-            }}>
-              {TIER_CONFIGS[operator.tier].name}
-            </div>
-            {operator.betaUser && (
-              <div style={{
-                fontFamily: 'Orbitron, sans-serif',
-                fontSize: '11px',
+          {/* Tier + Beta chips. .chip with inline tier-tinted color
+              since tier accents are dynamic and outside the canonical
+              green/amber/danger palette. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+            <span
+              className="chip"
+              style={{
+                color: getTierBadgeColor(operator.tier),
+                borderColor: `${getTierBadgeColor(operator.tier)}60`,
+                background: `${getTierBadgeColor(operator.tier)}10`,
+                fontFamily: 'var(--display)',
                 fontWeight: 700,
-                letterSpacing: '1.5px',
-                color: '#ffb800',
-                padding: '3px 6px',
-                border: '1px solid rgba(255,184,0,0.4)',
-                backgroundColor: 'rgba(255,184,0,0.06)',
-                textShadow: '0 0 3px rgba(255,184,0,0.3)',
-              }}>
+                letterSpacing: 1.5,
+                textShadow: `0 0 4px ${getTierBadgeColor(operator.tier)}40`,
+              }}
+            >
+              {TIER_CONFIGS[operator.tier].name}
+            </span>
+            {operator.betaUser && (
+              <span className="chip amber" style={{ fontFamily: 'var(--display)', fontWeight: 700, letterSpacing: 1.5 }}>
                 BETA TESTER
-              </div>
+              </span>
             )}
           </div>
         </div>
-        <div style={{
-          fontFamily: 'Share Tech Mono, monospace',
-          fontSize: '15px',
-          color: '#666',
-          textAlign: 'right',
-        }}>
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}
+        <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)', textAlign: 'right' }}>
+          {new Date()
+            .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
+            .toUpperCase()}
         </div>
       </div>
 
-      {/* Hero Stats Row */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-        gap: isMobile ? '8px' : '12px',
-        marginBottom: '24px',
-        position: 'relative',
-      }}>
-        {stats.map((stat, i) => (
-          <div key={stat.labelKey} style={{
-            border: '1px solid rgba(0,255,65,0.06)',
-            padding: '20px',
-            position: 'relative',
-            overflow: 'hidden',
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? 'translateY(0)' : 'translateY(15px)',
-            transition: `all 0.5s ease ${i * 0.1}s`,
-            background: 'linear-gradient(135deg, rgba(10,10,10,0.8) 0%, rgba(5,5,5,0.95) 100%)',
-          }}>
-            {/* Top-left corner accent */}
-            <div style={{
-              position: 'absolute', top: 0, left: 0,
-              width: '12px', height: '12px',
-              borderTop: `2px solid ${stat.color}30`,
-              borderLeft: `2px solid ${stat.color}30`,
-            }} />
-            {/* Bottom-right corner accent */}
-            <div style={{
-              position: 'absolute', bottom: 0, right: 0,
-              width: '12px', height: '12px',
-              borderBottom: `2px solid ${stat.color}30`,
-              borderRight: `2px solid ${stat.color}30`,
-            }} />
-
-            <div style={{
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: '15px',
-              letterSpacing: '2px',
-              color: '#888',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              marginBottom: '12px',
-            }}>
-              {stat.label}
+      {/* Hero stats — 4-up bracket cards. Each cell uses .ds-card
+          .bracket with a tier-tinted accent on the corner brackets
+          via the .amber modifier when the stat itself reads amber
+          (VOLUME). All 4 corners visible per the handoff card spec. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gap: isMobile ? 8 : 12,
+          marginBottom: 24,
+          position: 'relative',
+        }}
+      >
+        {stats.map((stat, i) => {
+          const isAmber = stat.color === '#ffb800';
+          return (
+            <div
+              key={stat.labelKey}
+              className={`ds-card bracket${isAmber ? ' amber' : ''}`}
+              style={{
+                padding: 20,
+                position: 'relative',
+                overflow: 'hidden',
+                opacity: mounted ? 1 : 0,
+                transform: mounted ? 'translateY(0)' : 'translateY(15px)',
+                transition: `all 0.5s ease ${i * 0.1}s`,
+              }}
+            >
+              <span className="bl" />
+              <span className="br" />
+              <div className="t-eyebrow" style={{ marginBottom: 12, color: isAmber ? 'var(--amber)' : undefined }}>
+                {stat.label}
+              </div>
+              <div
+                style={{
+                  fontFamily: 'var(--mono)',
+                  fontSize: isMobile
+                    ? stat.label === 'VOLUME'
+                      ? 22
+                      : 28
+                    : stat.label === 'VOLUME'
+                    ? 32
+                    : 42,
+                  color: stat.color,
+                  lineHeight: 1,
+                  marginBottom: 8,
+                  textShadow: `0 0 8px ${stat.color}60, 0 0 20px ${stat.color}25`,
+                  fontWeight: 700,
+                }}
+              >
+                {stat.label === 'VOLUME' ? stat.value.toLocaleString() : stat.value}
+                {stat.suffix}
+              </div>
+              <div className="t-mono-sm" style={{ color: 'var(--text-dim)', letterSpacing: 1 }}>
+                // {stat.sub}
+              </div>
+              {/* Bottom shimmer line — kept as a subtle status accent
+                  matching the stat's color. */}
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: 1,
+                  background: `linear-gradient(90deg, transparent, ${stat.color}20, transparent)`,
+                }}
+              />
             </div>
-            <div style={{
-              fontFamily: 'Share Tech Mono, monospace',
-              fontSize: isMobile ? (stat.label === 'VOLUME' ? '22px' : '28px') : (stat.label === 'VOLUME' ? '32px' : '42px'),
-              color: stat.color,
-              lineHeight: '1',
-              marginBottom: '8px',
-              textShadow: `0 0 8px ${stat.color}60, 0 0 20px ${stat.color}25`,
-              fontWeight: 'bold',
-            }}>
-              {stat.label === 'VOLUME' ? stat.value.toLocaleString() : stat.value}{stat.suffix}
-            </div>
-            <div style={{
-              fontFamily: 'Share Tech Mono, monospace',
-              fontSize: '15px',
-              color: '#3a3a3a',
-              letterSpacing: '1px',
-            }}>
-              // {stat.sub}
-            </div>
-
-            {/* Subtle shimmer line at bottom */}
-            <div style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '1px',
-              background: `linear-gradient(90deg, transparent, ${stat.color}20, transparent)`,
-            }} />
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Scanline Divider */}
@@ -417,27 +394,12 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
 
         {/* Left Column: Weekly Overview */}
         <div style={{ flex: isMobile ? '1' : '0 0 58%' }}>
-          <div style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            letterSpacing: '2px',
-            color: '#888',
-            textTransform: 'uppercase',
-            fontWeight: 700,
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}>
-            <span style={{ color: '#00ff41', fontSize: '15px' }}>▶</span>
+          <div className="t-eyebrow" style={{ marginBottom: 16 }}>
             {t('dashboard.weekly_ops')}
           </div>
 
-          <div style={{
-            border: '1px solid rgba(0,255,65,0.05)',
-            overflow: 'hidden',
-            background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
-          }}>
+          <div className="ds-card bracket" style={{ padding: 0, overflow: 'hidden' }}>
+            <span className="bl" /><span className="br" />
             {weekDates.map((dayInfo, i) => {
               const workout = operator.workouts?.[dayInfo.key];
               const today = isToday(dayInfo.date);
@@ -551,27 +513,12 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
 
           {/* PR Board */}
           <div>
-            <div style={{
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: '15px',
-              letterSpacing: '2px',
-              color: '#888',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}>
-              <span style={{ color: '#ffb800', fontSize: '15px' }}>◆</span>
-              RECENT {t('dashboard.pr_records')}
+            <div className="t-eyebrow amber" style={{ marginBottom: 16 }}>
+              Recent {t('dashboard.pr_records')}
             </div>
 
-            <div style={{
-              border: '1px solid rgba(0,255,65,0.05)',
-              overflow: 'hidden',
-              background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
-            }}>
+            <div className="ds-card bracket amber" style={{ padding: 0, overflow: 'hidden' }}>
+              <span className="bl" /><span className="br" />
               {recentPRs.length > 0 ? recentPRs.map((pr, i) => (
                 <div key={pr.id} style={{
                   padding: '12px 16px',
@@ -626,25 +573,10 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
           </div>
 
           {/* Readiness Panel with Rings */}
-          <div style={{
-            border: '1px solid rgba(0,255,65,0.05)',
-            padding: '20px',
-            background: 'linear-gradient(135deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
-          }}>
-            <div style={{
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: '15px',
-              letterSpacing: '2px',
-              color: '#888',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}>
-              <span style={{ color: '#00ff41', fontSize: '15px' }}>◈</span>
-              OPERATOR {t('dashboard.readiness')}
+          <div className="ds-card bracket" style={{ padding: 20 }}>
+            <span className="bl" /><span className="br" />
+            <div className="t-eyebrow" style={{ marginBottom: 20 }}>
+              Operator {t('dashboard.readiness')}
             </div>
 
             <div style={{

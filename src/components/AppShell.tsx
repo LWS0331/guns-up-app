@@ -1338,65 +1338,66 @@ const AppShell: React.FC<AppShellProps> = ({
               <DailyBriefComponent operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
             )}
 
-            {/* New Battle Plan button — only show for own profile when SITREP exists */}
+            {/* New Battle Plan button — only shown on own profile
+                when a SITREP already exists. Uses .btn.btn-amber.btn-sm
+                so it reads as a "warm/in-progress destructive action"
+                — replaces the legacy gray ghost button. */}
             {currentSelectedOp.id === currentUser.id && currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
                 <button
+                  type="button"
                   onClick={() => setShowNewPlanConfirm(true)}
-                  style={{
-                    padding: '8px 20px', background: 'transparent', color: '#888',
-                    border: '1px solid #333', borderRadius: 4, cursor: 'pointer',
-                    fontFamily: 'Share Tech Mono, monospace', fontSize: 11, letterSpacing: 0.5,
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#ff6b35'; e.currentTarget.style.color = '#ff6b35'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#888'; }}
+                  className="btn btn-amber btn-sm"
                 >
-                  ⚔️ NEW BATTLE PLAN
+                  ⚔ New Battle Plan
                 </button>
               </div>
             )}
 
             {/* New Battle Plan Confirmation Modal */}
             {showNewPlanConfirm && (
-              <div style={{
-                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                zIndex: 9999, padding: 20,
-              }}>
-                <div style={{
-                  background: '#0a0a0a', border: '1px solid rgba(255,107,53,0.4)', borderRadius: 8,
-                  padding: 24, maxWidth: 400, width: '100%', textAlign: 'center',
-                }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff6b35', letterSpacing: 1, marginBottom: 12 }}>
-                    ⚠️ NEW BATTLE PLAN
+              <div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(0, 0, 0, 0.85)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 9999,
+                  padding: 20,
+                }}
+              >
+                <div
+                  className="ds-card bracket amber amber-tone"
+                  style={{ padding: 24, maxWidth: 400, width: '100%', textAlign: 'center' }}
+                >
+                  <span className="bl" /><span className="br" />
+                  <div className="t-eyebrow amber" style={{ marginBottom: 12, justifyContent: 'center', display: 'flex' }}>
+                    ⚠ New Battle Plan
                   </div>
-                  <div style={{ fontSize: 13, color: '#ccc', lineHeight: 1.6, marginBottom: 8 }}>
+                  <p className="t-body-sm" style={{ color: 'var(--text-primary)', marginBottom: 8 }}>
                     This will replace your current SITREP and generate a brand new battle plan from scratch.
-                  </div>
-                  <div style={{ fontSize: 11, color: '#888', marginBottom: 20 }}>
+                  </p>
+                  <p className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginBottom: 20 }}>
                     Your workout history and progress data will be preserved — only the plan changes.
-                  </div>
+                  </p>
                   <div style={{ display: 'flex', gap: 10 }}>
                     <button
+                      type="button"
                       onClick={() => setShowNewPlanConfirm(false)}
-                      style={{
-                        flex: 1, padding: 12, background: 'transparent', color: '#888',
-                        border: '1px solid #333', borderRadius: 4, cursor: 'pointer',
-                        fontFamily: 'Share Tech Mono, monospace', fontSize: 12,
-                      }}
+                      className="btn btn-ghost btn-sm"
+                      style={{ flex: 1 }}
                     >
-                      CANCEL
+                      Cancel
                     </button>
                     <button
+                      type="button"
                       onClick={handleNewBattlePlan}
-                      style={{
-                        flex: 1, padding: 12, background: '#ff6b35', color: '#000',
-                        border: 'none', borderRadius: 4, cursor: 'pointer',
-                        fontFamily: 'Orbitron, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 1,
-                      }}
+                      className="btn btn-amber btn-sm"
+                      style={{ flex: 1 }}
                     >
-                      GENERATE NEW PLAN
+                      Generate New Plan
                     </button>
                   </div>
                 </div>
