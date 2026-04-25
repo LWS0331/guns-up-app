@@ -179,6 +179,31 @@
 }
 .navLinks a:hover { color: #fff; }
 .navLinks a:hover::after { transform: scaleX(1); }
+/* Member-login link in the nav. Visually subordinate to the primary "Deploy"
+   CTA — uses the same case + tracking as the other nav anchors so it reads
+   like another section link, but is bordered so the click affordance is
+   obvious for returning members hunting for the login. */
+.navLoginLink {
+  color: var(--green) !important;
+  border: 1px solid rgba(0,255,65,0.3);
+  padding: 6px 12px;
+  text-decoration: none;
+  text-transform: uppercase;
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  transition: all 0.2s ease;
+}
+.navLoginLink:hover {
+  background: rgba(0,255,65,0.08);
+  border-color: var(--green);
+  box-shadow: 0 0 8px rgba(0,255,65,0.25);
+}
+/* The default `.navLinks a::after` underline-on-hover doesn't apply to the
+   login link because we want the button-style border to be the only affordance. */
+.navLoginLink::after { display: none !important; }
+
 .navCta {
   font-family: var(--display);
   font-size: 11px;
