@@ -1390,6 +1390,51 @@
 }
 .founderSig b { color: var(--text-bright); font-weight: normal; }
 
+/* ───── Reversed founder block (used for the second co-founder) ─────
+   Same .founder grid, but rotator on the right and content on the
+   left so the two founders alternate visually down the section. The
+   1.3fr/1fr ratio inverts the default 1fr/1.3fr so the content
+   column has the wider span when it's on the LEFT — keeps the
+   reading flow weighted toward prose like the first block does. */
+.founderReverse {
+  grid-template-columns: 1.3fr 1fr;
+  margin-top: 80px;
+}
+.founderReverse .founderRotator { order: 2; }
+.founderReverse .founderContent { order: 1; }
+@media (max-width: 1100px) {
+  .founderReverse { grid-template-columns: 1fr; }
+  .founderReverse .founderRotator { order: 1; }
+  .founderReverse .founderContent { order: 2; }
+}
+
+/* ───── Divider between the two co-founder blocks ─────
+   Mono uppercase label (// 02 · CO-FOUNDER · BRIEF) flanked by two
+   horizontal hairline gradients fading in/out of green at the
+   center. ◆ glyphs in green sit between the hairlines and the
+   label. */
+.foundersDivider {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 64px 0 24px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+.foundersDivider::before,
+.foundersDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.25), transparent);
+}
+.foundersDivider .dot {
+  color: var(--green);
+}
+
 /* CTA BLOCK */
 .ctaBlock {
   position: relative;

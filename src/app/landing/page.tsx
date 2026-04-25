@@ -20,7 +20,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import styles from './landing.module.css';
-import FounderRotator from './FounderRotator';
+import FounderRotator, { RUBEN_SLIDES, BRITNEY_SLIDES } from './FounderRotator';
 import { trackEvent } from '@/lib/analytics';
 
 // Per-client monthly commission for Commander tier. Hard-coded in the design;
@@ -74,7 +74,7 @@ export default function LandingPage() {
             <a href="#gunny">Gunny AI</a>
             <a href="#tiers">Tiers</a>
             <a href="#trainers">Trainers</a>
-            <a href="#founder">Origin</a>
+            <a href="#founder">Founders</a>
             {/* MEMBER LOGIN — distinct from the primary "Deploy" CTA. Members
                 returning to the site click here; the Deploy CTA is for new
                 signups (currently routes to the same /login page until a
@@ -517,27 +517,63 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ========== FOUNDER ========== */}
+      {/* ========== FOUNDERS ==========
+           v4.2 update: section is now plural ("Founders") and renders
+           BOTH co-founders — Ruben (engineering / USMC) + Britney
+           (programming / athlete operations) — separated by a tactical
+           divider. Britney's block uses .founderReverse so the rotator
+           sits on the right and her content on the left, alternating
+           the visual rhythm. Both rotators are the same component,
+           parameterized via the `slides` prop. */}
       <section id="founder" className={styles.section}>
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>06 · Origin</span>
+          <span className={styles.eyebrow}>06 · Founders</span>
+          <h2>Two operators.<br />One <em>mission</em>.</h2>
+          <p>Guns Up wasn&apos;t built in a boardroom. It was built by two people who lived on the wrong side of generic programming — and decided to engineer the system they wished they&apos;d had.</p>
         </div>
         <div className={styles.sectionWrap}>
+          {/* ── Founder #1 · Ruben ── */}
           <div className={styles.founder}>
-            {/* Founder rotator — three eras, B&W, glitch transitions, HUD
-                chrome. See FounderRotator.tsx + design-handoff README §9. */}
-            <FounderRotator />
+            <FounderRotator slides={RUBEN_SLIDES} ariaLabel="Ruben — career eras" />
             <div className={styles.founderContent}>
-              <span className={styles.label}>// Founder&apos;s brief</span>
+              <span className={styles.label}>// 01 · Founder&apos;s brief</span>
               <div className={styles.founderQuote}>
                 &quot;Every fitness app I tried was built by marketers. <span className="green">This one</span> was built by an operator.&quot;
               </div>
               <p className={styles.founderBio}>
-                Guns Up was built by a former USMC non-commissioned officer and a roster of certified trainers tired of generic programming. Every claim we make is cited. Every protocol is field-tested. Every decision Gunny makes is grounded in your specific profile — not the average user. That&apos;s the whole difference.
+                Guns Up was built by a former USMC non-commissioned officer and a roster of certified trainers tired of generic programming. Every claim we make is cited. Every protocol is field-tested. Every decision Gunny makes is grounded in your specific profile — not the average user. That&apos;s the whole difference. Built alongside my wife and co-founder, Britney, between gym sessions and bedtime stories — this is a family operation, raising three kids while we ship.
               </p>
               <div className={styles.founderSig}>
-                <b>// RUBEN</b> · Founder · USMC NCO · CPT<br />
+                <b>// RUBEN</b> · Co-Founder · USMC NCO · CPT<br />
                 <b>// GUNS UP FITNESS</b> · Engineering · Claude API integration · 2026
+              </div>
+            </div>
+          </div>
+
+          {/* Divider between the two co-founder briefs. ◆ glyphs in
+              green, mono uppercase label, hairlines fade to/from green
+              at the center. */}
+          <div className={styles.foundersDivider}>
+            <span className={styles.dot}>◆</span>
+            <span>// 02 · Co-Founder · Brief</span>
+            <span className={styles.dot}>◆</span>
+          </div>
+
+          {/* ── Co-Founder #2 · Britney ── (.founderReverse swaps the
+              column order so the rotator is on the right) */}
+          <div className={`${styles.founder} ${styles.founderReverse}`}>
+            <FounderRotator slides={BRITNEY_SLIDES} ariaLabel="Britney — career eras" />
+            <div className={styles.founderContent}>
+              <span className={styles.label}>// 02 · Co-Founder&apos;s brief</span>
+              <div className={styles.founderQuote}>
+                &quot;Strong women build <span className="green">stronger systems</span>. We engineered Gunny to meet every athlete where she trains — and take her where she&apos;s going.&quot;
+              </div>
+              <p className={styles.founderBio}>
+                Britney is a lifelong competitor — WPSL athlete, Spartan Race World Championship qualifier, NPC Figure competitor. She&apos;s spent two decades in real prep cycles: cutting for stage, peaking for races, rehabbing injuries between seasons. Every protocol Gunny runs for hypertrophy, conditioning, and contest prep was pressure-tested against her training log first. If it doesn&apos;t work for an athlete in week-9 of prep, it doesn&apos;t ship. She&apos;s also raising three kids with her husband and co-founder, Ruben — Guns Up is the family business, built in the margins between school runs and PR attempts.
+              </p>
+              <div className={styles.founderSig}>
+                <b>// BRITNEY</b> · Co-Founder · NPC Women&apos;s Figure · Spartan Elite<br />
+                <b>// GUNS UP FITNESS</b> · Programming · Athlete operations · 2026
               </div>
             </div>
           </div>
@@ -614,7 +650,7 @@ export default function LandingPage() {
             <a href="#arsenal">Arsenal</a>
             <a href="#gunny">Gunny AI</a>
             <a href="#tiers">Tiers</a>
-            <a href="#founder">Origin</a>
+            <a href="#founder">Founders</a>
           </div>
           <div className={styles.footCol}>
             <h5>For Trainers</h5>
