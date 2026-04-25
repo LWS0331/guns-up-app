@@ -2491,23 +2491,49 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           <button
             type="button"
             onClick={() => {
+              // Remove the EXERCISE THE USER IS CURRENTLY VIEWING.
+              // The legacy "Remove Last" semantics (pop the tail of
+              // the blocks array) silently failed in the stepped
+              // flow because the user only ever sees one block at a
+              // time — clicking the button while on exercise 1 of 5
+              // removed exercise 5, which was off-screen, so nothing
+              // visible changed. Now operates on currentStep.blockIdx
+              // so removal always corresponds to what's on screen.
               if (workout.blocks.length <= 1) return;
+              if (currentStep.kind !== 'exercise') return;
+              const targetIdx = currentStep.blockIdx;
               const dateStr = selectedDate || formatDate(currentDate);
-              const removedId = workout.blocks[workout.blocks.length - 1].id;
+              const removedId = workout.blocks[targetIdx]?.id;
+              if (!removedId) return;
               const updated = { ...operator };
               updated.workouts = { ...updated.workouts };
-              updated.workouts[dateStr] = { ...workout, blocks: workout.blocks.slice(0, -1) };
+              updated.workouts[dateStr] = {
+                ...workout,
+                blocks: workout.blocks.filter((_, i) => i !== targetIdx),
+              };
               onUpdateOperator(updated);
               setWorkoutResults(prev => {
                 const next = { ...prev };
                 delete next[removedId];
                 return next;
               });
+              // safeStepIdx in render clamps automatically when the
+              // removed block was the tail, but if the removed block
+              // was mid-list and was also the last step (e.g. the
+              // workout has no cooldown), defensively decrement so
+              // the user sees the previous exercise instead of
+              // jumping straight to the cooldown / Complete state.
+              const wasTailExercise = targetIdx === workout.blocks.length - 1;
+              if (wasTailExercise) {
+                setStepIdx(prev => Math.max(0, prev - 1));
+              }
             }}
             className="btn btn-danger-outline btn-sm"
             style={{ borderStyle: 'dashed' }}
+            disabled={workout.blocks.length <= 1}
+            title={workout.blocks.length <= 1 ? 'At least one exercise must remain' : 'Remove this exercise'}
           >
-            − Remove Last
+            − Remove This
           </button>
         </div>
         )}
