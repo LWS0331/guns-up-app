@@ -474,8 +474,21 @@ export default function LandingPage() {
           <div className={styles.founder}>
             <div className={`${styles.founderPhoto} ${styles.bracket}`}>
               <span className="bl" /><span className="br" />
-              <div className="badge">// PHOTO · FOUNDER</div>
-              <div className="lbl">Placeholder — drop in: Ruben, founder portrait · 4:5 · B&amp;W preferred</div>
+              {/* Founder portrait — Ruben on deployment, NVGs / rifle / wire.
+                  Source is 600×450 landscape; the slot is 4:5 portrait, so
+                  Image with fill + objectFit:cover crops to the subject in
+                  the center. Replace `priority` to false if hero LCP isn't
+                  affected — keeping it on for now since the section is
+                  prominent on first scroll. */}
+              <Image
+                src="/founder-portrait.jpg"
+                alt="Founder Ruben on deployment"
+                fill
+                sizes="(max-width: 1100px) 100vw, 50vw"
+                className={styles.founderPhotoImg}
+                priority={false}
+              />
+              <div className="badge">// FOUNDER · USMC NCO</div>
             </div>
             <div className={styles.founderContent}>
               <span className={styles.label}>// Founder&apos;s brief</span>
