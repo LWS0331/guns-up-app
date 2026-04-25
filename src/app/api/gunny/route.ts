@@ -367,6 +367,42 @@ self-contained and on its own line — do not nest or merge.
 
 After emitting <workout_modification>, confirm the change in plain text (e.g. "Roger. Lat Pulldown swapped for Cable Row — 4x10 at 140.").
 
+DELETE A WORKOUT FROM THE PLANNER — <workout_delete>:
+When the operator asks you to REMOVE an entire workout day from the planner
+(not modify a block within it — the whole day), emit a <workout_delete>
+block with the date in YYYY-MM-DD format. <workout_modification>'s
+"remove_block" only removes ONE EXERCISE from a workout — it does NOT
+remove the workout day itself. Use <workout_delete> for that.
+
+Triggers for <workout_delete>:
+- "remove Friday's workout", "delete Saturday from the planner"
+- "wipe Monday", "scrap Wednesday's session"
+- MOVE operations: when moving a workout from one date to another, emit
+  BOTH a <workout_delete> on the source date AND a <workout_json> on
+  the target date (with the moved workout's full payload + the new date)
+
+Format:
+<workout_delete>
+{
+  "date": "2026-04-25"
+}
+</workout_delete>
+
+You may emit multiple <workout_delete> blocks in one response (for
+batch deletes like "wipe this week"). Always use the operator's local
+date in YYYY-MM-DD form — pull from clientDate / clientDateLong in
+your context block, do NOT guess or use UTC.
+
+After emitting <workout_delete>, confirm in plain text exactly what
+was removed (e.g. "Friday April 25 GROUND WAR scrubbed from the
+planner. Clean slate.").
+
+CRITICAL: do NOT claim a workout was "deleted" / "removed" / "scrubbed"
+in your plain-text reply UNLESS you also emit a <workout_delete> block.
+Lying about state changes is the worst kind of UX trust violation —
+the operator will check the planner, see the workout still there, and
+lose trust in everything else you say.
+
 VOICE OUTPUT — YOU HAVE IT (HANDS-FREE TTS):
 The GUNS UP app renders your responses as text AND can speak them aloud via
 OpenAI TTS (with a browser-speech fallback). This is a real feature, not
@@ -1191,6 +1227,25 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const voiceMatch = responseText.match(/<voice_control>([\s\S]*?)<\/voice_control>/);
       if (voiceMatch) { try { voiceControl = JSON.parse(voiceMatch[1].trim()); } catch { /* ignore */ } }
 
+      // <workout_delete> — Gunny removes a workout from a specific date.
+      // Used when the operator says "remove Friday" / "delete that workout"
+      // / "move Monday to Wednesday" (the move case emits BOTH a
+      // workout_delete on the source date AND a workout_json on the
+      // target date). Without this signal the model would say "deleted"
+      // in chat but the planner state would never update.
+      // Multiple emitted dates merge into an array — used for batch deletes
+      // (e.g. "wipe this week's plan").
+      const workoutDeletes: Array<{ date: string }> = [];
+      for (const m of responseText.matchAll(/<workout_delete>([\s\S]*?)<\/workout_delete>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed.date === 'string') {
+            workoutDeletes.push({ date: parsed.date });
+          }
+        } catch { /* ignore malformed block */ }
+      }
+      const workoutDelete = workoutDeletes[0] || null;
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -1198,6 +1253,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const cleanResponse = responseText
         .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
         .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+        .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
         .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
         .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
         .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
@@ -1208,6 +1264,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         workoutData,
         workoutModification,
         workoutModifications,
+        workoutDelete,
+        workoutDeletes,
         profileData,
         mealData,
         voiceControl,
@@ -1284,11 +1342,26 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             try { voiceControl = JSON.parse(vm[1].trim()); } catch { /* invalid JSON */ }
           }
 
+          // Extract workout-delete signals — see the non-streaming path
+          // above for the rationale. Mirrors the same parser so SSE +
+          // non-SSE behave identically.
+          const workoutDeletes: Array<{ date: string }> = [];
+          for (const dm of fullText.matchAll(/<workout_delete>([\s\S]*?)<\/workout_delete>/g)) {
+            try {
+              const parsed = JSON.parse(dm[1].trim());
+              if (parsed && typeof parsed.date === 'string') {
+                workoutDeletes.push({ date: parsed.date });
+              }
+            } catch { /* invalid JSON */ }
+          }
+          const workoutDelete = workoutDeletes[0] || null;
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
             .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
             .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+            .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
             .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
             .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
             .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
@@ -1301,6 +1374,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 workoutData,
                 workoutModification,
                 workoutModifications,
+                workoutDelete,
+                workoutDeletes,
                 profileData,
                 mealData,
                 voiceControl,

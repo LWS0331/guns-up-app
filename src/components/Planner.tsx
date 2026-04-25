@@ -1431,32 +1431,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     </div>
                   )}
 
-                  {/* "DAY" stencil — canonical spec marks workout days
-                      with a bottom-aligned stencil glyph so the
-                      calendar reads at-a-glance which days are loaded.
-                      Uses Orbitron 800 + heavy letter-spacing for the
-                      stenciled feel; ghosts the green token to ~22%
-                      so it sits behind the title without competing. */}
-                  {workout && (
-                    <div
-                      aria-hidden
-                      style={{
-                        position: 'absolute',
-                        left: 0,
-                        right: 0,
-                        bottom: isMobile ? 2 : 4,
-                        textAlign: 'center',
-                        fontFamily: '"Orbitron", sans-serif',
-                        fontWeight: 800,
-                        fontSize: isMobile ? 9 : 11,
-                        letterSpacing: isMobile ? 2 : 3,
-                        color: 'rgba(0,255,65,0.22)',
-                        pointerEvents: 'none',
-                      }}
-                    >
-                      DAY
-                    </div>
-                  )}
+                  {/* The "DAY" stencil watermark (added in PR #48) was
+                      removed per user feedback — it sat behind the
+                      truncated workout title and competed visually
+                      with the title text. The green-bordered title
+                      strip itself is sufficient at-a-glance evidence
+                      that a day is loaded. */}
 
                   {tag && (
                     <span

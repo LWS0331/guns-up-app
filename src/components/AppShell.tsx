@@ -1034,6 +1034,13 @@ const AppShell: React.FC<AppShellProps> = ({
           speakGunny(replyText);
           // Handle meal/workout data from JSON fallback
           if (data.mealData) handlePanelMealData(data.mealData);
+          // Apply workout deletions FIRST so subsequent add/modify
+          // operations on the same response (e.g. a "move" — delete
+          // source + add target) don't fight each other.
+          const deletes = Array.isArray(data.workoutDeletes)
+            ? data.workoutDeletes
+            : (data.workoutDelete ? [data.workoutDelete] : []);
+          if (deletes.length > 0) handlePanelWorkoutDeletes(deletes);
           // Prefer the plural array if present (route returns both for
           // backwards compat). Falls back to the single mod for older servers.
           const mods = Array.isArray(data.workoutModifications)
@@ -1119,6 +1126,12 @@ const AppShell: React.FC<AppShellProps> = ({
         ));
         speakGunny(finalPayload.cleanText);
         if (finalPayload.mealData) handlePanelMealData(finalPayload.mealData);
+        // Same ordering rationale as the non-streaming branch above:
+        // apply deletes first so a delete+add (move) lands cleanly.
+        const fdeletes = Array.isArray(finalPayload.workoutDeletes)
+          ? finalPayload.workoutDeletes
+          : (finalPayload.workoutDelete ? [finalPayload.workoutDelete] : []);
+        if (fdeletes.length > 0) handlePanelWorkoutDeletes(fdeletes);
         const fmods = Array.isArray(finalPayload.workoutModifications)
           ? finalPayload.workoutModifications
           : (finalPayload.workoutModification ? [finalPayload.workoutModification] : []);
@@ -1224,6 +1237,35 @@ const AppShell: React.FC<AppShellProps> = ({
       }
     }
 
+    if (touched) onUpdateOperator(workingOp);
+  };
+
+  // Apply <workout_delete> signals from Gunny — removes the workout
+  // for one or more dates from operator.workouts. Without this handler,
+  // Gunny would say "deleted from planner" in chat but the planner
+  // would still show the workout (the bug the operator hit). The dates
+  // payload comes from /api/gunny which now parses <workout_delete>
+  // blocks and returns either a single workoutDelete or an array of
+  // workoutDeletes (batch).
+  const handlePanelWorkoutDeletes = (deletes: unknown) => {
+    const list: Array<{ date: string }> = Array.isArray(deletes)
+      ? (deletes as Array<{ date: string }>)
+      : (deletes && typeof (deletes as { date?: string }).date === 'string'
+          ? [deletes as { date: string }]
+          : []);
+    if (list.length === 0) return;
+
+    let workingOp = currentSelectedOp;
+    let touched = false;
+    for (const item of list) {
+      const date = item?.date;
+      if (!date || !isValidDateStr(date)) continue;
+      if (!workingOp.workouts || !workingOp.workouts[date]) continue;
+      const nextWorkouts = { ...workingOp.workouts };
+      delete nextWorkouts[date];
+      workingOp = { ...workingOp, workouts: nextWorkouts };
+      touched = true;
+    }
     if (touched) onUpdateOperator(workingOp);
   };
 
@@ -1373,6 +1415,13 @@ const AppShell: React.FC<AppShellProps> = ({
               }
             }
 
+            // Voice path: workout deletions land first so move-style
+            // operations (delete source date, add target date) don't
+            // race each other.
+            const voiceDeletes: unknown[] = Array.isArray(data.workoutDeletes)
+              ? data.workoutDeletes
+              : (data.workoutDelete ? [data.workoutDelete] : []);
+            if (voiceDeletes.length > 0) handlePanelWorkoutDeletes(voiceDeletes);
             const voiceMods: unknown[] = Array.isArray(data.workoutModifications)
               ? data.workoutModifications
               : (data.workoutModification ? [data.workoutModification] : []);
@@ -2205,7 +2254,14 @@ const AppShell: React.FC<AppShellProps> = ({
         overflow: 'auto',
         backgroundColor: '#030303',
         position: 'relative',
-        paddingBottom: isMobile ? '56px' : '0',
+        // Tab bar's actual height = 8px top padding + 56px button
+        // min-height + 6px bottom padding + safe-area-inset-bottom
+        // (per design-system.css .ds-tabbar). The legacy 56px padding
+        // here was clipping anything that sat at the bottom of the
+        // content area (notably the GunnyChat composer "What's the
+        // mission..." bar) under the fixed tab bar. 70px + safe-area
+        // matches the actual tab bar footprint.
+        paddingBottom: isMobile ? 'calc(70px + env(safe-area-inset-bottom, 0px))' : '0',
       }}>
         {renderTabContent()}
         {/* Always-mounted GunnyChat — display-toggled so streaming state & refs survive tab switches. */}
