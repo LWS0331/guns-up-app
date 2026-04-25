@@ -1702,9 +1702,13 @@ const AppShell: React.FC<AppShellProps> = ({
         .nav-tab:hover { color: #00ff41 !important; }
         .nav-tab .tab-icon { transition: opacity 0.2s ease; }
 
-        /* Mobile bottom nav */
+        /* Mobile bottom nav — visibility logic only.
+           Visual styling now lives in src/styles/design-system.css under
+           the .ds-tabbar selector. The .bottom-nav class is kept as a
+           media-query hook so we can hide the bar on desktop where
+           .desktop-nav handles navigation instead. */
         .bottom-nav {
-          display: none;
+          display: none !important;
         }
         .desktop-nav {
           display: flex;
@@ -1851,36 +1855,12 @@ const AppShell: React.FC<AppShellProps> = ({
           cursor: not-allowed;
         }
 
-        .gunny-toggle-btn {
-          position: fixed;
-          left: 8px;
-          bottom: 70px;
-          padding: 6px 12px;
-          background: linear-gradient(135deg, rgba(255,184,0,0.2), rgba(255,184,0,0.1));
-          border: 1px solid rgba(255,184,0,0.5);
-          border-radius: 6px;
-          color: #ffb800;
-          cursor: pointer;
-          font-family: 'Orbitron', sans-serif;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 1.5px;
-          writing-mode: horizontal-tb;
-          z-index: 9997;
-          transition: all 0.3s ease;
-          box-shadow: 0 2px 12px rgba(255,184,0,0.15);
-          animation: togglePulse 3s ease-in-out infinite;
-        }
-
-        .gunny-toggle-btn:hover {
-          background: linear-gradient(135deg, rgba(255,184,0,0.35), rgba(255,184,0,0.2));
-          box-shadow: 0 2px 20px rgba(255,184,0,0.3);
-        }
-
-        @keyframes togglePulse {
-          0%, 100% { box-shadow: 4px 0 20px rgba(255,184,0,0.15); }
-          50% { box-shadow: 4px 0 24px rgba(255,184,0,0.3); }
-        }
+        /* .gunny-toggle-btn — legacy class hook only.
+           All visual treatment now comes from .ds-gunny-fab in
+           src/styles/design-system.css (amber translucent fill, 14px
+           radius, slide-in pop animation). The class name persists on
+           the JSX node in case external code targets it; no styles
+           defined here. */
 
         .classification-bar {
           position: fixed;
@@ -1902,8 +1882,11 @@ const AppShell: React.FC<AppShellProps> = ({
         }
 
         @media (max-width: 768px) {
+          /* Show the design-system tabbar on mobile; hide the legacy
+             .bottom-nav placeholder. .ds-tabbar owns layout (grid +
+             5 cols), background, blur, border, safe-area padding. */
           .bottom-nav {
-            display: flex !important;
+            display: grid !important;
           }
           .desktop-nav {
             display: none !important;
@@ -1916,13 +1899,6 @@ const AppShell: React.FC<AppShellProps> = ({
             width: 85%;
             max-width: 340px;
             animation: slideInLeft 0.35s cubic-bezier(0.25, 1, 0.5, 1);
-          }
-
-          .gunny-toggle-btn {
-            bottom: 64px;
-            left: 6px;
-            padding: 5px 10px;
-            font-size: 9px;
           }
 
           .classification-bar {
@@ -1948,50 +1924,25 @@ const AppShell: React.FC<AppShellProps> = ({
       {/* Matrix code rain */}
       <DataRain />
 
-      {/* Top Header Bar */}
-      <header style={{
-        height: isMobile ? '44px' : '52px',
-        background: 'linear-gradient(180deg, rgba(10,10,10,0.95) 0%, rgba(5,5,5,0.98) 100%)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(0, 255, 65, 0.06)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingLeft: isMobile ? '12px' : '20px',
-        paddingRight: isMobile ? '12px' : '20px',
-        flexShrink: 0,
-        position: 'relative',
-        zIndex: 100,
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : 'translateY(-10px)',
-        transition: 'opacity 0.4s ease, transform 0.4s ease',
-      }}>
-        {/* Left: Logo and Title */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: isMobile ? '8px' : '12px',
-        }}>
-          <Logo size={isMobile ? 22 : 26} color="#00ff41" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-            <span className="guns-up-breathing" style={{
-              fontFamily: 'Orbitron, sans-serif',
-              fontSize: isMobile ? '10px' : '11px',
-              fontWeight: 700,
-              letterSpacing: '3px',
-              color: '#00ff41',
-            }}>
-              GUNS UP
-            </span>
-            <span style={{
-              fontFamily: 'Share Tech Mono, monospace',
-              fontSize: '15px',
-              color: '#666',
-              letterSpacing: '1px',
-            }}>
-              {currentSelectedOp.callsign}
-            </span>
+      {/* Top Header Bar — uses .ds-topbar from the design system. The
+          mount-fade is the only inline bit left; .ds-topbar owns the
+          background, blur, border, padding, and z-index. */}
+      <header
+        className="ds-topbar"
+        style={{
+          height: isMobile ? '44px' : '52px',
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(-10px)',
+          transition: 'opacity 0.4s ease, transform 0.4s ease',
+        }}
+      >
+        {/* Left: Logo + GUNS UP / callsign brand stack — .ds-topbar-brand
+            handles type, glow, layout. */}
+        <div className="ds-topbar-brand">
+          <Logo size={isMobile ? 22 : 26} className="mark" />
+          <div className="stack">
+            <span className="guns-up-breathing t1">GUNS UP</span>
+            <span className="t2">{currentSelectedOp.callsign}</span>
           </div>
         </div>
 
@@ -2084,87 +2035,75 @@ const AppShell: React.FC<AppShellProps> = ({
         </div>
       </main>
 
-      {/* Mobile Bottom Tab Bar */}
-      <nav className="bottom-nav" style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '56px',
-        background: 'linear-gradient(180deg, rgba(8,8,8,0.98) 0%, rgba(3,3,3,1) 100%)',
-        borderTop: '1px solid rgba(0,255,65,0.08)',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        zIndex: 200,
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-      }}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id);
-                trackEvent(EVENTS.TAB_CHANGED, { tab: tab.id });
-              }}
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '8px 0',
-                background: isActive ? 'rgba(0, 255, 65, 0.08)' : 'none',
-                border: 'none',
-                cursor: 'pointer',
-                position: 'relative',
-                minHeight: '44px',
-                borderRadius: '4px',
-                margin: '0 4px',
-              }}
-            >
-              {/* Active top indicator */}
-              {isActive && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: '25%',
-                  right: '25%',
-                  height: '2px',
-                  backgroundColor: '#00ff41',
-                  boxShadow: '0 0 8px rgba(0,255,65,0.4)',
-                }} />
-              )}
-              <span style={{
-                fontSize: '26px',
-                color: isActive ? '#00ff41' : '#666',
-                transition: 'color 0.2s ease',
-              }}>
-                {tab.icon}
-              </span>
-              <span style={{
-                fontFamily: 'Orbitron, sans-serif',
-                fontSize: '15px',
-                fontWeight: isActive ? 800 : 500,
-                color: isActive ? '#00ff41' : '#666',
-                letterSpacing: '1px',
-                transition: 'color 0.2s ease',
-              }}>
-                {t(tab.labelKey)}
-              </span>
-            </button>
-          );
-        })}
+      {/* Mobile Bottom Tab Bar — uses .ds-tabbar from the design system.
+          Background, blur, top-border, safe-area padding, fixed positioning,
+          and the active top-pip indicator all live in CSS now. We keep the
+          icon glyph + label structure but reorder so Gunny sits in the
+          center with the special halo treatment per the handoff. */}
+      <nav className="ds-tabbar bottom-nav">
+        {(() => {
+          // Reorder for the 5-slot mobile grid: Gunny lives in the
+          // visually-anchored center slot. Build the row dynamically so
+          // 4-tab (regular user) and 5-tab (admin/trainer) cases both
+          // produce a 5-col grid with Gunny centered.
+          //
+          // Layout target: [coc] [planner] [GUNNY] [intel] [ops?]
+          // For 4-tab users, the 5th slot stays empty; the grid keeps
+          // Gunny visually centered.
+          const byId = new Map(tabs.map(t => [t.id, t] as const));
+          const slots: (typeof tabs[number] | null)[] = [
+            byId.get('coc') ?? null,
+            byId.get('planner') ?? null,
+            byId.get('gunny') ?? null,
+            byId.get('intel') ?? null,
+            byId.get('ops') ?? null,
+          ];
+          return slots.map((tab, idx) => {
+            if (!tab) {
+              // Empty grid cell — preserves 5-col layout for 4-tab users.
+              return <span key={`slot-${idx}`} aria-hidden />;
+            }
+            const isActive = activeTab === tab.id;
+            const isGunny = tab.id === 'gunny';
+            return (
+              <button
+                key={tab.id}
+                className={`${isActive ? 'active' : ''} ${isGunny ? 'gunny-tab' : ''}`}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  trackEvent(EVENTS.TAB_CHANGED, { tab: tab.id });
+                }}
+              >
+                {isGunny ? (
+                  <span className="gunny-icon-wrap">
+                    <img src="/logo-glow.png" alt="" className="gunny-icon" />
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</span>
+                )}
+                <span className="lbl">{t(tab.labelKey)}</span>
+              </button>
+            );
+          });
+        })()}
       </nav>
 
-      {/* Gunny AI Toggle — left edge tab, hidden on Gunny tab */}
-      {!showGunnyPanel && activeTab !== 'gunny' && (
+      {/* Gunny AI floating pill — uses .ds-gunny-fab from the design
+          system. The legacy class .gunny-toggle-btn stays alongside so the
+          older positioning rules (defined in <style jsx> further below)
+          keep working until we fully strip them. The .show modifier is
+          conditional — without it the FAB stays hidden via opacity:0 +
+          pointer-events:none, with it the cubic-bezier pop animation
+          fires. */}
+      {activeTab !== 'gunny' && (
         <button
-          className="gunny-toggle-btn"
+          className={`ds-gunny-fab gunny-toggle-btn ${!showGunnyPanel ? 'show' : ''}`}
           onClick={() => setShowGunnyPanel(true)}
           title="Open Gunny AI"
+          aria-hidden={showGunnyPanel}
         >
-          <BoltIcon size={14} /> <span style={{ marginLeft: 4 }}>GUNNY</span>
+          <BoltIcon size={18} />
+          GUNNY
         </button>
       )}
 

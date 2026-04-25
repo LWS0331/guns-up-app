@@ -677,3 +677,269 @@
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+
+/* ============================================================
+   APP CHROME — TopBar + bottom TabBar + GunnyFab
+   --------------------------------------------------------------
+   Ported from the handoff app-system.css. Used by AppShell.tsx
+   to render the persistent top header and bottom navigation.
+   The handoff version absolutely positions the tabbar inside an
+   `.app-frame`; we render in a Next page tree so the tabbar uses
+   `position: fixed` instead — same visual, web-friendly.
+   ============================================================ */
+
+.ds-topbar {
+  flex-shrink: 0;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-green-soft);
+  background: rgba(3, 3, 3, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 100;
+  position: relative;
+}
+.ds-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ds-topbar-brand .mark {
+  width: 22px;
+  height: 22px;
+  filter: drop-shadow(0 0 4px var(--green-glow));
+  object-fit: contain;
+}
+.ds-topbar-brand .stack {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.ds-topbar-brand .stack .t1 {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  color: var(--green);
+  text-shadow: 0 0 6px rgba(0, 255, 65, 0.3);
+}
+.ds-topbar-brand .stack .t2 {
+  font-family: var(--display);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--text-tertiary);
+  margin-top: 3px;
+}
+
+.ds-topbar-callsign {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--btn-text);
+  border: 1px solid rgba(var(--accent-rgb), var(--btn-border-alpha));
+  padding: 7px 12px;
+  background: rgba(var(--accent-rgb), var(--btn-alpha));
+  text-shadow: 0 0 6px rgba(var(--accent-rgb), 0.35);
+  box-shadow: inset 0 0 12px rgba(var(--accent-rgb), 0.06);
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.ds-topbar-callsign .dot {
+  width: 5px;
+  height: 5px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--green);
+  animation: dsPulseDot 2s ease-in-out infinite;
+}
+
+/* Bottom TabBar — fixed to viewport bottom on mobile.
+   Five-column grid; the middle slot is reserved for the Gunny
+   halo button. */
+.ds-tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: rgba(3, 3, 3, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-green);
+  z-index: 200;
+  padding: 8px 0 calc(env(safe-area-inset-bottom, 0px) + 6px);
+}
+.ds-tabbar button {
+  background: none;
+  border: none;
+  padding: 6px 4px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  min-height: 56px;
+  position: relative;
+  cursor: pointer;
+}
+.ds-tabbar button.active { color: var(--green); }
+.ds-tabbar button.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 2px;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.ds-tabbar svg { width: 22px; height: 22px; }
+.ds-tabbar .lbl {
+  font-family: var(--display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+/* The center Gunny tab — always glowing. Its visual presence is
+   the indicator, so suppress the green underline pip. */
+.ds-tabbar button.gunny-tab { color: var(--green); }
+.ds-tabbar button.gunny-tab .lbl {
+  color: var(--green);
+  text-shadow: 0 0 6px rgba(0, 255, 65, 0.5);
+}
+.ds-tabbar button.gunny-tab.active::before { display: none; }
+
+.gunny-icon-wrap {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -14px;
+  margin-bottom: -2px;
+}
+.gunny-icon-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(0, 255, 65, 0.55) 0%,
+    rgba(0, 255, 65, 0.18) 45%,
+    transparent 75%
+  );
+  filter: blur(6px);
+  animation: dsGunnyHalo 2.4s ease-in-out infinite;
+  z-index: 0;
+}
+.gunny-icon-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 255, 65, 0.55);
+  box-shadow:
+    inset 0 0 8px rgba(0, 255, 65, 0.25),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 0 12px rgba(0, 255, 65, 0.45);
+  background: radial-gradient(circle at 50% 35%, rgba(0, 255, 65, 0.18), rgba(0, 0, 0, 0.85) 70%);
+  z-index: 1;
+}
+.gunny-icon-wrap .gunny-icon {
+  position: relative;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 0 4px rgba(0, 255, 65, 0.9))
+    drop-shadow(0 0 10px rgba(0, 255, 65, 0.5));
+  animation: dsGunnyPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes dsGunnyHalo {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.15); }
+}
+@keyframes dsGunnyPulse {
+  0%, 100% {
+    filter:
+      drop-shadow(0 0 4px rgba(0, 255, 65, 0.9))
+      drop-shadow(0 0 10px rgba(0, 255, 65, 0.5));
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 6px rgba(0, 255, 65, 1))
+      drop-shadow(0 0 18px rgba(0, 255, 65, 0.8));
+  }
+}
+@keyframes dsPulseDot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+/* Floating Gunny pill — bottom-left, slides in from edge when shown.
+   Uses the rare 14px radius (the only rounded element in the system). */
+.ds-gunny-fab {
+  position: fixed;
+  left: 14px;
+  bottom: 76px;
+  z-index: 199;
+  background: rgba(255, 140, 0, 0.18);
+  color: var(--amber);
+  text-shadow: 0 0 8px rgba(255, 140, 0, 0.55);
+  border: 1.5px solid rgba(255, 140, 0, 0.8);
+  border-radius: 14px;
+  padding: 12px 18px 12px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 0 24px rgba(255, 140, 0, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 6px 20px rgba(0, 0, 0, 0.6);
+  min-height: 44px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateX(-20px) scale(0.9);
+  pointer-events: none;
+  transition:
+    opacity 0.25s ease,
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ds-gunny-fab.show {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: auto;
+  animation: dsGunnyFabPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ds-gunny-fab svg {
+  width: 18px;
+  height: 18px;
+  filter: drop-shadow(0 0 4px rgba(255, 140, 0, 0.8));
+}
+@keyframes dsGunnyFabPop {
+  0%   { opacity: 0; transform: translateX(-30px) scale(0.85); }
+  60%  { opacity: 1; transform: translateX(4px) scale(1.05); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
