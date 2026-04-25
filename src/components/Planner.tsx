@@ -2892,6 +2892,109 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               </>
             )}
 
+            {/* Movements — unified report list. Replaces the legacy
+                per-block bracket-card grid. Each row matches the
+                warmup numbered-list style: letter prefix in mono
+                green, name + Demo button on the same line, then
+                the prescription string as plain mono text below.
+                Conditioning blocks (EMOM / AMRAP / etc.) render
+                with an amber format label + their description body
+                in the same vertical rhythm — same report, no chips.
+                The colored-pill version had RPE pink / Tempo
+                purple / Rest blue, all out-of-palette per the
+                design system. Plain prescription text reads cleaner
+                anyway and matches the surrounding warmup/cooldown
+                treatment. */}
+            {workout.blocks.length > 0 && (
+              <>
+                <div className="t-label" style={{ color: 'var(--amber)', marginBottom: 8 }}>// Movements</div>
+                <ul style={{ listStyle: 'none', paddingLeft: 0, marginBottom: 16 }} className="stack-3">
+                  {workout.blocks.map((block, idx) => {
+                    const label = getBlockLabels(workout.blocks)[idx];
+                    if (block.type === 'exercise') {
+                      const vidUrl = block.videoUrl || getVideoUrl(block.exerciseName);
+                      return (
+                        <li key={block.id} className="stack-1">
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: 10,
+                              alignItems: 'baseline',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <span className="t-mono-sm" style={{ color: 'var(--green)', minWidth: 24, fontWeight: 700 }}>
+                              {label})
+                            </span>
+                            <span
+                              className="t-body-sm"
+                              style={{ color: 'var(--text-primary)', fontWeight: 600, flex: '1 1 auto' }}
+                            >
+                              {block.exerciseName}
+                            </span>
+                            {vidUrl && (
+                              <a
+                                href={vidUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-amber btn-sm"
+                                style={{ padding: '4px 8px', fontSize: 9, flexShrink: 0 }}
+                              >
+                                ▶ Demo
+                              </a>
+                            )}
+                          </div>
+                          {block.prescription && (
+                            <div
+                              className="t-mono-sm"
+                              style={{
+                                color: 'var(--text-secondary)',
+                                marginLeft: 34,
+                                lineHeight: 1.5,
+                                letterSpacing: 0.3,
+                              }}
+                            >
+                              {block.prescription}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    }
+                    // Conditioning block — same indent rhythm, amber
+                    // format label + multi-line description body.
+                    return (
+                      <li key={block.id} className="stack-1">
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                          <span className="t-mono-sm" style={{ color: 'var(--amber)', minWidth: 24, fontWeight: 700 }}>
+                            {label})
+                          </span>
+                          <span
+                            className="t-body-sm"
+                            style={{ color: 'var(--amber)', fontWeight: 700, letterSpacing: 1 }}
+                          >
+                            {block.format}
+                          </span>
+                        </div>
+                        {block.description && (
+                          <div
+                            className="t-body-sm"
+                            style={{
+                              color: 'var(--text-primary)',
+                              marginLeft: 34,
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {block.description}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+
             {workout.cooldown && (
               <>
                 <div className="t-label" style={{ color: 'var(--amber)', marginBottom: 8 }}>// Cooldown</div>
@@ -2918,66 +3021,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* Workout blocks — each rendered as its own bracket card so
-            every movement reads as an independent HUD tile per the
-            handoff "Movement card" pattern. Lives outside the main
-            workout card to give each block visual breathing room. */}
-        {workout && !workoutMode && !showWorkoutBuilder && workout.blocks.length > 0 && (
-          <div className="stack-3">
-            {workout.blocks.map((block, idx) => {
-              const label = getBlockLabels(workout.blocks)[idx];
-              if (block.type === 'exercise') {
-                const vidUrl = block.videoUrl || getVideoUrl(block.exerciseName);
-                const parsed = parsePrescription(block.prescription);
-                return (
-                  <div key={block.id} className="ds-card bracket">
-                    <span className="bl" /><span className="br" />
-                    <div className="row-between" style={{ marginBottom: 12, alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
-                      <div className="t-display-m" style={{ color: 'var(--green)' }}>
-                        {label}) {block.exerciseName}
-                      </div>
-                      {vidUrl && (
-                        <a
-                          href={vidUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-amber btn-sm"
-                          style={{ padding: '7px 10px' }}
-                        >
-                          ▶ Demo
-                        </a>
-                      )}
-                    </div>
-                    {/* Each prescription tag as a chip. TagPill is the
-                        legacy renderer; render its parsed values as
-                        plain .chip elements to match the handoff. */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {parsed.length > 0
-                        ? parsed.map((tag, ti) => <TagPill key={ti} tag={tag} />)
-                        : block.prescription && (
-                            <span className="chip" title="Prescription">
-                              {block.prescription}
-                            </span>
-                          )}
-                    </div>
-                  </div>
-                );
-              } else {
-                return (
-                  <div key={block.id} className="ds-card bracket amber amber-tone">
-                    <span className="bl" /><span className="br" />
-                    <div className="t-display-m" style={{ color: 'var(--amber)', marginBottom: 6 }}>
-                      {block.format}
-                    </div>
-                    <div className="t-body-sm" style={{ whiteSpace: 'pre-wrap' }}>
-                      {block.description}
-                    </div>
-                  </div>
-                );
-              }
-            })}
-          </div>
-        )}
+        {/* The legacy per-block bracket-card grid was removed —
+            movements now render inside the main workout card above
+            as a unified report (Coach's Notes → Warmup → Movements
+            → Cooldown). Pulling them into the same card matches the
+            "this is the day's plan, top to bottom" mental model the
+            user wanted and drops the out-of-palette pill chips
+            (RPE pink / Tempo purple / Rest blue) that were leaking
+            colors outside the green / amber / danger system. */}
       </div>
     );
   };
