@@ -139,6 +139,31 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
         earned: !!(operator as unknown as Record<string, unknown>).wearableConnected,
         progress: (operator as unknown as Record<string, unknown>).wearableConnected ? 100 : 0,
         requirement: 'Connect wearable' },
+
+      // COMMS / VOICE — unlocks once the operator uses tactical radio voice
+      // input. We mark it earned when the voice-input flag is set on the
+      // operator record (set by TacticalRadio on first successful PTT
+      // transcription) — same gating pattern as 'connected' above.
+      { id: 'comms-check', name: 'COMMS CHECK', description: 'Use Tactical Radio voice input', icon: '🎙️',
+        tier: 'bronze', category: 'milestone',
+        earned: !!(operator as unknown as Record<string, unknown>).voiceInputUsed,
+        progress: (operator as unknown as Record<string, unknown>).voiceInputUsed ? 100 : 0,
+        requirement: 'Use voice PTT once' },
+
+      // ZONE LOCK — fires when the user has logged at least one workout
+      // with live HR data captured (proxy: wearable connected AND a
+      // completed workout exists). Encourages the cardio/HR-zone flow
+      // that the Commander tier unlocks.
+      { id: 'zone-lock', name: 'ZONE LOCK', description: 'Train with live HR zones', icon: '❤️',
+        tier: 'silver', category: 'milestone',
+        earned: !!(operator as unknown as Record<string, unknown>).wearableConnected && completedWorkouts.length >= 1,
+        progress:
+          (operator as unknown as Record<string, unknown>).wearableConnected && completedWorkouts.length >= 1
+            ? 100
+            : (operator as unknown as Record<string, unknown>).wearableConnected
+              ? 50
+              : 0,
+        requirement: 'Wearable + 1 workout' },
     ] as Badge[];
   }, [operator]);
 

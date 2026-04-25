@@ -5,6 +5,7 @@ import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, PRRecord, Injury, formatHeightInput, FitnessLevel, MilestoneGoal } from '@/lib/types';
 import WearableConnect from '@/components/WearableConnect';
 import ProgressCharts from '@/components/ProgressCharts';
+import BillingPanel from '@/components/BillingPanel';
 import { FOOD_DB } from '@/data/foods';
 import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
 import BattlePlanRef from '@/components/BattlePlanRef';
@@ -527,6 +528,14 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
   // Render functions
   const renderProfileTab = () => (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+      {/* Billing affordance — top of profile so it's the first thing the
+          operator sees when they're managing account-level stuff. Hides
+          itself for non-owners (a trainer viewing a client shouldn't see
+          the client's upgrade buttons). */}
+      {currentUser && currentUser.id === operator.id && (
+        <BillingPanel operator={operator} />
+      )}
+
       {/* Callsign - full width */}
       <div style={{ gridColumn: '1 / -1', marginBottom: '8px' }}>
         {isAdmin ? (

@@ -454,7 +454,22 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     onWorkoutModeChange({ active: true, workoutTitle: workout.title || '', exercises });
   }, [workoutMode, workoutResults, selectedDate, onWorkoutModeChange]);
 
-  // Poll wearable for HR data during workout mode
+  // Poll wearable for HR data during workout mode.
+  //
+  // Architecture (replaces the old "POST /sync every 30s" loop, which
+  // hammered Vital's API and wrote to Postgres on every tick):
+  //   1. On workout start: kick a single POST /api/wearables/sync to
+  //      refresh the cached syncData blob from Vital.
+  //   2. Then poll GET /api/wearables/latest every 10s — that endpoint
+  //      reads the cached blob from the DB. Fast, no upstream calls.
+  //   3. The wearable webhook (/api/wearables/webhook) updates that
+  //      same syncData when Vital pushes new data, so polling latest
+  //      picks up live HR as soon as it arrives.
+  //
+  // Net effect: HR feels live (10s update cadence visually), Vital
+  // sees one call per workout instead of ~120, and the user's
+  // wearables_connection row sees one write per workout instead of
+  // dozens of overlapping ones.
   useEffect(() => {
     if (!workoutMode) {
       if (hrPollRef.current) clearInterval(hrPollRef.current);
@@ -464,10 +479,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       return;
     }
 
-    // Try to fetch HR from wearable API
-    const fetchHR = async () => {
+    let cancelled = false;
+
+    // One-shot kickoff sync to refresh the server-cached snapshot.
+    // Errors are swallowed — if the user has no wearable, the latest
+    // poll below just returns null and the manual entry UI takes over.
+    const kickoffSync = async () => {
       try {
-        const res = await fetch('/api/wearables/sync', {
+        await fetch('/api/wearables/sync', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -475,24 +494,41 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           },
           body: JSON.stringify({ operatorId: operator.id }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          const hr = data?.syncSnapshot?.activity?.heartRate?.avg;
-          if (hr && typeof hr === 'number') {
-            setCurrentHR(hr);
-            setHrSource('wearable');
-            setHrHistory(prev => [...prev.slice(-60), { hr, time: Date.now() }]);
-          }
-        }
       } catch {
-        // Wearable not available — user can enter manually
+        // No wearable / not configured — fine.
       }
     };
 
-    fetchHR();
-    hrPollRef.current = setInterval(fetchHR, 30000); // poll every 30s
+    const fetchLatest = async () => {
+      try {
+        const res = await fetch(
+          `/api/wearables/latest?operatorId=${encodeURIComponent(operator.id)}`,
+          {
+            headers: { 'Authorization': `Bearer ${getAuthToken()}` },
+          }
+        );
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const hr = data?.currentHR;
+        if (typeof hr === 'number' && hr > 0) {
+          setCurrentHR(hr);
+          setHrSource('wearable');
+          setHrHistory(prev => [...prev.slice(-60), { hr, time: Date.now() }]);
+        }
+      } catch {
+        // Network blip — try again on next tick.
+      }
+    };
+
+    // Kick the sync, then start the poll. The kickoff is fire-and-forget
+    // so the first latest() call happens immediately (cached data), and
+    // the next tick (10s later) catches the freshly-synced data.
+    kickoffSync();
+    fetchLatest();
+    hrPollRef.current = setInterval(fetchLatest, 10000); // 10s — feels live, cheap on the server
 
     return () => {
+      cancelled = true;
       if (hrPollRef.current) clearInterval(hrPollRef.current);
     };
   }, [workoutMode, operator.id]);

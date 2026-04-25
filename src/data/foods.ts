@@ -218,4 +218,26 @@ export const FOOD_DB: Record<string, { calories: number; protein: number; carbs:
   'mass gainer': { calories: 650, protein: 50, carbs: 85, fat: 8, serving: '1 scoop' },
   'fish oil': { calories: 25, protein: 0, carbs: 0, fat: 2.5, serving: '1 softgel' },
   'multivitamin': { calories: 0, protein: 0, carbs: 0, fat: 0, serving: '1 tablet' },
+  'collagen': { calories: 35, protein: 9, carbs: 0, fat: 0, serving: '1 scoop' },
+  'electrolytes': { calories: 10, protein: 0, carbs: 2, fat: 0, serving: '1 packet' },
+
+  // ═══ ADDITIONAL SEAFOOD / GAME ═══
+  'duck': { calories: 337, protein: 19, carbs: 0, fat: 28, serving: '4 oz' },
+  'mackerel': { calories: 230, protein: 20, carbs: 0, fat: 16, serving: '4 oz' },
+  'sardines': { calories: 191, protein: 23, carbs: 0, fat: 10.5, serving: '1 can' },
+  'octopus': { calories: 139, protein: 25, carbs: 4, fat: 1.8, serving: '4 oz' },
+  'mussels': { calories: 172, protein: 24, carbs: 7, fat: 4.5, serving: '4 oz' },
+
+  // ═══ ADDITIONAL VEG / PRODUCE ═══
+  'arugula': { calories: 5, protein: 0.5, carbs: 0.7, fat: 0.1, serving: '1 cup' },
+  'bok choy': { calories: 9, protein: 1, carbs: 1.5, fat: 0.1, serving: '1 cup' },
+  'beets': { calories: 59, protein: 2.2, carbs: 13, fat: 0.2, serving: '1 cup' },
+  'butternut squash': { calories: 82, protein: 1.8, carbs: 22, fat: 0.2, serving: '1 cup' },
+
+  // ═══ ADDITIONAL FAST FOOD ═══
+  'taco bell burrito': { calories: 430, protein: 17, carbs: 55, fat: 16, serving: '1 burrito' },
+  'panera mac and cheese': { calories: 470, protein: 17, carbs: 50, fat: 22, serving: '1 cup' },
+  'sweetgreen salad': { calories: 480, protein: 25, carbs: 40, fat: 24, serving: '1 bowl' },
+  'cava bowl': { calories: 600, protein: 35, carbs: 65, fat: 22, serving: '1 bowl' },
+  'shake shack burger': { calories: 530, protein: 28, carbs: 32, fat: 32, serving: '1 burger' },
 };
