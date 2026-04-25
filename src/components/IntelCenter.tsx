@@ -1388,27 +1388,15 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       )}
       </>)}
 
-      {/* Macro Targets */}
-      <div
-        style={{
-          marginBottom: '32px',
-          padding: '16px',
-          backgroundColor: 'rgba(0,255,65,0.02)',
-          border: '1px solid rgba(0,255,65,0.06)',
-        }}
-      >
-        <h3
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#00ff41',
-            marginBottom: '16px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          MACRO TARGETS
-        </h3>
+      {/* Macro Targets — bracket card with .t-eyebrow header. The
+          four inline inputs below keep their existing focus-state
+          ternaries since each binds to a distinct state slice and
+          inlining a helper would reduce clarity here. */}
+      <div className="ds-card bracket" style={{ marginBottom: 32, padding: 16 }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 16, display: 'inline-flex' }}>
+          Macro Targets
+        </span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', minWidth: 0 }}>
           <div>
             <label
@@ -1580,198 +1568,53 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         </div>
       </div>
 
-      {/* Today's Progress */}
-      <div
-        style={{
-          marginBottom: '32px',
-          padding: '16px',
-          backgroundColor: 'rgba(0,255,65,0.02)',
-          border: '1px solid rgba(0,255,65,0.06)',
-        }}
-      >
-        <h3
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#00ff41',
-            marginBottom: '16px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          TODAY'S PROGRESS
-        </h3>
+      {/* Today's Progress — four .bar progress strips, one per
+          macro. Each bar shows actual / target. The four-line
+          repeated structure was extracted into a small inline
+          helper below to cut duplication. Bar color is dynamic
+          (matches macro semantic: cal=green, protein=green,
+          carbs=amber, fat=purple) so we use inline override on
+          the .bar > span fill. */}
+      <div className="ds-card bracket" style={{ marginBottom: 32, padding: 16 }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 16, display: 'inline-flex' }}>
+          Today&apos;s Progress
+        </span>
 
-        {/* Calories */}
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '6px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
-            }}
-          >
-            <span style={{ color: '#ddd' }}>CALORIES</span>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#00ff41' }}>
-              {mealTotals.calories} / {state.nutrition.calorieTarget}
-            </span>
-          </div>
-          <div
-            style={{
-              height: '8px',
-              backgroundColor: 'rgba(0,255,65,0.04)',
-              borderRadius: '2px',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                backgroundColor: '#00ff41',
-                width: `${Math.min(
-                  (mealTotals.calories / state.nutrition.calorieTarget) * 100,
-                  100
-                )}%`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Protein */}
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '6px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
-            }}
-          >
-            <span style={{ color: '#ddd' }}>PROTEIN</span>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#00ff41' }}>
-              {mealTotals.protein} / {state.nutrition.proteinTarget}g
-            </span>
-          </div>
-          <div
-            style={{
-              height: '8px',
-              backgroundColor: 'rgba(0,255,65,0.04)',
-              borderRadius: '2px',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                backgroundColor: '#00ff41',
-                width: `${Math.min(
-                  (mealTotals.protein / state.nutrition.proteinTarget) * 100,
-                  100
-                )}%`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Carbs */}
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '6px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
-            }}
-          >
-            <span style={{ color: '#ddd' }}>CARBS</span>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#ffb800' }}>
-              {mealTotals.carbs} / {state.nutrition.carbsTarget}g
-            </span>
-          </div>
-          <div
-            style={{
-              height: '8px',
-              backgroundColor: 'rgba(0,255,65,0.04)',
-              borderRadius: '2px',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                backgroundColor: '#ffb800',
-                width: `${Math.min(
-                  (mealTotals.carbs / state.nutrition.carbsTarget) * 100,
-                  100
-                )}%`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Fat */}
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '6px',
-              fontFamily: 'Chakra Petch, sans-serif',
-              fontSize: '26px',
-            }}
-          >
-            <span style={{ color: '#ddd' }}>FAT</span>
-            <span style={{ fontFamily: 'Share Tech Mono, monospace', color: '#a855f7' }}>
-              {mealTotals.fat} / {state.nutrition.fatTarget}g
-            </span>
-          </div>
-          <div
-            style={{
-              height: '8px',
-              backgroundColor: 'rgba(0,255,65,0.04)',
-              borderRadius: '2px',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                backgroundColor: '#a855f7',
-                width: `${Math.min(
-                  (mealTotals.fat / state.nutrition.fatTarget) * 100,
-                  100
-                )}%`,
-              }}
-            />
-          </div>
-        </div>
+        {([
+          { label: 'CALORIES',  actual: mealTotals.calories, target: state.nutrition.calorieTarget, color: 'var(--green)',  unit: '' },
+          { label: 'PROTEIN',   actual: mealTotals.protein,  target: state.nutrition.proteinTarget, color: 'var(--green)',  unit: 'g' },
+          { label: 'CARBS',     actual: mealTotals.carbs,    target: state.nutrition.carbsTarget,   color: 'var(--warn)',   unit: 'g' },
+          { label: 'FAT',       actual: mealTotals.fat,      target: state.nutrition.fatTarget,     color: '#a855f7',       unit: 'g' },
+        ] as const).map((row) => {
+          const pct = row.target > 0 ? Math.min((row.actual / row.target) * 100, 100) : 0;
+          return (
+            <div key={row.label} style={{ marginBottom: 16 }}>
+              <div
+                className="row-between"
+                style={{ marginBottom: 6, fontFamily: 'var(--body)', fontSize: 13 }}
+              >
+                <span style={{ color: 'var(--text-primary)', letterSpacing: 1 }}>{row.label}</span>
+                <span className="t-mono-data" style={{ color: row.color, fontSize: 13 }}>
+                  {row.actual} / {row.target}{row.unit}
+                </span>
+              </div>
+              <div className="bar" style={{ height: 8 }}>
+                <span style={{ width: `${pct}%`, background: row.color, boxShadow: `0 0 6px ${row.color}` }} />
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Meal Log */}
-      <div
-        style={{
-          marginBottom: '32px',
-          padding: '16px',
-          backgroundColor: 'rgba(0,255,65,0.02)',
-          border: '1px solid rgba(0,255,65,0.06)',
-        }}
-      >
-        <h3
-          style={{
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '15px',
-            color: '#00ff41',
-            marginBottom: '16px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}
-        >
-          LOG MEAL
-        </h3>
+      {/* Meal Log — bracket card. Header reads "Log Meal" when
+          today (input form below), "Past Meals" when viewing a
+          historical day. */}
+      <div className="ds-card bracket" style={{ marginBottom: 32, padding: 16 }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 16, display: 'inline-flex' }}>
+          {isViewingToday ? 'Log Meal' : 'Past Meals'}
+        </span>
 
         {/* Log Form — only when viewing today */}
         {isViewingToday ? (<div
