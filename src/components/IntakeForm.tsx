@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from 'react';
 import { Operator, IntakeAssessment, FitnessLevel, calculateFitnessLevel, calculateTrainingAge, calculateReadiness, formatHeightInput } from '@/lib/types';
 import { getLocalDateStr } from '@/lib/dateUtils';
+import Icon from '@/components/Icons';
 
 interface IntakeFormProps {
   operator: Operator;
@@ -60,14 +61,17 @@ const COMMON_CONDITIONS = [
   'Previous Surgery', 'Pregnancy/Postpartum', 'None',
 ];
 
-const TRAINING_PATH_OPTIONS = [
-  { id: 'bodybuilding', label: 'BODYBUILDING', desc: 'Hypertrophy focus — sculpt physique, maximize muscle size, controlled tempos', icon: '🏋️' },
-  { id: 'crossfit', label: 'FUNCTIONAL FITNESS', desc: 'CrossFit-style — WODs, varied movements, compete against the clock', icon: '⚡' },
-  { id: 'powerlifting', label: 'POWERLIFTING', desc: 'Squat, bench, deadlift — chase maximal strength numbers', icon: '🔩' },
-  { id: 'athletic', label: 'ATHLETIC PERFORMANCE', desc: 'Speed, agility, power — train like a pro athlete', icon: '🏃' },
-  { id: 'tactical', label: 'TACTICAL / MILITARY', desc: 'Rucking, calisthenics, endurance — PFT and selection prep', icon: '🎖️' },
-  { id: 'hybrid', label: 'HYBRID', desc: 'Best of everything — strength + conditioning + muscle', icon: '🔄' },
-  { id: 'gunny_pick', label: 'LET GUNNY DECIDE', desc: 'Based on your goals, experience, and profile — Gunny picks the optimal path', icon: '🤖' },
+// Training-path picker — emoji icons replaced with SVG icon components
+// from the design-system Icons set so the picker stays on-brand and
+// scales cleanly. Each path maps to the closest semantic glyph.
+const TRAINING_PATH_OPTIONS: { id: string; label: string; desc: string; icon: React.ReactNode }[] = [
+  { id: 'bodybuilding', label: 'BODYBUILDING', desc: 'Hypertrophy focus — sculpt physique, maximize muscle size, controlled tempos', icon: <Icon.Dumbbell /> },
+  { id: 'crossfit', label: 'FUNCTIONAL FITNESS', desc: 'CrossFit-style — WODs, varied movements, compete against the clock', icon: <Icon.Bolt /> },
+  { id: 'powerlifting', label: 'POWERLIFTING', desc: 'Squat, bench, deadlift — chase maximal strength numbers', icon: <Icon.Sword /> },
+  { id: 'athletic', label: 'ATHLETIC PERFORMANCE', desc: 'Speed, agility, power — train like a pro athlete', icon: <Icon.Target /> },
+  { id: 'tactical', label: 'TACTICAL / MILITARY', desc: 'Rucking, calisthenics, endurance — PFT and selection prep', icon: <Icon.Trophy /> },
+  { id: 'hybrid', label: 'HYBRID', desc: 'Best of everything — strength + conditioning + muscle', icon: <Icon.Stats /> },
+  { id: 'gunny_pick', label: 'LET GUNNY DECIDE', desc: 'Based on your goals, experience, and profile — Gunny picks the optimal path', icon: <Icon.Flame /> },
 ];
 
 const PR_EXERCISES = [
@@ -513,7 +517,9 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
                 ...(intake.trainingPath === p.id ? s.optionBtnActive : {}),
               }}
                 onClick={() => setIntake(prev => ({ ...prev, trainingPath: p.id }))}>
-                <span style={{ fontSize: 20, flexShrink: 0 }}>{p.icon}</span>
+                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', color: 'var(--green)' }}>
+                  {React.cloneElement(p.icon as React.ReactElement<{ size?: number }>, { size: 20 })}
+                </span>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 12 }}>{p.label}</div>
                   <div style={{ fontSize: 10, marginTop: 4, color: intake.trainingPath === p.id ? '#00ff4199' : '#666' }}>{p.desc}</div>

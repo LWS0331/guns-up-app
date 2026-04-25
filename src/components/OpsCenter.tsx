@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Operator, TIER_CONFIGS, AiTier, OPS_CENTER_ACCESS } from '@/lib/types';
 import { getAuthToken } from '@/lib/authClient';
+import Icon from '@/components/Icons';
 
 type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'MARKETING';
 
@@ -574,7 +575,9 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                   <td style={{ padding: '10px 8px', color: '#888' }}>{op.role}</td>
                   <td style={{ padding: '10px 8px' }}>
                     {op.tierLocked ? (
-                      <span style={{ color: '#888' }}>🔒 {op.tier}</span>
+                      <span style={{ color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <Icon.Lock size={11} /> {op.tier}
+                      </span>
                     ) : (
                       <select
                         value={op.tier}
@@ -858,12 +861,17 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
-  const tabConfig: { id: OpsTab; label: string; icon: string }[] = [
-    { id: 'REVENUE', label: 'REVENUE', icon: '$' },
-    { id: 'USERS', label: 'USERS', icon: '◈' },
-    { id: 'PLATFORM', label: 'PLATFORM', icon: '▦' },
-    { id: 'BETA', label: 'BETA', icon: '★' },
-    { id: 'MARKETING', label: 'MARKETING', icon: '◆' },
+  // Tab metadata for the OpsCenter top strip — character glyphs were
+  // replaced with SVG icons so the admin chrome stays on-brand. The
+  // "$" for REVENUE is left as a glyph since there's no money icon
+  // in the design-system set yet; we render it inside a styled span
+  // so it visually matches the SVG siblings.
+  const tabConfig: { id: OpsTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'REVENUE', label: 'REVENUE', icon: <span className="t-mono" style={{ fontSize: 14 }}>$</span> },
+    { id: 'USERS', label: 'USERS', icon: <Icon.User /> },
+    { id: 'PLATFORM', label: 'PLATFORM', icon: <Icon.Settings /> },
+    { id: 'BETA', label: 'BETA', icon: <Icon.Bolt /> },
+    { id: 'MARKETING', label: 'MARKETING', icon: <Icon.Send /> },
   ];
 
   return (
@@ -919,7 +927,9 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                 whiteSpace: 'nowrap',
               }}
             >
-              <span style={{ marginRight: '6px', opacity: 0.6 }}>{tab.icon}</span>
+              <span style={{ marginRight: 6, opacity: 0.7, display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}>
+                {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 13 })}
+              </span>
               {tab.label}
             </button>
           );
