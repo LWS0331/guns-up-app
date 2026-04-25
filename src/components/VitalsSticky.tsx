@@ -24,7 +24,7 @@
 // action toggles the .vitals-expand region (full HRZoneGauge).
 
 import React, { useEffect, useState } from 'react';
-import HRZoneGauge, { type HrZoneDef, type HrSample } from './HRZoneGauge';
+import { type HrZoneDef, type HrSample } from './HRZoneGauge';
 import Icon from './Icons';
 
 export interface VitalsStickyProps {
@@ -52,10 +52,6 @@ export interface VitalsStickyProps {
   onDemo?: () => void;        // open exercise demo video
   onNotes?: () => void;       // jump to notes input
   onSkip?: () => void;        // skip current set / advance
-
-  /** Render the expanded HR panel below the HUD when true. */
-  hrExpanded?: boolean;
-  onToggleHrExpanded?: () => void;
 
   /** Workout start ISO so the HUD can show a session-duration "REC" timer. */
   workoutStartTime?: string;
@@ -86,8 +82,6 @@ export default function VitalsSticky({
   onManualHR,
   currentSetIndex,
   totalSets,
-  hrExpanded = false,
-  onToggleHrExpanded,
   workoutStartTime,
   onPauseTimer,
   onAddRest,
@@ -165,20 +159,19 @@ export default function VitalsSticky({
         <div className="div" aria-hidden />
 
         {/* CENTER — HR readout + sparkline + range label.
-            Tap to expand the full gauge below. */}
-        <button
-          type="button"
-          onClick={onToggleHrExpanded}
-          aria-label="Toggle HR panel"
-          aria-expanded={hrExpanded}
+            No longer interactive (the expand-panel target was
+            removed); rendered as a div so screen readers don't
+            announce it as a button. */}
+        <div
+          aria-label="Live heart rate readout"
           className="vital-gauge"
           style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: onToggleHrExpanded ? 'pointer' : 'default',
             padding: '8px 4px',
             color: activeZone?.color || 'var(--text-tertiary)',
+            display: 'flex',
             flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
             gap: 4,
           }}
         >
@@ -240,7 +233,7 @@ export default function VitalsSticky({
               {rangeLabel}
             </div>
           )}
-        </button>
+        </div>
 
         <div className="div" aria-hidden />
 
@@ -295,10 +288,11 @@ export default function VitalsSticky({
         </div>
       )}
 
-      {/* Action row — canonical: PAUSE / +30S / RESET / ▼ HUD.
-          PAUSE gets the .primary amber treatment (the orange dot
-          pip + amber text). +30S / RESET stay neutral. ▼ HUD is
-          the toggle for the expanded HRZoneGauge below. */}
+      {/* Action row — PAUSE / +30S / RESET. The legacy ▼ HUD
+          toggle was removed: the expanded HRZoneGauge panel that
+          it controlled is gone, and the BPM digits + sparkline +
+          IN RANGE label in the HUD's center slot already cover
+          the at-a-glance HR readout. */}
       <div className="vitals-actions">
         <button
           type="button"
@@ -328,35 +322,7 @@ export default function VitalsSticky({
           <Icon.X size={11} />
           Reset
         </button>
-        <button
-          type="button"
-          onClick={onToggleHrExpanded}
-          disabled={!onToggleHrExpanded}
-          aria-label={hrExpanded ? 'Collapse HUD' : 'Expand HUD'}
-          aria-expanded={hrExpanded}
-        >
-          {hrExpanded ? <Icon.ChevronUp size={11} /> : <Icon.ChevronDown size={11} />}
-          HUD
-        </button>
       </div>
-
-      {/* Expanded HR panel — only when toggled open. Hosts the
-          full HRZoneGauge component (gauge + sparkline + manual
-          input) so the live HUD stays compact. */}
-      {hrExpanded && (
-        <div className="vitals-expand">
-          <HRZoneGauge
-            currentHR={currentHR}
-            targetZone={targetZone}
-            hrSource={hrSource}
-            zones={zones}
-            history={hrHistory}
-            onSetTargetZone={onSetTargetZone}
-            onManualSubmit={onManualHR}
-            onClose={onToggleHrExpanded}
-          />
-        </div>
-      )}
     </div>
   );
 }
