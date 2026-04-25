@@ -1064,33 +1064,58 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
   const renderMonthView = () => {
     const monthDates = getMonthDates(currentDate);
-    const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const monthLabel = currentDate.toLocaleDateString('en-US', { month: 'long' });
+    const yearLabel = currentDate.getFullYear();
 
     return (
-      <div>
-        <div style={{ marginBottom: '16px', textAlign: 'center' }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: 0, fontSize: '26px', fontWeight: 900, letterSpacing: '4px', textShadow: '0 0 8px rgba(0,255,65,0.2)' }}>
-            {monthName.toUpperCase()}
+      <div className="stack-3">
+        {/* Month header — handoff "April **2026**" pattern: month
+            in white display type + year as green-glow <em>. */}
+        <header style={{ marginBottom: 4 }}>
+          <div className="t-mono-sm" style={{ marginBottom: 6, color: 'var(--text-tertiary)' }}>
+            <b style={{ color: 'var(--green)', fontWeight: 'normal' }}>//</b> Planner&nbsp;
+            <span style={{ color: 'var(--text-dim)' }}>/</span>&nbsp;Month
+          </div>
+          <h2 className="t-display-xl" style={{ fontSize: 22, textAlign: 'center', letterSpacing: 2 }}>
+            {monthLabel}{' '}
+            <em style={{ fontStyle: 'normal', color: 'var(--green)', textShadow: '0 0 12px rgba(0,255,65,0.35)' }}>
+              {yearLabel}
+            </em>
           </h2>
-        </div>
+        </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: isMobile ? '2px' : '4px', marginBottom: isMobile ? '2px' : '4px' }}>
+        {/* Day-of-week header row — uses .t-label sizing for the
+            stenciled feel and tertiary text token for color. */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(7, 1fr)',
+            gap: isMobile ? 2 : 4,
+            marginBottom: isMobile ? 2 : 4,
+          }}
+        >
           {(isMobile ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']).map((day, i) => (
-            <div key={`${day}-${i}`} style={{
-              textAlign: 'center',
-              fontFamily: 'Orbitron',
-              color: '#666',
-              fontSize: isMobile ? '6px' : '7px',
-              fontWeight: 700,
-              padding: isMobile ? '4px' : '8px',
-              letterSpacing: isMobile ? '1px' : '2px',
-            }}>
+            <div
+              key={`${day}-${i}`}
+              className="t-label"
+              style={{
+                textAlign: 'center',
+                color: 'var(--text-tertiary)',
+                padding: isMobile ? 4 : 8,
+                fontSize: isMobile ? 9 : 10,
+                letterSpacing: isMobile ? 1 : 2,
+              }}
+            >
               {day}
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: isMobile ? '2px' : '4px' }}>
+        {/* Calendar grid — each cell uses design-system tokens for
+            border + bg. Today gets the strong green border + 6%
+            green fill per the handoff mock. Drag-over uses dashed
+            green to signal a valid drop target. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: isMobile ? 2 : 4 }}>
           {monthDates.map(week =>
             week.map(date => {
               const dateStr = formatDate(date);
@@ -1098,6 +1123,18 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               const tag = getDayTag(dateStr);
               const isCurrentDay = isToday(date);
               const isInMonth = isCurrentMonth(date);
+
+              const cellBg = dragOverDate === dateStr
+                ? 'rgba(0,255,65,0.1)'
+                : isCurrentDay
+                  ? 'rgba(0,255,65,0.06)'
+                  : 'rgba(5,5,5,0.6)';
+
+              const cellBorder = dragOverDate === dateStr
+                ? '2px dashed var(--green)'
+                : isCurrentDay
+                  ? '1px solid var(--border-green-strong)'
+                  : '1px solid var(--border-green-soft)';
 
               return (
                 <div
@@ -1116,40 +1153,49 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     setDragOverDate(null);
                   }}
                   style={{
-                    minHeight: isMobile ? '60px' : '90px',
-                    padding: isMobile ? '4px' : '8px',
-                    backgroundColor: dragOverDate === dateStr ? 'rgba(0,255,65,0.1)' : (isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)'),
-                    border: dragOverDate === dateStr ? '2px dashed #00ff41' : (isCurrentDay ? '1px solid rgba(0,255,65,0.3)' : '1px solid rgba(0,255,65,0.04)'),
+                    minHeight: isMobile ? 60 : 90,
+                    padding: isMobile ? 4 : 8,
+                    backgroundColor: cellBg,
+                    border: cellBorder,
                     cursor: 'pointer',
                     position: 'relative',
                     transition: 'all 0.2s ease',
                     overflow: 'hidden',
                   }}
-                  onMouseEnter={e => {
-                    if (dragOverDate !== dateStr) {
-                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,255,65,0.2)';
-                      (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0,255,65,0.03)';
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (dragOverDate !== dateStr) {
-                      (e.currentTarget as HTMLElement).style.borderColor = isCurrentDay ? 'rgba(0,255,65,0.3)' : 'rgba(0,255,65,0.04)';
-                      (e.currentTarget as HTMLElement).style.backgroundColor = isCurrentDay ? 'rgba(0,255,65,0.04)' : 'rgba(5,5,5,0.6)';
-                    }
-                  }}
                 >
-                  {/* Today left accent */}
+                  {/* Today left accent stripe — kept as a separate
+                      pseudo-rectangle so the cell border can swap to
+                      dashed during drag without losing the marker. */}
                   {isCurrentDay && (
-                    <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '2px', backgroundColor: '#00ff41', boxShadow: '0 0 6px rgba(0,255,65,0.4)' }} />
+                    <div
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: 2,
+                        background: 'var(--green)',
+                        boxShadow: '0 0 6px var(--green)',
+                      }}
+                    />
                   )}
 
-                  <div style={{
-                    fontFamily: 'Share Tech Mono',
-                    fontSize: '15px',
-                    fontWeight: 700,
-                    color: isCurrentDay ? '#00ff41' : isInMonth ? '#888' : '#222',
-                    marginBottom: '6px',
-                  }}>
+                  {/* Date number — mono per handoff. Today glows green;
+                      out-of-month dates fade to text-dim. */}
+                  <div
+                    className="t-mono"
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: isCurrentDay
+                        ? 'var(--green)'
+                        : isInMonth
+                          ? 'var(--text-secondary)'
+                          : 'var(--text-dim)',
+                      marginBottom: 6,
+                    }}
+                  >
                     {date.getDate()}
                   </div>
 
@@ -1162,36 +1208,37 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                       }}
                       onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
                       style={{
-                        fontFamily: 'Chakra Petch',
-                        fontSize: '15px',
-                        color: '#00ff41',
+                        fontFamily: 'var(--body)',
+                        fontSize: 12,
+                        color: 'var(--green)',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        marginBottom: '4px',
-                        paddingLeft: '6px',
-                        borderLeft: '1px solid rgba(0,255,65,0.3)',
+                        marginBottom: 4,
+                        paddingLeft: 6,
+                        borderLeft: '1px solid var(--border-green-strong)',
                         cursor: dragDate === dateStr ? 'grabbing' : 'grab',
                         opacity: dragDate === dateStr ? 0.6 : 1,
                         transition: 'opacity 0.2s ease',
-                      }}>
+                      }}
+                    >
                       {workout.title}
                     </div>
                   )}
 
                   {tag && (
-                    <div style={{
-                      display: 'inline-block',
-                      padding: '1px 5px',
-                      backgroundColor: `${getTagColor(tag.color)}10`,
-                      border: `1px solid ${getTagColor(tag.color)}40`,
-                      fontFamily: 'Share Tech Mono',
-                      fontSize: '15px',
-                      color: getTagColor(tag.color),
-                      letterSpacing: '0.5px',
-                    }}>
+                    <span
+                      className="chip"
+                      style={{
+                        padding: '1px 5px',
+                        fontSize: 9,
+                        background: `${getTagColor(tag.color)}10`,
+                        borderColor: `${getTagColor(tag.color)}40`,
+                        color: getTagColor(tag.color),
+                      }}
+                    >
                       {tag.note.substring(0, 10)}
-                    </div>
+                    </span>
                   )}
 
                   {showDayMenu === dateStr && (
@@ -1203,7 +1250,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           )}
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 8, fontFamily: 'Share Tech Mono', fontSize: 9, color: '#444' }}>
+        <div
+          className="t-mono-sm"
+          style={{ textAlign: 'center', marginTop: 4, color: 'var(--text-dim)' }}
+        >
           Drag workouts to move between dates
         </div>
       </div>
@@ -1220,14 +1270,23 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     const weekEnd = formatDateForDisplay(formatDate(weekDates[6]));
 
     return (
-      <div>
-        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-          <h2 style={{ fontFamily: 'Orbitron', color: '#00ff41', margin: '0 0 20px 0', fontSize: '26px' }}>
-            Week: {weekStart} - {weekEnd}
+      <div className="stack-3">
+        {/* Week header — same crumb + green-em treatment as Day/Month
+            so all three views share a screen-head pattern. */}
+        <header style={{ marginBottom: 4 }}>
+          <div className="t-mono-sm" style={{ marginBottom: 6, color: 'var(--text-tertiary)' }}>
+            <b style={{ color: 'var(--green)', fontWeight: 'normal' }}>//</b> Planner&nbsp;
+            <span style={{ color: 'var(--text-dim)' }}>/</span>&nbsp;Week
+          </div>
+          <h2 className="t-display-xl" style={{ fontSize: 22, textAlign: 'center', letterSpacing: 2 }}>
+            <em style={{ fontStyle: 'normal', color: 'var(--green)', textShadow: '0 0 12px rgba(0,255,65,0.35)' }}>
+              {weekStart}
+            </em>{' '}
+            — {weekEnd}
           </h2>
-        </div>
+        </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
           {weekDates.map(date => {
             const dateStr = formatDate(date);
             const workout = getWorkoutForDate(dateStr);
@@ -1242,33 +1301,47 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   setSelectedDate(dateStr);
                   setViewMode('day');
                 }}
+                className="ds-card"
                 style={{
-                  minHeight: '200px',
-                  padding: '12px',
-                  backgroundColor: isCurrentDay ? 'rgba(0, 255, 65, 0.1)' : '#030303',
-                  border: isCurrentDay ? '2px solid #00ff41' : '1px solid rgba(0, 255, 65, 0.2)',
+                  minHeight: 200,
+                  padding: 12,
                   cursor: 'pointer',
+                  // Today gets the elevated green wash + strong border
+                  // so it stands out from the rest of the week strip.
+                  background: isCurrentDay
+                    ? 'linear-gradient(180deg, rgba(0,255,65,0.06), transparent)'
+                    : undefined,
+                  borderColor: isCurrentDay ? 'var(--border-green-strong)' : undefined,
                 }}
               >
-                <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', marginBottom: '8px' }}>
-                  {dayName} {date.getDate()}
+                <div className="t-display-m" style={{ marginBottom: 8, fontSize: 12 }}>
+                  {dayName}{' '}
+                  <span
+                    className="t-mono"
+                    style={{
+                      color: isCurrentDay ? 'var(--green)' : 'var(--text-tertiary)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {date.getDate()}
+                  </span>
                 </div>
 
                 {workout ? (
                   <div>
-                    <div style={{ fontFamily: 'Chakra Petch', color: '#00ff41', fontSize: '15px', fontWeight: 'bold', marginBottom: '2px' }}>
+                    <div className="t-display-m" style={{ color: 'var(--green)', fontSize: 12, marginBottom: 4 }}>
                       {workout.title}
                     </div>
-                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: '12px', color: '#aaa' }}>
+                    <div className="t-mono-sm">
                       {workout.blocks.length} blocks
                     </div>
                   </div>
                 ) : tag ? (
-                  <div style={{ fontFamily: 'Chakra Petch', color: getTagColor(tag.color), fontSize: '15px' }}>
+                  <div className="t-body-sm" style={{ color: getTagColor(tag.color) }}>
                     {tag.note}
                   </div>
                 ) : (
-                  <div style={{ fontFamily: 'Share Tech Mono', color: '#999', fontSize: '15px' }}>No workout</div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>No workout</div>
                 )}
               </div>
             );
