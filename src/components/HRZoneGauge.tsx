@@ -85,22 +85,58 @@ export default function HRZoneGauge({
   const currentAngle = currentHR ? bpmToAngle(currentHR) : null;
   const needleTip = currentAngle != null ? polar(currentAngle, RADIUS + 6) : null;
 
-  const borderColor = currentZone?.color || '#333';
+  const borderColor = currentZone?.color || 'var(--border-green-soft)';
   const liveLabel =
     hrSource === 'wearable' ? 'LIVE' : hrSource === 'manual' ? 'MANUAL' : 'NO DEVICE';
+  const liveTone =
+    hrSource === 'wearable' ? 'ok' : hrSource === 'manual' ? 'ghost' : 'ghost';
 
   return (
-    <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: `1px solid ${borderColor}`, borderRadius: 8, transition: 'border 0.3s' }}>
+    // HR Zone Tracker — design-system bracket card. Border tints to
+    // the active zone color when live data is arriving, falling back
+    // to the soft green default. The legacy hex (#333) is replaced
+    // by --border-green-soft so an idle card matches every other
+    // tactical surface in the app.
+    <div
+      className="ds-card bracket"
+      style={{
+        marginBottom: 16,
+        padding: 12,
+        borderColor,
+        transition: 'border-color 0.3s',
+      }}
+    >
+      <span className="bl" /><span className="br" />
       <style>{`
         @keyframes hrPulseRing { 0% { transform: scale(1); opacity: 0.7; } 70% { transform: scale(1.6); opacity: 0; } 100% { transform: scale(1.6); opacity: 0; } }
         @keyframes hrPulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
       `}</style>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <div style={{ fontFamily: 'Orbitron', fontSize: 11, color: '#888', letterSpacing: 1 }}>HR ZONE TRACKER</div>
+      <div className="row-between" style={{ marginBottom: 8 }}>
+        <span className="t-eyebrow">HR Zone Tracker</span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#555' }}>{liveLabel}</span>
+          {/* LIVE / MANUAL / NO DEVICE — uses the canonical
+              .status-pill so it matches the online indicator in
+              GunnyChat's header. */}
+          <span className={`status-pill ${liveTone}`} style={{ fontSize: 9, padding: '4px 8px' }}>
+            {liveLabel}
+          </span>
           {onClose && (
-            <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close HR tracker"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-tertiary)',
+                cursor: 'pointer',
+                fontSize: 16,
+                padding: 0,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
           )}
         </div>
       </div>
@@ -148,19 +184,35 @@ export default function HRZoneGauge({
         <div style={{ minWidth: 140, flex: 1 }}>
           {currentHR && currentZone ? (
             <>
-              <div style={{ fontFamily: 'Orbitron', fontSize: 13, color: currentZone.color, marginBottom: 4 }}>
-                ZONE {currentZone.zone}: {currentZone.name}
+              <div
+                className="t-display-m"
+                style={{ color: currentZone.color, marginBottom: 4, fontSize: 13, textShadow: `0 0 6px ${currentZone.color}55` }}
+              >
+                Zone {currentZone.zone}: {currentZone.name}
               </div>
               {currentZone.zone !== targetZone ? (
-                <div style={{ fontFamily: 'Share Tech Mono', fontSize: 11, color: currentZone.zone > targetZone ? '#ff4444' : '#00ff41' }}>
+                // Off-target callout — danger if above, green if below.
+                // Above-target = "SLOW DOWN" (overexerting); below =
+                // "PUSH HARDER" (under target). Color tracks intent.
+                <div
+                  className="t-mono-sm"
+                  style={{
+                    color: currentZone.zone > targetZone ? 'var(--danger)' : 'var(--green)',
+                    letterSpacing: 1,
+                  }}
+                >
                   {currentZone.zone > targetZone ? 'ABOVE TARGET — SLOW DOWN' : 'BELOW TARGET — PUSH HARDER'}
                 </div>
               ) : (
-                <div style={{ fontFamily: 'Share Tech Mono', fontSize: 11, color: '#00ff41' }}>ON TARGET</div>
+                <div className="t-mono-sm" style={{ color: 'var(--green)', letterSpacing: 1 }}>
+                  ON TARGET
+                </div>
               )}
             </>
           ) : (
-            <div style={{ fontFamily: 'Share Tech Mono', fontSize: 11, color: '#666', marginBottom: 6 }}>Enter HR manually or connect a wearable</div>
+            <div className="t-mono-sm" style={{ marginBottom: 6, color: 'var(--text-tertiary)' }}>
+              Enter HR manually or connect a wearable
+            </div>
           )}
           <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
             <input
@@ -175,33 +227,58 @@ export default function HRZoneGauge({
                   }
                 }
               }}
-              style={{ width: 80, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 12, textAlign: 'center', borderRadius: 4 }}
+              className="ds-input"
+              style={{ width: 90, padding: '6px 8px', textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 13 }}
             />
-            <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#555' }}>↵ enter</span>
+            <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>↵ enter</span>
           </div>
         </div>
       </div>
 
-      {/* Zone strip — tap to set target */}
-      <div style={{ display: 'flex', gap: 2, height: 20, borderRadius: 4, overflow: 'hidden', marginTop: 10 }}>
+      {/* Zone strip — tap to select a target zone. The active zone
+          (current HR) fills with its color; the target zone gets a
+          2px outline so the user sees both at a glance. */}
+      <div style={{ display: 'flex', gap: 2, height: 20, overflow: 'hidden', marginTop: 10 }}>
         {zones.map(z => {
           const isActive = currentZone?.zone === z.zone;
           const isTarget = z.zone === targetZone;
           return (
-            <div key={z.zone} onClick={() => onSetTargetZone(z.zone)} style={{
-              flex: 1, background: isActive ? z.color : `${z.color}22`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-              border: isTarget ? `2px solid ${z.color}` : '2px solid transparent',
-              transition: 'all 0.3s', position: 'relative',
-            }}>
-              <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: isActive ? '#000' : z.color, fontWeight: isActive ? 700 : 400 }}>Z{z.zone}</span>
-            </div>
+            <button
+              key={z.zone}
+              type="button"
+              onClick={() => onSetTargetZone(z.zone)}
+              aria-label={`Set target zone ${z.zone}: ${z.name}`}
+              aria-pressed={isTarget}
+              style={{
+                flex: 1,
+                background: isActive ? z.color : `${z.color}22`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                border: isTarget ? `2px solid ${z.color}` : '2px solid transparent',
+                padding: 0,
+                transition: 'all 0.3s',
+                position: 'relative',
+                fontFamily: 'var(--mono)',
+                fontSize: 9,
+                color: isActive ? '#000' : z.color,
+                fontWeight: isActive ? 700 : 400,
+                letterSpacing: '0.04em',
+              }}
+            >
+              Z{z.zone}
+            </button>
           );
         })}
       </div>
       <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>
         {zones.map(z => (
-          <div key={z.zone} style={{ flex: 1, textAlign: 'center', fontFamily: 'Share Tech Mono', fontSize: 8, color: '#555' }}>
+          <div
+            key={z.zone}
+            className="t-mono-sm"
+            style={{ flex: 1, textAlign: 'center', fontSize: 8, color: 'var(--text-dim)' }}
+          >
             {z.min}-{z.max}
           </div>
         ))}
