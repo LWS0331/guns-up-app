@@ -106,6 +106,7 @@
 .composer-send,
 .composer-tool,
 .subtabs button,
+.seg,
 .segmented .seg,
 .vitals-actions button,
 .ds-tabbar button,
@@ -512,7 +513,14 @@
   gap: 6px;
   align-items: center;
 }
-.segmented .seg {
+/* Top-level .seg covers BOTH siblings (prev/next chevrons that sit
+   outside .segmented in the planner header) AND descendants. Without
+   the standalone rule, iOS Safari paints the prev/next as default
+   white-fill rounded squares because none of the appearance reset
+   rules match. Keep both selectors to preserve the cascade — the
+   descendant variant below adds nothing new for now but stays in
+   case future overrides need finer scope. */
+.seg {
   font-family: var(--display);
   font-size: 10px;
   font-weight: 700;
@@ -530,6 +538,7 @@
   appearance: none;
   border-radius: 0;
 }
+.seg.active,
 .segmented .seg.active {
   color: var(--green);
   border-color: var(--green);
