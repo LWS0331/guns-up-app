@@ -1038,44 +1038,315 @@
   gap: 48px;
   align-items: center;
 }
-.founderPhoto {
+/* ───────────────── Founder Rotator ─────────────────
+   Replaces the previous single-photo placeholder with a multi-era
+   rotator. See FounderRotator.tsx + design-handoff README §9 for spec.
+   The container is a 4:5 portrait slot with a tactical HUD overlay;
+   slides cross-fade with a glitch transition every 5 s. */
+
+.founderRotator {
   aspect-ratio: 4/5;
-  background:
-    repeating-linear-gradient(-45deg, rgba(255,255,255,0.02) 0, rgba(255,255,255,0.02) 10px, transparent 10px, transparent 20px),
-    linear-gradient(180deg, rgba(0,255,65,0.06), transparent);
+  background: #000;
   border: 1px solid rgba(0,255,65,0.2);
+  box-shadow: 0 0 40px rgba(0,255,65,0.08), inset 0 0 30px rgba(0,255,65,0.03);
   position: relative;
-  display: flex;
-  align-items: flex-end;
-  padding: 18px;
-  overflow: hidden; /* clip the cover-fit Image inside the 4:5 slot */
+  overflow: hidden;
+  isolation: isolate; /* keep the glitch + HUD z-index stack from leaking */
 }
 
-/* Photo fills the 4:5 slot. Source is 600×450 landscape so cover-crops to the
-   center subject. Slight green tint via filter + dim overlay keeps the
-   founder photo on-brand with the rest of the green-on-black palette without
-   touching the original asset. */
-.founderPhotoImg {
+/* SLIDES — each <div> hosts the <img>. The active slide fades + zooms in
+   slowly; outgoing slide remains briefly during the glitch transition. */
+.frSlide {
   position: absolute;
   inset: 0;
+  z-index: 1;
+  opacity: 0;
+  transform: scale(1.08);
+  transition: opacity 0.55s ease-out, transform 5s ease-out, filter 0.55s steps(4);
+  /* All photos render in B&W per spec — saturate(0) + grayscale(1) is
+     belt-and-braces (different browsers honor one over the other). */
+  filter: contrast(1.05) saturate(0) brightness(0.88) grayscale(1);
+}
+.frSlideActive {
+  opacity: 1;
+  transform: scale(1);
+}
+.frSlideImg {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  z-index: 0;
-  filter: contrast(1.05) saturate(0.85);
+  object-position: center top;
+  user-select: none;
+  pointer-events: none;
 }
-.founderPhoto::after {
+
+/* MILITARY slide gets a soft green duotone wash to hint at NVG night-vision
+   without painting it green. Other eras stay pure B&W. */
+.frSlide[data-era="MILITARY"]::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(3,3,3,0.15) 0%, rgba(3,3,3,0.55) 80%, rgba(3,3,3,0.85) 100%);
+  background: linear-gradient(180deg, rgba(0,255,65,0.06) 0%, rgba(0,255,65,0.02) 50%, rgba(0,0,0,0.15) 100%);
+  mix-blend-mode: screen;
   pointer-events: none;
-  z-index: 1;
 }
-/* Badge + remaining decorations sit above the image + gradient. */
-.founderPhoto :global(.badge),
-.founderPhoto :global(.lbl) {
-  z-index: 2;
+
+/* Decorative overlays — z-indexed per spec. */
+.frGridlines {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0,255,65,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,65,0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.frCrosshair {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.frCrosshair::before, .frCrosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(0,255,65,0.18);
+  pointer-events: none;
+}
+.frCrosshair::before {
+  /* horizontal hairline through center */
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(-0.5px);
+}
+.frCrosshair::after {
+  /* vertical hairline through center */
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-0.5px);
+}
+
+.frReticleSweep {
+  position: absolute;
+  z-index: 5;
+  width: 180px;
+  height: 180px;
+  left: 50%;
+  top: 50%;
+  border: 1px solid rgba(0,255,65,0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: none;
+  animation: frReticle 3.5s ease-in-out infinite;
+  box-shadow: inset 0 0 30px rgba(0,255,65,0.1);
+}
+@keyframes frReticle {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
+  50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.85; }
+}
+
+.frScan {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(180deg, transparent, rgba(0,255,65,0.18), transparent);
+  pointer-events: none;
+  animation: frScan 3.5s linear infinite;
+}
+@keyframes frScan {
+  0% { top: -60px; }
+  100% { top: 100%; }
+}
+
+/* Static CRT scanlines on top of the photo (separate from the page-level
+   ones so they read at the photo's smaller scale). */
+.founderRotator::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 2px,
+    rgba(0,0,0,0.18) 2px,
+    rgba(0,0,0,0.18) 3px
+  );
+  mix-blend-mode: multiply;
+}
+
+.frVignette {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.65) 100%);
+}
+
+/* Glitch overlay — re-triggered each transition by remounting via key prop
+   on the React side. The overlay is invisible 95% of the time; the
+   keyframe fires for ~0.55 s then the element settles back to opacity 0. */
+.frGlitch {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,255,65,0.18) 0,
+      rgba(0,255,65,0.18) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.06) 0,
+      rgba(255,255,255,0.06) 1px,
+      transparent 1px,
+      transparent 8px
+    );
+  opacity: 0;
+  animation: frGlitchBars 0.55s steps(4) 1;
+}
+@keyframes frGlitchBars {
+  0%   { opacity: 0; transform: translateX(0); }
+  10%  { opacity: 0.95; transform: translateX(-2px); clip-path: inset(0 0 60% 0); }
+  30%  { opacity: 0.6; transform: translateX(3px); clip-path: inset(35% 0 25% 0); }
+  55%  { opacity: 0.85; transform: translateX(-1px); clip-path: inset(60% 0 0 0); }
+  80%  { opacity: 0.4; transform: translateX(0); clip-path: inset(0 0 0 0); }
+  100% { opacity: 0; transform: translateX(0); }
+}
+
+/* HUD chrome — top + bottom bars (z 10). */
+.frHudTop {
+  position: absolute;
+  z-index: 10;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.85);
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.frRec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ff4444;
+}
+.frRecDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4444;
+  box-shadow: 0 0 6px #ff4444;
+  animation: frRecBlink 1s steps(2) infinite;
+}
+@keyframes frRecBlink { 50% { opacity: 0.3; } }
+.frCoord { color: rgba(0,255,65,0.85); }
+.frClock { color: rgba(255,255,255,0.7); font-variant-numeric: tabular-nums; }
+
+.frHudBottom {
+  position: absolute;
+  z-index: 10;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  pointer-events: auto; /* progress segments are clickable */
+}
+.frEraLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.frEraLabel {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(20px, 2.4vw, 30px);
+  letter-spacing: 2.5px;
+  color: #fff;
+  text-shadow: 0 0 12px rgba(0,255,65,0.35);
+  text-transform: uppercase;
+}
+.frYear {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(0,255,65,0.85);
+  letter-spacing: 2px;
+}
+.frCaption {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  color: rgba(255,255,255,0.7);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+/* 3-segment progress bar. Each segment is a button so a click jumps to
+   that era (caught in JSX). The active segment grows a fill bar over
+   ROTATE_MS; previously-shown segments are filled solid. */
+.frProgress {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.frSegment {
+  position: relative;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-top: 0;
+  border-bottom: 0;
+  outline: none;
+  transition: background 0.2s ease, height 0.2s ease;
+}
+.frSegment:hover { background: rgba(0,255,65,0.18); height: 6px; }
+.frSegment:focus-visible { box-shadow: 0 0 0 1px var(--green); }
+.frSegmentDone {
+  background: rgba(0,255,65,0.45);
+}
+.frSegmentActive {
+  background: rgba(0,255,65,0.18);
+}
+.frSegmentFill {
+  position: absolute;
+  inset: 0;
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(0,255,65,0.4);
+  transform-origin: left;
+  animation: frFill 5s linear forwards;
+}
+@keyframes frFill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Calm everything down — the rotator becomes a still gallery the
+     viewer can step through manually. */
+  .frSlide { transition: opacity 0.2s ease; transform: none !important; }
+  .frReticleSweep, .frScan, .frRecDot, .frSegmentFill { animation: none !important; }
+  .frGlitch { display: none; }
 }
 .founderPhoto :global(.lbl) {
   font-family: var(--mono);
