@@ -7,7 +7,7 @@ import { applyWorkoutModification, type WorkoutModification, type PrefillWeights
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
-import { BoltIcon, SendIcon } from '@/components/Icons';
+import Icon, { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
 import UserSwitcher from '@/components/UserSwitcher';
@@ -1349,7 +1349,8 @@ const AppShell: React.FC<AppShellProps> = ({
                   onClick={() => setShowNewPlanConfirm(true)}
                   className="btn btn-amber btn-sm"
                 >
-                  ⚔ New Battle Plan
+                  <Icon.Sword size={14} />
+                  New Battle Plan
                 </button>
               </div>
             )}
@@ -1374,7 +1375,8 @@ const AppShell: React.FC<AppShellProps> = ({
                 >
                   <span className="bl" /><span className="br" />
                   <div className="t-eyebrow amber" style={{ marginBottom: 12, justifyContent: 'center', display: 'flex' }}>
-                    ⚠ New Battle Plan
+                    <Icon.Warning size={12} />
+                    New Battle Plan
                   </div>
                   <p className="t-body-sm" style={{ color: 'var(--text-primary)', marginBottom: 8 }}>
                     This will replace your current SITREP and generate a brand new battle plan from scratch.
@@ -1947,43 +1949,48 @@ const AppShell: React.FC<AppShellProps> = ({
           </div>
         </div>
 
-        {/* Center: Desktop Navigation Tabs */}
-        <nav className="desktop-nav" style={{
-          gap: '2px',
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100%',
-        }}>
+        {/* Center: Desktop Navigation Tabs — uses the .subtabs
+            utility from the design system so the desktop nav reads
+            with the same chrome vocabulary as the mobile bottom
+            tabbar (10px Orbitron 700 / 1.8px LS, 2px glowing
+            underline on active). The legacy inline-style "nav-tab"
+            chrome rendered an unstyled-looking strip on desktop
+            because it never adopted design-system tokens. */}
+        <nav
+          className="desktop-nav subtabs"
+          style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100%',
+            borderBottom: 'none',
+            padding: 0,
+          }}
+        >
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             const isOps = tab.id === 'ops';
-            const activeColor = isOps ? '#ff2020' : '#00ff41';
             return (
               <button
                 key={tab.id}
+                type="button"
                 className={`nav-tab ${isActive ? 'active' : ''}`}
                 onClick={() => {
                   setActiveTab(tab.id);
                   trackEvent(EVENTS.TAB_CHANGED, { tab: tab.id });
                 }}
-                style={{
-                  fontSize: '15px',
-                  padding: '8px 20px',
-                  fontWeight: isActive ? 800 : 500,
-                  color: isActive ? activeColor : '#3a3a3a',
-                  backgroundColor: isActive ? (isOps ? 'rgba(255, 32, 32, 0.06)' : 'rgba(0, 255, 65, 0.04)') : 'transparent',
-                }}
+                style={
+                  // Ops tab keeps its red active treatment as the
+                  // exception (it's the trainer/admin entry point).
+                  isOps && isActive
+                    ? { color: '#ff2020', padding: '12px 18px' }
+                    : { padding: '12px 18px' }
+                }
               >
-                <span className="tab-icon" style={{
-                  fontSize: '15px',
-                  opacity: isActive ? 1 : 0.3,
-                  color: isActive ? activeColor : '#888',
-                }}>
+                <span style={{ fontSize: 14, opacity: isActive ? 1 : 0.5, marginRight: 6 }}>
                   {tab.icon}
                 </span>
                 {t(tab.labelKey)}
-                <div className="tab-indicator" style={isOps ? { background: '#ff2020', boxShadow: '0 0 8px rgba(255,32,32,0.4)' } : undefined} />
               </button>
             );
           })}

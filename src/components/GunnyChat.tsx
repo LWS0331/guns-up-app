@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
+import Icon from './Icons';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
@@ -1859,24 +1860,26 @@ ${mealSuggestion}`;
   };
 
   // Quick action strip — surfaces the most-used Gunny verbs as
-  // tappable .gunny-quick chips above the chat composer. The
-  // "Cool Down" action mirrors the canonical handoff Gunny screen
-  // mock and asks Gunny to draft a post-workout decompression.
-  const quickActions = operator.role === 'trainer'
+  // tappable .gunny-quick chips above the chat composer. Each
+  // action defines its icon as a ReactNode (SVG) so the chrome
+  // stays emoji-free per the canonical April 24 design — the
+  // tactical military aesthetic doesn't tolerate emoji renders
+  // that vary across iOS/Android/desktop.
+  const quickActions: { id: string; label: string; icon: React.ReactNode }[] = operator.role === 'trainer'
     ? [
-        { id: 'build_wod', label: t('gunny.build_wod'), icon: '▶' },
-        { id: 'my_clients', label: 'MY CLIENTS', icon: '◈' },
-        { id: 'goal_paths', label: t('gunny.goal_paths'), icon: '◆' },
-        { id: 'weekly_plan', label: t('gunny.weekly_plan'), icon: '▦' },
-        { id: 'cool_down', label: 'COOL DOWN', icon: '❄' },
+        { id: 'build_wod', label: t('gunny.build_wod'), icon: <Icon.Play size={12} /> },
+        { id: 'my_clients', label: 'MY CLIENTS', icon: <Icon.User size={12} /> },
+        { id: 'goal_paths', label: t('gunny.goal_paths'), icon: <Icon.Target size={12} /> },
+        { id: 'weekly_plan', label: t('gunny.weekly_plan'), icon: <Icon.Calendar size={12} /> },
+        { id: 'cool_down', label: 'COOL DOWN', icon: <Icon.Snowflake size={12} /> },
       ]
     : [
-        { id: 'build_wod', label: t('gunny.build_wod'), icon: '▶' },
-        { id: 'trainer_wod', label: 'TRAINER WOD', icon: '★' },
-        { id: 'check_readiness', label: t('gunny.check_readiness'), icon: '◈' },
-        { id: 'goal_paths', label: t('gunny.goal_paths'), icon: '◆' },
-        { id: 'macro_check', label: t('gunny.macro_check'), icon: '◉' },
-        { id: 'cool_down', label: 'COOL DOWN', icon: '❄' },
+        { id: 'build_wod', label: t('gunny.build_wod'), icon: <Icon.Play size={12} /> },
+        { id: 'trainer_wod', label: 'TRAINER WOD', icon: <Icon.Trophy size={12} /> },
+        { id: 'check_readiness', label: t('gunny.check_readiness'), icon: <Icon.Heart size={12} /> },
+        { id: 'goal_paths', label: t('gunny.goal_paths'), icon: <Icon.Target size={12} /> },
+        { id: 'macro_check', label: t('gunny.macro_check'), icon: <Icon.Food size={12} /> },
+        { id: 'cool_down', label: 'COOL DOWN', icon: <Icon.Snowflake size={12} /> },
       ];
 
   const handleQuickActionById = (actionId: string) => {
@@ -2070,7 +2073,7 @@ ${mealSuggestion}`;
             className={`btn btn-sm ${ttsOn ? 'btn-primary' : 'btn-secondary'}`}
             style={{ minWidth: 40, padding: '6px 10px' }}
           >
-            {ttsOn ? '🔊' : '🔇'}
+            {ttsOn ? <Icon.Volume size={14} /> : <Icon.VolumeMute size={14} />}
           </button>
         </div>
       </div>
@@ -2124,7 +2127,9 @@ ${mealSuggestion}`;
               disabled={isTyping}
               style={{ flexShrink: 0 }}
             >
-              <span style={{ color: 'var(--green)', opacity: 0.7, marginRight: 6 }}>{action.icon}</span>
+              <span style={{ color: 'var(--green)', opacity: 0.7, marginRight: 6, display: 'inline-flex', verticalAlign: 'middle' }}>
+                {action.icon}
+              </span>
               {action.label}
             </button>
           ))}
@@ -2522,6 +2527,7 @@ ${mealSuggestion}`;
             type="button"
             onClick={() => imageInputRef.current?.click()}
             title="Attach image for analysis"
+            aria-label="Attach image for analysis"
             style={{
               background: pendingImage ? 'rgba(255,107,53,0.4)' : 'rgba(0,255,65,0.08)',
               border: `1px solid ${pendingImage ? '#ff6b35' : 'var(--border-green-soft)'}`,
@@ -2531,11 +2537,10 @@ ${mealSuggestion}`;
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              fontSize: 14,
               lineHeight: 1,
             }}
           >
-            📷
+            <Icon.Camera size={16} />
           </button>
 
           <button
