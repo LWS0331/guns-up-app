@@ -1858,12 +1858,17 @@ ${mealSuggestion}`;
     }
   };
 
+  // Quick action strip — surfaces the most-used Gunny verbs as
+  // tappable .gunny-quick chips above the chat composer. The
+  // "Cool Down" action mirrors the canonical handoff Gunny screen
+  // mock and asks Gunny to draft a post-workout decompression.
   const quickActions = operator.role === 'trainer'
     ? [
         { id: 'build_wod', label: t('gunny.build_wod'), icon: '▶' },
         { id: 'my_clients', label: 'MY CLIENTS', icon: '◈' },
         { id: 'goal_paths', label: t('gunny.goal_paths'), icon: '◆' },
         { id: 'weekly_plan', label: t('gunny.weekly_plan'), icon: '▦' },
+        { id: 'cool_down', label: 'COOL DOWN', icon: '❄' },
       ]
     : [
         { id: 'build_wod', label: t('gunny.build_wod'), icon: '▶' },
@@ -1871,6 +1876,7 @@ ${mealSuggestion}`;
         { id: 'check_readiness', label: t('gunny.check_readiness'), icon: '◈' },
         { id: 'goal_paths', label: t('gunny.goal_paths'), icon: '◆' },
         { id: 'macro_check', label: t('gunny.macro_check'), icon: '◉' },
+        { id: 'cool_down', label: 'COOL DOWN', icon: '❄' },
       ];
 
   const handleQuickActionById = (actionId: string) => {
@@ -1881,6 +1887,7 @@ ${mealSuggestion}`;
     if (actionId === 'macro_check') actionText = 'CHECK MACROS';
     if (actionId === 'my_clients') actionText = 'SHOW MY CLIENTS';
     if (actionId === 'trainer_wod') actionText = 'WHAT DID MY TRAINER DO TODAY';
+    if (actionId === 'cool_down') actionText = 'BUILD ME A COOL DOWN ROUTINE';
     handleQuickAction(actionText);
   };
 
