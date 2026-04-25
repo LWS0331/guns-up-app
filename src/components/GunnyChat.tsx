@@ -1086,7 +1086,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string } } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string } } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1243,7 +1243,16 @@ ${mealSuggestion}`;
         const errMsg = data?.error || 'Gunny AI temporarily offline.';
         return { response: errMsg };
       }
-      return { response: data.response, workoutData: data.workoutData, workoutModification: data.workoutModification, profileData: data.profileData, mealData: data.mealData };
+      return {
+        response: data.response,
+        workoutData: data.workoutData,
+        workoutModification: data.workoutModification,
+        workoutModifications: data.workoutModifications,
+        workoutDelete: data.workoutDelete,
+        workoutDeletes: data.workoutDeletes,
+        profileData: data.profileData,
+        mealData: data.mealData,
+      };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
     }
@@ -1272,6 +1281,12 @@ ${mealSuggestion}`;
      * for the first entry so pre-migration callers still compile.
      */
     workoutModifications?: Array<Record<string, unknown>>;
+    /**
+     * Workout-day deletions emitted via <workout_delete> blocks. Plural
+     * for batch deletes ("wipe this week"); singular alias retained.
+     */
+    workoutDelete?: { date: string };
+    workoutDeletes?: Array<{ date: string }>;
     profileData?: Record<string, unknown>;
     mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string };
     voiceControl?: { action?: string };
@@ -1334,6 +1349,8 @@ ${mealSuggestion}`;
           workoutData: data.workoutData,
           workoutModification: data.workoutModification,
           workoutModifications: Array.isArray(data.workoutModifications) ? data.workoutModifications : (data.workoutModification ? [data.workoutModification] : []),
+          workoutDelete: data.workoutDelete,
+          workoutDeletes: Array.isArray(data.workoutDeletes) ? data.workoutDeletes : (data.workoutDelete ? [data.workoutDelete] : []),
           profileData: data.profileData,
           mealData: data.mealData,
           voiceControl: data.voiceControl,
@@ -1410,6 +1427,8 @@ ${mealSuggestion}`;
           workoutData: finalPayload.workoutData,
           workoutModification: finalPayload.workoutModification,
           workoutModifications: Array.isArray(finalPayload.workoutModifications) ? finalPayload.workoutModifications : (finalPayload.workoutModification ? [finalPayload.workoutModification] : []),
+          workoutDelete: finalPayload.workoutDelete,
+          workoutDeletes: Array.isArray(finalPayload.workoutDeletes) ? finalPayload.workoutDeletes : (finalPayload.workoutDelete ? [finalPayload.workoutDelete] : []),
           profileData: finalPayload.profileData,
           mealData: finalPayload.mealData,
           voiceControl: finalPayload.voiceControl,
@@ -1614,12 +1633,37 @@ ${mealSuggestion}`;
 
       applyVoiceControl(apiResult?.voiceControl);
 
+      // WORKOUT DELETE — when Gunny emits <workout_delete>, remove the
+      // workout for those date(s) from operator.workouts. Without this
+      // the model would say "deleted from planner" in chat but the
+      // planner state never updated (the bug the operator hit on a
+      // move-workout request). Apply BEFORE block-shape mods so a move
+      // (delete source + add target) lands cleanly.
+      const deletesList = ((apiResult?.workoutDeletes && apiResult.workoutDeletes.length > 0)
+        ? apiResult.workoutDeletes
+        : (apiResult?.workoutDelete ? [apiResult.workoutDelete] : [])) as Array<{ date: string }>;
+      let wasDeletion = false;
+      if (deletesList.length > 0 && onUpdateOperator) {
+        let workingOp = operator;
+        let touched = false;
+        for (const del of deletesList) {
+          if (!del?.date || !isValidDateStr(del.date)) continue;
+          if (!workingOp.workouts || !workingOp.workouts[del.date]) continue;
+          const nextWorkouts = { ...workingOp.workouts };
+          delete nextWorkouts[del.date];
+          workingOp = { ...workingOp, workouts: nextWorkouts };
+          touched = true;
+          wasDeletion = true;
+        }
+        if (touched) onUpdateOperator(workingOp);
+      }
+
       // SURGICAL MODIFICATION — apply each targeted change Gunny emitted. Gunny
       // can emit multiple <workout_modification> blocks (e.g. prefill_weights
       // for every exercise on today's workout); we iterate and apply them in
       // order. For block-shape mods (swap/add/remove/update), we fold them all
       // into a single operator update to avoid a render storm.
-      let wasModification = false;
+      let wasModification = wasDeletion;
       const mods = (apiResult?.workoutModifications || []) as unknown as WorkoutModification[];
       if (mods.length > 0) {
         const today = getLocalDateStr();
@@ -1798,10 +1842,32 @@ ${mealSuggestion}`;
 
       applyVoiceControl(apiResult?.voiceControl);
 
+      // QA-path workout deletes — same handling as the normal-mode
+      // path above. Apply BEFORE block-shape mods so a move
+      // (delete source + add target) lands cleanly.
+      const qaDeletes = ((apiResult?.workoutDeletes && apiResult.workoutDeletes.length > 0)
+        ? apiResult.workoutDeletes
+        : (apiResult?.workoutDelete ? [apiResult.workoutDelete] : [])) as Array<{ date: string }>;
+      let qaWasDeletion = false;
+      if (qaDeletes.length > 0 && onUpdateOperator) {
+        let workingOp = operator;
+        let touched = false;
+        for (const del of qaDeletes) {
+          if (!del?.date || !isValidDateStr(del.date)) continue;
+          if (!workingOp.workouts || !workingOp.workouts[del.date]) continue;
+          const nextWorkouts = { ...workingOp.workouts };
+          delete nextWorkouts[del.date];
+          workingOp = { ...workingOp, workouts: nextWorkouts };
+          touched = true;
+          qaWasDeletion = true;
+        }
+        if (touched) onUpdateOperator(workingOp);
+      }
+
       // Same loop pattern as the normal-mode path above — apply every
       // workout_modification Gunny emitted, prefills via event bus, block
       // mods folded into a single operator update.
-      let wasModification = false;
+      let wasModification = qaWasDeletion;
       const qaMods = (apiResult?.workoutModifications || []) as unknown as WorkoutModification[];
       if (qaMods.length > 0) {
         const today = getLocalDateStr();
@@ -2248,78 +2314,25 @@ ${mealSuggestion}`;
               {message.image && (
                 <img src={message.image} alt="User upload" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 4, marginBottom: 8, display: 'block' }} />
               )}
-              {/* Render text — workout cards keep the line-split with VIDEO links; other messages render as tactical markdown */}
-              {message.isWorkout ? (
-                message.text.split('\n').map((line, lineIdx) => {
-                // Phase headers — style them prominently
-                const isPhaseHeader = /^(PHASE \d|OPERATION:|TARGET:|GOAL PATH:|COOLDOWN:|━+$|PRIMER|COMPLEX|STRENGTH|ISOLATION|METCON)/i.test(line.trim());
-                const isSectionDivider = /^━+$/.test(line.trim());
-                const isAddItPrompt = line.includes('Say "ADD IT"');
-
-                if (isSectionDivider) {
-                  return <div key={lineIdx} style={{ height: '1px', background: 'linear-gradient(90deg, transparent, rgba(255,184,0,0.4), transparent)', margin: '8px 0' }} />;
-                }
-
-                if (isAddItPrompt) {
-                  return (
-                    <div key={lineIdx} style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        onClick={() => {
-                          if (lastWorkoutDataRef.current) {
-                            saveWorkoutToPlanner(lastWorkoutDataRef.current);
-                            const title = (lastWorkoutDataRef.current.title as string) || 'workout';
-                            lastWorkoutDataRef.current = null;
-                            const confirmMsg: Message = { id: 'gunny-confirm-' + Date.now(), role: 'gunny', text: `LOCKED IN. "${title}" saved to your PLANNER. Go execute, champ.`, timestamp: new Date() };
-                            setMessages(prev => [...prev, confirmMsg]);
-                          }
-                        }}
-                        style={{
-                          padding: '10px 24px', fontFamily: '"Orbitron", sans-serif', fontSize: '13px',
-                          fontWeight: 800, letterSpacing: '2px', color: '#030303', background: '#ffb800',
-                          border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-                          boxShadow: '0 0 12px rgba(255,184,0,0.3)',
-                        }}
-                      >
-                        ◆ ADD TO PLANNER
-                      </button>
-                      <span style={{ fontSize: '12px', color: '#666', fontFamily: '"Share Tech Mono", monospace' }}>or type "add it"</span>
-                    </div>
-                  );
-                }
-
-                // Check for VIDEO links within the line
-                const parts = line.split(/(\[VIDEO: [^\]]+\]\([^)]+\))/);
+              {/* Render text — both workout and non-workout messages
+                  go through the same ReactMarkdown pipeline. The
+                  legacy line-by-line render for isWorkout broke
+                  markdown (`**bold**` / `## headers` / `1. ordered`
+                  rendered as raw text whenever Gunny appended a
+                  workout JSON to a markdown reply). The "Say 'ADD IT'"
+                  footer is stripped from the body and replaced with a
+                  separate ADD TO PLANNER button below.
+                  Section dividers (━━━) and phase headers from the
+                  legacy line-renderer are no longer special-cased —
+                  Gunny's prompt now uses standard markdown for these. */}
+              {(() => {
+                // Strip the "Say 'ADD IT'" footer line from the body
+                // so it renders cleanly in markdown — the action moves
+                // to the dedicated button below.
+                const bodyText = message.isWorkout
+                  ? message.text.replace(/\n*━+\n*\s*Say "ADD IT"[^\n]*\n?/i, '\n').trim()
+                  : message.text;
                 return (
-                  <div key={lineIdx} style={{
-                    ...(isPhaseHeader ? {
-                      color: '#ffb800', fontFamily: '"Orbitron", sans-serif', fontSize: '13px',
-                      fontWeight: 700, letterSpacing: '2px', marginTop: '12px', marginBottom: '4px',
-                      textShadow: '0 0 6px rgba(255,184,0,0.3)',
-                    } : {}),
-                    minHeight: line.trim() === '' ? '8px' : undefined,
-                  }}>
-                    {parts.map((part, i) => {
-                      const videoMatch = part.match(/\[VIDEO: ([^\]]+)\]\(([^)]+)\)/);
-                      if (videoMatch) {
-                        return (
-                          <a key={i} href={videoMatch[2]} target="_blank" rel="noopener noreferrer"
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px',
-                              fontFamily: '"Share Tech Mono", monospace', fontSize: '11px', color: '#ff4444',
-                              background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.2)',
-                              cursor: 'pointer', textDecoration: 'none', margin: '2px 4px 2px 0',
-                              transition: 'all 0.2s',
-                            }}>
-                            ▶ {videoMatch[1]}
-                          </a>
-                        );
-                      }
-                      return <span key={i}>{part}</span>;
-                    })}
-                  </div>
-                );
-                })
-              ) : (
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -2408,8 +2421,52 @@ ${mealSuggestion}`;
                     ),
                   }}
                 >
-                  {message.text}
+                  {bodyText}
                 </ReactMarkdown>
+                );
+              })()}
+              {/* ADD TO PLANNER button — only on workout messages where
+                  Gunny emitted <workout_json>. Wired to lastWorkoutDataRef
+                  which holds the parsed workout from the last response.
+                  Sits below the markdown body so the prose renders
+                  correctly above it. */}
+              {message.isWorkout && lastWorkoutDataRef.current && (
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => {
+                      if (lastWorkoutDataRef.current) {
+                        saveWorkoutToPlanner(lastWorkoutDataRef.current);
+                        const title = (lastWorkoutDataRef.current.title as string) || 'workout';
+                        lastWorkoutDataRef.current = null;
+                        const confirmMsg: Message = {
+                          id: 'gunny-confirm-' + Date.now(),
+                          role: 'gunny',
+                          text: `LOCKED IN. "${title}" saved to your PLANNER. Go execute, champ.`,
+                          timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, confirmMsg]);
+                      }
+                    }}
+                    style={{
+                      padding: '10px 24px',
+                      fontFamily: '"Orbitron", sans-serif',
+                      fontSize: 13,
+                      fontWeight: 800,
+                      letterSpacing: 2,
+                      color: '#030303',
+                      background: '#ffb800',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 0 12px rgba(255,184,0,0.3)',
+                    }}
+                  >
+                    ◆ ADD TO PLANNER
+                  </button>
+                  <span style={{ fontSize: 12, color: '#666', fontFamily: '"Share Tech Mono", monospace' }}>
+                    or type &quot;add it&quot;
+                  </span>
+                </div>
               )}
               {/* Timestamp — small mono caption pinned right for
                   user, left for gunny per the handoff bubble layout. */}
