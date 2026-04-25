@@ -182,43 +182,72 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
   const renderBadge = (badge: Badge) => {
     const colors = BADGE_COLORS[badge.tier];
     return (
-      <div key={badge.id} style={{
-        padding: 12, background: badge.earned ? `${colors.bg}22` : '#0a0a0a',
-        border: `1px solid ${badge.earned ? colors.border : '#222'}`,
-        borderRadius: 8, position: 'relative', overflow: 'hidden',
-        opacity: badge.earned ? 1 : 0.6, transition: 'all 0.3s',
-      }}>
-        {/* Progress bar background */}
+      <div
+        key={badge.id}
+        className="ds-card bracket"
+        style={{
+          padding: 12,
+          // Earned tier defines the background tint; locked stays
+          // on the default --bg-card. Opacity drops on un-earned
+          // so they read as backlogged goals, not active state.
+          background: badge.earned ? `${colors.bg}22` : undefined,
+          borderColor: badge.earned ? colors.border : undefined,
+          opacity: badge.earned ? 1 : 0.65,
+          transition: 'all 0.3s',
+          overflow: 'hidden',
+        }}
+      >
+        <span className="bl" /><span className="br" />
+        {/* Progress watermark — fills the card horizontally with a
+            faint tinted overlay proportional to progress. Sits below
+            the content via z-index. */}
         {!badge.earned && badge.progress > 0 && (
-          <div style={{
-            position: 'absolute', top: 0, left: 0, bottom: 0,
-            width: `${badge.progress}%`, background: `${colors.border}11`,
-          }} />
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: `${badge.progress}%`,
+              background: `${colors.border}11`,
+              zIndex: 0,
+            }}
+          />
         )}
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 20 }}>{badge.icon}</span>
-            <div>
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: badge.earned ? colors.text : '#666', letterSpacing: 1 }}>
+            <div style={{ minWidth: 0 }}>
+              <div
+                className="t-display-m"
+                style={{ fontSize: 10, color: badge.earned ? colors.text : 'var(--text-tertiary)' }}
+              >
                 {badge.name}
               </div>
-              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#888' }}>
+              <div className="t-mono-sm" style={{ color: 'var(--text-secondary)', fontSize: 9 }}>
                 {badge.description}
               </div>
             </div>
           </div>
           {!badge.earned && (
             <div style={{ marginTop: 6 }}>
-              <div style={{ height: 3, background: '#222', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${badge.progress}%`, background: colors.border, borderRadius: 2, transition: 'width 0.5s' }} />
+              {/* Per-badge progress — uses the canonical .bar with
+                  a tier-tinted fill via inline override since each
+                  tier color is dynamic. */}
+              <div className="bar" style={{ height: 3 }}>
+                <span style={{ width: `${badge.progress}%`, background: colors.border }} />
               </div>
-              <div style={{ fontFamily: 'Share Tech Mono', fontSize: 8, color: '#555', marginTop: 2 }}>
+              <div className="t-mono-sm" style={{ color: 'var(--text-dim)', marginTop: 2, fontSize: 8 }}>
                 {Math.round(badge.progress)}% — {badge.requirement}
               </div>
             </div>
           )}
           {badge.earned && (
-            <div style={{ fontFamily: 'Share Tech Mono', fontSize: 8, color: colors.border, marginTop: 4 }}>
+            <div
+              className="t-mono-sm"
+              style={{ color: colors.border, marginTop: 4, fontSize: 8 }}
+            >
               EARNED {badge.tier.toUpperCase()}
             </div>
           )}
@@ -227,60 +256,105 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
     );
   };
 
+  const sectionLabel = (text: string, count: number, tone: 'green' | 'amber' | 'dim') => (
+    <div
+      className={`t-eyebrow${tone === 'amber' ? ' amber' : ''}`}
+      style={{
+        marginBottom: 8,
+        color: tone === 'green' ? 'var(--green)' : tone === 'amber' ? 'var(--amber)' : 'var(--text-dim)',
+      }}
+    >
+      {text} ({count})
+    </div>
+  );
+
   return (
-    <div>
-      {/* XP / Level header */}
-      <div style={{ padding: 16, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 8, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="stack-4">
+      {/* XP / Level header — bracket card with two stat clusters
+          (level + xp on the left, badge ratio on the right). The
+          XP progress bar sits below as the canonical .bar. */}
+      <div
+        className="ds-card bracket"
+        style={{
+          padding: 16,
+          marginBottom: 16,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <span className="bl" /><span className="br" />
         <div>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#ffb800', letterSpacing: 1 }}>
-            LEVEL {level}
+          <div className="t-display-m" style={{ color: 'var(--warn)' }}>
+            Level {level}
           </div>
-          <div style={{ fontFamily: 'Share Tech Mono', fontSize: 10, color: '#666', marginTop: 2 }}>
+          <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginTop: 2 }}>
             {xp} XP — {xpToNext} XP to next level
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00ff41' }}>{earnedBadges.length}</div>
-          <div style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#666' }}>/ {badges.length} BADGES</div>
+          <div className="t-num-display">{earnedBadges.length}</div>
+          <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
+            / {badges.length} BADGES
+          </div>
         </div>
       </div>
 
-      {/* XP progress bar */}
-      <div style={{ height: 6, background: '#111', borderRadius: 3, marginBottom: 20, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${((xp % 500) / 500) * 100}%`, background: 'linear-gradient(90deg, #ffb800, #ff6600)', borderRadius: 3, transition: 'width 0.5s' }} />
+      {/* XP progress — gradient amber→orange to match the gamified
+          XP/leveling vibe. .bar takes the colored fill via inline. */}
+      <div className="bar amber" style={{ height: 6, marginBottom: 20 }}>
+        <span
+          style={{
+            width: `${((xp % 500) / 500) * 100}%`,
+            background: 'linear-gradient(90deg, var(--warn), #ff6600)',
+          }}
+        />
       </div>
 
-      {/* Earned */}
       {earnedBadges.length > 0 && (
         <>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00ff41', letterSpacing: 1, marginBottom: 8 }}>
-            EARNED ({earnedBadges.length})
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, marginBottom: 20 }}>
+          {sectionLabel('Earned', earnedBadges.length, 'green')}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gap: 8,
+              marginBottom: 20,
+            }}
+          >
             {earnedBadges.map(renderBadge)}
           </div>
         </>
       )}
 
-      {/* In Progress */}
       {inProgressBadges.length > 0 && (
         <>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#ffb800', letterSpacing: 1, marginBottom: 8 }}>
-            IN PROGRESS ({inProgressBadges.length})
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, marginBottom: 20 }}>
+          {sectionLabel('In Progress', inProgressBadges.length, 'amber')}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gap: 8,
+              marginBottom: 20,
+            }}
+          >
             {inProgressBadges.map(renderBadge)}
           </div>
         </>
       )}
 
-      {/* Locked */}
       {lockedBadges.length > 0 && (
         <>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#555', letterSpacing: 1, marginBottom: 8 }}>
-            LOCKED ({lockedBadges.length})
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+          {sectionLabel('Locked', lockedBadges.length, 'dim')}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gap: 8,
+            }}
+          >
             {lockedBadges.map(renderBadge)}
           </div>
         </>

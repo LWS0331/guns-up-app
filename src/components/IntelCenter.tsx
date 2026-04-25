@@ -2466,112 +2466,232 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
   const renderPRBoardTab = () => {
     const exerciseGroups = getExerciseGroups();
     const groupKeys = Object.keys(exerciseGroups);
+    const recentCount = state.prBoard.filter(
+      p => (Date.now() - new Date(p.date).getTime()) / (1000 * 60 * 60 * 24) < 30
+    ).length;
 
     return (
-      <div>
-        {/* View toggle */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div className="stack-4">
+        {/* View toggle — uses .segmented so it matches the
+            Planner Month/Week/Day chrome. Three modes: roadmap
+            (visual milestones), tracker (per-exercise progression),
+            table (raw editable rows). */}
+        <div className="segmented" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
           {(['roadmap', 'tracker', 'table'] as const).map(mode => {
-            const labels = { roadmap: 'MILESTONE ROADMAP', tracker: 'PHASE TRACKER', table: 'TABLE VIEW' };
+            const labels = {
+              roadmap: 'Milestone Roadmap',
+              tracker: 'Phase Tracker',
+              table: 'Table View',
+            };
             return (
-              <button key={mode} onClick={() => setPrViewMode(mode)} style={{
-                padding: '6px 14px', fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700,
-                background: prViewMode === mode ? '#00ff41' : '#0a0a0a',
-                color: prViewMode === mode ? '#000' : '#888',
-                border: `1px solid ${prViewMode === mode ? '#00ff41' : '#333'}`,
-                borderRadius: 4, cursor: 'pointer', letterSpacing: 1,
-              }}>{labels[mode]}</button>
+              <button
+                key={mode}
+                type="button"
+                className={`seg ${prViewMode === mode ? 'active' : ''}`}
+                onClick={() => setPrViewMode(mode)}
+              >
+                {labels[mode]}
+              </button>
             );
           })}
         </div>
 
-        {/* Milestone Roadmap View */}
+        {/* Milestone Roadmap — delegated to renderMilestoneRoadmap. */}
         {prViewMode === 'roadmap' && renderMilestoneRoadmap()}
 
-        {/* Phase Tracker View */}
+        {/* Phase Tracker */}
         {prViewMode === 'tracker' && (
           <div>
             {groupKeys.length === 0 && (
-              <div style={{ padding: 24, textAlign: 'center', color: '#555', fontFamily: 'Share Tech Mono, monospace', fontSize: 13 }}>
-                No PRs logged yet. Add your first PR below.
+              <div className="ds-card" style={{ padding: 24, textAlign: 'center' }}>
+                <span className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
+                  No PRs logged yet. Add your first PR below.
+                </span>
               </div>
             )}
-            {groupKeys.map(key => renderPhaseLineTracker(
-              exerciseGroups[key][0].exercise, // Use original casing from first entry
-              exerciseGroups[key]
-            ))}
+            {groupKeys.map(key =>
+              renderPhaseLineTracker(
+                exerciseGroups[key][0].exercise,
+                exerciseGroups[key]
+              )
+            )}
 
-            {/* Summary stats */}
+            {/* Summary stats — bracket card with three stat cells. */}
             {groupKeys.length > 0 && (
-              <div style={{
-                marginTop: 16, padding: 12, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 4,
-                display: 'flex', gap: 20, justifyContent: 'center',
-              }}>
+              <div
+                className="ds-card bracket"
+                style={{
+                  marginTop: 16,
+                  padding: 12,
+                  display: 'flex',
+                  gap: 20,
+                  justifyContent: 'center',
+                }}
+              >
+                <span className="bl" /><span className="br" />
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#ffb800' }}>{state.prBoard.length}</div>
-                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666' }}>TOTAL PRs</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00ff41' }}>{groupKeys.length}</div>
-                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666' }}>EXERCISES</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00ff41' }}>
-                    {state.prBoard.filter(p => (Date.now() - new Date(p.date).getTime()) / (1000 * 60 * 60 * 24) < 30).length}
+                  <div className="t-num-display" style={{ color: 'var(--warn)' }}>
+                    {state.prBoard.length}
                   </div>
-                  <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 9, color: '#666' }}>LAST 30 DAYS</div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
+                    TOTAL PRs
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div className="t-num-display">{groupKeys.length}</div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
+                    EXERCISES
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div className="t-num-display">{recentCount}</div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
+                    LAST 30 DAYS
+                  </div>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Table View (original) */}
+        {/* Table View — original editable grid. Header uses .t-label
+            tokens; rows get a left green stripe on recent (<7d) PRs
+            so streak-active lifts pop visually. */}
         {prViewMode === 'table' && (
-          <div style={{ width: '100%', overflowX: 'auto', marginBottom: '16px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Chakra Petch, sans-serif' }}>
+          <div className="ds-card bracket" style={{ padding: 0, overflowX: 'auto' }}>
+            <span className="bl" /><span className="br" />
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--body)' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid rgba(0,255,65,0.15)' }}>
+                <tr style={{ borderBottom: '2px solid var(--border-green-strong)' }}>
                   {['EXERCISE', 'WEIGHT', 'REPS', 'DATE', 'NOTES'].map((h, i) => (
-                    <th key={h} style={{
-                      padding: '12px', textAlign: i === 0 || i === 4 ? 'left' : 'right',
-                      fontFamily: 'Chakra Petch, sans-serif', fontSize: '13px', color: '#888',
-                      textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'normal',
-                    }}>{h}</th>
+                    <th
+                      key={h}
+                      className="t-label"
+                      style={{
+                        padding: '12px',
+                        textAlign: i === 0 || i === 4 ? 'left' : 'right',
+                        fontWeight: 'normal',
+                      }}
+                    >
+                      {h}
+                    </th>
                   ))}
-                  <th style={{ padding: '12px', width: '32px' }} />
+                  <th style={{ padding: 12, width: 32 }} />
                 </tr>
               </thead>
               <tbody>
                 {state.prBoard.map((pr, index) => {
                   const isRecent = (Date.now() - new Date(pr.date).getTime()) / (1000 * 60 * 60 * 24) < 7;
                   return (
-                    <tr key={pr.id} style={{
-                      borderBottom: '1px solid rgba(0,255,65,0.06)',
-                      borderLeft: isRecent ? '2px solid #00ff41' : '2px solid transparent',
-                    }}>
+                    <tr
+                      key={pr.id}
+                      style={{
+                        borderBottom: '1px solid var(--border-green-soft)',
+                        borderLeft: isRecent ? '2px solid var(--green)' : '2px solid transparent',
+                      }}
+                    >
                       <td style={{ padding: '10px 12px' }}>
-                        <input type="text" value={pr.exercise} onChange={(e) => handlePRChange(index, 'exercise', e.target.value)}
-                          style={{ width: '100%', padding: '4px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#ddd', outline: 'none' }} />
+                        <input
+                          type="text"
+                          value={pr.exercise}
+                          onChange={(e) => handlePRChange(index, 'exercise', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: 4,
+                            fontFamily: 'var(--body)',
+                            fontSize: 14,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-primary)',
+                            outline: 'none',
+                          }}
+                        />
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        <input type="number" value={pr.weight} onChange={(e) => handlePRChange(index, 'weight', parseInt(e.target.value))}
-                          style={{ width: '70px', padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#00ff41', textAlign: 'right', outline: 'none' }} />
+                        <input
+                          type="number"
+                          value={pr.weight}
+                          onChange={(e) => handlePRChange(index, 'weight', parseInt(e.target.value))}
+                          style={{
+                            width: 70,
+                            padding: 4,
+                            fontFamily: 'var(--mono)',
+                            fontSize: 14,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--green)',
+                            textAlign: 'right',
+                            outline: 'none',
+                          }}
+                        />
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        <input type="number" value={pr.reps} onChange={(e) => handlePRChange(index, 'reps', parseInt(e.target.value))}
-                          style={{ width: '50px', padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '14px', backgroundColor: 'transparent', border: 'none', color: '#00ff41', textAlign: 'right', outline: 'none' }} />
+                        <input
+                          type="number"
+                          value={pr.reps}
+                          onChange={(e) => handlePRChange(index, 'reps', parseInt(e.target.value))}
+                          style={{
+                            width: 50,
+                            padding: 4,
+                            fontFamily: 'var(--mono)',
+                            fontSize: 14,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--green)',
+                            textAlign: 'right',
+                            outline: 'none',
+                          }}
+                        />
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        <input type="date" value={pr.date} onChange={(e) => handlePRChange(index, 'date', e.target.value)}
-                          style={{ padding: '4px', fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', backgroundColor: 'transparent', border: 'none', color: '#888', outline: 'none' }} />
+                        <input
+                          type="date"
+                          value={pr.date}
+                          onChange={(e) => handlePRChange(index, 'date', e.target.value)}
+                          style={{
+                            padding: 4,
+                            fontFamily: 'var(--mono)',
+                            fontSize: 12,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-secondary)',
+                            outline: 'none',
+                          }}
+                        />
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <input type="text" value={pr.notes} onChange={(e) => handlePRChange(index, 'notes', e.target.value)}
-                          style={{ width: '100%', padding: '4px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '12px', backgroundColor: 'transparent', border: 'none', color: '#888', outline: 'none' }} />
+                        <input
+                          type="text"
+                          value={pr.notes}
+                          onChange={(e) => handlePRChange(index, 'notes', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: 4,
+                            fontFamily: 'var(--body)',
+                            fontSize: 12,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-secondary)',
+                            outline: 'none',
+                          }}
+                        />
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <button onClick={() => removePR(pr.id)} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '16px', padding: 0 }}>×</button>
+                        <button
+                          type="button"
+                          onClick={() => removePR(pr.id)}
+                          aria-label={`Delete PR ${pr.exercise}`}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--danger)',
+                            cursor: 'pointer',
+                            fontSize: 16,
+                            padding: 0,
+                          }}
+                        >
+                          ×
+                        </button>
                       </td>
                     </tr>
                   );
@@ -2581,17 +2701,15 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           </div>
         )}
 
-        {/* Add PR button */}
-        <button onClick={addPR} style={{
-          padding: '10px 16px', fontFamily: 'Chakra Petch, sans-serif', fontSize: '13px',
-          backgroundColor: 'transparent', border: '1px solid #00ff41', color: '#00ff41',
-          cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px', transition: 'all 0.2s',
-          borderRadius: 4, marginTop: 8,
-        }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0,255,65,0.1)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+        {/* Add PR — primary CTA, full-width-feeling so users see
+            it immediately under any of the three view modes. */}
+        <button
+          type="button"
+          onClick={addPR}
+          className="btn btn-primary"
+          style={{ marginTop: 8 }}
         >
-          + ADD PR
+          + Add PR
         </button>
       </div>
     );
