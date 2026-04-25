@@ -22,6 +22,7 @@
 
 import React from 'react';
 import HRZoneGauge, { type HrZoneDef, type HrSample } from './HRZoneGauge';
+import Icon from './Icons';
 
 export interface VitalsStickyProps {
   /** Rest timer state (managed by parent). */
@@ -217,9 +218,12 @@ export default function VitalsSticky({
         </div>
       )}
 
-      {/* Action row — 4-button ammo strip. PTT button gets the
-          .primary amber treatment with leading dot since it's the
-          "talk to coach" affordance you reach for during a set. */}
+      {/* Action row — 4-button ammo strip. Each button pairs an
+          inline SVG (Icons.tsx) with a stenciled label so the
+          tactical aesthetic stays consistent and the row reads
+          fast in a noisy gym. PTT button gets the .primary amber
+          treatment with leading dot via CSS — it's the "talk to
+          coach" affordance you reach for mid-set. */}
       <div className="vitals-actions">
         <button
           type="button"
@@ -228,6 +232,7 @@ export default function VitalsSticky({
           className="primary"
           aria-label="Push to talk / open Gunny"
         >
+          <Icon.Mic size={12} />
           PTT
         </button>
         <button
@@ -236,6 +241,7 @@ export default function VitalsSticky({
           disabled={!onDemo}
           aria-label="Show exercise demo"
         >
+          <Icon.Play size={12} />
           Demo
         </button>
         <button
@@ -244,6 +250,7 @@ export default function VitalsSticky({
           disabled={!onNotes}
           aria-label="Jump to notes"
         >
+          <Icon.Edit size={12} />
           Notes
         </button>
         <button
@@ -252,6 +259,7 @@ export default function VitalsSticky({
           disabled={!onSkip}
           aria-label="Skip / advance set"
         >
+          <Icon.ChevronRight size={12} />
           Skip
         </button>
       </div>
