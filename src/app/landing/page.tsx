@@ -61,8 +61,14 @@ export default function LandingPage() {
             <a href="#tiers">Tiers</a>
             <a href="#trainers">Trainers</a>
             <a href="#founder">Origin</a>
+            {/* MEMBER LOGIN — distinct from the primary "Deploy" CTA. Members
+                returning to the site click here; the Deploy CTA is for new
+                signups (currently routes to the same /login page until a
+                separate /signup flow exists, but kept visually distinct so
+                the pattern is in place when it does). */}
+            <Link href="/login" className={styles.navLoginLink}>Member Login</Link>
           </div>
-          <a className={styles.navCta} href="#cta">Deploy →</a>
+          <Link className={styles.navCta} href="/login">Deploy →</Link>
         </div>
       </nav>
 
@@ -88,7 +94,7 @@ export default function LandingPage() {
             </p>
 
             <div className={styles.heroCtas}>
-              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/">
+              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/login">
                 DEPLOY OPERATOR <span className={styles.arrow}>→</span>
               </Link>
               <a className={`${styles.btn} ${styles.btnSecondary}`} href="#gunny">
@@ -356,7 +362,7 @@ export default function LandingPage() {
                 <ul className={styles.tierFeats}>
                   {t.feats.map((f) => <li key={f}>{f}</li>)}
                 </ul>
-                <Link className={styles.tierCta} href="/">{t.cta}</Link>
+                <Link className={styles.tierCta} href="/login">{t.cta}</Link>
               </article>
             ))}
           </div>
@@ -449,7 +455,7 @@ export default function LandingPage() {
           </div>
 
           <div style={{ marginTop: 60, textAlign: 'center' }}>
-            <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/">
+            <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/login">
               APPLY AS TRAINER <span className={styles.arrow}>→</span>
             </Link>
             <a className={`${styles.btn} ${styles.btnSecondary}`} href="#" style={{ marginLeft: 10 }}>
@@ -522,7 +528,7 @@ export default function LandingPage() {
             <h2>You&apos;ve read the brief.<br /><em>Deploy, operator.</em></h2>
             <p>Start at $2/month. Gunny goes live the moment your intake is complete. 30-day milestones tracked from day one.</p>
             <div className="btns">
-              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/">
+              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/login">
                 DEPLOY NOW <span className={styles.arrow}>→</span>
               </Link>
               <a className={`${styles.btn} ${styles.btnSecondary}`} href="#gunny">

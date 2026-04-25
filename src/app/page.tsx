@@ -3,9 +3,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Operator } from '@/lib/types';
 import { OPERATORS, getAccessibleOperators } from '@/data/operators';
-import LoginScreen from '@/components/LoginScreen';
 import AppShell from '@/components/AppShell';
 import ClientOnboarding from '@/components/ClientOnboarding';
+// Marketing landing page is the public face of `/`. Members log in via
+// `/login` (which the landing's MEMBER LOGIN button links to). LoginScreen
+// is no longer rendered here — it lives at /login.
+import LandingPage from '@/app/landing/page';
 import { initAnalytics, identifyUser, resetAnalytics, trackEvent, EVENTS } from '@/lib/analytics';
 import { getAuthToken } from '@/lib/authClient';
 
@@ -212,38 +215,11 @@ export default function Home() {
     }
   }, [dbReady]);
 
-  const handleLogin = async (operator: Operator) => {
-    // Get the latest version of this operator from state
-    const latest = operators.find(op => op.id === operator.id) || operator;
-    setCurrentUser(latest);
-    identifyUser(latest.id, {
-      role: latest.role,
-      tier: latest.tier,
-      callsign: latest.callsign
-    });
-    trackEvent(EVENTS.LOGIN, { role: latest.role, tier: latest.tier });
-
-    // Re-fetch operators from DB now that we have an auth token
-    // This ensures we load persisted data (not static fallback) after fresh login
-    const token = getAuthToken();
-    if (token) {
-      try {
-        const res = await fetch('/api/operators', {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.operators?.length > 0) {
-            setOperators(data.operators as Operator[]);
-            // Update currentUser with DB version
-            const dbUser = data.operators.find((op: Operator) => op.id === operator.id);
-            if (dbUser) setCurrentUser(dbUser);
-            setDbReady(true);
-          }
-        }
-      } catch { /* DB unavailable — keep static data */ }
-    }
-  };
+  // Note: the old handleLogin handler that was wired into LoginScreen here is
+  // gone — login now happens at /login, which fires its own LOGIN trackEvent
+  // and hard-navigates to `/`. The mount-time loadFromDB effect above picks
+  // up the freshly-stored authToken, calls /api/auth/me + identifyUser, and
+  // pulls operators from the DB. Same end state, cleaner separation.
 
   const handleLogout = () => {
     trackEvent(EVENTS.LOGOUT);
@@ -294,7 +270,11 @@ export default function Home() {
   }
 
   if (!currentUser) {
-    return <LoginScreen onLogin={handleLogin} operators={operators} />;
+    // Logged-out visitors see the marketing landing page instead of the PIN
+    // keypad. Login + signup flows live at /login. The current implementation
+    // doesn't pass operators or onLogin to the landing — it's a static-ish
+    // marketing page that just links to /login for auth.
+    return <LandingPage />;
   }
 
   // Check if client needs onboarding (no trainer assigned, is a client)
