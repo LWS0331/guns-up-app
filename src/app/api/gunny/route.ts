@@ -4,6 +4,9 @@ import { requireAuth } from '@/lib/requireAuth';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
+import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
+import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
+import type { JuniorSafetyEvent } from '@/lib/types';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -1166,7 +1169,11 @@ export async function POST(req: NextRequest) {
     // When true, SYSTEM_PROMPT becomes SOCCER_YOUTH_PROMPT and the adult
     // body-comp / supplement / 1RM contextBlock is replaced by the
     // junior-safe variant. Mode prefixes still prepend.
-    const isJuniorOperator = operatorContext?.isJunior === true;
+    //
+    // Gated on JUNIOR_OPERATOR_ENABLED — until the flag is set in env, even
+    // accounts with isJunior=true fall through to the adult prompt. This
+    // keeps the entire surface inert in production until rollout starts.
+    const isJuniorOperator = operatorContext?.isJunior === true && isJuniorOperatorEnabledServer();
 
     // Build rich context about the operator
     let contextBlock = '';
@@ -1378,6 +1385,26 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       );
     }
 
+    // Junior safety event detection — scan the most recent user message
+    // BEFORE the LLM call. Pain / concussion / RED-S keywords get logged
+    // to operator.juniorSafety.events for the parent dashboard, regardless
+    // of how the LLM ultimately responds. The youth prompt's refusal
+    // protocols handle the conversation; this is the audit trail. Adults
+    // and flag-disabled juniors short-circuit through here.
+    let safetyEvents: JuniorSafetyEvent[] = [];
+    if (isJuniorOperator) {
+      const latestUser = [...anthropicMessages].reverse().find(m => m.role === 'user');
+      const latestText = latestUser
+        ? typeof latestUser.content === 'string'
+          ? latestUser.content
+          : latestUser.content
+              .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+              .map(p => p.text)
+              .join(' ')
+        : '';
+      safetyEvents = await detectAndLogSafety(auth.operatorId, true, latestText);
+    }
+
     let systemPrompt: string;
     if (isOpsMode) {
       // Ops mode is platform-owner only; juniors never reach it. Adult prompt OK.
@@ -1519,6 +1546,10 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         profileData,
         mealData,
         voiceControl,
+        // Junior safety events (empty array for adults / flag-disabled juniors).
+        // Client surfaces a banner; ParentDashboard polls juniorSafety.events
+        // for the canonical list.
+        safetyEvents,
         model: finalModel,
         usage: { input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens },
       });
@@ -1645,6 +1676,10 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 profileData,
                 mealData,
                 voiceControl,
+                // Junior safety events captured pre-LLM (see non-streaming
+                // payload above for context). Mirrored here so SSE + non-SSE
+                // clients see the same shape.
+                safetyEvents,
                 model: finalModel,
                 usage: {
                   input_tokens: final.usage.input_tokens,

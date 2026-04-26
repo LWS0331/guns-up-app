@@ -10,6 +10,8 @@ import { FOOD_DB } from '@/data/foods';
 import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
+import JuniorPRBoard from '@/components/JuniorPRBoard';
+import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import { getAuthToken } from '@/lib/authClient';
@@ -3056,6 +3058,13 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       case 'NUTRITION':
         return renderNutritionTab();
       case 'PR_BOARD':
+        // Junior operators (with the flag on) see sport-performance metrics
+        // (10m sprint, CMJ, agility T, mile, etc.) instead of the adult
+        // 1RM-centric PR board. Per docs/youth-soccer-corpus.md §11: no
+        // maximal 1RM testing for unsupervised juniors.
+        if (operator.isJunior === true && isJuniorOperatorEnabledClient()) {
+          return <JuniorPRBoard operator={operator} onUpdateOperator={onUpdateOperator} />;
+        }
         return renderPRBoardTab();
       case 'ANALYTICS':
         return <ProgressCharts operator={operator} />;
