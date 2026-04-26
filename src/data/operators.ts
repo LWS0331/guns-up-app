@@ -1174,6 +1174,98 @@ export const OPERATORS: Operator[] = [
     { age: 33, height: "5'5\"", weight: 140, bodyFat: 22, trainingAge: '3 years', goals: ['toning', 'endurance', 'weight loss'], readiness: 7, sleep: 7.5, stress: 4 },
     { split: 'Upper/Lower', equipment: ['Dumbbell', 'Cable', 'Bodyweight', 'Resistance Band'], sessionDuration: 50, daysPerWeek: 4, weakPoints: ['Core', 'Upper body strength'], avoidMovements: [] },
     undefined, 'team-madheart'),
+
+  // ─── Junior Operators (PIN block 4xxx) ─────────────────────────────────
+  // First Junior Operator profile. Trainer: RAMPAGE. Parents: IRONSIDE + Erika.
+  // Routed to SOCCER_YOUTH_PROMPT — never the adult Marine DI tone.
+  {
+    id: 'op-poppy',
+    name: 'Camila Cruz',
+    callsign: 'POPPY',
+    pin: '4001',
+    role: 'client',
+    tier: 'sonnet',                                 // OPERATOR tier — Sonnet handles youth guardrails cleanly
+    tierLocked: true,                               // junior tiers are admin-controlled
+    coupleWith: null,
+    trainerId: 'op-ruben',
+    teamId: 'team-wolf-pack',
+    isJunior: true,
+    juniorAge: 12,
+    parentIds: ['op-efrain', 'op-erika'],
+
+    profile: {
+      age: 12,
+      height: '4\'11"',                             // placeholder — confirm at intake
+      weight: 90,                                   // placeholder — confirm at intake
+      bodyFat: 0,                                   // sentinel: NEVER tracked or displayed for juniors
+      trainingAge: '4 years',                       // soccer experience proxy
+      goals: [
+        'develop on-field aggression',
+        'improve agility and change of direction',
+        'refine running mechanics',
+        'maintain ball-skill foundation',
+      ],
+      readiness: 8,
+      sleep: 9,                                     // age-appropriate target 9-12 hrs
+      stress: 3,
+    },
+
+    sportProfile: {
+      sport: 'soccer',
+      position: 'unsure',                           // coach to confirm
+      level: 'mixed',
+      yearsPlaying: 4,
+      trainingDaysPerWeek: 3,                       // soccer practice days
+      gameDay: 'sat',
+      noTrainingDays: ['wed'],                      // dance day — explicit rest from soccer S&C
+      trainingWindow: '6:00 PM',
+      multiSport: true,
+      otherSports: ['dance'],
+      focusAreas: [
+        'aggressive play / competitive mindset',
+        'agility and change of direction',
+        'running mechanics',
+        'proficient and controlled movement',
+        'ball-drill heavy programming',
+      ],
+      coachNotes:
+        'Speed is a strength. Slightly undersized — leverage quickness over physicality. Ball skills are good — agility under pressure is the next layer. Running tech needs work — knee drive, foot strike, posture. Multi-sport (dance) is a positive: dance gives her body awareness and footwork that translates. Programming should be ball-heavy with movement quality cues — never punitive conditioning.',
+      maturationStage: 'pre_phv',                   // typical for 12yo girl, confirm at next assessment
+      estimatedPeakHeightVelocity: null,            // calculate via Mirwald in v2
+    },
+
+    juniorConsent: {
+      parentSignatures: [],                         // populated on first parent login + e-signature
+      participationConsent: false,
+      dataConsent: false,
+      emergencyContact: { name: '', relationship: '', phone: '' },
+      pediatricianClearance: false,
+      pediatricianClearanceDate: null,
+    },
+
+    juniorSafety: { events: [] },
+
+    nutrition: {
+      // Youth-appropriate range, NOT a deficit prescription.
+      // Per UEFA 2021 / SDA 2014: girl 10-13 active = 2000-2400 kcal.
+      targets: { calories: 2200, protein: 80, carbs: 300, fat: 75 },
+      meals: {},
+    },
+
+    prs: [],                                        // Junior PR board uses sport-performance metrics — see commit 6
+    injuries: [],
+    workouts: {},
+    dayTags: {},
+
+    preferences: {
+      split: 'Soccer S&C',
+      equipment: ['cones', 'agility ladder', 'ball', 'bands', 'med-ball-light'],
+      sessionDuration: 45,
+      daysPerWeek: 3,                               // S&C sessions, not soccer practice
+      weakPoints: ['running mechanics', 'agility under pressure'],
+      avoidMovements: [],
+    },
+  },
 ];
 
 export function getAccessibleOperators(userId: string, ops?: Operator[]): Operator[] {
@@ -1195,6 +1287,14 @@ export function getAccessibleOperators(userId: string, ops?: Operator[]): Operat
     }
   }
 
+  // Parents (adult operators with juniors in parentIds) gain visibility into their juniors
+  const juniors = getParentJuniors(user.id, source);
+  for (const jr of juniors) {
+    if (!accessibleUsers.find((a) => a.id === jr.id)) {
+      accessibleUsers.push(jr);
+    }
+  }
+
   return accessibleUsers;
 }
 
@@ -1210,4 +1310,18 @@ export function getClientTrainer(clientId: string, ops?: Operator[]): Operator |
   const client = source.find((op) => op.id === clientId);
   if (!client?.trainerId) return undefined;
   return source.find((op) => op.id === client.trainerId);
+}
+
+// Get all juniors a parent has visibility into
+export function getParentJuniors(parentId: string, ops?: Operator[]): Operator[] {
+  const source = ops || OPERATORS;
+  return source.filter((op) => op.isJunior === true && op.parentIds?.includes(parentId));
+}
+
+// Get a junior's parents (adult operators)
+export function getJuniorParents(juniorId: string, ops?: Operator[]): Operator[] {
+  const source = ops || OPERATORS;
+  const junior = source.find((op) => op.id === juniorId);
+  if (!junior?.parentIds?.length) return [];
+  return source.filter((op) => junior.parentIds!.includes(op.id));
 }
