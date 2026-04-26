@@ -33,17 +33,21 @@ interface TierOffer {
   key: AiTier | 'white_glove';
   name: string;
   monthly: number;
+  annual: number;
+  annualSavings: number;
   blurb: string;
   accent: string;
 }
 
-// Mirrors lib/stripe.ts → TIER_PRICES amounts. Annual price = ~17% off
-// (matches the landing page copy in /landing/page.tsx).
+// Mirrors lib/stripe.ts → TIER_PRICES amounts AND landing page copy in
+// /app/landing/page.tsx (the canonical pricing surface). Keep all three
+// in sync — landing copy + this in-app panel + stripe.ts → real Stripe
+// products. Annual = ~17% off the monthly equivalent.
 const TIER_OFFERS: TierOffer[] = [
-  { key: 'haiku',       name: 'RECON',      monthly: 2,     blurb: 'Core Gunny AI · planner + macros',   accent: '#7dd3fc' },
-  { key: 'sonnet',      name: 'OPERATOR',   monthly: 5,     blurb: 'Sonnet brain · SITREP + history',    accent: '#22d3ee' },
-  { key: 'opus',        name: 'COMMANDER',  monthly: 15,    blurb: 'Opus brain · voice + wearable HR',   accent: '#facc15' },
-  { key: 'white_glove', name: 'WARFIGHTER', monthly: 49.99, blurb: 'Human trainer + weekly custom brief', accent: '#ff6b35' },
+  { key: 'haiku',       name: 'RECON',      monthly: 3.99,  annual: 39.92,  annualSavings: 7,   blurb: 'Core Gunny AI · planner + macros',           accent: '#7dd3fc' },
+  { key: 'sonnet',      name: 'OPERATOR',   monthly: 9.99,  annual: 99.50,  annualSavings: 20,  blurb: 'Sonnet brain · SITREP + history',            accent: '#22d3ee' },
+  { key: 'opus',        name: 'COMMANDER',  monthly: 14.99, annual: 149.40, annualSavings: 30,  blurb: 'Opus brain · voice + wearable HR',           accent: '#facc15' },
+  { key: 'white_glove', name: 'WARFIGHTER', monthly: 49.99, annual: 497.90, annualSavings: 102, blurb: 'Human trainer + weekly custom brief',        accent: '#ff6b35' },
 ];
 
 export default function BillingPanel({ operator }: BillingPanelProps) {
@@ -223,8 +227,22 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
                       marginBottom: 4,
                     }}
                   >
-                    ${t.monthly}/mo
+                    {cycle === 'annual'
+                      ? `$${t.annual.toFixed(2)}/yr`
+                      : `$${t.monthly.toFixed(2)}/mo`}
                   </div>
+                  {cycle === 'annual' && (
+                    <div
+                      style={{
+                        fontFamily: 'Share Tech Mono, monospace',
+                        fontSize: 10,
+                        color: t.accent,
+                        marginBottom: 4,
+                      }}
+                    >
+                      save ${t.annualSavings}
+                    </div>
+                  )}
                   <div
                     style={{
                       fontFamily: 'Share Tech Mono, monospace',
