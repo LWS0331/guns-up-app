@@ -160,6 +160,17 @@ export default function Home() {
       sitrep: updated.sitrep ?? {},
       dailyBrief: updated.dailyBrief ?? {},
       trainerNotes: updated.trainerNotes ?? null,
+      // Junior Operator fields — only meaningful when the operator
+      // (or its target via parent dashboard) is a junior. The server
+      // whitelists per actor (self/trainer/admin write the kid-owned
+      // fields; parents are restricted to juniorConsent + juniorSafety).
+      // Without these on the body, JuniorIntakeForm.onComplete loses
+      // sportProfile + consent on save and ParentDashboard updates
+      // (mark resolved, emergency contact) silently fail.
+      sportProfile: updated.sportProfile,
+      juniorConsent: updated.juniorConsent,
+      juniorSafety: updated.juniorSafety,
+      juniorAge: updated.juniorAge,
       // Admin-only fields (ignored by server if not admin)
       tier: updated.tier,
       role: updated.role,
@@ -175,6 +186,9 @@ export default function Home() {
       promoActive: updated.promoActive ?? false,
       promoType: updated.promoType ?? null,
       promoExpiry: updated.promoExpiry ?? null,
+      // Admin-only junior identity (toggle isJunior on, set parents)
+      isJunior: updated.isJunior,
+      parentIds: updated.parentIds,
     };
 
     try {
