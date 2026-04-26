@@ -43,19 +43,8 @@ model Operator {
   dailyBrief  Json      @default("{}")  // Today's adaptive daily brief
   billing     Json      @default("{}")  // Stripe billing data
 
-  // Junior Operator fields (gated behind JUNIOR_OPERATOR_ENABLED feature flag)
-  isJunior      Boolean  @default(false)
-  juniorAge     Int?                                  // duplicate of profile.age for fast filter
-  parentIds     String[] @default([])                 // adult operators with full visibility
-  sportProfile  Json     @default("{}")               // SportProfile shape — see src/lib/types.ts
-  juniorConsent Json     @default("{}")               // parent consent record + signed dates
-  juniorSafety  Json     @default("{}")               // refusal log, escalation flags, RED-S flags
-
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-
-  @@index([parentIds])
-  @@index([isJunior])
 }
 
 model ChatHistory {

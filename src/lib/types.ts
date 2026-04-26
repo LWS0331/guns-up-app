@@ -16,7 +16,7 @@ export interface Team {
 }
 
 export const TEAMS: Team[] = [
-  { id: 'team-wolf-pack', name: 'WOLF PACK', trainerId: 'op-ruben', memberIds: ['op-ruben', 'op-rosa', 'op-erika', 'op-efrain', 'op-aldo', 'op-edgar', 'op-jasmine', 'op-patty', 'op-poppy'] },
+  { id: 'team-wolf-pack', name: 'WOLF PACK', trainerId: 'op-ruben', memberIds: ['op-ruben', 'op-rosa', 'op-erika', 'op-efrain', 'op-aldo', 'op-edgar', 'op-jasmine', 'op-patty'] },
   { id: 'team-madheart', name: 'MADHEART', trainerId: 'op-britney', memberIds: ['op-britney', 'op-mary', 'op-harold', 'op-jonathan', 'op-natalie', 'op-arnold', 'op-lynette'] },
 ];
 
@@ -118,72 +118,6 @@ export function getTrainerRank(clientCount: number): TrainerRank {
   return 'recruit';
 }
 
-// ─── Junior Operator (ages 10–18) ──────────────────────────────────────────
-// Gated behind JUNIOR_OPERATOR_ENABLED feature flag. See SOCCER_YOUTH_PROMPT
-// in src/app/api/gunny/route.ts for the youth-safe coaching voice and
-// hard knowledge boundaries (no body-comp, no supplements, no diagnosis).
-
-export type SoccerPosition = 'GK' | 'CB' | 'FB' | 'CM' | 'W' | 'ST' | 'unsure';
-export type CompetitionLevel = 'recreational' | 'club' | 'academy' | 'high_school_varsity' | 'mixed';
-export type MaturationStage = 'pre_phv' | 'peri_phv' | 'post_phv' | 'unknown';
-export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
-
-export interface SportProfile {
-  sport: 'soccer';                                // hard-coded for v1, expandable later
-  position: SoccerPosition;
-  level: CompetitionLevel;
-  yearsPlaying: number;
-  trainingDaysPerWeek: number;                    // soccer practice days
-  gameDay: DayOfWeek;
-  noTrainingDays: DayOfWeek[];
-  trainingWindow: string;                         // e.g. "6:00 PM"
-  multiSport: boolean;
-  otherSports: string[];                          // e.g. ["dance"]
-  focusAreas: string[];                           // free-text from trainer/parent intake
-  // Coach observations (set by trainer, not athlete)
-  coachNotes: string;
-  // Maturation — set by trainer or auto-estimated via Mirwald (v2)
-  maturationStage: MaturationStage;
-  estimatedPeakHeightVelocity: string | null;     // ISO date string or null
-}
-
-export interface JuniorConsent {
-  parentSignatures: Array<{
-    parentOperatorId: string;
-    signedAt: string;                             // ISO date
-    consentVersion: string;                       // for legal audit
-  }>;
-  participationConsent: boolean;
-  dataConsent: boolean;
-  emergencyContact: {
-    name: string;
-    relationship: string;
-    phone: string;
-  };
-  pediatricianClearance: boolean;                 // optional but encouraged
-  pediatricianClearanceDate: string | null;
-}
-
-export type JuniorSafetyEventType =
-  | 'refusal'
-  | 'red_flag'
-  | 'parent_alert'
-  | 'pain_report'
-  | 'concussion_keyword';
-
-export interface JuniorSafetyEvent {
-  timestamp: string;
-  type: JuniorSafetyEventType;
-  detail: string;
-  resolved: boolean;
-  resolvedBy: string | null;
-  resolvedAt: string | null;
-}
-
-export interface JuniorSafetyFlags {
-  events: JuniorSafetyEvent[];
-}
-
 export interface Operator {
   id: string;
   name: string;
@@ -220,14 +154,6 @@ export interface Operator {
   preferences: TrainingPreferences;
   workouts: Record<string, Workout>; // key = "YYYY-MM-DD"
   dayTags: Record<string, DayTag>; // key = "YYYY-MM-DD"
-
-  // Junior Operator fields (all undefined for adult operators)
-  isJunior?: boolean;
-  juniorAge?: number;                  // duplicate of profile.age for fast filter
-  parentIds?: string[];                // adult operators with full visibility
-  sportProfile?: SportProfile;
-  juniorConsent?: JuniorConsent;
-  juniorSafety?: JuniorSafetyFlags;
 }
 
 export interface OperatorProfile {
