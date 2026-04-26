@@ -1500,10 +1500,26 @@ const AppShell: React.FC<AppShellProps> = ({
     { id: 'gunny',   label: t('nav.gunny_short'),  labelKey: 'nav.gunny_short',  icon: <Icon.Bolt /> },
   ];
 
+  // Parent Hub tab — only surfaces for adults whose id appears in any
+  // junior operator's parentIds (i.e. they have a linked junior). Behind
+  // the JUNIOR_OPERATOR_ENABLED flag. Renders ParentDashboard inside.
+  const linkedJuniorsForHub = isJuniorOperatorEnabledClient()
+    ? getParentJuniors(currentUser.id, operators)
+    : [];
+  const showParentHub = linkedJuniorsForHub.length > 0;
+
   // Conditionally add OPS tab for trainers and admins.
-  const tabs = (OPS_CENTER_ACCESS.includes(currentUser.id) || currentUser.role === 'trainer')
-    ? [...baseTabs, { id: 'ops' as AppTab, label: 'OPS', labelKey: 'nav.ops', icon: <Icon.Settings /> }]
-    : baseTabs;
+  const isTrainerOrAdmin = OPS_CENTER_ACCESS.includes(currentUser.id) || currentUser.role === 'trainer';
+
+  const tabs: typeof baseTabs = [
+    ...baseTabs,
+    ...(showParentHub
+      ? [{ id: 'parent_hub' as AppTab, label: t('nav.parent_hub_short'), labelKey: 'nav.parent_hub_short', icon: <Icon.Target /> }]
+      : []),
+    ...(isTrainerOrAdmin
+      ? [{ id: 'ops' as AppTab, label: 'OPS', labelKey: 'nav.ops', icon: <Icon.Settings /> }]
+      : []),
+  ];
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -1595,25 +1611,6 @@ const AppShell: React.FC<AppShellProps> = ({
 
             <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
 
-            {/* Parent Dashboard — surfaces for any adult with juniors in
-                their parentIds, behind the JUNIOR_OPERATOR_ENABLED flag.
-                Read-only visibility into the linked juniors' training,
-                Gunny chat, safety events. The junior knows their parent
-                sees this (transparency disclosed in JuniorIntakeForm). */}
-            {isJuniorOperatorEnabledClient() && (() => {
-              const linkedJuniors = getParentJuniors(currentUser.id, operators);
-              if (linkedJuniors.length === 0) return null;
-              return (
-                <div style={{ marginTop: 20 }}>
-                  <ParentDashboard
-                    parent={currentUser}
-                    juniors={linkedJuniors}
-                    onUpdateJunior={onUpdateOperator}
-                  />
-                </div>
-              );
-            })()}
-
             <Leaderboard operators={operators} currentUser={currentUser} />
             <div style={{ marginTop: 20 }}>
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>ACHIEVEMENTS</h3>
@@ -1672,6 +1669,20 @@ const AppShell: React.FC<AppShellProps> = ({
         // Rendered as an always-mounted sibling inside <main> below so streaming
         // state survives tab switches. See the display-toggled wrapper near renderTabContent().
         return null;
+      case 'parent_hub':
+        // Surfaces only for adults with at least one junior in their
+        // parentIds. Read-only visibility into the linked juniors' training,
+        // safety events, emergency contact. The junior is told their parent
+        // sees this (transparency disclosed in JuniorIntakeForm welcome).
+        return (
+          <div style={{ padding: '16px 18px' }}>
+            <ParentDashboard
+              parent={currentUser}
+              juniors={linkedJuniorsForHub}
+              onUpdateJunior={onUpdateOperator}
+            />
+          </div>
+        );
       case 'ops':
         // Trainer-specific view
         if (currentUser.role === 'trainer') {
@@ -2325,16 +2336,18 @@ const AppShell: React.FC<AppShellProps> = ({
           // 4-tab (regular user) and 5-tab (admin/trainer) cases both
           // produce a 5-col grid with Gunny centered.
           //
-          // Layout target: [coc] [planner] [GUNNY] [intel] [ops?]
+          // Layout target: [coc] [planner] [GUNNY] [intel] [ops?|parent_hub?]
           // For 4-tab users, the 5th slot stays empty; the grid keeps
-          // Gunny visually centered.
+          // Gunny visually centered. The 5th slot is OPS for trainers/admins
+          // OR PARENT HUB for parents with linked juniors (mutually
+          // exclusive in practice — trainers with juniors see OPS).
           const byId = new Map(tabs.map(t => [t.id, t] as const));
           const slots: (typeof tabs[number] | null)[] = [
             byId.get('coc') ?? null,
             byId.get('planner') ?? null,
             byId.get('gunny') ?? null,
             byId.get('intel') ?? null,
-            byId.get('ops') ?? null,
+            byId.get('ops') ?? byId.get('parent_hub') ?? null,
           ];
           return slots.map((tab, idx) => {
             if (!tab) {

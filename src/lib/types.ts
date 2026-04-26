@@ -473,7 +473,7 @@ export interface DailyBrief {
 }
 
 export type ViewMode = 'month' | 'week' | 'day';
-export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'radio' | 'ops';
+export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'radio' | 'ops' | 'parent_hub';
 
 // Operator IDs that can access OPS CENTER and the server-side admin guards.
 //

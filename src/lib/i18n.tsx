@@ -12,6 +12,8 @@ export const translations = {
     'nav.intel_short': 'INTEL',
     'nav.gunny': 'GUNNY CHAT',
     'nav.gunny_short': 'GUNNY',
+    'nav.parent_hub': 'PARENT HUB',
+    'nav.parent_hub_short': 'PARENT',
 
     // Login Screen
     'login.enter_pin': 'ENTER ACCESS CODE',
@@ -97,6 +99,8 @@ export const translations = {
     'nav.intel_short': 'INTEL',
     'nav.gunny': 'CHAT GUNNY',
     'nav.gunny_short': 'GUNNY',
+    'nav.parent_hub': 'CENTRO DE PADRES',
+    'nav.parent_hub_short': 'PADRES',
 
     // Login Screen
     'login.enter_pin': 'INGRESA PIN DE ACCESO',
