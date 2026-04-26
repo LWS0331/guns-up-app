@@ -1734,46 +1734,76 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     } catch { /* vibrate API unavailable — silent */ }
   };
 
-  // Rest timer countdown
+  // Rest timer countdown — ref-based interval that owns its lifecycle so
+  // the timer reliably stops at zero. The previous implementation
+  // depended on [restRunning, restTimer] which forced the effect to
+  // tear down + recreate the setInterval every second; under rapid
+  // state changes (auto-add, voice command, mid-rest set logging) it
+  // could leak intervals or fail to fire the stop branch.
+  //
+  // New shape: effect runs only when restRunning toggles. The interval
+  // callback uses the setState updater form to read the latest tick
+  // value, hits its own stop branch when prev <= 1, and clears the
+  // interval from inside the callback (plus the cleanup). No more
+  // race between re-render and tick.
+  const restIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    if (!restRunning || restTimer <= 0) {
-      if (restTimer <= 0 && restRunning) {
-        setRestRunning(false);
-        playCompletionAlarm();
-        // Visual alarm pulse for 5 seconds
-        setTimerAlarm(true);
-        setTimeout(() => setTimerAlarm(false), 5000);
-        speak('Time. Next set.');
+    const clearRest = () => {
+      if (restIntervalRef.current) {
+        clearInterval(restIntervalRef.current);
+        restIntervalRef.current = null;
       }
+    };
+    if (!restRunning) {
+      clearRest();
       return;
     }
-    // Louder beep at 3, 2, 1
-    if (restTimer <= 3 && restTimer > 0) {
-      try {
-        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square';
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 520;
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.01);
-        gain.gain.setValueAtTime(0.6, ctx.currentTime + 0.22);
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.25);
-      } catch { /* AudioContext unavailable — skip countdown beep */ }
-      // Short vibration tick on final countdown (if supported)
-      try {
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-          navigator.vibrate(80);
+    // Already running — guard against duplicate intervals (StrictMode
+    // double-invoke in dev).
+    if (restIntervalRef.current) return;
+
+    restIntervalRef.current = setInterval(() => {
+      setRestTimer(prev => {
+        // Hit zero: stop the interval, fire the completion alarm.
+        if (prev <= 1) {
+          clearRest();
+          setRestRunning(false);
+          playCompletionAlarm();
+          setTimerAlarm(true);
+          setTimeout(() => setTimerAlarm(false), 5000);
+          speak('Time. Next set.');
+          return 0;
         }
-      } catch { /* vibrate API unavailable */ }
-    }
-    const interval = setInterval(() => setRestTimer(prev => prev - 1), 1000);
-    return () => clearInterval(interval);
-  }, [restRunning, restTimer]);
+        // Final-3-second countdown beeps + short haptic.
+        if (prev <= 4) {
+          try {
+            const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'square';
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 520;
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.01);
+            gain.gain.setValueAtTime(0.6, ctx.currentTime + 0.22);
+            gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.25);
+          } catch { /* AudioContext unavailable */ }
+          try {
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+              navigator.vibrate(80);
+            }
+          } catch { /* vibrate API unavailable */ }
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return clearRest;
+  }, [restRunning]);
 
   // Wake lock — keep screen awake during rest timer and workout mode
   useEffect(() => {
