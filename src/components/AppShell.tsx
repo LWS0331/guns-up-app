@@ -18,6 +18,10 @@ import Planner, { WorkoutModeState } from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
+import JuniorIntakeForm from '@/components/JuniorIntakeForm';
+import ParentDashboard from '@/components/ParentDashboard';
+import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
+import { getParentJuniors } from '@/data/operators';
 import SitrepView from '@/components/SitrepView';
 import TacticalRadio from '@/components/TacticalRadio';
 import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
@@ -1590,6 +1594,26 @@ const AppShell: React.FC<AppShellProps> = ({
             )}
 
             <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
+
+            {/* Parent Dashboard — surfaces for any adult with juniors in
+                their parentIds, behind the JUNIOR_OPERATOR_ENABLED flag.
+                Read-only visibility into the linked juniors' training,
+                Gunny chat, safety events. The junior knows their parent
+                sees this (transparency disclosed in JuniorIntakeForm). */}
+            {isJuniorOperatorEnabledClient() && (() => {
+              const linkedJuniors = getParentJuniors(currentUser.id, operators);
+              if (linkedJuniors.length === 0) return null;
+              return (
+                <div style={{ marginTop: 20 }}>
+                  <ParentDashboard
+                    parent={currentUser}
+                    juniors={linkedJuniors}
+                    onUpdateJunior={onUpdateOperator}
+                  />
+                </div>
+              );
+            })()}
+
             <Leaderboard operators={operators} currentUser={currentUser} />
             <div style={{ marginTop: 20 }}>
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>ACHIEVEMENTS</h3>
@@ -1771,22 +1795,41 @@ const AppShell: React.FC<AppShellProps> = ({
     );
   }
 
-  // Show intake form if not completed OR user requested to re-take it
+  // Show intake form if not completed OR user requested to re-take it.
+  // Junior operators (with the flag on) get the youth-safe JuniorIntakeForm
+  // instead of the adult IntakeForm. Adult flow + flag-disabled juniors
+  // fall through to the existing IntakeForm — no behavior change.
   if (showIntake) {
+    const useJuniorIntake = currentUser.isJunior === true && isJuniorOperatorEnabledClient();
     return (
       <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
         <DataRain />
         <div style={{ position: 'relative', zIndex: 1, padding: '20px 0' }}>
-          <IntakeForm
-            operator={currentUser}
-            onComplete={(updated) => {
-              onUpdateOperator(updated);
-              setShowIntake(false);
-              // Auto-generate SITREP after intake
-              generateSitrep(updated);
-            }}
-            onSkip={() => setShowIntake(false)}
-          />
+          {useJuniorIntake ? (
+            <JuniorIntakeForm
+              operator={currentUser}
+              onComplete={(updated) => {
+                onUpdateOperator(updated);
+                setShowIntake(false);
+                // SITREP generation is intentionally skipped for juniors —
+                // the adult SITREP path computes macros and prescribes adult
+                // training splits, neither of which apply to youth operators.
+                // The trainer (RAMPAGE) sets the junior's program manually.
+              }}
+              onSkip={() => setShowIntake(false)}
+            />
+          ) : (
+            <IntakeForm
+              operator={currentUser}
+              onComplete={(updated) => {
+                onUpdateOperator(updated);
+                setShowIntake(false);
+                // Auto-generate SITREP after intake
+                generateSitrep(updated);
+              }}
+              onSkip={() => setShowIntake(false)}
+            />
+          )}
         </div>
       </div>
     );
