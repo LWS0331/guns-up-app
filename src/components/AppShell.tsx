@@ -2318,8 +2318,20 @@ const AppShell: React.FC<AppShellProps> = ({
         paddingBottom: isMobile ? 'calc(70px + env(safe-area-inset-bottom, 0px))' : '0',
       }}>
         {renderTabContent()}
-        {/* Always-mounted GunnyChat — display-toggled so streaming state & refs survive tab switches. */}
-        <div style={{ display: activeTab === 'gunny' ? 'block' : 'none', height: '100%' }}>
+        {/* Always-mounted GunnyChat — display-toggled so streaming state & refs
+            survive tab switches. Absolute fill so the inner flex column
+            (header + scrollable messages + composer) honors the parent's
+            actual height; with the prior height:100% inside flex+overflow,
+            percentage heights resolved oddly and the composer slipped
+            beneath the bottom tab bar on mobile. */}
+        <div style={{
+          display: activeTab === 'gunny' ? 'block' : 'none',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: isMobile ? 'calc(70px + env(safe-area-inset-bottom, 0px))' : 0,
+        }}>
           <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />
         </div>
       </main>
