@@ -2586,7 +2586,7 @@ ${mealSuggestion}`;
             }}
             onKeyDown={handleKeyDown}
             placeholder="What's the mission, champ?"
-            rows={1}
+            rows={2}
             style={{
               flex: 1,
               background: 'transparent',
@@ -2601,6 +2601,11 @@ ${mealSuggestion}`;
               resize: 'none',
               overflow: 'hidden',
               lineHeight: 1.4,
+              // Min-height = 2 lines so the placeholder ("What's the
+              // mission, champ?") never clips when wrapping at narrow
+              // mobile widths. The auto-resize onChange still grows
+              // beyond this when the user types longer messages.
+              minHeight: 52,
             }}
           />
 
