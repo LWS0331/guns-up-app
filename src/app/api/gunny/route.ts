@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
+import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -1436,6 +1437,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const jsonMatch = responseText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
       if (jsonMatch) { try { workoutData = JSON.parse(jsonMatch[1].trim()); } catch { /* ignore */ } }
 
+      // Junior Operator runtime safety net — silently downscale plyo
+      // contacts, RPE, and session duration if the model produced an
+      // over-cap workout despite the youth prompt's explicit caps. Adult
+      // operators short-circuit through here unchanged.
+      if (workoutData && isJuniorOperator) {
+        const guarded = applyJuniorGuardrailsToWorkoutJson(workoutData, {
+          isJunior: true,
+          sportProfile: operatorContext?.sportProfile,
+          juniorAge: operatorContext?.juniorAge,
+        });
+        workoutData = guarded.workout;
+        if (guarded.modified) {
+          // eslint-disable-next-line no-console
+          console.warn('[junior-guardrails]', operatorContext?.callsign, guarded.modificationsApplied.join(' | '));
+        }
+      }
+
       // Gunny may emit MULTIPLE <workout_modification> blocks in a single
       // response — e.g. prefill_weights for 5 different exercises on the same
       // workout day. Parse them all. workoutModifications (plural, array) is
@@ -1542,6 +1560,22 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           const wm = fullText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
           if (wm) {
             try { workoutData = JSON.parse(wm[1].trim()); } catch { /* invalid JSON */ }
+          }
+
+          // Junior Operator runtime safety net (streaming path) — same logic
+          // as the non-streaming path above; mirrors so both transports
+          // behave identically.
+          if (workoutData && isJuniorOperator) {
+            const guarded = applyJuniorGuardrailsToWorkoutJson(workoutData, {
+              isJunior: true,
+              sportProfile: operatorContext?.sportProfile,
+              juniorAge: operatorContext?.juniorAge,
+            });
+            workoutData = guarded.workout;
+            if (guarded.modified) {
+              // eslint-disable-next-line no-console
+              console.warn('[junior-guardrails]', operatorContext?.callsign, guarded.modificationsApplied.join(' | '));
+            }
           }
 
           // Extract workout MODIFICATION(S) — plural. Gunny emits one block per
