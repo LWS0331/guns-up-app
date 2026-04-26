@@ -1660,7 +1660,7 @@ const AppShell: React.FC<AppShellProps> = ({
           </>
         );
       case 'planner':
-        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} />;
+        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setActiveTab('gunny')} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} />;
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'radio':
@@ -2381,24 +2381,12 @@ const AppShell: React.FC<AppShellProps> = ({
         })()}
       </nav>
 
-      {/* Gunny AI floating pill — uses .ds-gunny-fab from the design
-          system. The legacy class .gunny-toggle-btn stays alongside so the
-          older positioning rules (defined in <style jsx> further below)
-          keep working until we fully strip them. The .show modifier is
-          conditional — without it the FAB stays hidden via opacity:0 +
-          pointer-events:none, with it the cubic-bezier pop animation
-          fires. */}
-      {activeTab !== 'gunny' && (
-        <button
-          className={`ds-gunny-fab gunny-toggle-btn ${!showGunnyPanel ? 'show' : ''}`}
-          onClick={() => setShowGunnyPanel(true)}
-          title="Open Gunny AI"
-          aria-hidden={showGunnyPanel}
-        >
-          <BoltIcon size={18} />
-          GUNNY
-        </button>
-      )}
+      {/* Gunny AI floating pill — REMOVED. The full GUNNY tab in the
+          bottom nav is the canonical entry point. The floating FAB
+          covered half the mobile screen and the side panel didn't deliver
+          on its "context-aware live edits" intent. Side panel JSX below
+          stays dormant for now; a future "Claude in Chrome" style
+          implementation will revive a different surface. */}
 
       {/* Gunny AI Panel Overlay (mobile) */}
       {showGunnyPanel && isMobile && (
