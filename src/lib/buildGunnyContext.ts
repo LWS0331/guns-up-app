@@ -4,7 +4,7 @@
 // so responses never regress to generic advice because one caller forgot
 // to include a field.
 
-import type { Operator } from './types';
+import type { Operator, SportProfile, JuniorConsent } from './types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from './workoutAnalysis';
 import { getLocalDateStr, toLocalDateStr } from './dateUtils';
 
@@ -92,6 +92,16 @@ export interface GunnyOperatorContext {
    */
   completedWorkoutLogs: string[];
   workoutExecution: string | null;
+
+  // Junior Operator surface — undefined for adult operators. When isJunior
+  // is true the gunny route swaps SYSTEM_PROMPT for SOCCER_YOUTH_PROMPT and
+  // the contextBlock is rewritten to drop body-comp / 1RM fields and add the
+  // sport profile + parent-visibility note.
+  isJunior?: boolean;
+  juniorAge?: number;
+  parentIds?: string[];
+  sportProfile?: SportProfile;
+  juniorConsent?: JuniorConsent;
 }
 
 export function buildFullGunnyContext(
@@ -314,5 +324,10 @@ export function buildFullGunnyContext(
     lastCompletedWorkout,
     completedWorkoutLogs,
     workoutExecution,
+    isJunior: operator.isJunior,
+    juniorAge: operator.juniorAge,
+    parentIds: operator.parentIds,
+    sportProfile: operator.sportProfile,
+    juniorConsent: operator.juniorConsent,
   };
 }
