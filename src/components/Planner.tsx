@@ -2774,9 +2774,16 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           <button
             type="button"
             onClick={() => {
+              // Default to "New Exercise" so the active-block card has
+              // a visible title even before the user fills it in. The
+              // previous empty-string default produced phantom blocks
+              // (no title rendered → user couldn't see they had added
+              // anything → kept clicking → ended up with a 34-step
+              // workout of mostly nameless 3x10 blocks). The user can
+              // rename via the Notes popover.
               const newBlock: ExerciseBlock = {
                 type: 'exercise', id: `block-live-${Date.now()}`, sortOrder: workout.blocks.length,
-                exerciseName: '', prescription: '3x10', isLinkedToNext: false,
+                exerciseName: 'New Exercise', prescription: '3x10', isLinkedToNext: false,
               };
               const dateStr = selectedDate || formatDate(currentDate);
               const updated = { ...operator };
