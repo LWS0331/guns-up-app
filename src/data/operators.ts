@@ -1195,6 +1195,14 @@ export function getAccessibleOperators(userId: string, ops?: Operator[]): Operat
     }
   }
 
+  // Parents (adult operators with juniors in parentIds) gain visibility into their juniors
+  const juniors = getParentJuniors(user.id, source);
+  for (const jr of juniors) {
+    if (!accessibleUsers.find((a) => a.id === jr.id)) {
+      accessibleUsers.push(jr);
+    }
+  }
+
   return accessibleUsers;
 }
 
@@ -1210,4 +1218,18 @@ export function getClientTrainer(clientId: string, ops?: Operator[]): Operator |
   const client = source.find((op) => op.id === clientId);
   if (!client?.trainerId) return undefined;
   return source.find((op) => op.id === client.trainerId);
+}
+
+// Get all juniors a parent has visibility into
+export function getParentJuniors(parentId: string, ops?: Operator[]): Operator[] {
+  const source = ops || OPERATORS;
+  return source.filter((op) => op.isJunior === true && op.parentIds?.includes(parentId));
+}
+
+// Get a junior's parents (adult operators)
+export function getJuniorParents(juniorId: string, ops?: Operator[]): Operator[] {
+  const source = ops || OPERATORS;
+  const junior = source.find((op) => op.id === juniorId);
+  if (!junior?.parentIds?.length) return [];
+  return source.filter((op) => junior.parentIds!.includes(op.id));
 }
