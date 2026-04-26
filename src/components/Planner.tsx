@@ -2607,7 +2607,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
               <div className="row-between" style={{ marginBottom: 4, gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <div className="t-display-l" style={{ color: 'var(--green)', fontSize: 18, flex: 1, minWidth: 0 }}>
-                  {block.exerciseName}
+                  {/* Defensive fallback: if exerciseName is empty (Gunny
+                      emitted a block with no name, or the workout data
+                      got malformed), show "Exercise N" so the user can
+                      still see what set they're on. Without this, the
+                      title slot collapses to 0 height and the user has
+                      no idea which exercise they're doing. */}
+                  {block.exerciseName?.trim() || `Exercise ${idx + 1}`}
                 </div>
                 {/* Notes / Form Demo / Form Check icon — single tap
                     opens the NotesFormPopover holding the legacy
@@ -2628,7 +2634,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 )}
               </div>
               <div className="t-mono-sm" style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
-                {block.prescription}
+                {/* Same defensive fallback — empty prescription was
+                    rendering as a 0-height row, leaving the user with
+                    no spec for the active set. */}
+                {block.prescription?.trim() || '— spec missing —'}
               </div>
 
               {/* Inline Form Demo button kept ONLY for inactive blocks
