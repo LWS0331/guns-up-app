@@ -16,7 +16,7 @@ export interface Team {
 }
 
 export const TEAMS: Team[] = [
-  { id: 'team-wolf-pack', name: 'WOLF PACK', trainerId: 'op-ruben', memberIds: ['op-ruben', 'op-rosa', 'op-erika', 'op-efrain', 'op-aldo', 'op-edgar', 'op-jasmine', 'op-patty'] },
+  { id: 'team-wolf-pack', name: 'WOLF PACK', trainerId: 'op-ruben', memberIds: ['op-ruben', 'op-rosa', 'op-erika', 'op-efrain', 'op-aldo', 'op-edgar', 'op-jasmine', 'op-patty', 'op-poppy'] },
   { id: 'team-madheart', name: 'MADHEART', trainerId: 'op-britney', memberIds: ['op-britney', 'op-mary', 'op-harold', 'op-jonathan', 'op-natalie', 'op-arnold', 'op-lynette'] },
 ];
 
