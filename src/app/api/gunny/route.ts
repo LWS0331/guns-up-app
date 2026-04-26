@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/requireAuth';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
+import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -1166,7 +1167,11 @@ export async function POST(req: NextRequest) {
     // When true, SYSTEM_PROMPT becomes SOCCER_YOUTH_PROMPT and the adult
     // body-comp / supplement / 1RM contextBlock is replaced by the
     // junior-safe variant. Mode prefixes still prepend.
-    const isJuniorOperator = operatorContext?.isJunior === true;
+    //
+    // Gated on JUNIOR_OPERATOR_ENABLED — until the flag is set in env, even
+    // accounts with isJunior=true fall through to the adult prompt. This
+    // keeps the entire surface inert in production until rollout starts.
+    const isJuniorOperator = operatorContext?.isJunior === true && isJuniorOperatorEnabledServer();
 
     // Build rich context about the operator
     let contextBlock = '';
