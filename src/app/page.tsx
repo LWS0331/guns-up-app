@@ -26,34 +26,61 @@ export default function Home() {
     // Initialize PostHog analytics
     initAnalytics();
 
-    // Register service worker for PWA support with auto-update
+    // ─── Stripe checkout return handling ─────────────────────────────
+    // Stripe's success_url + cancel_url drop the user back at /?checkout=
+    // success&session_id=… or /?checkout=cancelled. We don't actually
+    // act on those params yet (Stripe webhook updates the operator
+    // record server-side), but the leftover URL state was confusing
+    // bfcache restoration on iOS — combined with SW updates this could
+    // produce the "stuck loading" symptom on browser-back from Stripe.
+    // Strip the query string immediately so the URL goes back to clean
+    // `/` and downstream logic doesn't see weird state.
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('checkout') || params.has('session_id')) {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    }
+
+    // ─── bfcache restore handler ─────────────────────────────────────
+    // iOS Safari aggressively caches the page when you navigate away
+    // (e.g. to Stripe). When you come back via browser-back the page is
+    // restored from cache — pageshow fires with persisted=true. The
+    // cached React tree is fine, but we want to make sure isLoaded is
+    // true (in case the original load was mid-flight when we navigated
+    // away) so the user doesn't get stuck on "INITIALIZING SYSTEMS…".
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        setIsLoaded(true);
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+
+    // Register service worker for PWA support with auto-update.
+    // SINGLE reload trigger only — the previous setup had two listeners
+    // (updatefound→statechange AND postMessage) that both fired on the
+    // same activation, racing each other and causing double reloads /
+    // bfcache confusion when returning from Stripe checkout. We now
+    // rely solely on `controllerchange` which is the canonical "a new
+    // SW just took control" signal, and we guard against firing more
+    // than once per page life.
+    let swReloadFired = false;
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
           // Check for updates every 60 seconds
           setInterval(() => registration.update(), 60000);
-          // When a new SW is waiting, activate it
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'activated') {
-                  // New version available — reload to get fresh assets
-                  window.location.reload();
-                }
-              });
-            }
-          });
         })
-        .catch((error) => {
-          // Service Worker registration failed
+        .catch(() => {
+          // Service Worker registration failed — non-fatal, app still works
         });
-      // Listen for SW update messages
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data?.type === 'SW_UPDATED') {
-          window.location.reload();
-        }
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (swReloadFired) return;
+        swReloadFired = true;
+        window.location.reload();
       });
     }
 
