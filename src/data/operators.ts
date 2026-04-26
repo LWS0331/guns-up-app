@@ -1184,7 +1184,7 @@ export const OPERATORS: Operator[] = [
     callsign: 'POPPY',
     pin: '4001',
     role: 'client',
-    tier: 'sonnet',                                 // OPERATOR tier — Sonnet handles youth guardrails cleanly
+    tier: 'opus',                                   // COMMANDER tier — all junior operators get Opus 4.6 for safety-critical youth coaching (refusal scope, concussion protocol, RED-S detection benefit from the strongest model)
     tierLocked: true,                               // junior tiers are admin-controlled
     coupleWith: null,
     trainerId: 'op-ruben',
