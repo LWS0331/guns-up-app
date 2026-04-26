@@ -26,7 +26,18 @@ export async function GET(req: NextRequest) {
         },
       });
     } else {
-      rows = me ? [me] : [];
+      // Clients: self + any junior operators where this client is listed
+      // as a parent. Without the junior expansion, parents (WARDOG /
+      // PHOENIX) wouldn't see their kids in the operators list, which
+      // breaks PARENT HUB visibility (getParentJuniors returns empty).
+      rows = await prisma.operator.findMany({
+        where: {
+          OR: [
+            { id: auth.operatorId },
+            { isJunior: true, parentIds: { has: auth.operatorId } },
+          ],
+        },
+      });
     }
 
     // Convert DB rows back to the app's Operator shape.
@@ -64,6 +75,16 @@ export async function GET(req: NextRequest) {
       sitrep: row.sitrep as Record<string, unknown>,
       dailyBrief: row.dailyBrief as Record<string, unknown>,
       billing: row.billing as Record<string, unknown>,
+      // Junior Operator fields — required for getParentJuniors() to find
+      // linked juniors and for ParentDashboard to render their data.
+      // Without these on the response, isJunior is undefined client-side
+      // and the parent visibility filter never matches.
+      isJunior: row.isJunior,
+      juniorAge: row.juniorAge,
+      parentIds: row.parentIds,
+      sportProfile: row.sportProfile as Record<string, unknown>,
+      juniorConsent: row.juniorConsent as Record<string, unknown>,
+      juniorSafety: row.juniorSafety as Record<string, unknown>,
     }));
 
     return NextResponse.json({ operators });
