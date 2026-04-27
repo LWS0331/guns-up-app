@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
+import { isEmailAuthorized } from '@/lib/authAllowlist';
 import {
   compareStateNonce,
   decodeIdToken,
@@ -91,6 +92,14 @@ export async function GET(req: NextRequest) {
 
   const email = claims.email.toLowerCase().trim();
   const googleId = claims.sub;
+
+  // Allowlist check — gate the entire OAuth flow on Ruben's curated list.
+  // We reject AFTER claim verification so we have a stable email to log,
+  // but BEFORE any DB write so unauthorized sign-ins create no operator row.
+  if (!isEmailAuthorized(email)) {
+    console.warn('[api/auth/google/callback] rejected unauthorized email:', email);
+    return failureRedirect(req, 'not_authorized');
+  }
 
   // Operator resolution — try googleId first, then email, then create.
   let operator = await prisma.operator.findUnique({ where: { googleId } });

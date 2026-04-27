@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword, generateToken } from '@/lib/auth';
+import { isEmailAuthorized, ALLOWLIST_REJECTION_MESSAGE } from '@/lib/authAllowlist';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,6 +13,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Missing required fields: email, password, name, callsign' },
         { status: 400 }
+      );
+    }
+
+    // Allowlist check — only AUTHORIZED_EMAILS may register an account.
+    // 403 (not 401) so the client can distinguish "not authorized" from
+    // "credentials wrong" and surface the right message.
+    if (!isEmailAuthorized(email)) {
+      return NextResponse.json(
+        { error: ALLOWLIST_REJECTION_MESSAGE },
+        { status: 403 },
       );
     }
 

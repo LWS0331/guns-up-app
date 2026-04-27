@@ -32,6 +32,11 @@ export const OPERATORS: Operator[] = [
     name: 'Ruben Rodriguez',
     callsign: 'RAMPAGE',
     pin: '1234',
+    // Pre-seeded email so the Google OAuth callback links the first
+    // ruben@gunsupfitness.com sign-in to this existing operator (with all
+    // his trainer data) instead of creating a fresh op-google-... record.
+    // Update via DB if the chosen email differs.
+    email: 'ruben@gunsupfitness.com',
     role: 'trainer',
     tier: 'opus',
     coupleWith: 'op-britney',
