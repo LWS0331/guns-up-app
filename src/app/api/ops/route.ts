@@ -68,6 +68,16 @@ export async function GET(req: Request) {
         name: op.name,
         role: op.role,
         tier: op.tier,
+        // Closed-beta visibility fields — added so OpsCenter roster can
+        // render the full operator state (allowlist activated? google
+        // linked? vanguard? tier locked?) directly from /api/ops without
+        // falling back to the stale `operators` prop.
+        email: op.email,
+        googleId: op.googleId,
+        tierLocked: op.tierLocked,
+        isVanguard: op.isVanguard,
+        promoActive: op.promoActive,
+        trainerId: op.trainerId,
         betaUser: op.betaUser,
         workoutCount,
         mealCount,

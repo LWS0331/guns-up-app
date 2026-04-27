@@ -38,6 +38,14 @@ interface DbMetrics {
       name: string;
       role: string;
       tier: string;
+      // Closed-beta fields — needed for accurate roster rendering
+      // without falling back to the stale `operators` prop.
+      email: string | null;
+      googleId: string | null;
+      tierLocked: boolean;
+      isVanguard: boolean;
+      promoActive: boolean;
+      trainerId: string | null;
       betaUser: boolean;
       workoutCount: number;
       mealCount: number;
@@ -129,17 +137,60 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchMetrics(); }, []);
 
-  // Use DB metrics when available, fall back to client-side operators array
+  // Auto-refresh sources so the roster is always current:
+  //   - Tab refocus (visibilitychange): catches the case where admin
+  //     creates an operator in a sibling tab/terminal then comes back
+  //   - 60s polling while tab is visible: bounded staleness without
+  //     hammering the API
+  //   - After local mutations (handleTierChange, handleGrantVanguard,
+  //     etc.): wired in each handler below
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchMetrics();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchMetrics();
+      }
+    }, 60_000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Use DB metrics when available, fall back to client-side operators array.
+  //
+  // `displayOperators` is the single source of truth for roster rendering,
+  // KPI counts, tier distribution, and revenue. Prefers /api/ops (which
+  // refetches every 60s + on tab refocus + after each mutation) so a
+  // newly-created operator (e.g. via SQL or /api/admin/create-operator)
+  // appears within one polling cycle without requiring a page reload.
   const opStats = metrics?.operators.operatorStats || [];
-  const trainers = metrics ? opStats.filter(op => op.role === 'trainer') : operators.filter(op => op.role === 'trainer');
-  const clients = metrics ? opStats.filter(op => op.role === 'client') : operators.filter(op => op.role === 'client');
+  type DisplayOp = {
+    id: string; callsign: string; name: string; role: string; tier: string;
+    email?: string | null; tierLocked?: boolean; isVanguard?: boolean;
+    betaUser?: boolean; trainerId?: string | null; promoActive?: boolean;
+    googleId?: string | null;
+  };
+  const displayOperators: DisplayOp[] = opStats.length > 0
+    ? opStats
+    : operators as unknown as DisplayOp[];
+  const trainers = displayOperators.filter(op => op.role === 'trainer');
+  const clients = displayOperators.filter(op => op.role === 'client');
   const chatsByOperator = metrics?.chatsByOperator || {};
 
   // ═══════════════════════════════════════
-  // REVENUE CALCULATIONS (always from operators + TIER_CONFIGS)
+  // REVENUE CALCULATIONS (DB-fresh via displayOperators + TIER_CONFIGS)
   // ═══════════════════════════════════════
   const revenueByTier = (Object.keys(TIER_CONFIGS) as AiTier[]).reduce((acc, tier) => {
-    const count = operators.filter(c => c.role === 'client' && c.tier === tier).length;
+    const count = displayOperators.filter(c => c.role === 'client' && c.tier === tier).length;
     const config = TIER_CONFIGS[tier];
     acc[tier] = {
       count,
@@ -195,20 +246,20 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     </div>
   );
 
-  // Handle tier change
+  // Handle tier change. Slim PATCH-style body — only the tier field.
+  // The /api/operators/:id PUT handler uses pickFields to whitelist
+  // updatable columns by role, so sending only `{tier}` is the safe
+  // and correct way to change one column without risking accidental
+  // overwrite of stale spread fields.
   const handleTierChange = async (operatorId: string, newTier: AiTier) => {
     try {
-      const op = operators.find(o => o.id === operatorId);
-      if (!op) return;
-
-      const updated = { ...op, tier: newTier };
       const res = await fetch(`/api/operators/${operatorId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
-        body: JSON.stringify(updated),
+        body: JSON.stringify({ tier: newTier }),
       });
       if (res.ok) {
         fetchMetrics();
@@ -218,26 +269,26 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
-  // Handle activate beta
+  // Handle activate beta — slim PATCH per operator. Reads from
+  // displayOperators (DB-fresh) so newly-created operators get the
+  // beta flag too.
   const handleActivateBeta = async () => {
     try {
       const today = new Date();
       const betaEnd = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000);
-
-      for (const op of operators.filter(o => o.role !== 'trainer')) {
-        const updated = {
-          ...op,
-          betaUser: true,
-          betaStartDate: today.toISOString().split('T')[0],
-          betaEndDate: betaEnd.toISOString().split('T')[0],
-        };
+      const patch = {
+        betaUser: true,
+        betaStartDate: today.toISOString().split('T')[0],
+        betaEndDate: betaEnd.toISOString().split('T')[0],
+      };
+      for (const op of displayOperators.filter(o => o.role !== 'trainer')) {
         await fetch(`/api/operators/${op.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${getAuthToken()}`,
           },
-          body: JSON.stringify(updated),
+          body: JSON.stringify(patch),
         });
       }
       fetchMetrics();
@@ -246,18 +297,17 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
-  // Handle lock all tiers
+  // Handle lock all tiers — slim PATCH.
   const handleLockAllTiers = async () => {
     try {
-      for (const op of operators) {
-        const updated = { ...op, tierLocked: true };
+      for (const op of displayOperators) {
         await fetch(`/api/operators/${op.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${getAuthToken()}`,
           },
-          body: JSON.stringify(updated),
+          body: JSON.stringify({ tierLocked: true }),
         });
       }
       fetchMetrics();
@@ -266,20 +316,16 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
-  // Handle grant vanguard
+  // Handle grant vanguard — slim PATCH.
   const handleGrantVanguard = async (operatorId: string) => {
     try {
-      const op = operators.find(o => o.id === operatorId);
-      if (!op) return;
-
-      const updated = { ...op, isVanguard: true };
       await fetch(`/api/operators/${operatorId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
-        body: JSON.stringify(updated),
+        body: JSON.stringify({ isVanguard: true }),
       });
       fetchMetrics();
     } catch (err) {
@@ -531,22 +577,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           </button>
         </div>
 
-        {/* User KPIs — real from DB */}
+        {/* User KPIs — DB-fresh via displayOperators */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="TOTAL OPERATORS" value={String(dbStats?.total ?? operators.length)} color="#00ff41" />
+          <KPICard label="TOTAL OPERATORS" value={String(dbStats?.total ?? displayOperators.length)} color="#00ff41" />
           <KPICard label="TRAINERS" value={String(dbStats?.trainers ?? trainers.length)} color="#ffb800" />
           <KPICard label="CLIENTS" value={String(dbStats?.clients ?? clients.length)} color="#00ff41" />
           <KPICard label="ACTIVE (7D)" value={String(dbStats?.active7d ?? 0)} color={dbStats?.active7d ? '#00ff41' : '#ff4444'} />
-          <KPICard label="BETA USERS" value={String(dbStats?.beta ?? 0)} color="#ff00ff" />
-          <KPICard label="PROFILE DONE" value={`${dbStats?.profileComplete ?? 0}/${dbStats?.total ?? operators.length}`} color="#00ff41" />
+          <KPICard label="BETA USERS" value={String(dbStats?.beta ?? displayOperators.filter(o => o.betaUser).length)} color="#ff00ff" />
+          <KPICard label="ACTIVATED" value={`${displayOperators.filter(o => !!o.email).length}/${dbStats?.total ?? displayOperators.length}`} color="#00ff41" />
         </div>
 
         {/* Tier Distribution */}
         <SectionHeader title="TIER DISTRIBUTION" />
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
           {(Object.keys(TIER_CONFIGS) as AiTier[]).map(tier => {
-            const count = (opStats.length > 0 ? opStats : operators).filter((op: { tier?: string }) => op.tier === tier).length;
-            const total = dbStats?.total ?? operators.length;
+            const count = displayOperators.filter(op => op.tier === tier).length;
+            const total = dbStats?.total ?? displayOperators.length;
             const pct = total > 0 ? Math.round(count / total * 100) : 0;
             return (
               <div key={tier} style={{ padding: '12px 16px', background: 'rgba(0,0,0,0.3)', border: `1px solid ${tierColor(tier)}20`, flex: '1 1 120px' }}>
@@ -564,23 +610,34 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           })}
         </div>
 
-        {/* Roster with Tier Management */}
+        {/* Roster with Tier Management — DB-fresh via displayOperators.
+            Auto-refreshes every 60s + on tab refocus + after each
+            mutation. EMAIL column doubles as the activation indicator
+            for the closed-beta allowlist (NULL = locked out). GOOGLE
+            shows whether the operator has linked their Google account
+            for OAuth sign-in. */}
         <SectionHeader title="OPERATOR ROSTER" />
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
-                {['CALLSIGN', 'NAME', 'ROLE', 'TIER', 'LOCKED', 'ACTIONS'].map(h => (
+                {['CALLSIGN', 'NAME', 'ROLE', 'EMAIL', 'GOOGLE', 'TIER', 'LOCKED', 'ACTIONS'].map(h => (
                   <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {operators.map(op => (
+              {displayOperators.map(op => (
                 <tr key={op.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                   <td style={{ padding: '10px 8px', color: '#ddd', fontWeight: 600 }}>{op.callsign}</td>
                   <td style={{ padding: '10px 8px', color: '#888' }}>{op.name || '—'}</td>
                   <td style={{ padding: '10px 8px', color: '#888' }}>{op.role}</td>
+                  <td style={{ padding: '10px 8px', color: op.email ? '#aaa' : '#ff4444', fontSize: 11 }}>
+                    {op.email || '— LOCKED'}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', color: op.googleId ? '#00ff41' : '#444', fontSize: 14 }}>
+                    {op.googleId ? '✓' : '·'}
+                  </td>
                   <td style={{ padding: '10px 8px' }}>
                     {op.tierLocked ? (
                       <span style={{ color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
