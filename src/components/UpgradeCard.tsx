@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { upgradeTargetLabel } from '@/lib/tierGates';
+import { useLanguage } from '@/lib/i18n';
 
 interface UpgradeCardProps {
   feature: string;                                       // e.g. "Volume Tracking"
@@ -27,6 +28,7 @@ const TIER_ACCENT: Record<UpgradeCardProps['requiredTier'], string> = {
 };
 
 export default function UpgradeCard({ feature, requiredTier, description, onUpgrade, compact }: UpgradeCardProps) {
+  const { t } = useLanguage();
   const target = upgradeTargetLabel(requiredTier);
   const accent = TIER_ACCENT[requiredTier];
 
@@ -68,7 +70,7 @@ export default function UpgradeCard({ feature, requiredTier, description, onUpgr
             marginBottom: compact ? 8 : 12,
           }}
         >
-          🔒 {target} TIER
+          🔒 {target} {t('upgrade.tier_required').toUpperCase()}
         </div>
 
         <div
@@ -110,7 +112,7 @@ export default function UpgradeCard({ feature, requiredTier, description, onUpgr
             marginBottom: compact ? 10 : 14,
           }}
         >
-          Unlock with {target} tier
+          {t('upgrade.unlock_with')} {target}
         </div>
 
         {onUpgrade && (
@@ -131,7 +133,7 @@ export default function UpgradeCard({ feature, requiredTier, description, onUpgr
               textTransform: 'uppercase',
             }}
           >
-            View Pricing →
+            {t('upgrade.view_pricing')} →
           </button>
         )}
       </div>

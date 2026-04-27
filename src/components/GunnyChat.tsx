@@ -2585,7 +2585,7 @@ ${mealSuggestion}`;
               e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
             }}
             onKeyDown={handleKeyDown}
-            placeholder="What's the mission, champ?"
+            placeholder={t('gunny.placeholder')}
             rows={2}
             style={{
               flex: 1,
