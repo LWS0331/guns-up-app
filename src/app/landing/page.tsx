@@ -504,13 +504,16 @@ export default function LandingPage() {
           </div>
 
           <div style={{ marginTop: 60, textAlign: 'center' }}>
-            {/* Both trainer CTAs route to /contact with subject=trainer until
-                a dedicated trainer-application flow exists. The one-pager
-                button used to be a dead `#` anchor — now it triggers the same
-                contact form so we capture the lead instead of dropping it. */}
+            {/* APPLY AS TRAINER routes to /trainer-apply — a structured,
+                gated application that lands in the TrainerApplication DB
+                queue (NOT inbox-based contact form). Selectivity by design:
+                applications are reviewed manually, no auto-acceptance, no
+                self-serve Stripe checkout for trainers.
+                One-pager still routes to /contact?subject=trainer until a
+                real PDF asset exists to download. */}
             <Link
               className={`${styles.btn} ${styles.btnPrimary}`}
-              href="/contact?subject=trainer"
+              href="/trainer-apply"
               onClick={() => trackLandingCta('trainer_apply')}
             >
               APPLY AS TRAINER <span className={styles.arrow}>→</span>
@@ -666,7 +669,7 @@ export default function LandingPage() {
             <h5>For Trainers</h5>
             <a href="#trainers">Revenue Share</a>
             <a href="#trainers">Rank Bonuses</a>
-            <Link href="/contact?subject=trainer">Apply</Link>
+            <Link href="/trainer-apply">Apply</Link>
             <Link href="/contact?subject=trainer">Marketing Playbook</Link>
           </div>
           <div className={styles.footCol}>
