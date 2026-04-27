@@ -27,14 +27,17 @@ export async function GET(req: NextRequest) {
       });
     } else {
       // Clients: self + any junior operators where this client is listed
-      // as a parent. Without the junior expansion, parents (WARDOG /
-      // PHOENIX) wouldn't see their kids in the operators list, which
-      // breaks PARENT HUB visibility (getParentJuniors returns empty).
+      // as a parent + ALL trainers. Without the junior expansion, parents
+      // (WARDOG / PHOENIX) wouldn't see their kids and PARENT HUB breaks.
+      // Without the trainer expansion, the ClientOnboarding screen renders
+      // "No trainers available" for any client whose trainerId isn't set,
+      // and they get stuck on step 1 with no way forward.
       rows = await prisma.operator.findMany({
         where: {
           OR: [
             { id: auth.operatorId },
             { isJunior: true, parentIds: { has: auth.operatorId } },
+            { role: 'trainer' },
           ],
         },
       });

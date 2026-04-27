@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const operator = await prisma.operator.findUnique({
+    let operator = await prisma.operator.findUnique({
       where: { id: authData.operatorId },
     });
 
@@ -30,6 +30,39 @@ export async function GET(request: NextRequest) {
     // and the client clears the stored token (page.tsx:loadFromDB).
     if (!isOperatorAllowed(operator)) {
       return NextResponse.json(NOT_ALLOWED_RESPONSE, { status: 403 });
+    }
+
+    // Closed-beta auto-assign: clients without a trainerId get
+    // routed to the default trainer (op-ruben). Without this the
+    // ClientOnboarding screen renders "No trainers available"
+    // because /api/operators only returns self for client viewers,
+    // leaving the user stuck on step 1. This also self-heals any
+    // orphan `op-google-XXXX` rows from the legacy OAuth auto-create
+    // path which set trainerId=null.
+    //
+    // When public launch lands and we have multiple trainers, set
+    // CLOSED_BETA_DEFAULT_TRAINER='' (empty string) to disable.
+    const defaultTrainerId =
+      process.env.CLOSED_BETA_DEFAULT_TRAINER ?? 'op-ruben';
+    if (
+      operator.role === 'client' &&
+      !operator.trainerId &&
+      defaultTrainerId &&
+      defaultTrainerId !== operator.id
+    ) {
+      const trainer = await prisma.operator.findUnique({
+        where: { id: defaultTrainerId },
+        select: { id: true, role: true },
+      });
+      if (trainer && trainer.role === 'trainer') {
+        operator = await prisma.operator.update({
+          where: { id: operator.id },
+          data: { trainerId: defaultTrainerId },
+        });
+        console.log(
+          `[auth/me] auto-assigned trainerId=${defaultTrainerId} for client ${operator.id}`,
+        );
+      }
     }
 
     const { passwordHash: _, ...operatorData } = operator;
