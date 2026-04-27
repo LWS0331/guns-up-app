@@ -12,6 +12,7 @@ import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import JuniorPRBoard from '@/components/JuniorPRBoard';
 import SupplementStack from '@/components/SupplementStack';
+import RecoveryReadout from '@/components/RecoveryReadout';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
@@ -3098,13 +3099,25 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         // Pass currentUser so the COMMANDER+ tier gate uses the viewer's
         // tier (a trainer viewing a client always has access). Upgrade
         // CTA bounces back to the PROFILE tab where BillingPanel lives.
+        // Recovery Readout sits underneath the wearable connect surface
+        // — pulls latest sync data and renders the GO_HARD/NORMAL/
+        // DELOAD/REST recommendation. (Recovery Protocol Engine, #50.)
         return (
-          <WearableConnect
-            operator={operator}
-            onUpdateOperator={onUpdateOperator}
-            currentUser={currentUser}
-            onOpenBilling={() => setActiveTab('PROFILE')}
-          />
+          <div>
+            <WearableConnect
+              operator={operator}
+              onUpdateOperator={onUpdateOperator}
+              currentUser={currentUser}
+              onOpenBilling={() => setActiveTab('PROFILE')}
+            />
+            <div style={{ marginTop: 20 }}>
+              <RecoveryReadout
+                operator={operator}
+                currentUser={currentUser}
+                onOpenBilling={() => setActiveTab('PROFILE')}
+              />
+            </div>
+          </div>
         );
       default:
         return null;
