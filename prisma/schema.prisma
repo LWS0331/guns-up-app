@@ -83,3 +83,34 @@ model WearableConnection {
   @@index([operatorId])
   @@index([vitalUserId])
 }
+
+// Trainer applications submitted via /trainer-apply landing page form.
+// Public POST endpoint; admin-only GET. Reviewed manually — no auto-acceptance.
+// Migration NOT run automatically; apply via `prisma migrate dev` when ready.
+model TrainerApplication {
+  id                  String   @id @default(cuid())
+  email               String
+  name                String
+  callsign            String?                // optional — applicant may not have a callsign yet
+  yearsCertified      Int                    // years holding any S&C / personal-training cert
+  currentClientCount  Int                    // active paying clients today
+  primaryDiscipline   String                 // e.g. "strength", "hypertrophy", "tactical", "sport_perf"
+  certifications      String[] @default([])  // e.g. ["NSCA-CSCS", "NASM-CPT"]
+  whyGunsUp           String                 // free text — qualifying motivation
+  sampleProgramming   String                 // free text — sample week / proof-of-craft
+
+  status              String   @default("pending") // "pending" | "approved" | "rejected"
+  reviewedBy          String?                // operatorId of admin who reviewed (e.g. "op-ruben")
+  reviewedAt          DateTime?
+  reviewNotes         String?
+
+  // Spam-protection metadata (mirrors /api/contact rate-limit pattern)
+  ip                  String?
+  userAgent           String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
+}
