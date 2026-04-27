@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     const newColumns = [
       { name: 'email', type: 'TEXT UNIQUE' },
       { name: 'passwordHash', type: 'TEXT' },
+      { name: 'googleId', type: 'TEXT UNIQUE' },
       { name: 'betaStartDate', type: 'TEXT' },
       { name: 'betaEndDate', type: 'TEXT' },
       { name: 'isVanguard', type: 'BOOLEAN NOT NULL DEFAULT false' },
