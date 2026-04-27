@@ -61,6 +61,26 @@ export async function POST(req: NextRequest) {
       { name: 'sitrep', type: "JSONB NOT NULL DEFAULT '{}'" },
       { name: 'dailyBrief', type: "JSONB NOT NULL DEFAULT '{}'" },
       { name: 'billing', type: "JSONB NOT NULL DEFAULT '{}'" },
+      // Junior Operator (gated, see featureFlags + JuniorIntakeForm)
+      { name: 'isJunior', type: 'BOOLEAN NOT NULL DEFAULT false' },
+      { name: 'juniorAge', type: 'INTEGER' },
+      { name: 'parentIds', type: 'TEXT[] DEFAULT ARRAY[]::TEXT[]' },
+      { name: 'sportProfile', type: "JSONB NOT NULL DEFAULT '{}'" },
+      { name: 'juniorConsent', type: "JSONB NOT NULL DEFAULT '{}'" },
+      { name: 'juniorSafety', type: "JSONB NOT NULL DEFAULT '{}'" },
+      // Pricing v2 — Free RECON usage caps
+      { name: 'reconChatsCount', type: 'INTEGER NOT NULL DEFAULT 0' },
+      { name: 'reconChatsResetAt', type: 'TIMESTAMP(3)' },
+      { name: 'reconWorkoutsCount', type: 'INTEGER NOT NULL DEFAULT 0' },
+      { name: 'reconWorkoutsResetAt', type: 'TIMESTAMP(3)' },
+      // Activation Flow tracking (PaywallSpec §8)
+      { name: 'webPurchaseAt', type: 'TIMESTAMP(3)' },
+      { name: 'firstAppOpenAt', type: 'TIMESTAMP(3)' },
+      { name: 'firstWorkoutCompletedAt', type: 'TIMESTAMP(3)' },
+      { name: 'activationEmailsSent', type: 'INTEGER NOT NULL DEFAULT 0' },
+      { name: 'lastActivationEmailAt', type: 'TIMESTAMP(3)' },
+      { name: 'passwordResetRequestedAt', type: 'TIMESTAMP(3)' },
+      { name: 'recoveryAttempts', type: 'INTEGER NOT NULL DEFAULT 0' },
     ];
     for (const col of newColumns) {
       await pool.query(`
@@ -70,6 +90,79 @@ export async function POST(req: NextRequest) {
         END $$;
       `);
     }
+
+    // Indexes for new columns (idempotent — IF NOT EXISTS).
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "Operator_webPurchaseAt_firstAppOpenAt_idx"
+      ON "Operator"("webPurchaseAt", "firstAppOpenAt");
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "Operator_isJunior_idx"
+      ON "Operator"("isJunior");
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "Operator_parentIds_idx"
+      ON "Operator" USING GIN ("parentIds");
+    `);
+
+    // === AuthToken table — Pricing v2 / Activation Flow ===
+    // Single-use tokens for web_handoff / magic_link / password_reset.
+    // See src/lib/authTokens.ts for the contract.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "AuthToken" (
+        "id" TEXT NOT NULL,
+        "operatorId" TEXT NOT NULL,
+        "type" TEXT NOT NULL,
+        "intent" TEXT,
+        "metadata" JSONB NOT NULL DEFAULT '{}',
+        "used" BOOLEAN NOT NULL DEFAULT false,
+        "usedAt" TIMESTAMP(3),
+        "expiresAt" TIMESTAMP(3) NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "AuthToken_pkey" PRIMARY KEY ("id")
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "AuthToken_operatorId_idx"
+      ON "AuthToken"("operatorId");
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "AuthToken_expiresAt_idx"
+      ON "AuthToken"("expiresAt");
+    `);
+
+    // === TrainerApplication table (idempotent — may already exist) ===
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "TrainerApplication" (
+        "id" TEXT NOT NULL,
+        "email" TEXT NOT NULL,
+        "name" TEXT NOT NULL,
+        "callsign" TEXT,
+        "yearsCertified" INTEGER NOT NULL,
+        "currentClientCount" INTEGER NOT NULL,
+        "primaryDiscipline" TEXT NOT NULL,
+        "certifications" TEXT[] DEFAULT ARRAY[]::TEXT[],
+        "whyGunsUp" TEXT NOT NULL,
+        "sampleProgramming" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'pending',
+        "reviewedBy" TEXT,
+        "reviewedAt" TIMESTAMP(3),
+        "reviewNotes" TEXT,
+        "ip" TEXT,
+        "userAgent" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "TrainerApplication_pkey" PRIMARY KEY ("id")
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "TrainerApplication_status_idx"
+      ON "TrainerApplication"("status");
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "TrainerApplication_email_idx"
+      ON "TrainerApplication"("email");
+    `);
 
     // Create ChatHistory table
     await pool.query(`
@@ -121,7 +214,10 @@ export async function POST(req: NextRequest) {
 
     await pool.end();
 
-    return NextResponse.json({ ok: true, message: 'Tables created successfully (Operator, ChatHistory, WearableConnection)' });
+    return NextResponse.json({
+      ok: true,
+      message: 'Schema synced (Operator, ChatHistory, WearableConnection, AuthToken, TrainerApplication) — Pricing v2 + Activation Flow columns applied.',
+    });
   } catch (error) {
     await pool.end();
     console.error('Migration error:', error);
