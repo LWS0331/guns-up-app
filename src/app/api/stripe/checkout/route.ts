@@ -15,6 +15,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Invalid tier: ${tier}` }, { status: 400 });
     }
 
+    // Pricing v2: RECON is FREE — no Stripe Checkout session is ever
+    // created. If the client somehow asked, bounce them back with a
+    // clear error so they upgrade to OPERATOR or above instead.
+    if (tierConfig.free) {
+      return NextResponse.json({
+        error: 'RECON is free — no purchase needed. Pick OPERATOR or above to checkout.',
+      }, { status: 400 });
+    }
+
     const stripe = getStripe();
     const cycle = billingCycle === 'annual' ? 'annual' : 'monthly';
     const priceId = tierConfig[cycle];

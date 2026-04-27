@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { checkAndIncrement, capExceededBody } from '@/lib/usageCaps';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
@@ -1141,7 +1142,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Rate limit (per-operator, per-tier, per-hour)
+    // Rate limit (per-operator, per-tier, per-hour) — kept for paid tiers.
     const rl = checkRateLimit(auth.operatorId, tier);
     if (!rl.allowed) {
       const retryAfterSec = Math.ceil(rl.resetMs / 1000);
@@ -1154,6 +1155,20 @@ export async function POST(req: NextRequest) {
           resetInSec: retryAfterSec,
         },
         { status: 429, headers: { 'Retry-After': String(retryAfterSec) } }
+      );
+    }
+
+    // Free RECON usage cap — Pricing Strategy v2 makes RECON $0/mo with
+    // hard rolling caps (30 chats/24h). Paid tiers, trainers, admins
+    // bypass via checkAndIncrement (it short-circuits on isCapExempt).
+    // We increment optimistically so a legit chat that fails downstream
+    // still counts — that's intentional. The point is to bound API
+    // spend, not to be generous on retries.
+    const reconCap = await checkAndIncrement(auth.operatorId, 'chat');
+    if (!reconCap.allowed) {
+      return NextResponse.json(
+        capExceededBody(reconCap),
+        { status: 429, headers: { 'Retry-After': String(Math.max(60, Math.ceil(((reconCap.resetAt?.getTime() || Date.now()) - Date.now()) / 1000))) } }
       );
     }
 

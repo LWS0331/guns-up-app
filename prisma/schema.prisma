@@ -51,11 +51,54 @@ model Operator {
   juniorConsent Json     @default("{}")               // parent consent record + signed dates
   juniorSafety  Json     @default("{}")               // refusal log, escalation flags, RED-S flags
 
+  // Free RECON usage caps (Pricing Strategy v2 — RECON is now $0/mo with
+  // hard caps to prevent runaway API spend). Tiers above RECON ignore.
+  // Counters reset against rolling windows: chats every 24h, workout
+  // generations every 7 days. See src/lib/usageCaps.ts.
+  reconChatsCount       Int       @default(0)         // chats in current 24h window
+  reconChatsResetAt     DateTime?                     // next reset boundary (now + 24h)
+  reconWorkoutsCount    Int       @default(0)         // workout generations in current 7d window
+  reconWorkoutsResetAt  DateTime?                     // next reset boundary (now + 7d)
+
+  // Post-purchase activation tracking (PaywallSpec §8). The cron in
+  // src/app/api/cron/activation-emails/route.ts scans these fields to
+  // schedule the four-email activation sequence (immediate, 6h, 3d, 7d).
+  webPurchaseAt           DateTime?  // first Stripe webhook fired for this account
+  firstAppOpenAt          DateTime?  // first authenticated app session
+  firstWorkoutCompletedAt DateTime?  // first workout marked done after activation
+  activationEmailsSent    Int        @default(0)
+  lastActivationEmailAt   DateTime?
+  passwordResetRequestedAt DateTime?
+  recoveryAttempts         Int       @default(0)
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([parentIds])
   @@index([isJunior])
+  @@index([webPurchaseAt, firstAppOpenAt])  // activation email cron scan
+}
+
+// AuthToken — short-lived single-use tokens for the activation flow.
+// Three intents:
+//   - web_handoff:    iOS app generates a token to hand off to the web
+//                     for an upgrade checkout. 5-min TTL, single use.
+//   - magic_link:     emailed sign-in link sent post-purchase. 7-day TTL.
+//   - password_reset: standard password recovery. 1-hour TTL.
+// metadata holds intent-specific payload (e.g. targetTier for upgrades).
+model AuthToken {
+  id          String    @id @default(cuid())
+  operatorId  String
+  type        String    // 'web_handoff' | 'magic_link' | 'password_reset'
+  intent      String?   // 'upgrade' | 'sign_in' | 'recover'
+  metadata    Json      @default("{}")
+  used        Boolean   @default(false)
+  usedAt      DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([operatorId])
+  @@index([expiresAt])
 }
 
 model ChatHistory {

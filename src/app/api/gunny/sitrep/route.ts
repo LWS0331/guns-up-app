@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
 import { TIER_MODEL_MAP, SITREP_MODEL_FALLBACK } from '@/lib/models';
+import { checkAndIncrement, capExceededBody } from '@/lib/usageCaps';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -21,6 +22,19 @@ export async function POST(req: NextRequest) {
 
     if (!operatorContext) {
       return NextResponse.json({ error: 'Missing operator context' }, { status: 400 });
+    }
+
+    // Free RECON workout-generation cap (Pricing Strategy v2 — 5 sitreps
+    // per 7d for free users). SITREP is the heaviest single AI call
+    // in the app since it generates an entire week of programming, so
+    // this is the right enforcement point. Paid tiers / admins / trainers
+    // bypass automatically via the helper.
+    const reconCap = await checkAndIncrement(auth.operatorId, 'workout');
+    if (!reconCap.allowed) {
+      return NextResponse.json(
+        capExceededBody(reconCap),
+        { status: 429, headers: { 'Retry-After': String(Math.max(60, Math.ceil(((reconCap.resetAt?.getTime() || Date.now()) - Date.now()) / 1000))) } }
+      );
     }
 
     // Sitrep generation floors at sonnet even for haiku-tier users because
