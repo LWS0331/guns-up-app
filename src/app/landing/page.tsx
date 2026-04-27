@@ -117,15 +117,17 @@ export default function LandingPage() {
               >
                 DEPLOY OPERATOR <span className={styles.arrow}>→</span>
               </Link>
-              {/* "REQUEST BRIEF" used to scroll to #gunny — moved to /contact
-                  with subject pre-filled so visitors who want a real
-                  conversation actually start one. */}
+              {/* SEE TIERS — drives the secondary hero CTA into the tier
+                  grid in the same page instead of a contact form. The point
+                  of the landing page is to convert; the four tiers ARE the
+                  brief. /contact remains for legitimate trainer/beta/legal
+                  outreach below. */}
               <Link
                 className={`${styles.btn} ${styles.btnSecondary}`}
-                href="/contact?subject=brief"
-                onClick={() => trackLandingCta('hero_brief')}
+                href="#tiers"
+                onClick={() => trackLandingCta('hero_see_tiers')}
               >
-                REQUEST BRIEF
+                SEE TIERS
               </Link>
             </div>
 
