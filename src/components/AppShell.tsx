@@ -1832,11 +1832,53 @@ const AppShell: React.FC<AppShellProps> = ({
           ) : (
             <IntakeForm
               operator={currentUser}
-              onComplete={(updated) => {
+              onComplete={async (updated) => {
                 onUpdateOperator(updated);
                 setShowIntake(false);
-                // Auto-generate SITREP after intake
-                generateSitrep(updated);
+
+                // Path recommendation: when the operator picked
+                // "LET GUNNY DECIDE" (gunny_pick) we call the
+                // /api/gunny/recommend-path endpoint to get a concrete
+                // training path + rationale based on intake. We do this
+                // BEFORE generateSitrep so the SITREP can use the
+                // resolved path. Errors are non-fatal — fall through
+                // to SITREP with whatever path was set.
+                let opForSitrep = updated;
+                if (updated.preferences?.trainingPath === 'gunny_pick') {
+                  try {
+                    const token = (typeof window !== 'undefined') ? localStorage.getItem('authToken') : null;
+                    const res = await fetch('/api/gunny/recommend-path', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                      },
+                      body: JSON.stringify({ operatorId: updated.id }),
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      if (data.ok && data.path) {
+                        const withPath: Operator = {
+                          ...updated,
+                          preferences: {
+                            ...updated.preferences,
+                            trainingPath: data.path,
+                            gunnyPathRationale: data.rationale,
+                            gunnyPathAlternates: data.alternates,
+                          },
+                        };
+                        onUpdateOperator(withPath);
+                        opForSitrep = withPath;
+                      }
+                    }
+                  } catch (err) {
+                    console.error('[AppShell] path recommendation failed', err);
+                  }
+                }
+
+                // Auto-generate SITREP after intake (now using
+                // resolved path if recommendation ran)
+                generateSitrep(opForSitrep);
               }}
               onSkip={() => setShowIntake(false)}
             />

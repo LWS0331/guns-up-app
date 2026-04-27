@@ -316,6 +316,13 @@ export interface TrainingPreferences {
   trainingPath?: string;
   weakPoints: string[];
   avoidMovements: string[];
+  // Gunny path recommendation engine — populated by /api/gunny/recommend-path
+  // when the operator picked "LET GUNNY DECIDE" during intake. The endpoint
+  // analyzes intake answers and returns a concrete path key + rationale +
+  // up to 2 alternates. The rationale gets surfaced in IntelCenter so the
+  // user understands why Gunny picked it.
+  gunnyPathRationale?: string;
+  gunnyPathAlternates?: { path: string; reason: string }[];
 }
 
 // Workout types

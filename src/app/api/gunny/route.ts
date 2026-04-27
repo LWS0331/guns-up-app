@@ -6,6 +6,7 @@ import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
+import { prisma } from '@/lib/db';
 import type { JuniorSafetyEvent } from '@/lib/types';
 
 const client = new Anthropic({
@@ -1175,6 +1176,63 @@ export async function POST(req: NextRequest) {
     // keeps the entire surface inert in production until rollout starts.
     const isJuniorOperator = operatorContext?.isJunior === true && isJuniorOperatorEnabledServer();
 
+    // Enrich context with wearable data (server-side). The WearableConnection
+    // rows live in a separate table from Operator, so the client-built
+    // operatorContext can't include them. Pull the latest syncData here so
+    // Gunny actually sees sleep duration / HRV / recovery / hrAverage rather
+    // than just the intake sleep-quality 1-10. Junior operators skip this
+    // since the youth prompt doesn't reference wearable data.
+    let wearableMetricsBlock = '';
+    if (!isJuniorOperator && operatorContext?.id) {
+      try {
+        const conns = await prisma.wearableConnection.findMany({
+          where: { operatorId: operatorContext.id, active: true },
+          orderBy: { lastSyncAt: 'desc' },
+          take: 5,
+        });
+        if (conns.length > 0) {
+          const lines: string[] = ['', '═══ WEARABLE METRICS (LIVE) ═══'];
+          for (const c of conns) {
+            const sd = (c.syncData || {}) as Record<string, unknown>;
+            lines.push(`Provider: ${c.providerName} (last sync: ${c.lastSyncAt ? new Date(c.lastSyncAt).toLocaleString() : 'never'})`);
+            const sleep = sd.sleep as Record<string, unknown> | undefined;
+            if (sleep) {
+              const dur = typeof sleep.duration === 'number' ? sleep.duration : null;
+              const hours = dur != null ? (dur / 3600).toFixed(1) : '?';
+              lines.push(`  Sleep: ${hours}h${sleep.efficiency ? `, ${sleep.efficiency}% efficient` : ''}${sleep.hrAverage ? `, avg HR ${sleep.hrAverage}bpm` : ''}`);
+              if (typeof sleep.deep === 'number' || typeof sleep.rem === 'number') {
+                lines.push(`  Sleep stages: deep ${sleep.deep ? Math.round(Number(sleep.deep)/60) : '?'}m, REM ${sleep.rem ? Math.round(Number(sleep.rem)/60) : '?'}m`);
+              }
+            }
+            const recovery = sd.recovery as Record<string, unknown> | undefined;
+            if (recovery) {
+              if (recovery.hrv != null) lines.push(`  HRV: ${recovery.hrv}ms`);
+              if (recovery.score != null) lines.push(`  Recovery score: ${recovery.score}/100`);
+              if (recovery.restingHr != null) lines.push(`  Resting HR: ${recovery.restingHr}bpm`);
+            }
+            const activity = sd.activity as Record<string, unknown> | undefined;
+            if (activity) {
+              if (activity.steps != null) lines.push(`  Steps today: ${activity.steps}`);
+              if (activity.activeCalories != null) lines.push(`  Active calories: ${activity.activeCalories}`);
+            }
+            const body = sd.body as Record<string, unknown> | undefined;
+            if (body) {
+              if (body.weight != null) lines.push(`  Weight (latest): ${body.weight}lbs`);
+              if (body.bodyFat != null) lines.push(`  Body fat (latest): ${body.bodyFat}%`);
+            }
+          }
+          lines.push('═══════════════════════════════');
+          lines.push('Use this LIVE measured data — it overrides the operator\'s self-reported sleep/readiness when present. If recovery score is low (<33), HRV trending down, or sleep <6h: dial back intensity, recommend a deload, or suggest mobility instead of heavy lifting.');
+          wearableMetricsBlock = lines.join('\n');
+        }
+      } catch (err) {
+        // Don't block the chat if wearable lookup fails — Gunny still works
+        // with the rest of the operator context.
+        // eslint-disable-next-line no-console
+        console.error('[gunny] wearable enrichment failed', err);
+      }
+    }
+
     // Build rich context about the operator
     let contextBlock = '';
     if (isJuniorOperator) {
@@ -1326,6 +1384,13 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       contextBlock = contextBlock
         .replace(/═══ WORKOUT HISTORY[\s\S]*?═══ NUTRITION HISTORY/, '═══ NUTRITION HISTORY')
         .replace(/═══ NUTRITION HISTORY[\s\S]*?═══ CRITICAL INSTRUCTIONS/, '═══ CRITICAL INSTRUCTIONS');
+    }
+
+    // Append wearable metrics (already gated to non-junior + non-haiku in
+    // construction; for haiku we've already stripped workout/meal history,
+    // so wearable metrics also get stripped to keep the context tight).
+    if (wearableMetricsBlock && tier !== 'haiku') {
+      contextBlock += wearableMetricsBlock;
     }
 
     // Add trainer programming dataset
