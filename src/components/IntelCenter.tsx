@@ -13,6 +13,7 @@ import DailyBriefRef from '@/components/DailyBriefRef';
 import JuniorPRBoard from '@/components/JuniorPRBoard';
 import SupplementStack from '@/components/SupplementStack';
 import RecoveryReadout from '@/components/RecoveryReadout';
+import FormAnalysis from '@/components/FormAnalysis';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
@@ -43,7 +44,7 @@ interface IntelCenterProps {
   onRequestIntake?: () => void;
 }
 
-type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES';
+type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES' | 'FORM_CHECK';
 
 interface LocalState {
   profile: {
@@ -3119,6 +3120,18 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </div>
           </div>
         );
+      case 'FORM_CHECK':
+        // AI Form Analysis (Video) — feature #47. Operator uploads a
+        // short clip; client-side frame extraction + Claude vision
+        // returns a structured form review. WARFIGHTER tier-gated;
+        // upgrade CTA bounces to PROFILE → BillingPanel.
+        return (
+          <FormAnalysis
+            operator={operator}
+            currentUser={currentUser}
+            onOpenBilling={() => setActiveTab('PROFILE')}
+          />
+        );
       default:
         return null;
     }
@@ -3132,6 +3145,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     INJURIES: '▦',
     PREFERENCES: '◇',
     WEARABLES: '◎',
+    FORM_CHECK: '◊',
   };
 
   const getTabLabels = (): Record<SubTab, string> => ({
@@ -3142,6 +3156,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     INJURIES: t('intel.injuries'),
     PREFERENCES: t('intel.preferences'),
     WEARABLES: 'WEARABLES',
+    FORM_CHECK: 'FORM CHECK',
   });
 
   const [isMobile, setIsMobile] = useState(false);
@@ -3177,7 +3192,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           matches Planner's sub-nav and any future tabbed screens. */}
       {isMobile ? (
         <nav className="subtabs" aria-label="Intel sub-navigation">
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -3208,7 +3223,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </div>
           </div>
 
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
