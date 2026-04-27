@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/requireAuth';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { checkAndIncrement, capExceededBody } from '@/lib/usageCaps';
+import { FOOD_DB_SYSTEM_INSTRUCTION, buildFoodContextFromMessage } from '@/lib/foodDbContext';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
@@ -1413,6 +1414,24 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       contextBlock += buildTrainerDataset(body.trainerData);
     }
 
+    // Food DB v2 dynamic injection — Pricing Strategy v2 + nutrition
+    // database deep-research. We always include the SHORT system
+    // instruction (one paragraph) explaining the lookup contract, then
+    // dynamically inject DB matches based on the latest user message
+    // when the message hints at food. Junior operators skip this — the
+    // youth prompt has its own nutrition guardrails.
+    if (!isJuniorOperator && !isOpsMode) {
+      const lastUserMsg = [...messages].reverse().find((m: { role: string; text?: string; content?: string }) => m.role === 'user');
+      const userText = lastUserMsg?.text || lastUserMsg?.content || '';
+      if (userText) {
+        const lang = (operatorContext?.language === 'es') ? 'es' : 'en';
+        const foodMatches = buildFoodContextFromMessage(userText, 8, lang);
+        if (foodMatches) {
+          contextBlock += `\n\n═══ NUTRITION DATABASE — RELEVANT MATCHES ═══\n${foodMatches}`;
+        }
+      }
+    }
+
     // Add screen context for assistant mode
     if (isAssistantMode && screenContext) {
       contextBlock += `\n\n═══ WHAT THE OPERATOR IS CURRENTLY VIEWING ═══\n${screenContext}`;
@@ -1505,6 +1524,15 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       // Regular gameplan mode: optionally prepend mode-specific prefix
       const modePrefix = MODE_PREFIXES[mode] || '';
       systemPrompt = modePrefix ? (modePrefix + '\n\n' + SYSTEM_PROMPT) : SYSTEM_PROMPT;
+    }
+
+    // Append the Food DB lookup contract to non-junior, non-ops prompts.
+    // The actual entries are injected as DB-matches in contextBlock below,
+    // only when relevant — the prompt instruction tells Gunny what to do
+    // with them when they appear. Adds ~300 tokens to the system prompt
+    // but unlocks structured 293-entry nutrition lookups.
+    if (!isJuniorOperator && !isOpsMode) {
+      systemPrompt += `\n\n${FOOD_DB_SYSTEM_INSTRUCTION}`;
     }
 
     // Context-aware data gaps block. SITREP_PREAMBLE asserts "you KNOW their
