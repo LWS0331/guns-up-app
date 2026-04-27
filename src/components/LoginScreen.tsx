@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import LogoFull from '@/components/LogoFull';
 import LanguageToggle from '@/components/LanguageToggle';
 import { useLanguage } from '@/lib/i18n';
@@ -12,7 +12,11 @@ interface LoginScreenProps {
   operators: Operator[];
 }
 
-type LoginMode = 'pin' | 'email' | 'register';
+// PIN login is being phased out — Google OAuth is the primary path,
+// email/password is the legacy fallback for accounts that pre-date the
+// SSO migration. The /api/auth/login endpoint still accepts PINs as a
+// server-side backstop, but the UI no longer surfaces a PIN entry.
+type LoginMode = 'email' | 'register';
 
 // Floating particle for background
 interface Particle {
@@ -27,8 +31,7 @@ interface Particle {
 
 export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
   const { t } = useLanguage();
-  const [loginMode, setLoginMode] = useState<LoginMode>('pin');
-  const [pin, setPin] = useState<string>('');
+  const [loginMode, setLoginMode] = useState<LoginMode>('email');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [name, setName] = useState<string>('');
@@ -51,75 +54,20 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
       delay: Math.random() * 10,
     }))
   );
-  const hiddenInputRef = useRef<HTMLInputElement>(null);
+  // PIN-related refs and handlers were removed when the PIN UI was retired.
+  // The /api/auth/login endpoint still accepts PINs server-side as a backstop
+  // for any account that hasn't been migrated to email yet — there's just no
+  // longer a UI for entering one.
 
   useEffect(() => {
     setMounted(true);
-    if (hiddenInputRef.current) {
-      hiddenInputRef.current.focus();
-    }
   }, []);
 
-  useEffect(() => {
-    if (pin.length === 4) {
-      // Authenticate via API first (DB is source of truth for PINs)
-      const loginViaApi = async () => {
-        try {
-          const res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pin }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.token) localStorage.setItem('authToken', data.token);
-            setSuccess(true);
-            setError('');
-            setMatchedOperator(data.operator);
-            setTimeout(() => { onLogin(data.operator); }, 1400);
-            return;
-          }
-        } catch { /* API unreachable — fall through to offline */ }
-
-        // Offline fallback: match against local operators (no JWT issued)
-        const operator = operators.find((op) => op.pin === pin);
-        if (operator) {
-          setSuccess(true);
-          setError('');
-          setMatchedOperator(operator);
-          setTimeout(() => { onLogin(operator); }, 1400);
-        } else {
-          setError('Invalid PIN');
-          setSuccess(false);
-          setTimeout(() => {
-            setPin('');
-            setError('');
-            if (hiddenInputRef.current) hiddenInputRef.current.focus();
-          }, 800);
-        }
-      };
-      loginViaApi();
-    }
-  }, [pin, operators, onLogin]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (/^[0-9]$/.test(e.key)) {
-      setPin(prev => {
-        if (prev.length < 4) return prev + e.key;
-        return prev;
-      });
-      e.preventDefault();
-    } else if (e.key === 'Backspace') {
-      setPin(prev => prev.slice(0, -1));
-      setError('');
-      e.preventDefault();
-    }
-  }, []);
-
+  // Container click used to focus a hidden PIN input — now a no-op so the
+  // background tap doesn't accidentally trigger anything. Kept on the
+  // wrapper so the "cursor: pointer" styling still feels intentional.
   const handleContainerClick = () => {
-    if (hiddenInputRef.current && loginMode === 'pin') {
-      hiddenInputRef.current.focus();
-    }
+    /* intentionally empty — see comment above */
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -295,34 +243,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
         pointerEvents: 'none',
       }} />
 
-      {/* Hidden input */}
-      <input
-        ref={hiddenInputRef}
-        type="tel"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        maxLength={4}
-        value={pin}
-        style={{
-          position: 'absolute',
-          opacity: 0,
-          width: '1px',
-          height: '1px',
-          border: 'none',
-          outline: 'none',
-          padding: 0,
-          margin: 0,
-          overflow: 'hidden',
-        }}
-        onKeyDown={handleKeyDown}
-        onChange={(e) => {
-          const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-          setPin(val);
-        }}
-        autoFocus
-        autoComplete="off"
-        aria-label="PIN input"
-      />
+      {/* Hidden PIN input removed — see LoginMode comment at top of file. */}
 
       {/* Language Toggle (top-right) */}
       <div style={{
@@ -436,27 +357,42 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
         )}
 
         {/* `?oauth_error=…` query param: surfaced when the OAuth callback
-            rejects the round-trip (state mismatch, email_not_verified, etc.).
-            Read once on mount and shown above the legacy login tabs. */}
-        {!success && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('oauth_error') && (
-          <div
-            style={{
-              fontFamily: 'Share Tech Mono, monospace',
-              fontSize: 11,
-              color: '#ff4444',
-              padding: '8px 12px',
-              border: '1px solid rgba(255,68,68,0.35)',
-              borderRadius: 4,
-              maxWidth: 360,
-              textAlign: 'center',
-            }}
-            role="alert"
-          >
-            Google sign-in failed ({new URLSearchParams(window.location.search).get('oauth_error')}). Try again or use email below.
-          </div>
-        )}
+            rejects the round-trip (state mismatch, email_not_verified,
+            not_authorized, etc.). Translate the raw reason into a user-
+            facing message so we don't leak machine codes. */}
+        {(() => {
+          if (success) return null;
+          if (typeof window === 'undefined') return null;
+          const reason = new URLSearchParams(window.location.search).get('oauth_error');
+          if (!reason) return null;
+          const friendly =
+            reason === 'not_authorized'
+              ? 'This email isn’t authorized for the GUNS UP closed beta. Contact the team to request access.'
+              : reason === 'email_not_verified'
+                ? 'Your Google account email isn’t verified. Verify it with Google and try again.'
+                : reason === 'state_mismatch'
+                  ? 'Sign-in session expired. Try again from the login button below.'
+                  : `Google sign-in failed (${reason}). Try again or use email/password below.`;
+          return (
+            <div
+              style={{
+                fontFamily: 'Share Tech Mono, monospace',
+                fontSize: 11,
+                color: '#ff4444',
+                padding: '8px 12px',
+                border: '1px solid rgba(255,68,68,0.35)',
+                borderRadius: 4,
+                maxWidth: 360,
+                textAlign: 'center',
+              }}
+              role="alert"
+            >
+              {friendly}
+            </div>
+          );
+        })()}
 
-        {/* Mode Selector Tabs — legacy paths kept until PIN sunset (Phase 3) */}
+        {/* Mode Selector Tabs — Login + Register (PIN UI was retired) */}
         {!success && (
           <div style={{
             display: 'flex',
@@ -465,27 +401,6 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             transform: mounted ? 'translateY(0)' : 'translateY(10px)',
             transition: 'opacity 0.6s ease 0.5s, transform 0.6s ease 0.5s',
           }}>
-            <button
-              onClick={() => {
-                setLoginMode('pin');
-                setError('');
-                setPin('');
-              }}
-              style={{
-                fontFamily: 'Orbitron, monospace',
-                fontSize: '11px',
-                letterSpacing: '2px',
-                textTransform: 'uppercase',
-                padding: '8px 16px',
-                border: `1px solid ${loginMode === 'pin' ? '#00ff41' : 'rgba(0,255,65,0.2)'}`,
-                backgroundColor: loginMode === 'pin' ? 'rgba(0,255,65,0.1)' : 'transparent',
-                color: loginMode === 'pin' ? '#00ff41' : '#666',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              PIN LOGIN (BETA)
-            </button>
             <button
               onClick={() => {
                 setLoginMode('email');
@@ -512,132 +427,12 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
         )}
 
         {/* PIN Section */}
-        {!success && loginMode === 'pin' ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '12px',
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? 'translateY(0)' : 'translateY(10px)',
-            transition: 'opacity 0.6s ease 0.6s, transform 0.6s ease 0.6s',
-          }}>
-            {/* Label */}
-            <div style={{
-              fontFamily: 'Orbitron, monospace',
-              fontSize: '15px',
-              color: '#888',
-              textTransform: 'uppercase',
-              letterSpacing: '3px',
-              animation: 'accessTextPulse 3s ease-in-out infinite',
-            }}>
-              {t('login.enter_pin')}
-            </div>
-
-            {/* PIN boxes */}
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'center',
-            }}>
-              {[0, 1, 2, 3].map((index) => {
-                const filled = index < pin.length;
-                const isActive = index === pin.length;
-
-                let borderColor = 'rgba(0,255,65,0.2)';
-                let bgColor = 'rgba(0,255,65,0.03)';
-                let shadow = 'none';
-                let anim = 'pinBoxIdle 4s ease-in-out infinite';
-
-                if (error) {
-                  borderColor = '#ff4444';
-                  bgColor = 'rgba(255,68,68,0.05)';
-                  shadow = '0 0 12px rgba(255,68,68,0.3)';
-                  anim = 'none';
-                } else if (filled) {
-                  borderColor = 'rgba(0,255,65,0.35)';
-                  bgColor = 'rgba(0,255,65,0.04)';
-                  shadow = '0 0 8px rgba(0,255,65,0.15)';
-                  anim = 'none';
-                } else if (isActive) {
-                  borderColor = 'rgba(0,255,65,0.25)';
-                  bgColor = 'rgba(0,255,65,0.02)';
-                }
-
-                return (
-                  <div key={index} style={{
-                    width: '48px',
-                    height: '56px',
-                    backgroundColor: bgColor,
-                    border: `1px solid ${borderColor}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                    transition: 'all 0.15s ease',
-                    animation: anim,
-                    animationDelay: `${index * 0.5}s`,
-                    boxShadow: shadow,
-                  }}>
-                    {/* Corner accents */}
-                    <div style={{
-                      position: 'absolute', top: -1, left: -1,
-                      width: '6px', height: '6px',
-                      borderTop: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
-                      borderLeft: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
-                      transition: 'border-color 0.15s ease',
-                    }} />
-                    <div style={{
-                      position: 'absolute', bottom: -1, right: -1,
-                      width: '6px', height: '6px',
-                      borderBottom: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
-                      borderRight: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
-                      transition: 'border-color 0.15s ease',
-                    }} />
-
-                    {/* Digit or cursor */}
-                    {filled ? (
-                      <div style={{
-                        fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '26px',
-                        color: '#00ff41',
-                        textShadow: '0 0 8px rgba(0,255,65,0.5)',
-                        animation: 'fadeInScale 0.15s ease',
-                      }}>
-                        {pin[index]}
-                      </div>
-                    ) : isActive ? (
-                      <div style={{
-                        width: '2px',
-                        height: '20px',
-                        backgroundColor: '#00ff41',
-                        opacity: 0.6,
-                        animation: 'cursorBlink 1s ease-in-out infinite',
-                      }} />
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Error message */}
-            <div style={{
-              fontFamily: 'Orbitron, monospace',
-              fontSize: '15px',
-              color: '#ff4444',
-              textTransform: 'uppercase',
-              letterSpacing: '2px',
-              textAlign: 'center',
-              opacity: error ? 1 : 0,
-              transform: error ? 'translateY(0)' : 'translateY(-5px)',
-              transition: 'opacity 0.2s ease, transform 0.2s ease',
-              minHeight: '14px',
-              textShadow: error ? '0 0 8px rgba(255,68,68,0.4)' : 'none',
-            }}>
-              {error ? `// ${t('login.access_denied')}` : ''}
-            </div>
-          </div>
-        ) : !success && loginMode === 'email' ? (
+        {/* PIN UI removed — see LoginMode comment at top of file. The
+            entire PIN entry block (digit boxes + auto-submit on 4th digit)
+            was deleted as part of the SSO migration. /api/auth/login still
+            accepts a PIN payload server-side as a backstop in case any
+            client-side caller is still POSTing one. */}
+        {!success && loginMode === 'email' ? (
           <form onSubmit={handleEmailLogin} style={{
             display: 'flex',
             flexDirection: 'column',
