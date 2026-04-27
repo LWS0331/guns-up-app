@@ -5,28 +5,26 @@ set -e
 export DATABASE_URL="${DATABASE_URL:-postgresql://dummy:dummy@localhost:5432/dummy}"
 npx prisma generate
 
-# Push schema to database if a real DATABASE_URL was provided.
+# NOTE: prisma db push is intentionally NOT run at build time.
 #
-# We INTENTIONALLY hard-fail the build if `prisma db push` fails when a
-# real DATABASE_URL is present. The previous warn-and-continue behavior
-# once deployed an app with stale schema — the runtime Prisma client
-# expected columns that didn't exist, every Operator query 500'd, and
-# the LoginScreen fell back to the static OPERATORS array (locking the
-# real user out with a default PIN that "worked" but issued no JWT).
-# Better to fail the build than ship that.
+# On Railway, Postgres is only reachable via its internal hostname (e.g.
+# postgres-XXXX.railway.internal) at RUNTIME — during the build phase
+# the internal network isn't connected, so `prisma db push` errors with
+# P1001 ("Can't reach database server"). We previously masked that with
+# warn-and-continue, which led to schema drift and the lockout incident.
 #
-# Override (rare): SKIP_DB_PUSH=1 to skip the push intentionally.
-if [ "$SKIP_DB_PUSH" = "1" ]; then
-  echo "SKIP_DB_PUSH=1 — skipping prisma db push by request"
-elif [ -n "$REAL_DB" ] || echo "$DATABASE_URL" | grep -qv "dummy"; then
-  echo "DATABASE_URL detected, pushing schema..."
+# The schema sync now runs in scripts/start.sh, which fires when the
+# container boots and the internal DB hostname resolves. If you need
+# the build to push directly (rare — e.g. to test a public DATABASE_URL),
+# set FORCE_BUILD_DB_PUSH=1.
+if [ "$FORCE_BUILD_DB_PUSH" = "1" ]; then
+  echo "FORCE_BUILD_DB_PUSH=1 — running prisma db push during build..."
   if ! npx prisma db push --accept-data-loss; then
-    echo "ERROR: prisma db push failed. Failing the build to avoid shipping stale schema." >&2
-    echo "If this is intentional (read-only DB, etc.), set SKIP_DB_PUSH=1." >&2
+    echo "ERROR: forced prisma db push failed during build." >&2
     exit 1
   fi
 else
-  echo "No real DATABASE_URL, skipping db push"
+  echo "Skipping prisma db push during build (runs at startup via scripts/start.sh)"
 fi
 
 # Inject build timestamp into service worker for cache busting
