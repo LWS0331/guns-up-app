@@ -191,6 +191,7 @@ export interface Operator {
   pin: string;
   email?: string;
   passwordHash?: string;
+  googleId?: string; // Google OAuth `sub` claim — set after first /api/auth/google sign-in
   role: UserRole;
   tier: AiTier;
   coupleWith: string | null; // ID of partner operator

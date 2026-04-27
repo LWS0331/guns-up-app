@@ -14,6 +14,7 @@ model Operator {
   pin         String
   email       String?   @unique
   passwordHash String?
+  googleId    String?   @unique  // Google OAuth `sub` claim — set after first sign-in via /api/auth/google/callback
   role        String                  // "trainer" | "client"
   tier        String                  // "haiku" | "sonnet" | "opus" | "white_glove"
   coupleWith  String?
