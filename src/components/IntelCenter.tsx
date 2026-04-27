@@ -3067,13 +3067,32 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         }
         return renderPRBoardTab();
       case 'ANALYTICS':
-        return <ProgressCharts operator={operator} />;
+        // Pass currentUser so the OPERATOR+ tier gate uses the viewer's
+        // tier (a trainer viewing a client always has access). Upgrade
+        // CTA bounces back to the PROFILE tab where BillingPanel lives.
+        return (
+          <ProgressCharts
+            operator={operator}
+            currentUser={currentUser}
+            onOpenBilling={() => setActiveTab('PROFILE')}
+          />
+        );
       case 'INJURIES':
         return renderInjuriesTab();
       case 'PREFERENCES':
         return renderPreferencesTab();
       case 'WEARABLES':
-        return <WearableConnect operator={operator} onUpdateOperator={onUpdateOperator} />;
+        // Pass currentUser so the COMMANDER+ tier gate uses the viewer's
+        // tier (a trainer viewing a client always has access). Upgrade
+        // CTA bounces back to the PROFILE tab where BillingPanel lives.
+        return (
+          <WearableConnect
+            operator={operator}
+            onUpdateOperator={onUpdateOperator}
+            currentUser={currentUser}
+            onOpenBilling={() => setActiveTab('PROFILE')}
+          />
+        );
       default:
         return null;
     }

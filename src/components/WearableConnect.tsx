@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Operator } from '@/lib/types';
 import { getAuthToken } from '@/lib/authClient';
+import { hasCommanderAccess } from '@/lib/tierGates';
+import UpgradeCard from '@/components/UpgradeCard';
 
 interface WearableConnection {
   id: string;
@@ -60,9 +62,17 @@ const PROVIDERS = [
 interface WearableConnectProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
+  // Viewer (the logged-in user). Gating uses the VIEWER's tier — a
+  // trainer/admin viewing a client can always access wearable data
+  // even if the client is on RECON. Defaults to `operator` for self-view.
+  currentUser?: Operator;
+  onOpenBilling?: () => void;
 }
 
-const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOperator }) => {
+const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOperator, currentUser, onOpenBilling }) => {
+  const viewer = currentUser ?? operator;
+  const canAccessWearables = hasCommanderAccess(viewer);
+
   const [connections, setConnections] = useState<WearableConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
@@ -177,6 +187,21 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
 
   const connectedSlugs = new Set(connections.map(c => c.provider));
   const latestSync = connections.find(c => c.syncData?.lastSync)?.syncData;
+
+  // Tier gate — wearable integration is COMMANDER+ per the pricing model.
+  // RECON/OPERATOR users see an upgrade prompt; trainers/admins bypass.
+  if (!canAccessWearables) {
+    return (
+      <div style={{ padding: 20 }}>
+        <UpgradeCard
+          feature="Wearable Integration"
+          requiredTier="opus"
+          description="Connect Apple Watch, WHOOP, Garmin, Fitbit, or Oura Ring. Auto-sync sleep, recovery, HRV, heart rate, and readiness. Live HR zones during workout execution. Upgrade to COMMANDER to unlock the full wearable surface."
+          onUpgrade={onOpenBilling}
+        />
+      </div>
+    );
+  }
 
   if (!configured) {
     return (

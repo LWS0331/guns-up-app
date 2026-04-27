@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
+import { hasCommanderAccess } from '@/lib/tierGates';
 import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import BattlePlanRef from '@/components/BattlePlanRef';
@@ -2262,6 +2263,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               onPauseTimer={restRunning ? () => setRestRunning(false) : undefined}
               onAddRest={restRunning ? () => setRestTimer(t => t + 30) : undefined}
               onResetTimer={restRunning || restTimer > 0 ? () => { setRestTimer(0); setRestRunning(false); } : undefined}
+              // Live HR + zone strip + sparkline are COMMANDER+ per
+              // pricing model. RECON / OPERATOR users see a small lock
+              // placeholder in the center HUD slot; rest timer + set
+              // indicator stay open for all tiers.
+              canViewHR={hasCommanderAccess(operator)}
             />
           );
         })()}

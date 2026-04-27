@@ -6,14 +6,37 @@ import {
   LineChart, Line, BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
+import { hasOperatorAccess } from '@/lib/tierGates';
+import UpgradeCard from '@/components/UpgradeCard';
 
 interface ProgressChartsProps {
   operator: Operator;
+  // Viewer (the logged-in user). Gating uses the VIEWER's tier — a
+  // trainer/admin viewing a client can always see charts even if the
+  // client is on a lower tier. Defaults to `operator` for backwards
+  // compat (self-view of own profile).
+  currentUser?: Operator;
+  onOpenBilling?: () => void;
 }
 
 type ChartView = 'volume' | 'strength' | 'bodyComp' | 'frequency' | 'nutrition';
 
-const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator }) => {
+const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator, currentUser, onOpenBilling }) => {
+  const viewer = currentUser ?? operator;
+  const canViewCharts = hasOperatorAccess(viewer);
+
+  if (!canViewCharts) {
+    return (
+      <UpgradeCard
+        feature="Analytics & Progression Charts"
+        requiredTier="sonnet"
+        description="Volume tracking, strength curves, workout frequency, body composition, and 14-day nutrition trends. Upgrade to OPERATOR to unlock the full analytics surface."
+        onUpgrade={onOpenBilling}
+      />
+    );
+  }
+
+
   const [activeChart, setActiveChart] = useState<ChartView>('volume');
 
   // Build workout frequency data (last 12 weeks)
