@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword, generateToken } from '@/lib/auth';
-import { isEmailAuthorized, ALLOWLIST_REJECTION_MESSAGE } from '@/lib/authAllowlist';
+
+// Public registration is CLOSED until June 2026 (Pricing Strategy v2 §6).
+// During the closed beta, operators are seeded by admin via /api/admin/
+// set-emails — there is no self-serve sign-up path.
+//
+// We refuse this endpoint at the door before doing any DB work or even
+// validating the body, so a probing attacker gets the same fast 403
+// regardless of payload shape. The override lets us re-open it later
+// without redeploying the whole binary.
+const REGISTRATION_OPEN = process.env.REGISTRATION_OPEN === '1';
+const CLOSED_BETA_REJECTION = {
+  error: 'Registration closed',
+  message: 'Public registration opens June 2026. GUNS UP is currently in closed beta. Contact Ruben to request access.',
+};
 
 export async function POST(request: NextRequest) {
+  if (!REGISTRATION_OPEN) {
+    return NextResponse.json(CLOSED_BETA_REJECTION, { status: 403 });
+  }
   try {
     const body = await request.json();
     const { email, password, name, callsign } = body;
@@ -13,16 +29,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Missing required fields: email, password, name, callsign' },
         { status: 400 }
-      );
-    }
-
-    // Allowlist check — only AUTHORIZED_EMAILS may register an account.
-    // 403 (not 401) so the client can distinguish "not authorized" from
-    // "credentials wrong" and surface the right message.
-    if (!isEmailAuthorized(email)) {
-      return NextResponse.json(
-        { error: ALLOWLIST_REJECTION_MESSAGE },
-        { status: 403 },
       );
     }
 

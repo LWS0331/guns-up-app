@@ -49,5 +49,5 @@ export function isOperatorAllowed(op: OperatorAllowlistRow | null | undefined): 
  */
 export const NOT_ALLOWED_RESPONSE = {
   error: 'Not activated',
-  message: 'This account is not yet active for the closed beta. Email support@gunsupfitness.com to request access.',
+  message: 'This account is not yet active for the closed beta. Contact Ruben to request access.',
 } as const;

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
-import { isEmailAuthorized } from '@/lib/authAllowlist';
+import { isOperatorAllowed } from '@/lib/allowlist';
 import {
   compareStateNonce,
   decodeIdToken,
-  deriveCallsign,
   exchangeCodeForTokens,
   getGoogleConfig,
   OAUTH_STATE_COOKIE,
@@ -14,15 +13,20 @@ import {
 // GET /api/auth/google/callback
 //
 // Final leg of the OAuth dance. Verifies the CSRF state, exchanges the code
-// for tokens, looks up or creates the Operator, mints the existing-shape
-// JWT (so the rest of the app's Authorization: Bearer flow works unchanged),
-// then redirects to /auth/oauth-callback?token=... where a tiny client page
+// for tokens, looks up the Operator, mints the existing-shape JWT (so the
+// rest of the app's Authorization: Bearer flow works unchanged), then
+// redirects to /auth/oauth-callback?token=... where a tiny client page
 // stores the token in localStorage and continues to the post-login destination.
 //
-// Operator resolution (in order):
-//   1. Match by googleId (existing OAuth user)
-//   2. Match by email (legacy email/password user) — link the googleId
-//   3. Create a new Operator (first-time sign-in) with safe defaults
+// CLOSED BETA POLICY (April 2026): we DO NOT auto-create operators from
+// Google sign-ins. Closed-beta operators are pre-seeded; the founder
+// admin assigns their email via /api/admin/set-emails, and that email
+// IS the allowlist membership. Google sign-in succeeds only when:
+//   1. An Operator exists with this googleId already (returning OAuth user), OR
+//   2. An Operator exists with this email AND `isOperatorAllowed` (admin
+//      pre-assigned the email) — we link the googleId to that operator.
+// If neither match → reject with `not_authorized` so the user gets a
+// clean "contact Ruben" message instead of a half-created shell account.
 
 const NEXT_COOKIE = 'gunsup_oauth_next';
 
@@ -93,24 +97,18 @@ export async function GET(req: NextRequest) {
   const email = claims.email.toLowerCase().trim();
   const googleId = claims.sub;
 
-  // Allowlist check — gate the entire OAuth flow on Ruben's curated list.
-  // We reject AFTER claim verification so we have a stable email to log,
-  // but BEFORE any DB write so unauthorized sign-ins create no operator row.
-  if (!isEmailAuthorized(email)) {
-    console.warn('[api/auth/google/callback] rejected unauthorized email:', email);
-    return failureRedirect(req, 'not_authorized');
-  }
-
-  // Operator resolution — try googleId first, then email, then create.
+  // Operator resolution — try googleId first, then email-match.
+  // Closed-beta policy: we never CREATE a new operator from Google.
+  // Pre-seeded operators only.
   let operator = await prisma.operator.findUnique({ where: { googleId } });
 
-  if (!operator) {
-    const byEmail = email
-      ? await prisma.operator.findUnique({ where: { email } })
-      : null;
-    if (byEmail) {
-      // Existing email/password user signs in with Google for the first time
-      // — link the accounts so future sign-ins resolve via googleId directly.
+  if (!operator && email) {
+    // Existing operator with email assigned signs in with Google for the
+    // first time. Link the accounts so future sign-ins resolve via
+    // googleId directly. Note: findFirst (not findUnique) because email
+    // may be NULL for some seeded operators that haven't been activated.
+    const byEmail = await prisma.operator.findFirst({ where: { email } });
+    if (byEmail && isOperatorAllowed(byEmail)) {
       operator = await prisma.operator.update({
         where: { id: byEmail.id },
         data: { googleId },
@@ -118,50 +116,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (!operator) {
-    // First-time user. Create a fresh client operator with safe defaults.
-    // No PIN — Google is now their identity. Callsign is auto-derived; user
-    // can change it in Intel Center later.
-    const baseCallsign = deriveCallsign(claims);
-    const fallbackId = `op-google-${googleId.slice(-10)}`;
-
-    // Avoid collisions on callsign by appending a counter if needed. Most
-    // first-time signups will land on the first try.
-    let callsign = baseCallsign;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const dupe = await prisma.operator.findFirst({
-        where: { callsign },
-        select: { id: true },
-      });
-      if (!dupe) break;
-      callsign = `${baseCallsign}-${attempt + 2}`;
-    }
-
-    try {
-      operator = await prisma.operator.create({
-        data: {
-          id: fallbackId,
-          name: claims.name || claims.given_name || email.split('@')[0],
-          callsign,
-          pin: '', // Google-auth users have no PIN
-          email,
-          googleId,
-          role: 'client',
-          tier: 'haiku',
-          coupleWith: null,
-          profile: {},
-          nutrition: {},
-          prs: [],
-          injuries: [],
-          preferences: {},
-          workouts: {},
-          dayTags: {},
-        },
-      });
-    } catch (err) {
-      console.error('[api/auth/google/callback] create operator failed:', err);
-      return failureRedirect(req, 'operator_create_failed');
-    }
+  // Final allowlist verdict. If no operator matched (or matched but the
+  // email got nulled to revoke), reject. Same `not_authorized` reason
+  // so the /login page surfaces the standard "Contact Ruben" message.
+  if (!operator || !isOperatorAllowed(operator)) {
+    console.warn('[api/auth/google/callback] rejected unauthorized Google sign-in:', email);
+    return failureRedirect(req, 'not_authorized');
   }
 
   // Mint the existing-shape JWT so the rest of the auth surface works

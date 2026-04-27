@@ -40,6 +40,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
   const [success, setSuccess] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [matchedOperator, setMatchedOperator] = useState<Operator | null>(null);
+  const [showRegistrationClosedModal, setShowRegistrationClosedModal] = useState<boolean>(false);
   const [mounted, setMounted] = useState(false);
   const [showTOS, setShowTOS] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -367,12 +368,16 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
           if (!reason) return null;
           const friendly =
             reason === 'not_authorized'
-              ? 'This email isn’t authorized for the GUNS UP closed beta. Contact the team to request access.'
+              ? 'This account is not yet active for the closed beta. Contact Ruben to request access.'
               : reason === 'email_not_verified'
                 ? 'Your Google account email isn’t verified. Verify it with Google and try again.'
                 : reason === 'state_mismatch'
                   ? 'Sign-in session expired. Try again from the login button below.'
-                  : `Google sign-in failed (${reason}). Try again or use email/password below.`;
+                  : reason === 'not_configured'
+                    ? 'Google sign-in is not configured on this server. Contact Ruben — likely missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / NEXT_PUBLIC_APP_URL env vars.'
+                    : reason === 'token_exchange_failed'
+                      ? 'Google authentication failed at the token exchange step. Likely a redirect URI mismatch in Google Cloud Console — should be exactly $APP_URL/api/auth/google/callback. Contact Ruben.'
+                      : `Google sign-in failed (${reason}). Try again or use email/password below.`;
           return (
             <div
               style={{
@@ -513,7 +518,9 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               {isLoading ? 'LOGGING IN...' : 'LOGIN'}
             </button>
 
-            {/* Register link */}
+            {/* Register link — closed beta. Public registration starts
+                June 2026. Until then, clicking the button surfaces an
+                explainer popup instead of switching to the register form. */}
             <div style={{
               fontFamily: 'Orbitron, monospace',
               fontSize: '11px',
@@ -522,12 +529,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               New operator?{' '}
               <button
                 type="button"
-                onClick={() => {
-                  setLoginMode('register');
-                  setError('');
-                  setEmail('');
-                  setPassword('');
-                }}
+                onClick={() => setShowRegistrationClosedModal(true)}
                 style={{
                   fontFamily: 'Orbitron, monospace',
                   fontSize: '11px',
@@ -818,6 +820,106 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
       {/* Legal Pages Overlays */}
       {showTOS && <TermsOfService onClose={() => setShowTOS(false)} />}
       {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
+
+      {/* Registration-closed modal — closed-beta period.
+          Public registration starts June 2026 per Pricing Strategy v2 §6.
+          Until then, REGISTER buttons surface this explainer instead of
+          opening the create-account form. */}
+      {showRegistrationClosedModal && (
+        <div
+          onClick={() => setShowRegistrationClosedModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: 480,
+              width: '100%',
+              padding: 32,
+              background: '#0a0a0a',
+              border: '2px solid #00ff41',
+              borderRadius: 6,
+              textAlign: 'center',
+              boxShadow: '0 0 60px rgba(0,255,65,0.15)',
+            }}
+          >
+            <div style={{
+              display: 'inline-block',
+              padding: '4px 12px',
+              border: '1px solid #00ff41',
+              color: '#00ff41',
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: 10,
+              letterSpacing: 3,
+              marginBottom: 18,
+              borderRadius: 3,
+            }}>
+              // CLOSED BETA
+            </div>
+            <h2 style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: 22,
+              color: '#fff',
+              letterSpacing: 2,
+              margin: '0 0 14px',
+              fontWeight: 800,
+            }}>
+              REGISTRATION OPENS JUNE 2026
+            </h2>
+            <p style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: 13,
+              color: '#bbb',
+              lineHeight: 1.6,
+              marginBottom: 22,
+            }}>
+              GUNS UP is currently in closed beta with a hand-picked roster of
+              operators. Public registration goes live June 2026. Until then,
+              new accounts are added one-by-one as the founder team approves them.
+            </p>
+            <p style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: 12,
+              color: '#888',
+              lineHeight: 1.6,
+              marginBottom: 22,
+            }}>
+              Already approved? Sign in with the email Ruben gave you.
+              <br />
+              Want in early? Contact Ruben directly.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowRegistrationClosedModal(false)}
+              style={{
+                padding: '10px 24px',
+                background: '#00ff41',
+                color: '#0a0a0a',
+                border: 'none',
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: 2,
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                borderRadius: 3,
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes fadeInScale {
