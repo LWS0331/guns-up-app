@@ -11,6 +11,7 @@ import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import JuniorPRBoard from '@/components/JuniorPRBoard';
+import SupplementStack from '@/components/SupplementStack';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
@@ -1930,6 +1931,18 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             ))}
           </div>
         )}
+      </div>
+
+      {/* Supplement Stack — COMMANDER+ tier-gated. Renders Generate
+          Stack CTA if no recommendation yet, or the existing stack if
+          previously generated. Persists on operator.nutrition.supplementStack. */}
+      <div style={{ marginTop: 20 }}>
+        <SupplementStack
+          operator={operator}
+          currentUser={currentUser}
+          onUpdateOperator={onUpdateOperator}
+          onOpenBilling={() => setActiveTab('PROFILE')}
+        />
       </div>
     </div>
   );
