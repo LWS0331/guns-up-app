@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
+import { isOperatorAllowed, NOT_ALLOWED_RESPONSE } from '@/lib/allowlist';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +19,13 @@ export async function POST(request: NextRequest) {
           { error: 'Invalid PIN' },
           { status: 401 }
         );
+      }
+
+      // Closed-beta allowlist gate. Operators without an assigned email
+      // (and not in OPS_CENTER_ACCESS) cannot authenticate, even with a
+      // valid PIN. Activation = admin assigns email via /api/admin/set-emails.
+      if (!isOperatorAllowed(operator)) {
+        return NextResponse.json(NOT_ALLOWED_RESPONSE, { status: 403 });
       }
 
       const token = generateToken(operator.id, operator.role);
@@ -65,6 +73,13 @@ export async function POST(request: NextRequest) {
         { error: 'Invalid email or password' },
         { status: 401 }
       );
+    }
+
+    // Allowlist gate (defense in depth — email-path login means this
+    // operator has an email by definition, but admins can also nullify
+    // an email later to revoke access without deleting the row).
+    if (!isOperatorAllowed(operator)) {
+      return NextResponse.json(NOT_ALLOWED_RESPONSE, { status: 403 });
     }
 
     const token = generateToken(operator.id, operator.role);

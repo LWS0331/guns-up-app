@@ -23,6 +23,7 @@ import { prisma } from '@/lib/db';
 import { getStripe } from '@/lib/stripe';
 import { mintToken } from '@/lib/authTokens';
 import { queueActivationEmail } from '@/lib/activationEmails';
+import { isOperatorAllowed } from '@/lib/allowlist';
 
 interface RecoverRequest {
   email?: string;
@@ -83,19 +84,25 @@ export async function POST(req: NextRequest) {
     }
 
     // === Strategy 1: Operator + Stripe both present ===
+    // Closed-beta gate: only mint magic links for operators that are
+    // on the allowlist (have an assigned email or are admins). For
+    // non-allowlisted operators we still return the same generic
+    // "magic_link_sent" outcome so we don't leak activation status.
     if (existing) {
-      const minted = await mintToken({
-        operatorId: existing.id,
-        type: 'magic_link',
-        intent: 'sign_in',
-        metadata: { trigger: 'recovery' },
-      });
-      await queueActivationEmail({
-        operatorId: existing.id,
-        kind: 'magic_link',
-        email,
-        magicToken: minted.token,
-      });
+      if (isOperatorAllowed(existing)) {
+        const minted = await mintToken({
+          operatorId: existing.id,
+          type: 'magic_link',
+          intent: 'sign_in',
+          metadata: { trigger: 'recovery' },
+        });
+        await queueActivationEmail({
+          operatorId: existing.id,
+          kind: 'magic_link',
+          email,
+          magicToken: minted.token,
+        });
+      }
       return NextResponse.json({
         ok: true,
         outcome: 'magic_link_sent',
@@ -130,37 +137,21 @@ export async function POST(req: NextRequest) {
     }
 
     if (stripeCustomerId && inferredTier) {
-      // Auto-repair: create the Operator record so the user can sign in.
-      const callsign = `OPERATOR-${Math.floor(1000 + Math.random() * 9000)}`;
-      const newOp = await prisma.operator.create({
-        data: {
-          id: `op-${stripeCustomerId.slice(-12)}`,
-          name: email.split('@')[0],
-          callsign,
-          pin: '0000',
-          email,
-          role: 'client',
-          tier: inferredTier,
-          billing: { stripeCustomerId },
-          webPurchaseAt: new Date(),
-        },
-      });
-      const minted = await mintToken({
-        operatorId: newOp.id,
-        type: 'magic_link',
-        intent: 'sign_in',
-        metadata: { trigger: 'recovery_repair' },
-      });
-      await queueActivationEmail({
-        operatorId: newOp.id,
-        kind: 'magic_link',
+      // Closed-beta policy: do NOT auto-create operators from Stripe
+      // customers. Admin manually approves every new account. We DO
+      // record the request so the founder can pick it up — bump the
+      // existing-operator recoveryAttempts won't fire here (no operator
+      // exists yet), so we log explicitly + return support routing.
+      console.warn('[recover] Stripe customer found but no Operator + no allowlist entry. Awaiting admin activation:', {
         email,
-        magicToken: minted.token,
+        stripeCustomerId,
+        inferredTier,
+        ts: new Date().toISOString(),
       });
       return NextResponse.json({
         ok: true,
-        outcome: 'account_repaired',
-        message: 'We found your subscription but no app account — we\'ve created one and sent you a magic link.',
+        outcome: 'pending_activation',
+        message: `We see your subscription but your account isn't activated yet. Email support@gunsupfitness.com — we'll get you in within 24 hours.`,
       });
     }
 

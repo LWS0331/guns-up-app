@@ -25,6 +25,7 @@ import { prisma } from '@/lib/db';
 import { mintToken, consumeToken } from '@/lib/authTokens';
 import { generateToken } from '@/lib/auth';
 import { queueActivationEmail } from '@/lib/activationEmails';
+import { isOperatorAllowed, NOT_ALLOWED_RESPONSE } from '@/lib/allowlist';
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,6 +54,12 @@ export async function POST(req: NextRequest) {
       const op = await prisma.operator.findUnique({ where: { id: result.operatorId } });
       if (!op) {
         return NextResponse.json({ ok: false, error: 'Account not found.' }, { status: 404 });
+      }
+
+      // Allowlist gate. A token minted before the operator was de-
+      // activated should not be honored — failing closed.
+      if (!isOperatorAllowed(op)) {
+        return NextResponse.json(NOT_ALLOWED_RESPONSE, { status: 403 });
       }
 
       // Mark first app open if this is the activation magic link.
@@ -88,6 +95,14 @@ export async function POST(req: NextRequest) {
     // Don't leak account existence — always return 200 with queued:true.
     // The activation cron will dedupe if no operator matched.
     if (!op) {
+      return NextResponse.json({ ok: true, queued: false });
+    }
+
+    // Allowlist gate (defense in depth — finding by email implies
+    // the operator has an email, but admins might null one to revoke).
+    if (!isOperatorAllowed(op)) {
+      // Same generic 200 — don't leak that this email is on file
+      // but de-activated.
       return NextResponse.json({ ok: true, queued: false });
     }
 

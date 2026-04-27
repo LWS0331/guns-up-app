@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getAuthOperator } from '@/lib/authMiddleware';
+import { isOperatorAllowed, NOT_ALLOWED_RESPONSE } from '@/lib/allowlist';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,6 +23,13 @@ export async function GET(request: NextRequest) {
         { error: 'Operator not found' },
         { status: 404 }
       );
+    }
+
+    // Allowlist gate. If an operator is de-activated (email cleared)
+    // after their JWT was issued, the next /me call kicks them out
+    // and the client clears the stored token (page.tsx:loadFromDB).
+    if (!isOperatorAllowed(operator)) {
+      return NextResponse.json(NOT_ALLOWED_RESPONSE, { status: 403 });
     }
 
     const { passwordHash: _, ...operatorData } = operator;
