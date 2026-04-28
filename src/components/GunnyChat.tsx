@@ -614,7 +614,11 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
           patched[f] = (i[f] as unknown[]).map((v) => String(v));
         }
       }
-      updated.intake = patched as typeof updated.intake;
+      // Cast through `unknown` first: TS rejects a direct cast from
+      // Record<string, unknown> to IntakeAssessment because the source
+      // and target types don't overlap sufficiently. The runtime shape
+      // is enforced by the typed-field copy loops above.
+      updated.intake = patched as unknown as typeof updated.intake;
     }
 
     if (profileData.prs && Array.isArray(profileData.prs)) {
