@@ -1527,7 +1527,11 @@ const AppShell: React.FC<AppShellProps> = ({
         return (
           <>
             {currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
-              <DailyBriefComponent operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
+              <DailyBriefComponent
+                operator={currentSelectedOp}
+                onUpdateOperator={onUpdateOperator}
+                onViewPriorNutrition={() => setActiveTab('intel')}
+              />
             )}
 
             {/* New Battle Plan button — only shown on own profile
@@ -1660,7 +1664,7 @@ const AppShell: React.FC<AppShellProps> = ({
           </>
         );
       case 'planner':
-        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setActiveTab('gunny')} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} />;
+        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setActiveTab('gunny')} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} onWorkoutSaved={() => setActiveTab('planner')} />;
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'radio':

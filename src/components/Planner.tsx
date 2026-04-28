@@ -237,9 +237,14 @@ interface PlannerProps {
   gunnyVoiceResponse?: string | null; // Gunny's spoken response — show as overlay
   onDismissGunnyResponse?: () => void;
   onWorkoutModeChange?: (state: WorkoutModeState) => void;
+  /** Fired AFTER handleSaveWorkout commits — gives the parent a chance to
+   *  keep the planner tab active. Per beta hotfix (Apr 2026): some users
+   *  reported the save bouncing them back to the COC dashboard; the parent
+   *  should respond by ensuring activeTab stays 'planner'. */
+  onWorkoutSaved?: () => void;
 }
 
-const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, gunnyVoiceResponse, onDismissGunnyResponse, onWorkoutModeChange }) => {
+const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, gunnyVoiceResponse, onDismissGunnyResponse, onWorkoutModeChange, onWorkoutSaved }) => {
   const { t, language } = useLanguage();
   // ============================================================================
   // STATE
@@ -972,7 +977,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     setShowWorkoutBuilder(false);
     setWorkoutMode(false);
     /* activeListening removed — use Radio tab */
-    // Stay on day view so user can review the saved workout — don't clear selectedDate
+    // Stay on day view so user can review the saved workout. Per beta hotfix
+    // (Apr 2026): explicitly force viewMode='day' AND notify the parent so
+    // it can keep the planner tab active. Some operators reported the save
+    // bouncing them back to the COC dashboard; the defensive fix here is to
+    // re-assert the day view + lock the active tab via the callback.
+    setViewMode('day');
+    onWorkoutSaved?.();
   };
 
   const handleCancelWorkout = () => {
@@ -2724,13 +2735,19 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               )}
 
               {/* "SETS · THIS EXERCISE" history — every previously-
-                  logged set in this block, dimmed mono. Helps the
-                  user remember what they just hit before logging
-                  the next set. */}
+                  logged set in this block. Per beta hotfix (Apr 2026):
+                  these rows are now INLINE-EDITABLE so an operator who
+                  fat-fingers a weight or reps can correct the entry
+                  without abandoning workout mode. Inputs mutate
+                  workoutResults[block.id].sets[si] directly; the
+                  on-completion writeback in the workout-mode lifecycle
+                  picks up the corrected values when the session ends.
+                  Keeping the same layout + amber RPE accent so it
+                  still reads as a "logged set" row, just clickable. */}
               {isActive && blockResults.sets.some(s => s.completed) && (
                 <>
                   <div className="t-eyebrow" style={{ marginTop: 8, marginBottom: 6 }}>
-                    Sets · This Exercise
+                    Sets · This Exercise <span style={{ color: 'var(--text-dim)', fontSize: 9, marginLeft: 6 }}>(tap to edit)</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {blockResults.sets.slice(0, parsedSets).map((set, si) => set.completed && (
@@ -2739,24 +2756,85 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                         className="t-mono-data"
                         style={{
                           display: 'flex',
-                          gap: 12,
+                          gap: 8,
                           padding: '4px 6px',
                           color: 'var(--text-secondary)',
                           borderLeft: '2px solid var(--border-green-strong)',
                           paddingLeft: 8,
+                          alignItems: 'center',
                         }}
                       >
-                        <span style={{ color: 'var(--text-tertiary)', minWidth: 32 }}>S{si + 1}</span>
-                        <span>{set.weight} lbs</span>
-                        <span style={{ color: 'var(--text-dim)' }}>×</span>
-                        <span>{set.reps} reps</span>
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {rpeOf(set as any) > 0 && (
-                          <span style={{ color: 'var(--amber)' }}>
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                            RPE {rpeOf(set as any)}
-                          </span>
-                        )}
+                        <span style={{ color: 'var(--text-tertiary)', minWidth: 28 }}>S{si + 1}</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={set.weight}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) ss[si] = { ...ss[si], weight: v };
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} weight`}
+                          style={{
+                            width: 64, textAlign: 'right',
+                            background: 'transparent', border: '1px solid rgba(0,255,65,0.15)',
+                            color: 'var(--text-secondary)', padding: '2px 4px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
+                        <span style={{ color: 'var(--text-dim)' }}>lbs ×</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={set.reps}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) ss[si] = { ...ss[si], reps: v };
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} reps`}
+                          style={{
+                            width: 48, textAlign: 'right',
+                            background: 'transparent', border: '1px solid rgba(0,255,65,0.15)',
+                            color: 'var(--text-secondary)', padding: '2px 4px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
+                        <span style={{ color: 'var(--text-dim)' }}>reps</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          value={rpeOf(set as any) || ''}
+                          placeholder="RPE"
+                          onChange={(e) => {
+                            const v = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                (ss[si] as any).rpe = v;
+                              }
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} RPE`}
+                          style={{
+                            width: 44, textAlign: 'right',
+                            background: 'transparent', border: '1px solid rgba(255,140,0,0.25)',
+                            color: 'var(--amber)', padding: '2px 4px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
                       </div>
                     ))}
                   </div>

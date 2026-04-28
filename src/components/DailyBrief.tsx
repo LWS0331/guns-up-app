@@ -7,6 +7,12 @@ import { sitrepDayToWorkout } from '@/lib/workoutConverter';
 interface DailyBriefProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
+  /** Optional — fired when the user clicks "View prior days" so the parent
+   *  can switch to Intel → Nutrition. Per beta hotfix (Apr 2026): users
+   *  reported they "couldn't see prior nutrition data" because the
+   *  day-back navigation was buried in Intel's nutrition tab. This link
+   *  surfaces the existing entry point from the COC dashboard. */
+  onViewPriorNutrition?: () => void;
 }
 
 import { getLocalDateStr, getLocalYesterdayStr, getLocalDateLongStr, getLocalTimezone } from '@/lib/dateUtils';
@@ -15,7 +21,7 @@ import { getAuthToken } from '@/lib/authClient';
 const getTodayStr = getLocalDateStr;
 const getYesterdayStr = getLocalYesterdayStr;
 
-export default function DailyBriefComponent({ operator, onUpdateOperator }: DailyBriefProps) {
+export default function DailyBriefComponent({ operator, onUpdateOperator, onViewPriorNutrition }: DailyBriefProps) {
   const [brief, setBrief] = useState<DailyBriefType | null>(operator.dailyBrief?.date === getTodayStr() ? operator.dailyBrief : null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -303,7 +309,24 @@ export default function DailyBriefComponent({ operator, onUpdateOperator }: Dail
 
           {/* Nutrition Reminder */}
           <div style={{ padding: 10, background: 'rgba(0,255,65,0.05)', border: '1px solid rgba(0,255,65,0.15)', borderRadius: 4, marginBottom: 12 }}>
-            <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#00ff41', letterSpacing: 1, marginBottom: 4 }}>NUTRITION</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#00ff41', letterSpacing: 1 }}>NUTRITION</div>
+              {onViewPriorNutrition && (
+                <button
+                  type="button"
+                  onClick={onViewPriorNutrition}
+                  aria-label="View prior days of nutrition"
+                  style={{
+                    background: 'transparent', border: 'none',
+                    fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
+                    color: 'rgba(0,255,65,0.7)', cursor: 'pointer', padding: 0,
+                    textDecoration: 'underline',
+                  }}
+                >
+                  ← View prior days
+                </button>
+              )}
+            </div>
             <div style={{ fontSize: 11, color: '#ccc' }}>{brief.nutritionReminder}</div>
           </div>
 
