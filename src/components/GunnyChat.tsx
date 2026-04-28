@@ -583,6 +583,40 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
       }
     }
 
+    // Intake patch (Apr 2026 audit feature). Server-side intake audit
+    // emits gap questions; when the operator answers, Gunny includes the
+    // captured fields under "intake": {...}. Merge into operator.intake
+    // so the next request's audit reflects them and stops re-asking.
+    if (profileData.intake && typeof profileData.intake === 'object') {
+      const i = profileData.intake as Record<string, unknown>;
+      const existingIntake = (updated.intake || {}) as Record<string, unknown>;
+      const patched: Record<string, unknown> = { ...existingIntake };
+      const stringFields = [
+        'trainingPath', 'primaryGoal', 'currentActivity', 'exerciseHistory',
+        'currentDiet',
+      ];
+      const numberFields = [
+        'experienceYears', 'estimatedCalories', 'mealsPerDay', 'dailyWaterOz',
+        'sleepQuality', 'stressLevel',
+      ];
+      const arrayFields = ['healthConditions', 'injuryHistory', 'dietaryRestrictions'];
+      for (const f of stringFields) {
+        if (typeof i[f] === 'string' && (i[f] as string).trim().length > 0) {
+          patched[f] = (i[f] as string).trim();
+        }
+      }
+      for (const f of numberFields) {
+        const n = Number(i[f]);
+        if (Number.isFinite(n) && n > 0) patched[f] = n;
+      }
+      for (const f of arrayFields) {
+        if (Array.isArray(i[f])) {
+          patched[f] = (i[f] as unknown[]).map((v) => String(v));
+        }
+      }
+      updated.intake = patched as typeof updated.intake;
+    }
+
     if (profileData.prs && Array.isArray(profileData.prs)) {
       const prs = (profileData.prs as Array<Record<string, unknown>>).map((pr, i) => ({
         id: `pr-onboard-${Date.now()}-${i}`,
