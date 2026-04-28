@@ -1434,6 +1434,15 @@ ${log}`).join('\n\n')}
 ${operatorContext.workoutExecution ? `${operatorContext.workoutExecution}
 ` : ''}
 
+${operatorContext.macrocycle ? `${operatorContext.macrocycle}
+
+When the operator asks "what should this week look like" / "how does today
+fit the plan" / "am I peaking at the right time" — anchor the answer in
+the macrocycle block above. Don't introduce conflicting periodization
+advice. Block's volume/intensity multipliers are the authoritative scaler
+for prescription guidance THIS WEEK.
+` : ''}
+
 ═══ CRITICAL INSTRUCTIONS ═══
 You have access to this operator's COMPLETE profile, battle plan, workout history, nutrition logs, PRs, injuries, and preferences. USE ALL OF IT.
 - Reference their specific PRs when recommending weights ("You hit 225 on bench last week — let's push for 230 today")

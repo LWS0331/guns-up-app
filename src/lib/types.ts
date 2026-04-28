@@ -222,6 +222,11 @@ export interface Operator {
   workouts: Record<string, Workout>; // key = "YYYY-MM-DD"
   dayTags: Record<string, DayTag>; // key = "YYYY-MM-DD"
 
+  /** Macrocycle engine (Apr 2026). Up to 2 active goals — see
+   *  src/lib/macrocycle.ts. Empty/undefined for operators who haven't
+   *  set a long-horizon goal. */
+  macroCycles?: MacroCycle[];
+
   // Junior Operator fields (all undefined for adult operators)
   isJunior?: boolean;
   juniorAge?: number;                  // duplicate of profile.age for fast filter
@@ -667,3 +672,105 @@ export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
     features: ['All Commander Features', 'Priority Support', 'Custom Meal Plans', 'Monthly Video Consult', 'Direct Trainer Hotline'],
   },
 };
+
+// ─── Macrocycle Engine ─────────────────────────────────────────────────────
+// Calendar-aware periodization for 6-12 month goals (powerlifting meet,
+// hypertrophy phase, season prep, fat loss). Reverse-engineers blocks from
+// goal date → today, with concurrent-goal arbitration (max 2 active goals)
+// and hybrid time + performance-marker block transitions.
+//
+// See:
+//   - src/lib/macrocycleLibrary.ts — goal-type block templates
+//   - src/lib/macrocycle.ts        — engine (build, arbitration, transitions)
+
+export type MacroGoalType =
+  | 'powerlifting_meet'
+  | 'hypertrophy_phase'
+  | 'season_prep'
+  | 'fat_loss';
+
+export type MacroBlockKind =
+  | 'general_prep'      // GPP — base building, high volume, low specificity
+  | 'specific_prep'     // SPP — sport-specific work, moderate volume
+  | 'accumulation'      // hypertrophy / volume phase
+  | 'intensification'   // strength / load phase
+  | 'peak'              // peak / competition prep
+  | 'taper'             // pre-competition deload
+  | 'deload'            // recovery week
+  | 'maintenance'       // off-cycle / pause
+  | 'cut'               // fat-loss cut
+  | 'transition';       // bridge between blocks
+
+// `exclusive` blocks pause secondary goals (e.g., peak/taper for a meet).
+// `concurrent_with_secondary` blocks allow secondary goals to run.
+// `concurrent_only` blocks can only be a secondary (e.g., maintenance).
+export type MacroBlockCompatibility =
+  | 'exclusive'
+  | 'concurrent_with_secondary'
+  | 'concurrent_only';
+
+export interface MacroPerformanceMarker {
+  /** Human-readable label, e.g. "Hit 5x5 @ 80% with ≤2 RIR" */
+  label: string;
+  /** Type of marker — drives the readiness check in macrocycle.ts. */
+  kind: 'volume_target' | 'intensity_target' | 'compliance_rate' | 'pr_progression';
+  /** Numeric threshold; semantics depend on kind:
+   *  - volume_target: weekly volume in lbs or reps
+   *  - intensity_target: avg working weight as % of 1RM (0-100)
+   *  - compliance_rate: planned-vs-completed sessions (0-100)
+   *  - pr_progression: target weight on the indicator lift in lbs */
+  threshold: number;
+  /** Once threshold is reached, block can advance EARLY by this many days. */
+  advanceEarlyDaysAllowed: number;
+}
+
+export interface MacroBlock {
+  id: string;
+  kind: MacroBlockKind;
+  name: string;                                  // e.g. "Accumulation Block"
+  startDate: string;                             // ISO YYYY-MM-DD
+  endDate: string;                               // ISO YYYY-MM-DD inclusive
+  durationWeeks: number;                         // nominal length
+  compatibility: MacroBlockCompatibility;
+  /** Daily-brief prescription scalers. Baseline = 1.0; deload = 0.5–0.7. */
+  volumeMultiplier: number;
+  intensityMultiplier: number;
+  performanceMarker?: MacroPerformanceMarker;
+  description: string;                           // short text for brief header
+  /** Operator-specific guidance, written by Gunny on block transition. */
+  gunnyNotes?: string;
+  status: 'upcoming' | 'active' | 'completed' | 'extended';
+}
+
+export interface MacroGoal {
+  id: string;
+  type: MacroGoalType;
+  name: string;                                  // e.g. "Springfield PL Open"
+  targetDate: string;                            // ISO YYYY-MM-DD
+  /** 1 = highest, 2 = secondary. Concurrent arbitration: priority 1 wins;
+   *  if priority 1's active block is `exclusive`, priority 2 pauses. */
+  priority: 1 | 2;
+  targetMetrics?: Record<string, number>;        // e.g. { squat: 405, bench: 275 }
+  status: 'active' | 'completed' | 'paused' | 'cancelled';
+  createdAt: string;
+}
+
+export interface MacroCycle {
+  id: string;
+  goal: MacroGoal;
+  blocks: MacroBlock[];                          // ordered by startDate
+  lastRecomputedAt: string;
+  /** IDs of blocks that already have Gunny annotations cached. */
+  annotatedBlockIds: string[];
+}
+
+export interface MacroCycleArbitrationResult {
+  /** The block that drives today's prescription. */
+  primaryBlock: MacroBlock | null;
+  primaryGoal: MacroGoal | null;
+  /** Secondary block running concurrently (null if paused or not present). */
+  secondaryBlock: MacroBlock | null;
+  secondaryGoal: MacroGoal | null;
+  /** Human-readable note when a secondary goal is paused. */
+  pausedNotes?: string;
+}
