@@ -1178,6 +1178,133 @@ ${gaps.map(g => `  - ${g}`).join('\n')}
 `;
 }
 
+// ─── Server-side dedup (Apr 2026 hotfix) ──────────────────────────────────
+// Gunny was duplicating meal + PR records because dedup ran client-side
+// against a possibly-stale `operator` snapshot. The window between
+// onUpdateOperator(...) firing and the next Gunny request building its
+// operatorContext is ~50-300ms (debounced PATCH + React state batching);
+// any in-flight follow-up turn during that gap saw the prior log as
+// missing and re-emitted it.
+//
+// Fix: read fresh operator state from DB before the response leaves the
+// route, and null out duplicate emissions there. The client's existing
+// dedup stays as a backstop — server-side is now authoritative.
+//
+// Costs one prisma.operator.findUnique per request that has a meal_json
+// or pr_json payload (skipped for plain text responses).
+
+interface ServerDedupInput {
+  mealData: { name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; date?: string } | null;
+  prData: { exercise?: string; weight?: number; reps?: number; date?: string; notes?: string; type?: string } | null;
+}
+
+interface ServerDedupOutput {
+  mealData: ServerDedupInput['mealData'];
+  prData: ServerDedupInput['prData'];
+  /** Human-readable note when a duplicate was dropped — surfaced to the
+   *  client so it can append "[ALREADY LOGGED — not re-saved]" instead of
+   *  silently swallowing the user's intent. */
+  dedupNote?: string;
+}
+
+function getLocalDateForOperator(): string {
+  // Server-side fallback when the request doesn't carry a clientDate. Uses
+  // server local time as a cheap default; the client also sends clientDate
+  // in the body for the rare cross-tz case.
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function applyServerSideDedup(
+  operatorId: string,
+  input: ServerDedupInput,
+  clientDate?: string,
+): Promise<ServerDedupOutput> {
+  // Skip the DB read entirely when there's nothing to validate — most
+  // chat turns don't emit either payload, and the route handles many
+  // requests/sec.
+  if (!input.mealData && !input.prData) {
+    return { mealData: input.mealData, prData: input.prData };
+  }
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({
+      where: { id: operatorId },
+      select: { nutrition: true, prs: true },
+    });
+  } catch (err) {
+    console.error('[gunny/applyServerSideDedup] DB read failed; passing payload through:', err);
+    return { mealData: input.mealData, prData: input.prData };
+  }
+  if (!operator) {
+    return { mealData: input.mealData, prData: input.prData };
+  }
+
+  const today = clientDate || getLocalDateForOperator();
+  let dedupedMealOnDate: string | null = null;
+  let dedupedPrOnDate: string | null = null;
+
+  // Meal dedup: same name (case-insensitive, trimmed) + calories within ±5
+  // anywhere in the target date's bucket. Mirrors the GunnyChat client-side
+  // check from PR #68 but reads canonical state from Postgres instead of
+  // the client's optimistic operator snapshot.
+  let nextMeal = input.mealData;
+  if (nextMeal && typeof nextMeal.calories === 'number') {
+    const targetDate = (typeof nextMeal.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(nextMeal.date))
+      ? nextMeal.date
+      : today;
+    // operator.nutrition is JSONB; cast through unknown to avoid pulling
+    // the full type into this file. Shape: { meals: { [date]: Meal[] } }.
+    const nutrition = (operator.nutrition || {}) as { meals?: Record<string, Array<{ name?: string; calories?: number }>> };
+    const bucket = nutrition.meals?.[targetDate] || [];
+    const candidateName = (nextMeal.name || '').toLowerCase().trim();
+    const candidateCal = nextMeal.calories;
+    const dup = bucket.find((m) => {
+      const n = (m.name || '').toLowerCase().trim();
+      if (!n || n !== candidateName) return false;
+      return Math.abs((m.calories || 0) - candidateCal) <= 5;
+    });
+    if (dup) {
+      dedupedMealOnDate = targetDate;
+      nextMeal = null;
+    }
+  }
+
+  // PR dedup: same exercise (case-insensitive, trimmed) + weight within
+  // ±0.5 lbs on the same date. Same shape as GunnyChat client-side check
+  // in PR #70 — server-authoritative version.
+  let nextPr = input.prData;
+  if (nextPr && typeof nextPr.weight === 'number' && nextPr.exercise) {
+    const targetDate = (typeof nextPr.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(nextPr.date))
+      ? nextPr.date
+      : today;
+    const prs = (operator.prs || []) as Array<{ exercise?: string; weight?: number; date?: string }>;
+    const candidateEx = (nextPr.exercise || '').toLowerCase().trim();
+    const candidateW = nextPr.weight;
+    const dup = prs.find((p) => {
+      const e = (p.exercise || '').toLowerCase().trim();
+      if (!e || e !== candidateEx) return false;
+      if (Math.abs((p.weight || 0) - candidateW) > 0.5) return false;
+      return p.date === targetDate;
+    });
+    if (dup) {
+      dedupedPrOnDate = targetDate;
+      nextPr = null;
+    }
+  }
+
+  let dedupNote: string | undefined;
+  if (dedupedMealOnDate && dedupedPrOnDate) {
+    dedupNote = `Already logged on ${dedupedMealOnDate} — meal and PR both skipped.`;
+  } else if (dedupedMealOnDate) {
+    dedupNote = `That meal is already in your log for ${dedupedMealOnDate} — skipped to avoid a double entry. Say "log another serving" if you want a second one.`;
+  } else if (dedupedPrOnDate) {
+    dedupNote = `That PR is already on your board for ${dedupedPrOnDate} — skipped. Update the existing entry from Intel → PR Board if the values are off.`;
+  }
+
+  return { mealData: nextMeal, prData: nextPr, dedupNote };
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireAuth(req);
   if (auth instanceof NextResponse) return auth;
@@ -1769,16 +1896,29 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
         .trim();
 
+      // Read-first-then-write dedup. Looks at the operator's CURRENT
+      // Postgres state (not the client's possibly-stale operatorContext)
+      // and nulls out duplicate meal/PR emissions. Client-side dedup
+      // remains as a backstop. See applyServerSideDedup helper.
+      const dedupResult = await applyServerSideDedup(
+        auth.operatorId,
+        { mealData, prData },
+        clientDate,
+      );
+      const finalMealData = dedupResult.mealData;
+      const finalPrData = dedupResult.prData;
+
       return NextResponse.json({
-        response: cleanResponse,
+        response: dedupResult.dedupNote ? `${cleanResponse}\n\n[${dedupResult.dedupNote}]` : cleanResponse,
         workoutData,
         workoutModification,
         workoutModifications,
         workoutDelete,
         workoutDeletes,
         profileData,
-        mealData,
-        prData,
+        mealData: finalMealData,
+        prData: finalPrData,
+        dedupNote: dedupResult.dedupNote,
         voiceControl,
         // Junior safety events (empty array for adults / flag-disabled juniors).
         // Client surfaces a banner; ParentDashboard polls juniorSafety.events
@@ -1903,21 +2043,41 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
             .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
             .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+            .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
             .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
             .trim();
+
+          // Read-first-then-write dedup. Mirrors the non-streaming path —
+          // looks up the operator from Postgres and nulls duplicates so
+          // the client never persists a duplicate row even if its cached
+          // operator snapshot is stale. See applyServerSideDedup helper.
+          const dedupResult = await applyServerSideDedup(
+            auth.operatorId,
+            {
+              mealData: mealData as ServerDedupInput['mealData'],
+              prData: prData as ServerDedupInput['prData'],
+            },
+            clientDate,
+          );
+          const finalMealData = dedupResult.mealData;
+          const finalPrData = dedupResult.prData;
+          const finalCleanText = dedupResult.dedupNote
+            ? `${cleanText}\n\n[${dedupResult.dedupNote}]`
+            : cleanText;
 
           controller.enqueue(
             encoder.encode(
               `event: final\ndata: ${JSON.stringify({
-                cleanText,
+                cleanText: finalCleanText,
                 workoutData,
                 workoutModification,
                 workoutModifications,
                 workoutDelete,
                 workoutDeletes,
                 profileData,
-                mealData,
-                prData,
+                mealData: finalMealData,
+                prData: finalPrData,
+                dedupNote: dedupResult.dedupNote,
                 voiceControl,
                 // Junior safety events captured pre-LLM (see non-streaming
                 // payload above for context). Mirrored here so SSE + non-SSE
