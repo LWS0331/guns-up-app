@@ -1294,7 +1294,17 @@ ${mealSuggestion}`;
     try {
       const recentMessages = allMessages.slice(-10).map((m) => ({
         role: m.role,
-        text: m.text,
+        // Strip the structured tags Gunny emits (meal_json / workout_json /
+        // profile_json / etc.) before sending the conversation back to the
+        // model. Without this, Gunny sees its own prior <meal_json> in the
+        // transcript and can re-emit the same payload on a follow-up turn,
+        // double-logging the same meal — see beta hotfix bundle (Apr 2026).
+        text: (m.text || '')
+          .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+          .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
+          .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+          .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
+          .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, ''),
         ...(m.image ? { image: m.image } : {}),
       }));
 
@@ -1728,19 +1738,22 @@ ${mealSuggestion}`;
           const existingMeals = existingNutrition.meals || {};
           const prevBucket = existingMeals[targetDate] || [];
 
-          // DEDUP: reject if same name + calories logged within 60 seconds
-          const nowMs = Date.now();
+          // DEDUP: reject if the same meal (by name + calories) is already in
+          // today's bucket — broader than the prior 60-second window because
+          // Gunny was re-emitting <meal_json> from earlier turns and the
+          // duplicate would land minutes later, past the 60s guard. The user
+          // can still log a true repeat by saying "log another serving" —
+          // that flows through a different path (the model emits a fresh
+          // meal_json with a slightly different name like "Steak (2nd
+          // serving)") which won't match.
           const recentDup = prevBucket.find((existing: Meal) => {
-            if ((existing.name || '').toLowerCase() !== (meal.name || '').toLowerCase()) return false;
-            if (Math.abs((existing.calories || 0) - meal.calories) > 5) return false;
-            const idMatch = existing.id.match(/^meal-(\d+)$/);
-            if (!idMatch) return false;
-            return (nowMs - Number(idMatch[1])) < 60_000;
+            if ((existing.name || '').toLowerCase().trim() !== (meal.name || '').toLowerCase().trim()) return false;
+            return Math.abs((existing.calories || 0) - meal.calories) <= 5;
           });
           if (recentDup) {
             const dupMsg: Message = {
               id: 'gunny-dedup-' + Date.now(), role: 'gunny',
-              text: `Hold up, champ — I just logged "${meal.name}" under a minute ago. If that was a second helping, say "log another serving" and I'll stack it.`,
+              text: `Hold up, champ — "${meal.name}" is already in today's log. If that was a second helping, say "log another serving" and I'll stack it.`,
               timestamp: new Date(),
             };
             setMessages((prev) => [...prev, dupMsg]);
