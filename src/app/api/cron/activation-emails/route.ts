@@ -16,16 +16,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runActivationEmailScheduler } from '@/lib/activationEmails';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 export async function GET(req: NextRequest) {
-  // Bearer auth via CRON_SECRET (matches Vercel + Railway cron conventions).
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  // Bearer auth via CRON_SECRET — fails closed in production.
+  // See src/lib/cronAuth.ts for the full failure-mode rationale.
+  const denied = requireCronAuth(req);
+  if (denied) return denied;
 
   try {
     const summary = await runActivationEmailScheduler();

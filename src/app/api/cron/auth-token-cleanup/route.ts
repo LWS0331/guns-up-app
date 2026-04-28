@@ -7,15 +7,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { cleanupExpiredTokens } from '@/lib/authTokens';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  // Bearer auth via CRON_SECRET — fails closed in production.
+  const denied = requireCronAuth(req);
+  if (denied) return denied;
   try {
     const deleted = await cleanupExpiredTokens(7);
     return NextResponse.json({ ok: true, deleted, ts: new Date().toISOString() });

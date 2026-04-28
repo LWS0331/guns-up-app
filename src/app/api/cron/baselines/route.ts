@@ -21,6 +21,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 const RECENT_WINDOW_DAYS = 28;
 const ACUTE_DAYS = 7;
@@ -35,14 +36,11 @@ interface Workout {
 }
 
 export async function GET(req: NextRequest) {
-  // Bearer auth — same pattern as other crons.
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  // Bearer auth — fails closed in production. See src/lib/cronAuth.ts
+  // for why this is a separate helper now (the inline pattern was
+  // fail-OPEN on missing env var; an audit caught the backdoor).
+  const denied = requireCronAuth(req);
+  if (denied) return denied;
 
   try {
     const startedAt = new Date();
