@@ -44,6 +44,11 @@ model Operator {
   dailyBrief  Json      @default("{}")  // Today's adaptive daily brief
   billing     Json      @default("{}")  // Stripe billing data
 
+  // Macrocycle engine (Apr 2026). Up to 2 active goals — calendar-aware
+  // periodization for 6-12 month targets. See src/lib/macrocycle.ts and
+  // src/lib/macrocycleLibrary.ts. Migration NOT auto-run.
+  macroCycles  Json     @default("[]")    // MacroCycle[] — see src/lib/types.ts
+
   // Junior Operator fields (gated behind JUNIOR_OPERATOR_ENABLED feature flag)
   isJunior      Boolean  @default(false)
   juniorAge     Int?                                  // duplicate of profile.age for fast filter

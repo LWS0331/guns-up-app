@@ -11,6 +11,7 @@ import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import JuniorPRBoard from '@/components/JuniorPRBoard';
+import MacrocyclePanel from '@/components/MacrocyclePanel';
 import SupplementStack from '@/components/SupplementStack';
 import RecoveryReadout from '@/components/RecoveryReadout';
 import FormAnalysis from '@/components/FormAnalysis';
@@ -44,7 +45,7 @@ interface IntelCenterProps {
   onRequestIntake?: () => void;
 }
 
-type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES' | 'FORM_CHECK';
+type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES' | 'FORM_CHECK' | 'MACROCYCLE';
 
 interface LocalState {
   profile: {
@@ -3094,6 +3095,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         );
       case 'INJURIES':
         return renderInjuriesTab();
+      case 'MACROCYCLE':
+        return <MacrocyclePanel operator={operator} onUpdateOperator={onUpdateOperator} />;
       case 'PREFERENCES':
         return renderPreferencesTab();
       case 'WEARABLES':
@@ -3143,6 +3146,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PR_BOARD: '▶',
     ANALYTICS: '◉',
     INJURIES: '▦',
+    MACROCYCLE: '⟁',
     PREFERENCES: '◇',
     WEARABLES: '◎',
     FORM_CHECK: '◊',
@@ -3154,6 +3158,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PR_BOARD: t('intel.pr_board'),
     ANALYTICS: 'ANALYTICS',
     INJURIES: t('intel.injuries'),
+    MACROCYCLE: 'MACROCYCLE',
     PREFERENCES: t('intel.preferences'),
     WEARABLES: 'WEARABLES',
     FORM_CHECK: 'FORM CHECK',
@@ -3192,7 +3197,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           matches Planner's sub-nav and any future tabbed screens. */}
       {isMobile ? (
         <nav className="subtabs" aria-label="Intel sub-navigation">
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'MACROCYCLE', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -3223,7 +3228,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </div>
           </div>
 
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'MACROCYCLE', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button

@@ -7,6 +7,7 @@
 import type { Operator, SportProfile, JuniorConsent } from './types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from './workoutAnalysis';
 import { getLocalDateStr, toLocalDateStr } from './dateUtils';
+import { buildMacroBriefContext } from './macrocycle';
 
 // Matches the in-progress Workout Mode UI state consumed by AppShell
 export interface WorkoutExecutionState {
@@ -92,6 +93,14 @@ export interface GunnyOperatorContext {
    */
   completedWorkoutLogs: string[];
   workoutExecution: string | null;
+
+  /** Macrocycle context for the active long-horizon goal(s). Apr 2026 spec.
+   *  Pre-formatted as a string for direct injection into the Gunny system
+   *  prompt; null when the operator has no active macrocycle. The shape
+   *  encodes block name, week-of-block, days-to-goal, intensity/volume
+   *  scalers, secondary-goal status, and any block-transition hints so
+   *  Gunny can answer "what should this week look like" in calendar terms. */
+  macrocycle: string | null;
 
   // Junior Operator surface — undefined for adult operators. When isJunior
   // is true the gunny route swaps SYSTEM_PROMPT for SOCCER_YOUTH_PROMPT and
@@ -324,6 +333,42 @@ export function buildFullGunnyContext(
     lastCompletedWorkout,
     completedWorkoutLogs,
     workoutExecution,
+    macrocycle: (() => {
+      // Apr 2026 macrocycle engine — see src/lib/macrocycle.ts. Returns
+      // null for operators with no active long-horizon goal so Gunny's
+      // existing context isn't bloated for the typical case.
+      const ctx = buildMacroBriefContext(operator, today);
+      if (!ctx) return null;
+      const lines: string[] = [];
+      lines.push('═══ MACROCYCLE — ACTIVE GOAL ═══');
+      lines.push(
+        `Goal: ${ctx.primaryGoal.name} · ${ctx.primaryGoal.type.replace(/_/g, ' ')} · target ${ctx.primaryGoal.targetDate} (${ctx.primaryGoal.daysToGoal} days out)`,
+      );
+      lines.push(
+        `Block: ${ctx.primaryBlock.name} · Week ${ctx.primaryBlock.weekOfBlock} of ${ctx.primaryBlock.weeksInBlock}`,
+      );
+      lines.push(`Intent: ${ctx.primaryBlock.description}`);
+      lines.push(
+        `Scalers: volume ×${ctx.primaryBlock.volumeMultiplier.toFixed(2)} · intensity ×${ctx.primaryBlock.intensityMultiplier.toFixed(2)}`,
+      );
+      if (ctx.primaryBlock.performanceMarker) {
+        lines.push(`Marker to advance: ${ctx.primaryBlock.performanceMarker}`);
+      }
+      if (ctx.primaryBlock.gunnyNotes) {
+        lines.push(`Notes: ${ctx.primaryBlock.gunnyNotes}`);
+      }
+      if (ctx.secondaryGoal && ctx.secondaryBlock) {
+        lines.push('');
+        lines.push(
+          `Secondary goal: ${ctx.secondaryGoal.name} · ${ctx.secondaryBlock.name} (vol ×${ctx.secondaryBlock.volumeMultiplier.toFixed(2)}, int ×${ctx.secondaryBlock.intensityMultiplier.toFixed(2)})`,
+        );
+      }
+      if (ctx.pausedNotes) {
+        lines.push('');
+        lines.push(`Note: ${ctx.pausedNotes}`);
+      }
+      return lines.join('\n');
+    })(),
     isJunior: operator.isJunior,
     juniorAge: operator.juniorAge,
     parentIds: operator.parentIds,
