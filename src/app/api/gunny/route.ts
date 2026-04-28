@@ -647,9 +647,29 @@ The JSON schema:
       "notes": "string"
     }
   ],
+  "intake": {
+    "trainingPath": "bodybuilding|hypertrophy|powerlifting|athletic|tactical|hybrid",
+    "experienceYears": number,
+    "primaryGoal": "string",
+    "currentActivity": "sedentary|lightly_active|active|very_active|athlete",
+    "exerciseHistory": "none|sporadic|consistent_beginner|consistent_intermediate|advanced_athlete",
+    "healthConditions": ["string array (or [] for none)"],
+    "injuryHistory": ["string array (or [] for none)"],
+    "estimatedCalories": number,
+    "dietaryRestrictions": ["string array (e.g. 'gluten free', 'shellfish allergy')"],
+    "currentDiet": "no_plan|basic_tracking|strict_macros|meal_prep|keto|paleo|vegan|vegetarian|mediterranean|other",
+    "mealsPerDay": number,
+    "dailyWaterOz": number,
+    "sleepQuality": number (1-10),
+    "stressLevel": number (1-10)
+  },
   "onboardingComplete": true
 }
 </profile_json>
+
+The "intake" section is for fields captured by the audit at runtime (see
+INTAKE AUDIT block when present). Include ONLY the fields you just
+learned in this turn — partial updates merge incrementally.
 
 ONLY include "onboardingComplete": true when you have gathered AT MINIMUM:
 - age, height, weight
@@ -1687,6 +1707,31 @@ fit the plan" / "am I peaking at the right time" — anchor the answer in
 the macrocycle block above. Don't introduce conflicting periodization
 advice. Block's volume/intensity multipliers are the authoritative scaler
 for prescription guidance THIS WEEK.
+` : ''}
+
+${operatorContext.intakeAudit ? `${operatorContext.intakeAudit}
+
+INTAKE AUDIT BEHAVIOR (CRITICAL):
+- If CRITICAL fields are missing AND the operator's message would benefit
+  from them (asking for a workout, programming change, nutrition target,
+  etc.), pause programming advice and ask 1-2 of those fields FIRST. One
+  short conversational sentence per question. Don't paste the whole gap
+  list — pick the most relevant 1-2.
+- If only IMPORTANT or USEFUL gaps remain, weave the question naturally
+  into your reply rather than gating on it ("Quick — how many days a week
+  do you want to train? While you think on that, here's a starter…").
+- When the operator answers ANY gap question, emit <profile_json> at the
+  END of your response with the captured field(s) in the right slot:
+    • target=preferences → put under "preferences": {…}
+    • target=intake      → put under "intake": {…}
+    • target=profile     → put under "profile": {…}
+- Don't re-ask fields the operator just answered (the next request's
+  context will reflect the update).
+- Don't ask all gaps in one turn — that's an interrogation. Drip 1-2
+  per turn, prioritized: critical > important > useful.
+- If the operator says "skip", "later", or "I don't know" on a specific
+  field, drop it and don't re-ask in the same conversation. They can
+  always set it from Intel later.
 ` : ''}
 
 ═══ CRITICAL INSTRUCTIONS ═══

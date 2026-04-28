@@ -8,6 +8,7 @@ import type { Operator, SportProfile, JuniorConsent } from './types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from './workoutAnalysis';
 import { getLocalDateStr, toLocalDateStr } from './dateUtils';
 import { buildMacroBriefContext } from './macrocycle';
+import { getIntakeGaps, intakeCompletenessPercent } from './intakeAudit';
 
 // Matches the in-progress Workout Mode UI state consumed by AppShell
 export interface WorkoutExecutionState {
@@ -101,6 +102,13 @@ export interface GunnyOperatorContext {
    *  scalers, secondary-goal status, and any block-transition hints so
    *  Gunny can answer "what should this week look like" in calendar terms. */
   macrocycle: string | null;
+
+  /** Intake audit string — pre-formatted multi-line block listing missing
+   *  intake fields by tier (critical/important/useful) so Gunny can ask
+   *  for the gaps conversationally before producing programming advice
+   *  that depends on them. Null when the operator's intake is fully
+   *  filled. See src/lib/intakeAudit.ts. */
+  intakeAudit: string | null;
 
   // Junior Operator surface — undefined for adult operators. When isJunior
   // is true the gunny route swaps SYSTEM_PROMPT for SOCCER_YOUTH_PROMPT and
@@ -372,6 +380,39 @@ export function buildFullGunnyContext(
       if (ctx.pausedNotes) {
         lines.push('');
         lines.push(`Note: ${ctx.pausedNotes}`);
+      }
+      return lines.join('\n');
+    })(),
+    intakeAudit: (() => {
+      // Intake gap audit. Surfaces missing fields (tiered: critical/
+      // important/useful) so Gunny can ask for them in chat instead of
+      // assuming defaults. Null when intake is 100% filled — keeps the
+      // typical fully-onboarded operator's prompt clean.
+      const audit = getIntakeGaps(operator);
+      const totalGaps = audit.critical.length + audit.important.length + audit.useful.length;
+      if (totalGaps === 0) return null;
+      const pct = intakeCompletenessPercent(audit);
+      const lines: string[] = [];
+      lines.push(`═══ INTAKE AUDIT — ${pct}% COMPLETE ═══`);
+      lines.push('Missing fields, ranked by priority. When the operator\'s next message');
+      lines.push('would benefit from any of these (workout, nutrition, programming advice),');
+      lines.push('ask for the missing ones FIRST — one or two at a time, conversationally.');
+      lines.push('Don\'t flood with all gaps. When the operator answers, emit <profile_json>');
+      lines.push('with their answer in the appropriate slot (intake / preferences / profile).');
+      if (audit.critical.length) {
+        lines.push('');
+        lines.push('CRITICAL (workout shape — must have):');
+        for (const g of audit.critical) lines.push(`  - ${g.field} → "${g.prompt}" (write to ${g.target})`);
+      }
+      if (audit.important.length) {
+        lines.push('');
+        lines.push('IMPORTANT (programming quality + safety):');
+        for (const g of audit.important) lines.push(`  - ${g.field} → "${g.prompt}" (write to ${g.target})`);
+      }
+      if (audit.useful.length) {
+        lines.push('');
+        lines.push('USEFUL (nutrition + recovery sanity):');
+        for (const g of audit.useful) lines.push(`  - ${g.field} → "${g.prompt}" (write to ${g.target})`);
       }
       return lines.join('\n');
     })(),
