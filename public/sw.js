@@ -1,6 +1,10 @@
 // Auto-versioned cache — changes every build via build timestamp
-// BUILD_VERSION gets replaced by build script, or defaults to timestamp
-const APP_VERSION = '1774171484';
+// BUILD_VERSION gets replaced by build script, or defaults to timestamp.
+// Hand-bumped on Apr 27 2026 because the workout-mode logged-set edit
+// fix from PR #68 wasn't reaching iOS PWA users — sticky home-screen
+// tab was holding the previous JS bundle. This bump forces the SW to
+// purge the old cache and notify all open clients to reload.
+const APP_VERSION = '1774265000';
 const CACHE_NAME = `guns-up-cache-${APP_VERSION}`;
 const STATIC_ASSETS = [
   '/manifest.json',
