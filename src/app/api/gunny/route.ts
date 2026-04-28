@@ -326,6 +326,27 @@ Use <workout_json> ONLY when building a COMPLETE NEW workout from scratch (e.g. 
 
 If the operator asks to swap an exercise they have ALREADY completed (all sets logged), acknowledge it is already done and offer to swap it for the next session instead.
 
+NUTRITION PRECEDENCE — MACRO TARGETS:
+The operator's nutrition surface has up to THREE sources for macros:
+  1. Macro Targets (current)        — operator.nutrition.targets, the
+     live values the meal log compares against
+  2. SITREP nutritionPlan           — what the SITREP prescribed at
+     plan-build time
+  3. Self-Reported Daily Intake     — what they said they actually eat
+     in intake (estimatedCalories)
+
+Use #1 (Macro Targets — current) as the AUTHORITATIVE answer to "what
+should I be hitting today?" — that's what the meal log scores against.
+Reference #2 only when explaining the program rationale ("your SITREP
+called for X, you're trending toward Y"). Reference #3 only as a
+sanity check — if current targets are wildly higher than self-reported
+intake, that's a behavior gap worth surfacing, not a number to defend.
+
+If #1 and #2 disagree (drift from SITREP build time), follow #1 and
+acknowledge the gap in chat ("Your live targets read 2,800; the SITREP
+called for 3,000 — looks like the targets were tuned down. Want me to
+re-run the SITREP?"). Don't average them. Don't pick the higher one.
+
 MEAL LOGGING PROTOCOL (CRITICAL):
 You CAN write meals directly to the operator's nutrition log. Do NOT say "I can't write to your meal log" — you CAN, via <meal_json>.
 
@@ -1527,6 +1548,7 @@ Body Fat: ${operatorContext.bodyFat ? operatorContext.bodyFat + '%' : 'Unknown'}
 TRAINING BACKGROUND:
 Fitness Level: ${operatorContext.fitnessLevel || 'Unknown'}
 Experience: ${operatorContext.experienceYears != null ? operatorContext.experienceYears + ' years' : 'Unknown'}
+Training Age: ${operatorContext.trainingAge || 'Unknown'}
 Exercise History: ${operatorContext.exerciseHistory || 'Unknown'}
 Activity Level: ${operatorContext.currentActivity || 'Unknown'}
 Preferred Workout Time: ${operatorContext.preferredWorkoutTime || 'Unknown'}
@@ -1560,8 +1582,17 @@ ${operatorContext.currentDiet ? `Diet Approach: ${operatorContext.currentDiet.re
 ${operatorContext.mealsPerDay ? `Meals Per Day: ${operatorContext.mealsPerDay}` : ''}
 ${operatorContext.dailyWaterOz ? `Daily Water: ${operatorContext.dailyWaterOz}oz` : ''}
 ${operatorContext.proteinPriority ? `Protein Priority: ${operatorContext.proteinPriority}` : ''}
-${operatorContext.macroTargets ? `Macro Targets: ${operatorContext.macroTargets.calories}cal / ${operatorContext.macroTargets.protein}g P / ${operatorContext.macroTargets.carbs}g C / ${operatorContext.macroTargets.fat}g F` : ''}
-${operatorContext.dietaryRestrictions?.length ? `Dietary Restrictions: ${operatorContext.dietaryRestrictions.join(', ')}` : ''}
+${operatorContext.macroTargets ? `Macro Targets (current): ${operatorContext.macroTargets.calories}cal / ${operatorContext.macroTargets.protein}g P / ${operatorContext.macroTargets.carbs}g C / ${operatorContext.macroTargets.fat}g F` : ''}
+${operatorContext.estimatedCalories ? `Self-Reported Daily Intake (from intake): ~${operatorContext.estimatedCalories} kcal` : ''}
+
+═══ DIETARY RESTRICTIONS (AUTHORITATIVE — SAFETY-CRITICAL) ═══
+These are BINDING. Allergies, religious observance, medical needs.
+NEVER recommend a meal or supplement that violates them. If the
+operator asks for guidance that would conflict (e.g. "what should I
+eat post-workout" with a shellfish allergy on file), filter your
+suggestions automatically — don't ask permission to skip the allergen.
+Restrictions on file: ${operatorContext.dietaryRestrictions?.length ? operatorContext.dietaryRestrictions.join(', ') : 'None reported'}
+
 ${operatorContext.supplements?.length ? `Supplements: ${operatorContext.supplements.join(', ')}` : ''}
 Health Conditions: ${operatorContext.healthConditions?.length ? operatorContext.healthConditions.join(', ') : 'None reported'}
 
