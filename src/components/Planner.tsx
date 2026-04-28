@@ -2747,7 +2747,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               {isActive && blockResults.sets.some(s => s.completed) && (
                 <>
                   <div className="t-eyebrow" style={{ marginTop: 8, marginBottom: 6 }}>
-                    Sets · This Exercise <span style={{ color: 'var(--text-dim)', fontSize: 9, marginLeft: 6 }}>(tap to edit)</span>
+                    Sets · This Exercise <span style={{ color: 'var(--green)', fontSize: 9, marginLeft: 6, fontWeight: 700 }}>✎ TAP A CELL TO EDIT</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {blockResults.sets.slice(0, parsedSets).map((set, si) => set.completed && (
@@ -2780,9 +2780,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                           }}
                           aria-label={`Set ${si + 1} weight`}
                           style={{
-                            width: 64, textAlign: 'right',
-                            background: 'transparent', border: '1px solid rgba(0,255,65,0.15)',
-                            color: 'var(--text-secondary)', padding: '2px 4px',
+                            width: 70, textAlign: 'right',
+                            background: 'rgba(0,255,65,0.04)', border: '1px solid rgba(0,255,65,0.5)',
+                            borderRadius: 3, color: 'var(--text-primary)', padding: '4px 6px',
                             fontFamily: 'inherit', fontSize: 'inherit',
                           }}
                         />
@@ -2802,9 +2802,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                           }}
                           aria-label={`Set ${si + 1} reps`}
                           style={{
-                            width: 48, textAlign: 'right',
-                            background: 'transparent', border: '1px solid rgba(0,255,65,0.15)',
-                            color: 'var(--text-secondary)', padding: '2px 4px',
+                            width: 54, textAlign: 'right',
+                            background: 'rgba(0,255,65,0.04)', border: '1px solid rgba(0,255,65,0.5)',
+                            borderRadius: 3, color: 'var(--text-primary)', padding: '4px 6px',
                             fontFamily: 'inherit', fontSize: 'inherit',
                           }}
                         />
@@ -2829,9 +2829,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                           }}
                           aria-label={`Set ${si + 1} RPE`}
                           style={{
-                            width: 44, textAlign: 'right',
-                            background: 'transparent', border: '1px solid rgba(255,140,0,0.25)',
-                            color: 'var(--amber)', padding: '2px 4px',
+                            width: 50, textAlign: 'right',
+                            background: 'rgba(255,140,0,0.06)', border: '1px solid rgba(255,140,0,0.55)',
+                            borderRadius: 3, color: 'var(--amber)', padding: '4px 6px',
                             fontFamily: 'inherit', fontSize: 'inherit',
                           }}
                         />
