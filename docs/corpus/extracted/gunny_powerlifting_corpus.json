@@ -1,0 +1,1344 @@
+{
+  "corpus_metadata": {
+    "name": "Gunny Powerlifting Corpus",
+    "version": "1.0.0",
+    "specialty": "Powerlifting — raw and equipped, meet preparation focus",
+    "scope": "All major federations with rule variation notes",
+    "schema": "Hierarchical knowledge tree with typed entries",
+    "intended_use": "Retrieval-augmented coaching for Gunny AI trainer (GUNS UP)",
+    "entry_schema": {
+      "id": "stable identifier within category",
+      "title": "human-readable label",
+      "content": "primary coaching/reference text",
+      "key_points": "list of high-recall bullets for fast retrieval",
+      "common_errors": "where applicable, what athletes get wrong",
+      "cues": "where applicable, short verbal cues a coach would deliver",
+      "federations": "where applicable, fed-specific notes",
+      "tags": "retrieval tags",
+      "related": "cross-refs to other entry ids"
+    },
+    "federation_codes": {
+      "IPF": "International Powerlifting Federation — drug-tested, strict",
+      "USAPL": "USA Powerlifting — IPF affiliate (status has shifted historically; treat as IPF-style ruleset)",
+      "USPA": "United States Powerlifting Association — IPL affiliate, tested + untested divisions",
+      "IPL": "International Powerlifting League — parent of USPA",
+      "SPF": "Southern Powerlifting Federation — permissive, untested",
+      "WRPF": "World Raw Powerlifting Federation — raw-focused, monolift allowed, less strict commands",
+      "WPC": "World Powerlifting Congress — multi-ply friendly, untested",
+      "AWPC": "Amateur World Powerlifting Congress — tested arm of WPC",
+      "RPS": "Revolution Powerlifting Syndicate — permissive, multi-ply allowed",
+      "100PR": "100% Raw Powerlifting Federation — drug-tested, raw only, no knee sleeves in some divisions",
+      "USPF": "United States Powerlifting Federation — historic fed, mixed rules"
+    }
+  },
+
+  "programming": {
+    "description": "Training system design — periodization models, peaking, deloads, volume/intensity management.",
+    "entries": [
+      {
+        "id": "prog-block-periodization",
+        "title": "Block Periodization",
+        "content": "Sequential training blocks where each block emphasizes a specific quality. Standard powerlifting structure: Accumulation (high volume, moderate intensity, RPE 6-8, hypertrophy and work capacity) → Transmutation/Strength (moderate volume, higher intensity, RPE 7-9, strength expression with competition lifts) → Realization/Peaking (low volume, max intensity, RPE 8-10, singles and doubles at competition movement). Each block typically 3-5 weeks, ending in deload or test. Volume drops as intensity climbs across the cycle; the work done in accumulation builds the platform for the strength expressed in realization.",
+        "key_points": [
+          "Three sequential blocks: accumulation → strength → peak",
+          "Volume inversely correlates with intensity across blocks",
+          "Each block 3-5 weeks plus deload",
+          "Best for intermediate-advanced lifters with single-meet focus"
+        ],
+        "tags": ["periodization", "programming", "block", "meet-prep"],
+        "related": ["prog-peaking-12wk", "prog-deload-strategies"]
+      },
+      {
+        "id": "prog-conjugate",
+        "title": "Westside Conjugate Method",
+        "content": "Two stress qualities trained per lift per week: Max Effort (ME) day works up to 1RM on a competition variant or specialty bar (rotated every 1-3 weeks to prevent accommodation), and Dynamic Effort (DE) day uses submaximal weight (50-60% bar weight + 25% accommodating resistance from bands or chains) for speed work, typically 8-12 sets of 1-3 reps with short rest. Originally designed for equipped lifters; raw lifters typically need higher percentages on DE day (70-85%) and benefit from more competition-specific variants on ME day rather than pure specialty exercises. Accessory work targets weak points identified by where the lifter misses.",
+        "key_points": [
+          "ME day: work to 1RM on a variant",
+          "DE day: speed work, 50-60% + bands/chains for equipped, 70-85% straight weight for raw",
+          "Rotate ME exercises every 1-3 weeks",
+          "Accessories target the weak point of the miss"
+        ],
+        "common_errors": [
+          "Rotating ME exercises too far from competition movement (raw lifters)",
+          "Skipping accessory work in favor of more main lift volume",
+          "Using equipped DE percentages without bands"
+        ],
+        "tags": ["conjugate", "westside", "programming", "ME", "DE"],
+        "related": ["diag-squat-hole", "diag-bench-lockout", "prog-accommodating-resistance"]
+      },
+      {
+        "id": "prog-sheiko",
+        "title": "Sheiko Programming",
+        "content": "Russian high-frequency, high-volume system. Squat and bench typically trained 3-4x/week, deadlift 1-2x/week (deadlift is more recoverable in lower frequency due to spinal/CNS demands). Intensity sits in 70-85% range with high set/rep volumes (4-6 sets of 2-5 reps). Heavy use of competition lifts and close variants (pause squats, pause benches, deficit deadlifts). Programs are prescriptive — exact weights and reps assigned. Best suited for intermediates who can recover from frequency; beginners often over-fatigue, advanced lifters often need more intensity work above 85%.",
+        "key_points": [
+          "High frequency: squat/bench 3-4x/week, deadlift 1-2x",
+          "Intensity 70-85%, volume is the driver",
+          "Prescribed weights, not autoregulated",
+          "Best for intermediates; modify for advanced (add intensity work)"
+        ],
+        "tags": ["sheiko", "russian", "high-frequency", "volume"],
+        "related": ["prog-block-periodization", "prog-frequency"]
+      },
+      {
+        "id": "prog-dup",
+        "title": "Daily Undulating Periodization (DUP)",
+        "content": "Volume and intensity vary across sessions within the same week rather than across weeks. Example structure for squat: Monday hypertrophy (5x8 @ 70%), Wednesday strength (4x4 @ 80%), Friday power/peak (3x2 @ 88%). Stimulates multiple qualities concurrently rather than sequentially. Effective for lifters who plateau on linear models. Often combined with autoregulation (RPE) to manage fatigue.",
+        "key_points": [
+          "Multiple rep ranges and intensities within the same week",
+          "Each lift gets hypertrophy, strength, and power exposures",
+          "Pairs well with RPE",
+          "Good fit for experienced lifters who stall on block models"
+        ],
+        "tags": ["DUP", "undulating", "periodization"],
+        "related": ["prog-rpe", "prog-block-periodization"]
+      },
+      {
+        "id": "prog-rpe",
+        "title": "RPE and Autoregulation",
+        "content": "Rate of Perceived Exertion on the 1-10 powerlifting scale. RPE 10 = true max, no reps left in reserve (RIR 0). RPE 9 = 1 rep left. RPE 8 = 2 reps left. RPE 7 = 3 reps left. Below RPE 7 the scale becomes less reliable. Used to autoregulate daily loads — prescribe a target RPE and rep scheme (e.g., 'top set of 3 @ RPE 8'), let the lifter find the weight that day. Accounts for daily readiness fluctuations. Volume can be programmed by RPE drop-offs (e.g., back-off sets at 4-6% reduction from top set). Newer lifters under-rate RPE (call an RPE 9 an RPE 7); calibration takes ~6-12 months of honest reporting.",
+        "key_points": [
+          "10 = max, each point = 1 RIR",
+          "Reliable from RPE 7 upward",
+          "Allows daily load adjustment based on readiness",
+          "Calibration takes time; new lifters typically underestimate"
+        ],
+        "common_errors": [
+          "Leaving every set at RPE 6 because it 'felt hard' early",
+          "Pushing every top set to RPE 10 in accumulation",
+          "Not adjusting back-off weights when top set RPE drifts"
+        ],
+        "tags": ["RPE", "autoregulation", "RIR", "intensity"],
+        "related": ["prog-dup", "prog-volume-landmarks"]
+      },
+      {
+        "id": "prog-volume-landmarks",
+        "title": "Volume Landmarks (MV/MEV/MAV/MRV)",
+        "content": "Renaissance Periodization framework adapted for powerlifting. MV (Maintenance Volume): minimum sets to maintain current strength, ~6-10 hard sets per lift per week. MEV (Minimum Effective Volume): the floor where progress occurs, ~8-12 sets. MAV (Maximum Adaptive Volume): the productive zone, ~12-20 sets for squat/bench, 8-14 for deadlift. MRV (Maximum Recoverable Volume): the ceiling beyond which recovery fails, varies wildly by athlete. Powerlifting deadlift MRV is typically lower than squat or bench due to systemic fatigue. Track weekly hard sets (sets at RPE 7+) per lift and per muscle group; progress volume across an accumulation block, then drop hard.",
+        "key_points": [
+          "Squat/bench MAV ~12-20 hard sets/week",
+          "Deadlift MAV ~8-14 hard sets/week (lower recovery)",
+          "Cross MRV → drop volume, deload",
+          "Count hard sets (RPE 7+), not warmups"
+        ],
+        "tags": ["volume", "MEV", "MRV", "RP"],
+        "related": ["prog-rpe", "prog-deload-strategies"]
+      },
+      {
+        "id": "prog-frequency",
+        "title": "Training Frequency",
+        "content": "Squat: 2-4x/week productive for most. Bench: 2-4x/week, often higher because pec/triceps recover fast. Deadlift: 1-2x/week for most lifters; 3x rarely recoverable due to spinal erector and CNS demands. Frequency rises generally improve technical proficiency at the cost of fatigue. Higher frequency requires lower per-session volume. Sumo deadlifters often tolerate more deadlift frequency than conventional pullers because spinal load is lower. Equipped lifters bench less frequently in gear but supplement with raw bench frequency.",
+        "key_points": [
+          "Squat 2-4x, bench 2-4x, deadlift 1-2x as defaults",
+          "Higher frequency = lower per-session volume",
+          "Sumo tolerates more deadlift frequency than conventional",
+          "Equipped lifts done 1x/week in gear, raw work supplements"
+        ],
+        "tags": ["frequency", "programming"],
+        "related": ["prog-sheiko", "prog-volume-landmarks"]
+      },
+      {
+        "id": "prog-deload-strategies",
+        "title": "Deload Strategies",
+        "content": "Planned recovery periods, typically every 4-6 weeks or after crossing MRV. Three common approaches. Volume deload: keep intensity, cut volume 40-60%. Intensity deload: keep volume, cut load to 60-70% of working weight. Full deload: drop both, often used post-meet or before peak weeks. For strength athletes, volume deloads tend to preserve neural drive better than intensity deloads. Pre-meet taper is a structured deload (see meet prep). Signs you needed a deload yesterday: top sets feeling like RPE 9 at usual RPE 8 weights, joints aching, sleep disrupted, motivation gone.",
+        "key_points": [
+          "Volume deload preserves neural drive better than intensity deload",
+          "Every 4-6 weeks or when MRV crossed",
+          "Full deload post-meet or before peak",
+          "Watch for RPE drift and joint complaints as triggers"
+        ],
+        "tags": ["deload", "recovery", "fatigue-management"],
+        "related": ["prog-volume-landmarks", "prep-taper-structure"]
+      },
+      {
+        "id": "prog-accommodating-resistance",
+        "title": "Bands and Chains",
+        "content": "Accommodating resistance increases load through the strongest part of the strength curve. Bands store elastic energy, accelerate the eccentric (faster eccentric = harder reversal), and pull weight toward floor at lockout. Chains add weight as bar rises (each link off floor = more load). Standard prescription: 25% of total bar weight at top from bands or chains, 75% straight weight at bottom. Effective for raw lifters with lockout weakness. Bands aggressive on joints if overused; chains gentler. Equipped lifters use accommodating resistance to overload the suit/shirt's strongest position.",
+        "key_points": [
+          "Targets lockout strength on squat/bench/deadlift",
+          "25% accommodating + 75% bar weight is common ratio",
+          "Bands harder on joints than chains",
+          "Critical for lifters whose gear takes them to lockout"
+        ],
+        "tags": ["bands", "chains", "accommodating-resistance", "conjugate"],
+        "related": ["prog-conjugate", "diag-bench-lockout"]
+      },
+      {
+        "id": "prog-rep-ranges",
+        "title": "Rep Ranges by Adaptation",
+        "content": "1-3 reps: maximal strength, neural adaptation, technical refinement at competition load. 4-6 reps: strength-hypertrophy crossover, primary driver for most powerlifters in accumulation/strength blocks. 6-10 reps: hypertrophy with strength carryover, used for accessory work and weak point training. 10-15+ reps: pure hypertrophy and work capacity, used early off-season and for muscles that drive the lift indirectly (upper back, glutes, hamstrings). Most successful raw powerlifting volume sits in the 3-6 rep range at 75-85% intensity.",
+        "key_points": [
+          "3-6 reps @ 75-85% is the productive zone for most",
+          "Above 10 reps useful for accessories and off-season",
+          "1-3 reps for peaking and skill expression",
+          "Vary rep ranges across a training cycle"
+        ],
+        "tags": ["reps", "intensity", "programming"],
+        "related": ["prog-block-periodization", "prog-dup"]
+      }
+    ]
+  },
+
+  "technique": {
+    "description": "Movement-specific coaching knowledge for the three competition lifts.",
+    "subcategories": {
+      "squat": {
+        "entries": [
+          {
+            "id": "tech-squat-stance",
+            "title": "Squat Stance Selection",
+            "content": "Stance width sits on a spectrum from narrow (close-stance, more knee dominant, longer ROM, taller torso) to wide (more hip dominant, shorter ROM, more forward lean). Toe angle generally 15-30° out, but varies by hip anatomy — some hips require more flare to hit depth without impingement. Find your stance by working from the bottom up: in a deep squat, find the foot position where you feel both quads and glutes loaded with no hip pinching, then own that stance. Long-femured lifters often need wider stances. Hip socket orientation (anteverted vs retroverted) drives how wide and how flared toes need to be.",
+            "common_errors": [
+              "Forcing a narrow stance with long femurs (causes excessive forward lean)",
+              "Toes too straight forward, creating hip impingement at depth",
+              "Stance changing day to day"
+            ],
+            "cues": [
+              "Feet should feel like screwing into the floor",
+              "Knees track over toes, not inward",
+              "If hips pinch at depth, widen or flare more"
+            ],
+            "tags": ["squat", "stance", "setup"],
+            "related": ["tech-squat-bar-position", "diag-squat-hole"]
+          },
+          {
+            "id": "tech-squat-bar-position",
+            "title": "High Bar vs Low Bar",
+            "content": "High bar sits on top of the traps, requires more upright torso, more knee/quad dominant, generally lighter weights moved. Low bar sits across rear delts on shelf created by retracted scapulae, allows more forward lean, more hip/posterior chain dominant, generally heavier weights moved. Most competitive raw powerlifters use low bar. Athletes with shoulder mobility issues may struggle to create low-bar shelf and default to high bar. The transition takes 4-8 weeks of dedicated practice if changing — back angle, brace pattern, and depth perception all shift.",
+            "key_points": [
+              "Low bar: more weight moved, more posterior chain demand, requires shoulder mobility",
+              "High bar: more upright, more quad-dominant, often easier to hit depth",
+              "Switching takes weeks, not workouts"
+            ],
+            "cues": [
+              "Pinch the bar between rear delts (low bar)",
+              "Wrists stacked over elbows, not bent back"
+            ],
+            "tags": ["squat", "bar-position", "low-bar", "high-bar"],
+            "related": ["tech-squat-stance", "tech-squat-bracing"]
+          },
+          {
+            "id": "tech-squat-bracing",
+            "title": "Squat Bracing and 360° Pressure",
+            "content": "Brace by inhaling deeply (diaphragm down, belly out), then bearing down — pushing pressure into the abdominal wall in all directions, not just the front. With a belt, push the belly into the belt circumferentially. Air goes in before the unrack, holds through the rep, exits at the top. Valsalva maneuver (closed glottis) is standard for max attempts; partial exhale is acceptable on lighter sets but compromises spinal stiffness. Some lifters re-breathe between reps in a heavy multi-rep set; for singles, never break the brace until rack.",
+            "key_points": [
+              "Breathe in before unrack, hold through entire rep",
+              "Push pressure 360° into belt, not just front",
+              "Re-breathe between reps on multi-rep sets only",
+              "Belt placement: just above iliac crest, sometimes higher for short torsos"
+            ],
+            "cues": [
+              "Belly breath, not chest",
+              "Push the belt off your stomach",
+              "Brace before you unrack, not after"
+            ],
+            "tags": ["squat", "bracing", "breathing", "belt"],
+            "related": ["tech-squat-bar-position", "equip-belts"]
+          },
+          {
+            "id": "tech-squat-descent",
+            "title": "Squat Descent",
+            "content": "Initiate by simultaneously breaking at hips and knees — sitting back and down at the same time, not one before the other. Maintain neutral spine, vertical shin position relative to your individual leverages (long-femured lifters' shins will travel forward more), and keep upper back tight. Descent speed should be controlled — fast enough to use the stretch reflex, slow enough to maintain position. Common error: 'falling into the hole' (uncontrolled bottom) which loses tightness and forces a grinding ascent. Depth: hip crease below top of patella for IPF/USAPL; just below parallel for most other federations.",
+            "common_errors": [
+              "Knees breaking before hips (squatting down only)",
+              "Hips breaking before knees (good morning squat)",
+              "Losing upper back tightness in the descent",
+              "Crashing into the hole"
+            ],
+            "cues": [
+              "Sit back and down together",
+              "Same speed all the way down",
+              "Knees out as you descend"
+            ],
+            "tags": ["squat", "descent", "depth"],
+            "related": ["tech-squat-ascent", "tech-squat-depth-judging"]
+          },
+          {
+            "id": "tech-squat-ascent",
+            "title": "Squat Ascent and Drive",
+            "content": "From the hole, drive the floor away with whole foot (not toes, not heels alone). Hips and chest rise together — if hips shoot up faster, you've turned the squat into a good morning. Push the knees out through the first third of the ascent to stay in the groove. Through the sticking point (typically 3-6 inches above parallel for most lifters), continue pushing chest up and accelerating. At lockout, finish hips through and stand tall before hearing 'rack.' For low-bar squats, think about driving elbows forward to keep the chest up.",
+            "common_errors": [
+              "Hips rising faster than chest (good-morning squat)",
+              "Knees caving in (valgus collapse)",
+              "Stopping the drive before the sticking point",
+              "Soft lockout"
+            ],
+            "cues": [
+              "Chest up, hips up, together",
+              "Drive the floor away",
+              "Elbows forward, knees out"
+            ],
+            "tags": ["squat", "ascent", "drive"],
+            "related": ["diag-squat-hole", "diag-squat-midrange"]
+          },
+          {
+            "id": "tech-squat-depth-judging",
+            "title": "Depth Standards by Federation",
+            "content": "IPF/USAPL: hip crease (top of the femur fold) below the top of the patella. Strict, judged from the side. USPA/IPL: similar parallel standard, marginally more lenient in practice. SPF: parallel — top of the thigh at the hip parallel to the floor. WRPF: top of the thigh parallel to the floor. WPC/AWPC: parallel, generally judge-friendly. RPS: parallel. 100% Raw: strict parallel/hip crease. Judges look from the side; depth must be reached, not 'almost.' Train below depth in practice — competition adrenaline shortens ROM. A consistent visual marker (a contact point, a mark on the wall) helps build proprioception.",
+            "key_points": [
+              "IPF/USAPL strictest: hip crease below knee crease",
+              "Most other feds: parallel (top of thigh parallel to floor)",
+              "Train deeper than competition standard",
+              "Adrenaline cuts depth on meet day"
+            ],
+            "federations": {
+              "IPF": "Hip crease below patella, strict",
+              "USAPL": "IPF standard",
+              "USPA": "Parallel, similar practical depth",
+              "SPF": "Parallel",
+              "WRPF": "Parallel (top of thigh)",
+              "WPC": "Parallel",
+              "RPS": "Parallel",
+              "100PR": "Hip crease below patella, strict"
+            },
+            "tags": ["squat", "depth", "rules", "federations"],
+            "related": ["fed-ipf", "fed-uspa"]
+          }
+        ]
+      },
+      "bench": {
+        "entries": [
+          {
+            "id": "tech-bench-setup",
+            "title": "Bench Setup and Foot Placement",
+            "content": "Setup is the lift. Lay back, grip bar, pull yourself under the bar to set scapular retraction and depression — pinch shoulder blades together and down toward back pockets. Plant feet firm: tucked under (heels back) for leg drive emphasis, flat with feet wider for stability. The scapulae do not move during the press; they stay locked into the bench. Upper back stays tight throughout. Feet stay planted — no foot lift in IPF/USAPL/most feds (some allow it, e.g., older USPF rules). Setup determines stroke length and bar path — rebuild it every rep on a heavy single.",
+            "common_errors": [
+              "Loose scapulae (slips during press)",
+              "Feet shifting mid-press",
+              "Poor leg drive setup (knees collapsing inward under bar)",
+              "Pulling under the bar too late, after walkout"
+            ],
+            "cues": [
+              "Pinch shoulder blades, drive into bench",
+              "Glutes touch bench, stay there",
+              "Feet plant before unrack, not after"
+            ],
+            "tags": ["bench", "setup", "scapulae"],
+            "related": ["tech-bench-arch", "tech-bench-leg-drive"]
+          },
+          {
+            "id": "tech-bench-arch",
+            "title": "Bench Arch",
+            "content": "An arch shortens the press distance and creates a more biomechanically advantageous angle (think slight decline). Build it by setting upper back high on the bench, walking feet up under hips, and rotating the pelvis to lift the lower back off the pad. Glutes must touch the bench through the press in IPF/USAPL/USPA and most feds — a pronounced arch where glutes leave is a no-lift. Aggressive arches favor lifters with thoracic mobility and shorter limbs. Forced arches without mobility cause low back pain — earn it through thoracic extension drills. Arch height isn't strength; the arch is a position to press from, not a stunt.",
+            "key_points": [
+              "Glutes must remain on the bench (red light if they leave in most feds)",
+              "Arch reduces ROM and improves leverage",
+              "Mobility-limited; don't force without thoracic extension work",
+              "Equipped benchers use larger arches with the shirt"
+            ],
+            "tags": ["bench", "arch", "mobility"],
+            "related": ["tech-bench-setup", "fed-ipf"]
+          },
+          {
+            "id": "tech-bench-grip",
+            "title": "Bench Grip Width",
+            "content": "Maximum legal grip in IPF/USAPL/USPA/WRPF/most feds: 81cm (32 inches) — the rings on the bar mark this. Index fingers must be at or inside the rings. Wider grip = shorter ROM, more pec emphasis, more shoulder stress. Narrower grip = longer ROM, more triceps emphasis, often more comfortable for shoulders. Most competitive raw benchers use a grip near max legal. Find grip by lying on the bench, taking a shoulder-width grip and adjusting based on where your forearms are vertical at chest contact (forearms perpendicular to bar at touch). Bar grip itself: hard squeeze, wrap thumbs around the bar (no suicide grip — too dangerous, no spotter can save it).",
+            "key_points": [
+              "Max legal grip: index fingers at rings (81cm)",
+              "Wider = shorter ROM, more pec",
+              "Narrower = longer ROM, more triceps",
+              "Forearms vertical at touch is the goal"
+            ],
+            "common_errors": [
+              "Suicide grip (no thumb wrap) — never legal, never safe",
+              "Grip outside legal width (red light)",
+              "Inconsistent grip width across attempts"
+            ],
+            "tags": ["bench", "grip", "rules"],
+            "related": ["tech-bench-touch-point", "fed-ipf"]
+          },
+          {
+            "id": "tech-bench-touch-point",
+            "title": "Bench Touch Point",
+            "content": "Touch point depends on grip and arch. Wider grip and bigger arch = lower touch (lower sternum or upper abdomen). Narrower grip and flatter setup = higher touch (mid-chest or just below nipple line). Touch should be at the position where forearms are vertical — that's mechanical optimum. Touch must be visible to side judges and head judge in most feds; ribcage must show the bar contact, not just clothing. In equipped bench, touch point is determined by where the shirt allows the bar to come down — often higher and more difficult to reach, requiring weeks of shirt work to dial in.",
+            "key_points": [
+              "Touch where forearms are vertical at contact",
+              "Bigger arch + wider grip = lower touch",
+              "Touch must be visible to judges (no clothing-only contact)",
+              "Equipped touch point is shirt-dependent"
+            ],
+            "tags": ["bench", "touch", "ROM"],
+            "related": ["tech-bench-grip", "tech-bench-arch", "equip-bench-shirts"]
+          },
+          {
+            "id": "tech-bench-press",
+            "title": "Bench Press Execution",
+            "content": "After the 'Start' command (IPF/USAPL/USPA: required), unrack with help of spotter or solo. Settle, take air, lower bar under control to chest. Pause: motionless on chest for the 'Press' command (most feds — some have no pause requirement). Press up and slightly back toward the rack — bar path is a reverse J, not straight up. Lock out elbows fully and motionless for the 'Rack' command. Most red lights come from: incomplete lockout (elbows soft), uneven lockout (one elbow locks before the other), heels lifting, glutes lifting, double pump (bar moves down after press initiates).",
+            "common_errors": [
+              "Pressing before 'Press' command (red light)",
+              "Uneven lockout (one arm slower than the other)",
+              "Heel/butt lift",
+              "Sinking the bar instead of pausing motionless",
+              "Double pump"
+            ],
+            "cues": [
+              "Pause means dead still — no settling, no sinking",
+              "Press up and back toward your eyes",
+              "Elbows lock together, not one then the other"
+            ],
+            "tags": ["bench", "execution", "commands"],
+            "related": ["fed-ipf", "ops-bench-commands"]
+          },
+          {
+            "id": "tech-bench-leg-drive",
+            "title": "Bench Leg Drive",
+            "content": "Legs are not passive. Drive heels into the floor, push hips toward the head of the bench (not up — up lifts glutes), and use that force to extend the upper back and create whole-body tension. Leg drive transmits through the hips into the lower back into the upper back into the bar. Without leg drive, the press becomes purely upper body and weights drop 5-15%. Coordinate leg drive with the press — drive starts as bar leaves chest, not before. Some lifters use 'feet tucked' (heels back near hips, more aggressive drive) and some use 'flat foot' (more stability, less drive). Tucked feet create more force; flat feet create more consistent positioning. Test both.",
+            "key_points": [
+              "Drive heels down and away, not up",
+              "Tucked feet = more drive, flat feet = more stability",
+              "Leg drive starts as bar leaves chest",
+              "Without leg drive, expect 5-15% weight loss on bench"
+            ],
+            "cues": [
+              "Push the floor away through your heels",
+              "Drive the bench backward into the rack"
+            ],
+            "tags": ["bench", "leg-drive"],
+            "related": ["tech-bench-setup", "tech-bench-press"]
+          }
+        ]
+      },
+      "deadlift": {
+        "entries": [
+          {
+            "id": "tech-deadlift-conventional-setup",
+            "title": "Conventional Deadlift Setup",
+            "content": "Stance hip-width to slightly wider, feet under hips, toes mostly forward (slight flare 5-15° based on comfort). Bar over midfoot (about 1 inch from shins at setup). Walk to the bar, set feet, hinge at hips, grip the bar with hands just outside legs (mixed grip or hook grip). Pull the slack out of the bar — pull up against the bar's loose play in the sleeves until it clicks into the plates. Drop hips, get chest up, lats engaged (squeeze armpits, pull the bar into shins). Brace before you pull. Hips in a position where shoulders are slightly ahead of bar, hips above knees but below shoulders.",
+            "common_errors": [
+              "Bar drifting forward of midfoot at setup (longer lever arm)",
+              "Pulling slack with the back instead of the legs",
+              "Squat-like setup (hips too low) on conventional",
+              "Lats disengaged at start"
+            ],
+            "cues": [
+              "Bar over midfoot",
+              "Pull the slack — feel the click",
+              "Lats tight, armpits squeezed",
+              "Hips in the spot, shoulders just ahead of bar"
+            ],
+            "tags": ["deadlift", "conventional", "setup"],
+            "related": ["tech-deadlift-conventional-pull", "tech-deadlift-grip"]
+          },
+          {
+            "id": "tech-deadlift-conventional-pull",
+            "title": "Conventional Deadlift Execution",
+            "content": "From wedge position, push the floor away with legs while keeping chest up and lats engaged. Bar travels straight up, scraping shins. Hips and shoulders rise at the same rate off the floor — if hips shoot up, you've turned the deadlift into a stiff-leg pull from a worse position. As bar passes knees, drive hips through and stand tall, finishing with shoulders behind the bar (in some feds, shoulders must be behind the bar at lockout). Lock knees and hips simultaneously. No hitching (using the thighs as a ratchet to push the bar up). No downward bar movement during the pull.",
+            "common_errors": [
+              "Hips shooting up before chest (stiff-leg deadlift)",
+              "Bar drifting away from body",
+              "Hitching at lockout",
+              "Soft knee/hip lockout"
+            ],
+            "cues": [
+              "Push the floor away",
+              "Bar in contact with body the whole way",
+              "Squeeze glutes at the top, stand tall"
+            ],
+            "tags": ["deadlift", "conventional", "execution"],
+            "related": ["tech-deadlift-conventional-setup", "diag-deadlift-floor"]
+          },
+          {
+            "id": "tech-deadlift-sumo-setup",
+            "title": "Sumo Deadlift Setup",
+            "content": "Wide stance — feet wider than shoulders, often very wide depending on hip anatomy. Toes flared 30-45°. Bar over midfoot. Hands inside legs, narrow grip. Drop hips by sitting between heels (knees track over toes), torso more upright than conventional. Pull slack out of the bar. Hips in 'wedge' — feet pushed out into the floor, hips pulled forward into the bar, lats engaged, chest up. Sumo recruits more glutes/adductors and less lower back than conventional. Stance width depends on hip socket anatomy — not all lifters have hips that allow extreme sumo. Mid-stance sumo (slightly wider than conventional) works for many anthropometrically.",
+            "common_errors": [
+              "Stance too wide for hip anatomy (can't get hips down)",
+              "Hips too low (sumo squat)",
+              "Hips too high (knees can't push out)",
+              "Knees collapsing inward off the floor"
+            ],
+            "cues": [
+              "Push knees out into elbows",
+              "Spread the floor",
+              "Wedge hips into bar"
+            ],
+            "tags": ["deadlift", "sumo", "setup"],
+            "related": ["tech-deadlift-sumo-pull", "tech-deadlift-style-selection"]
+          },
+          {
+            "id": "tech-deadlift-sumo-pull",
+            "title": "Sumo Deadlift Execution",
+            "content": "From the wedge, push knees out as you drive feet through the floor. Bar slides up the legs. Hips shoot through aggressively — sumo lockout often demands a hard glute squeeze. Knees must lock fully before/with hips. Common sticking point: just off the floor (the start is the hardest because the lifter must overcome friction at the hips). Once bar passes knees, lockout is usually fast. Bar travel is shorter than conventional but the floor break is harder.",
+            "key_points": [
+              "Knees push out as you pull",
+              "Floor break is the sticking point for most sumo pullers",
+              "Lockout often easier than conventional",
+              "Aggressive hip drive through finish"
+            ],
+            "cues": [
+              "Knees out, hips through",
+              "Squeeze glutes hard at the top",
+              "Drive feet through the platform"
+            ],
+            "tags": ["deadlift", "sumo", "execution"],
+            "related": ["tech-deadlift-sumo-setup", "diag-deadlift-floor"]
+          },
+          {
+            "id": "tech-deadlift-grip",
+            "title": "Deadlift Grip Options",
+            "content": "Double overhand: both palms facing you. Strongest position-wise but limited by grip strength — typically maxes around 80-85% of 1RM for trained lifters. Mixed grip: one over, one under (supinated). Stronger holding capacity but introduces bicep tear risk on supinated arm and asymmetric loading. Hook grip: thumb wrapped under fingers around bar. Strong, symmetric, but painful — requires weeks to build thumb tolerance. Most elite sumo deadlifters use hook grip; many conventional pullers use mixed. Switch supinated arm side on training reps to balance any asymmetry. Chalk is essential — sweat kills grip. In federations that allow it, lifting straps in training reduce grip fatigue (never legal in competition).",
+            "key_points": [
+              "Double-overhand limited to ~80% 1RM",
+              "Mixed grip: bicep tear risk on supinated side",
+              "Hook grip: pain in early adoption, strong long-term",
+              "Chalk is non-negotiable; never use straps in competition"
+            ],
+            "tags": ["deadlift", "grip", "hook-grip", "mixed-grip"],
+            "related": ["tech-deadlift-conventional-setup", "tech-deadlift-sumo-setup"]
+          },
+          {
+            "id": "tech-deadlift-style-selection",
+            "title": "Choosing Conventional vs Sumo",
+            "content": "Anthropometry drives the choice. Long torso + short arms + long femurs = conventional struggles, sumo often better. Short torso + long arms + short femurs = conventional advantage. Hip socket structure: anteverted hips (femoral head angled forward) tolerate wide sumo; retroverted hips often can't get into deep sumo. Strength profile: strong upper back = conventional advantage; strong glutes/adductors = sumo advantage. Many lifters can pull both, with one being 5-30 pounds stronger. Test both for 8-12 weeks each before committing. Some lifters program both, picking competition style based on the stronger one that meet day.",
+            "key_points": [
+              "Anthropometry drives style — not preference, not aesthetics",
+              "Long arms favor conventional; long femurs favor sumo",
+              "Hip socket anatomy may rule out extreme sumo",
+              "Test both for 8-12 weeks before committing"
+            ],
+            "tags": ["deadlift", "style-selection", "anthropometry"],
+            "related": ["tech-deadlift-conventional-setup", "tech-deadlift-sumo-setup"]
+          }
+        ]
+      }
+    }
+  },
+
+  "meet_prep": {
+    "description": "Pre-meet structured preparation — peak cycles, taper, weight management, nutrition leading into competition.",
+    "entries": [
+      {
+        "id": "prep-12wk-peak",
+        "title": "12-Week Meet Peak (Standard Cycle)",
+        "content": "Weeks 12-9: Hypertrophy/accumulation. Volume 12-20 hard sets per lift, intensity 70-80%, RPE 7-8. Build work capacity and muscle mass. Weeks 8-5: Strength block. Volume 10-14 sets, intensity 80-87%, RPE 8-9. Heavy triples and doubles emerge. Compete-style sets (paused squats, paused benches, full ROM deadlifts) take over from variations. Weeks 4-2: Peak. Volume 5-8 sets per lift, intensity 87-95%, RPE 8-9.5. Heavy doubles and singles. Last truly heavy work 10-14 days out. Week 1: Taper. Volume cut 50-70%, intensity drops to 60-80%, technical practice only. Last training session 3-5 days before meet.",
+        "key_points": [
+          "Three blocks: hypertrophy → strength → peak",
+          "Last heavy work 10-14 days out from meet",
+          "Taper week sharpens, doesn't build",
+          "Best for intermediates and above"
+        ],
+        "tags": ["meet-prep", "peaking", "12-week"],
+        "related": ["prep-8wk-peak", "prep-taper-structure"]
+      },
+      {
+        "id": "prep-8wk-peak",
+        "title": "8-Week Meet Peak (Compressed)",
+        "content": "Weeks 8-6: Volume + Intensity dual emphasis. Sets 8-12, intensity 75-85%, RPE 7-9. Less time to build base — assumes lifter is already conditioned. Weeks 5-3: Strength/Peak crossover. Sets 6-10, intensity 82-90%, RPE 8-9. Heavy doubles starting week 5, heavy singles week 4. Weeks 2-1: Peak/Taper. Last heavy single week 2 (~92-95%). Week 1 is full taper. Better suited to advanced lifters with big base, worse for intermediates who need accumulation volume.",
+        "key_points": [
+          "Compressed cycle, less hypertrophy work",
+          "Assumes the lifter has a base already",
+          "Last heavy single 7-10 days out",
+          "Higher injury risk than 12-week if base is shallow"
+        ],
+        "tags": ["meet-prep", "peaking", "8-week"],
+        "related": ["prep-12wk-peak", "prep-4wk-peak"]
+      },
+      {
+        "id": "prep-4wk-peak",
+        "title": "4-Week Meet Peak (Short)",
+        "content": "Used when meet is announced late or when lifter is already in shape from another cycle. Week 4: Heavy doubles, RPE 8-9, ~85-90%. Week 3: Heavy singles, RPE 8-9, ~90-93%. Week 2: One last heavy attempt at opener weight (88-92% of expected meet 1RM), sometimes a short overload. Week 1: Taper — light technical work, last session 4-5 days out. Risk: not enough time to recover from any technical mistake or excessive volume. Reserved for experienced lifters who know their bodies.",
+        "key_points": [
+          "Compressed peak only for experienced lifters",
+          "Opener-weight attempt week 2",
+          "No room to fix volume mistakes",
+          "Use if already conditioned, not as a primary plan"
+        ],
+        "tags": ["meet-prep", "peaking", "4-week", "advanced"],
+        "related": ["prep-8wk-peak", "prep-taper-structure"]
+      },
+      {
+        "id": "prep-taper-structure",
+        "title": "Taper Week Structure",
+        "content": "Goal: arrive on meet day fully recovered with neural drive intact. Volume cut 50-70% from peak weeks. Intensity moderate (60-80%) for technical practice — feel the groove without fatigue. Last heavy session 5-7 days out depending on recovery profile (older lifters benefit from longer tapers; younger faster recovery profiles can train closer). Final session 3-5 days out: light squat opener walkout, bench unrack practice, light deadlift singles at ~50-60%. No new exercises. No skill building. Skip accessory work the final week unless it directly supports the main lifts. Sleep should improve — that's the signal taper is working.",
+        "key_points": [
+          "Volume drops 50-70%, intensity drops to 60-80%",
+          "Last heavy session 5-7 days out",
+          "Sleep quality is the readiness signal",
+          "No new exercises, no skill building"
+        ],
+        "tags": ["taper", "meet-prep", "recovery"],
+        "related": ["prep-12wk-peak", "prep-8wk-peak"]
+      },
+      {
+        "id": "prep-weight-cut-24hr",
+        "title": "24-Hour Weigh-In Weight Cut",
+        "content": "USPA, RPS, SPF, WRPF, WPC and most non-IPF feds use 24-hour weigh-ins. Allows aggressive water/sodium cuts because rehydration window is full day before competition. Standard protocol: water load 7-10 days out (1-2 gallons/day for several days, then taper to half on cut day), sodium load and cut, sauna or bath water cut day-of-weigh-in for final 2-5 lbs. Cut depth varies by lifter — aggressive cuts can hit 8-12% bodyweight; sustainable cuts stay under 5%. Refeed with sodium, carbs, and water immediately after weigh-in. Eat slowly through evening — don't bloat. Cut depth scales with rehydration capacity; first-time cuts should be conservative (3-5 lbs max).",
+        "key_points": [
+          "24-hour weigh-in allows full rehydration",
+          "Aggressive cuts 8-12% BW; sustainable <5%",
+          "Water load → cut → refeed",
+          "First-time cuts: conservative, 3-5 lbs"
+        ],
+        "tags": ["weight-cut", "weigh-in", "24-hour"],
+        "related": ["prep-weight-cut-2hr", "prep-meet-day-nutrition"]
+      },
+      {
+        "id": "prep-weight-cut-2hr",
+        "title": "2-Hour Weigh-In Weight Cut",
+        "content": "IPF, USAPL, 100% Raw and most tested feds use 2-hour weigh-ins. Far less time to rehydrate — aggressive water cuts are dangerous and reduce performance. Strategy: minimize cut depth (1-3 lbs max), use diet (lower carbs/fiber/sodium for 3-5 days) rather than dehydration. Some athletes use mild sweating only — sauna or hot shower 1-2 lbs day of weigh-in if needed. Refeed protocol: simple carbs and sodium (rice, sports drink, salty snacks) immediately. Avoid heavy meals — performance window is short. Many IPF lifters compete a class up to avoid cuts entirely.",
+        "key_points": [
+          "2-hour weigh-in = minimal water cut window",
+          "Diet-driven cut, not dehydration",
+          "1-3 lbs maximum is realistic",
+          "Many lifters skip cuts entirely and lift up a class"
+        ],
+        "tags": ["weight-cut", "weigh-in", "2-hour", "IPF"],
+        "related": ["prep-weight-cut-24hr", "fed-ipf"]
+      },
+      {
+        "id": "prep-meet-day-nutrition",
+        "title": "Meet Day Nutrition",
+        "content": "Light, familiar foods. Carbohydrate-focused (rice, oats, bagels, fruit), moderate protein, low fat and fiber (slow digestion). Eat 2-3 hours before squats start. Top off with simple sugars and caffeine 30-60 minutes pre-lift. Sip water and electrolytes throughout the day — never gorge between lifts (fluid in the gut compromises bracing). Caffeine: 200-400 mg pre-squats; many lifters re-dose 100-200 mg before bench and deadlift. Skip new supplements — meet day is not the day to try anything. Snacks between flights: rice cakes, gummies, sports drinks, bananas. Avoid greasy food, dairy, anything that bloats.",
+        "key_points": [
+          "Light carbs and protein 2-3 hours pre-lift",
+          "Caffeine 200-400 mg before squats, re-dose later",
+          "Sip fluids; don't gorge",
+          "Nothing new on meet day"
+        ],
+        "tags": ["meet-day", "nutrition", "caffeine"],
+        "related": ["prep-rehydration", "ops-warmup-timing"]
+      },
+      {
+        "id": "prep-rehydration",
+        "title": "Post-Weigh-In Rehydration",
+        "content": "After 24-hour weigh-in: drink 16-24 oz water with electrolytes immediately. Solid food within 30 minutes (rice and chicken, pasta, sandwiches — moderate carbs and salt). Continue eating through the evening, total intake 1.5-2x normal calories with extra sodium and potassium. Avoid alcohol and excessive sugar (worsens dehydration). Sleep is critical — if anything keeps you up, address it (light meal, magnesium, calm environment). After 2-hour weigh-in: smaller, faster refeed. 8-16 oz water, easily-digested carbs, salt. Don't overload — performance window is 60-90 minutes from weigh-in to first squat warmup.",
+        "key_points": [
+          "24-hour weigh-in: full meal + 16-24 oz water immediately, eat through night",
+          "2-hour weigh-in: small, fast refeed only",
+          "Sodium + potassium are critical",
+          "Sleep matters more than calories"
+        ],
+        "tags": ["rehydration", "weigh-in", "recovery"],
+        "related": ["prep-weight-cut-24hr", "prep-weight-cut-2hr"]
+      }
+    ]
+  },
+
+  "meet_day_operations": {
+    "description": "Meet logistics, judging commands, attempt management, handler responsibilities.",
+    "entries": [
+      {
+        "id": "ops-check-in",
+        "title": "Meet Day Check-In and Equipment Check",
+        "content": "Arrive 60-90 minutes before scheduled lifting. Weigh in (if not done day before). Equipment check: belt, suit, knee sleeves/wraps, wrist wraps, singlet, shoes, socks (deadlift socks required in IPF/USAPL). Officials inspect and mark approved gear. Submit opening attempts at the rules briefing or before flight starts. Verify rack height for squat and bench. Check flight order, your number, scheduled time. Identify your handler if you have one. Locate warmup room, platform, and your assigned chair. Get your numbered card or wristband.",
+        "key_points": [
+          "Arrive 60-90 minutes early",
+          "Equipment check is mandatory in tested feds",
+          "Submit openers before flight start",
+          "Verify rack heights — both squat and bench"
+        ],
+        "tags": ["meet-day", "check-in", "equipment-check"],
+        "related": ["ops-rack-heights", "ops-attempt-cards"]
+      },
+      {
+        "id": "ops-rack-heights",
+        "title": "Rack Height Setup",
+        "content": "Squat rack: bar should sit just below shoulder height — typical low-bar squatter sets the J-hooks so the bar is at sternum height when standing tall. Too high forces tip-toe unrack; too low forces a partial squat to unrack. Bench rack: bar at a height where arms are nearly locked out at unrack with minimal pull-out, but not so low you can't hand-off to spotter. Test setup before flight starts. Most platforms allow you to walk up before flight and verify your rack number — do this. Note rack heights in phone or on hand for reference. Squat: standard 12-16 for most adults; bench: 6-10 for most.",
+        "key_points": [
+          "Squat: bar at sternum standing tall",
+          "Bench: arms nearly locked at unrack",
+          "Verify before flight starts",
+          "Note your numbers"
+        ],
+        "tags": ["meet-day", "rack-heights"],
+        "related": ["ops-check-in"]
+      },
+      {
+        "id": "ops-warmup-timing",
+        "title": "Warmup Room Timing",
+        "content": "The 8-attempt rule: count 8 attempts before yours from the announcement of attempts in your flight. With ~1 minute per attempt average, you have roughly 8 minutes from current attempt to your platform call. Plan warmups to finish your last warmup with 2-3 attempts of cushion. Standard warmup ladder for squat (target 200 kg opener example): empty bar, 60 kg x 5, 100 kg x 3, 140 kg x 2, 170 kg x 1, 185 kg x 1 — opener on the platform. Adjust by lifter; experienced lifters may prefer fewer warmup sets. Have warmups planned in writing before the meet — don't improvise under stress. If flight is fast (< 1 min/attempt), start sooner. If flight is slow (medical timeouts, equipment issues), pace down.",
+        "key_points": [
+          "8 attempts before yours = standard warmup window",
+          "Finish warmups 2-3 attempts before platform call",
+          "Pre-write warmup ladder; don't improvise",
+          "Adjust pace to flight speed"
+        ],
+        "tags": ["meet-day", "warmups", "8-attempt-rule"],
+        "related": ["ops-flight-management", "ops-handler-role"]
+      },
+      {
+        "id": "ops-flight-management",
+        "title": "Flights and Lifting Order",
+        "content": "Flights are groups of 8-14 lifters who lift together in a rotation. Round 1: all flight members complete their first attempt in lifting order. Round 2: same lifters in same order with second attempts. Round 3: third attempts. Lifting order is set by attempt weight, lightest first. If you and another lifter take the same weight, lower lot number goes first. If lifting order changes (someone bumps weight up or down), official announcer updates. Pay attention — order can shift between rounds. Multi-flight meets run all flights' squats first, then bench, then deadlift, with breaks between flights. Wait for your flight to be called.",
+        "key_points": [
+          "Flight = 8-14 lifters lifting in rotation",
+          "Lightest weight goes first",
+          "Order can shift if attempts are changed",
+          "Multi-flight meets stack flights, not lifts"
+        ],
+        "tags": ["meet-day", "flights", "lifting-order"],
+        "related": ["ops-warmup-timing", "ops-attempt-cards"]
+      },
+      {
+        "id": "ops-attempt-cards",
+        "title": "Attempt Cards and Changes",
+        "content": "After each successful or failed attempt, you have a 1-minute window (most feds) to submit your next attempt to the table. Handler typically does this. You can change an attempt only twice in IPF/USAPL (or sometimes only once after the deadline) and there are restrictions on direction/timing depending on fed. Submit an opener that's a guaranteed make. Second attempt is your strategic move — usually a sizable PR or planned third-attempt setup. Third attempt is the maximal effort. Late submission can mean you forfeit the change (revert to previously announced weight) or, if too late, miss the attempt entirely.",
+        "key_points": [
+          "1-minute submission window after each attempt",
+          "Limited attempt changes per lift (rule varies by fed)",
+          "Handler manages the table",
+          "Late submission = forfeit"
+        ],
+        "tags": ["meet-day", "attempts", "card-submission"],
+        "related": ["ops-handler-role", "ops-attempt-selection"]
+      },
+      {
+        "id": "ops-squat-commands",
+        "title": "Squat Commands and Red Light Criteria",
+        "content": "IPF/USAPL/USPA/100PR/most strict feds: walk out (or unrack on monolift), stand still, 'Squat' command, descend, hit depth, ascend, stand still at top, 'Rack' command. WRPF allows monolift unrack (no walkout) and may not require 'Squat' command in some events. Red lights: failure to hit depth, downward movement during ascent (any drop), double bounce, foot movement during the rep, failure to wait for 'Squat' command (squatting before signal), failure to wait for 'Rack' command (racking early), bar shifting on back. White lights = good lift; need 2 of 3 judges in agreement. IPF and most feds use 'Squat' and 'Rack' commands; WRPF and some untested feds simplify.",
+        "key_points": [
+          "'Squat' command before descent (most feds)",
+          "'Rack' command after standing still at top",
+          "Red lights: depth fail, downward movement, double bounce, command violations",
+          "Need 2 of 3 white lights"
+        ],
+        "federations": {
+          "IPF": "Walkout, 'Squat' and 'Rack' commands required",
+          "USAPL": "IPF rules",
+          "USPA": "'Squat' and 'Rack', monolift permitted",
+          "WRPF": "Monolift standard, simplified commands",
+          "SPF": "Monolift permitted, simplified",
+          "100PR": "Strict, IPF-style commands"
+        },
+        "tags": ["squat", "commands", "judging"],
+        "related": ["tech-squat-depth-judging", "ops-bench-commands"]
+      },
+      {
+        "id": "ops-bench-commands",
+        "title": "Bench Commands and Red Light Criteria",
+        "content": "Lift off (self or hand-off from spotter), 'Start' command — bar held still at lockout. Lower bar to chest, motionless. 'Press' command — press up. Lockout fully and motionless. 'Rack' command — return bar to rack. Red lights: pressing before 'Press' command, double pump (downward movement after press starts), uneven lockout, heel lift, glute lift, bar shifting on chest, failure to lock out elbows, racking before 'Rack' command. WRPF often skips the 'Press' command (no pause requirement in some events). USPA/IPF/USAPL all require 'Start', 'Press', 'Rack'.",
+        "key_points": [
+          "'Start' (after unrack), 'Press' (after pause), 'Rack' (after lockout)",
+          "Red lights: command violations, double pump, heel/glute lift, soft lockout",
+          "WRPF may skip 'Press' command (no pause required)",
+          "Need 2 of 3 white lights"
+        ],
+        "federations": {
+          "IPF": "Three commands strict, motionless pause required",
+          "USAPL": "IPF rules",
+          "USPA": "Three commands, pause required",
+          "WRPF": "'Press' command often dropped (touch-and-go events)",
+          "SPF": "Variable by event"
+        },
+        "tags": ["bench", "commands", "judging"],
+        "related": ["tech-bench-press", "ops-squat-commands"]
+      },
+      {
+        "id": "ops-deadlift-commands",
+        "title": "Deadlift Commands and Red Light Criteria",
+        "content": "No 'Pull' command in most feds — lifter starts when ready. Lift bar, lock out (knees and hips fully extended, shoulders behind or even with bar in some feds). 'Down' command — lower the bar under control. Red lights: hitching (resting bar on thighs and ratcheting up), downward movement of bar during pull, failure to lock out fully, dropping the bar before 'Down' command, supporting bar on thighs at any point during ascent. Most feds require controlled descent — slamming the bar to the floor before the command can be a red light or a fine. IPF requires shoulders behind bar at top.",
+        "key_points": [
+          "No start command — pull when ready",
+          "'Down' command after full lockout",
+          "Red lights: hitching, downward movement, soft lockout, early drop",
+          "IPF: shoulders behind bar at lockout"
+        ],
+        "federations": {
+          "IPF": "Shoulders behind bar at lockout, controlled descent",
+          "USAPL": "IPF rules",
+          "USPA": "Shoulders even or behind bar",
+          "WRPF": "Standard rules, controlled descent",
+          "SPF": "Standard"
+        },
+        "tags": ["deadlift", "commands", "judging"],
+        "related": ["tech-deadlift-conventional-pull", "ops-bench-commands"]
+      },
+      {
+        "id": "ops-attempt-selection",
+        "title": "Attempt Selection Strategy",
+        "content": "Opener: guaranteed make, 88-92% of training 1RM. Should feel like an RPE 7-7.5 — speed, no grind. Purpose: get on the board, set baseline, calibrate. Second: ~94-97% of best training set, or a planned PR by 2-5%. RPE 8-9. Sets up the third. Third: max effort or strategic — depends on whether you're chasing a PR, a Wilks total, or qualifying total. Standard PR attempt: 3-8 lbs over best second attempt. Don't make a third attempt that's not warmed up by the second — second should bring you within striking distance. Conservative strategy: 9/9 (all attempts good) wins meets more than 8/9 with a missed third on max-out. Aggressive strategy: open low to leave room for big third. Match strategy to goal.",
+        "key_points": [
+          "Opener: 88-92% 1RM, guaranteed make",
+          "Second: 94-97%, RPE 8-9, sets up third",
+          "Third: max effort or strategic PR",
+          "9/9 beats 8/9 in most meet structures"
+        ],
+        "tags": ["attempts", "strategy", "openers"],
+        "related": ["ops-handler-role", "ops-bombing-prevention"]
+      },
+      {
+        "id": "ops-handler-role",
+        "title": "Handler Responsibilities",
+        "content": "A handler is the lifter's offsite coach during the meet. Responsibilities: track flight order and timing, count attempts before yours, pace warmups, submit attempt cards on time, give cues before each platform attempt, manage food/water/caffeine timing, troubleshoot equipment issues, manage emotional state. Best handlers know the lifter cold — typical openers, taper response, what cues land. The lifter should not be doing math or watching the clock; the handler owns logistics. If self-handling, write the script in advance: warmup ladders, attempt projections, eating schedule. Self-handlers fail when adrenaline rises and judgment narrows.",
+        "key_points": [
+          "Handler owns logistics and timing",
+          "Lifter focuses on lifting only",
+          "Self-handling possible with pre-written script",
+          "Best handlers know the lifter's quirks"
+        ],
+        "tags": ["handler", "meet-day", "support"],
+        "related": ["ops-warmup-timing", "ops-attempt-cards"]
+      },
+      {
+        "id": "ops-bombing-prevention",
+        "title": "Bombing Out Prevention",
+        "content": "'Bombing out' = missing all three attempts on a lift, getting zero credit and ending your meet (no total). Causes: opener too aggressive, equipment issues, technical breakdown under stress, depth misjudgment, command violations. Prevention: opener should be a weight you've hit for a clean double in training within the last 4 weeks. If first attempt is missed for a fixable reason (depth, command), second attempt should typically repeat the weight, not reduce. If missed for a physical reason (failed lockout, lost in the hole), reduce or hold weight on second. Third attempt after two misses: take the same weight or 1-2 kg lighter — you need this lift. Bombing on squat ends your day. Bombing on bench or deadlift ends your day. There is no recovery.",
+        "key_points": [
+          "Opener = clean double in training within 4 weeks",
+          "Repeat weight after first miss for fixable reasons",
+          "Reduce or hold for physical failure",
+          "Bombing = no total, no recovery"
+        ],
+        "tags": ["bombing", "attempts", "strategy"],
+        "related": ["ops-attempt-selection", "ops-squat-commands"]
+      }
+    ]
+  },
+
+  "equipped": {
+    "description": "Equipped powerlifting — suits, shirts, wraps, and federation-specific gear regulations.",
+    "entries": [
+      {
+        "id": "equip-single-vs-multi-ply",
+        "title": "Single-Ply vs Multi-Ply",
+        "content": "Single-ply: one layer of supportive fabric. IPF, USAPL, USPA single-ply division. Adds ~5-15% to lifts but requires significant technical skill to use. Multi-ply: two or more layers, often with reinforced seams. Common in WPC, RPS, SPF. Adds ~15-30%+ to lifts but with steeper learning curve and specialized programming. Multi-ply gear is so supportive that lifters often must be 'taken down' by the gear — they can't reach depth on squat or touch on bench without proper setup, opening weight, and technique. Multi-ply requires partner-assisted suit pulls and shirt setups. Single-ply is easier to learn and more federations accept it.",
+        "key_points": [
+          "Single-ply: ~5-15% boost, more federations accept",
+          "Multi-ply: ~15-30%+ boost, fewer feds, harder to learn",
+          "Multi-ply requires assisted setup",
+          "IPF/USAPL: single-ply only"
+        ],
+        "tags": ["equipped", "single-ply", "multi-ply"],
+        "related": ["equip-squat-suits", "equip-bench-shirts", "fed-ipf"]
+      },
+      {
+        "id": "equip-squat-suits",
+        "title": "Squat Suits",
+        "content": "Construction: tight stretch fabric (canvas, denim, polyester) cut to compress and store energy at the bottom of the squat. Brands: Inzer (Hardcore, Champion), Titan (Centurion), Metal (Ace, King), SDP, Boss Bench. Mechanics: suit resists hip flexion at the bottom, returning energy as the lifter ascends. Properly broken-in single-ply squat suit adds 30-80 lbs to a lift; multi-ply 80-200+ lbs. Sizing: ordered tight, often requires partners to pull onto lifter. Squat suit straps are critical — placed on shoulders with tension, often after warmup squats are completed. Suit-only walkouts feel different than raw — the suit stiffens the descent, and the lifter must learn to 'fall into' the suit rather than fight it.",
+        "key_points": [
+          "Compresses at bottom, stores and returns energy",
+          "Single-ply: 30-80 lb boost; multi-ply: 80-200+",
+          "Requires partner setup at heavy weights",
+          "Walkout and depth feel completely different from raw"
+        ],
+        "tags": ["equipped", "squat-suit", "geared"],
+        "related": ["equip-single-vs-multi-ply", "equip-suit-break-in"]
+      },
+      {
+        "id": "equip-bench-shirts",
+        "title": "Bench Shirts",
+        "content": "Construction: tight, reinforced shirts that resist the bar lowering to the chest. Open-back design (snap or velcro back) makes setup feasible. Brands: Inzer (Phenom, Rage X), Titan (F6, Fury), Metal (Pro, Viking). Mechanics: shirt stores enormous elastic energy as the bar is lowered, returns it on the press. Lifter must lower bar with intent — sloppy descent loses energy. Touch point is often higher than raw bench because the shirt stops the bar early. Common single-ply boost: 50-100 lbs; multi-ply: 100-300+. Bench shirts are harder than squat suits to use — many lifters never master them. Properly used, multi-ply shirts have produced bench lifts >1000 lbs.",
+        "key_points": [
+          "Resists bar descent, stores elastic energy",
+          "Touch point is higher than raw, shirt-determined",
+          "Single-ply: 50-100 lb boost; multi-ply: 100-300+",
+          "Hardest equipped lift to master"
+        ],
+        "tags": ["equipped", "bench-shirt", "geared"],
+        "related": ["equip-single-vs-multi-ply", "equip-suit-break-in"]
+      },
+      {
+        "id": "equip-deadlift-suits",
+        "title": "Deadlift Suits",
+        "content": "Tight suits cut to support the start of the deadlift — primarily helping off the floor and through the early pull. Less leverage at lockout (suit is mostly relaxed in lockout position). Single-ply deadlift suits add 15-50 lbs typically; multi-ply 30-100+. Less common than squat or bench gear because the boost is smaller and many lifters find their style (especially sumo) doesn't fit suit mechanics. Some lifters wear briefs only for deadlift in equipped meets. Deadlift suit straps go up; lifter pulls suit on, partner secures straps.",
+        "key_points": [
+          "Helps off the floor, less at lockout",
+          "Smaller boost than squat or bench gear",
+          "Single-ply: 15-50 lbs; multi-ply: 30-100+",
+          "Some equipped lifters wear briefs only"
+        ],
+        "tags": ["equipped", "deadlift-suit", "geared"],
+        "related": ["equip-single-vs-multi-ply", "equip-briefs"]
+      },
+      {
+        "id": "equip-briefs",
+        "title": "Squat/Deadlift Briefs",
+        "content": "Tight reinforced shorts worn under suits or alone. Used by some equipped lifters as primary deadlift gear (in feds that allow briefs-only) or as a layer under squat suit for more support. Add ~10-30 lbs as a single layer. Allow conventional pullers to maintain their setup without the more restrictive squat-suit feel. Used in WPC, SPF, RPS multi-ply events. Less common in single-ply feds. Brand examples: Inzer Power Pants, Titan briefs.",
+        "key_points": [
+          "Tight reinforced shorts, added support",
+          "Sometimes used as deadlift primary gear",
+          "10-30 lb boost as a single layer",
+          "Common in WPC/SPF/RPS multi-ply"
+        ],
+        "tags": ["equipped", "briefs"],
+        "related": ["equip-deadlift-suits", "equip-single-vs-multi-ply"]
+      },
+      {
+        "id": "equip-knee-wraps",
+        "title": "Knee Wraps and Wrap Techniques",
+        "content": "Long elastic wraps (typically 2m) wrapped tightly around the knees to provide support at the bottom of the squat. Provide 30-100+ lbs of carryover depending on tightness, length, and wrap technique. X-wrap: criss-cross pattern across knee, prioritizes support at depth. Spiral wrap: continuous spiral, distributes pressure evenly. Tightness ranges from 'training-tight' (uncomfortable but tolerable) to 'meet-tight' (painful, applied with help, 3-5 minutes max wear time). Wraps applied between warmup and platform, removed immediately after the lift to preserve circulation. IPF/USAPL allow knee sleeves only in their 'classic raw' division and knee wraps in their 'equipped' division (or at certain meets, 'equipped raw'). 100% Raw bans wraps in raw division.",
+        "key_points": [
+          "Adds 30-100+ lbs to squat depending on tightness",
+          "X-wrap or spiral are the two patterns",
+          "Meet-tight wraps applied 3-5 minutes pre-lift",
+          "Sleeves vs wraps is a major fed-defining distinction"
+        ],
+        "federations": {
+          "IPF": "Wraps in equipped only; sleeves in classic raw",
+          "USAPL": "IPF rules",
+          "USPA": "Wraps allowed in raw and classic divisions",
+          "WRPF": "Wraps standard in raw division",
+          "SPF": "Wraps standard",
+          "100PR": "Sleeves only, no wraps in raw"
+        },
+        "tags": ["knee-wraps", "equipped", "raw-with-wraps"],
+        "related": ["fed-ipf", "fed-uspa", "fed-wrpf"]
+      },
+      {
+        "id": "equip-wrist-wraps",
+        "title": "Wrist Wraps",
+        "content": "Elastic or fabric wraps around the wrists to stiffen the joint and prevent extension under heavy load. Used on squat (bar press into wrists) and bench (bar load on wrists at lockout). Stiffer wraps (IPF-approved 'heavy duty' types) for max attempts; lighter wraps for training. Length: most legal in 50-100 cm range depending on fed. Application: thumb loop on, wrap with tension across the wrist crease, secure with velcro. Apply just before lift, remove between lifts. IPF approves specific brands; most other feds permit any reasonable wrap. Don't wrap so tight you cut circulation — pulse should still be palpable.",
+        "key_points": [
+          "Stiffens wrist joint under load",
+          "Heavy duty for maxes, lighter for training",
+          "Apply just before lift",
+          "IPF requires approved brands"
+        ],
+        "tags": ["wrist-wraps", "equipment"],
+        "related": ["fed-ipf", "tech-bench-grip"]
+      },
+      {
+        "id": "equip-belts",
+        "title": "Powerlifting Belts",
+        "content": "Three main types: Single-prong leather (most common, simple, durable), double-prong leather (slightly slower buckle, no real benefit), lever belt (lever closure for fast on/off and consistent tightness). Standard powerlifting belt: 4 inches wide front-to-back (uniform width), 10-13mm thick. IPF approves specific belt brands. Belt creates a wall to brace into — pressure pushes into the belt, increasing intra-abdominal pressure and spinal stiffness. Position: just above iliac crest for most; higher for short-torso lifters. Tighter for max attempts, looser for warmups. Wear belt for sets above ~75% intensity; train un-belted in early warmups to maintain natural bracing capacity.",
+        "key_points": [
+          "Single-prong, double-prong, lever — choose by preference",
+          "4\" wide, 10-13mm thick is standard",
+          "Position above iliac crest, tighter for maxes",
+          "IPF requires approved brands"
+        ],
+        "tags": ["belts", "equipment", "bracing"],
+        "related": ["tech-squat-bracing", "fed-ipf"]
+      },
+      {
+        "id": "equip-suit-break-in",
+        "title": "Equipment Break-In",
+        "content": "New gear is stiffer than broken-in gear. Squat suits typically need 8-15 sessions to reach optimal stretch and groove. Bench shirts need 10-20+ sessions. Lifters often size gear progressively tight as their lift grows — what fits well at 600 lbs squat may not fit at 700. Break-in process: wear suit/shirt for warmup sets initially, work up to top sets across weeks. Heavy lifting in fresh gear is dangerous (won't move predictably) and can damage the gear. Plan break-in 8-12 weeks before a meet. Multi-ply gear takes longer to break in than single-ply. Equipment is consumable — replace squat suits every 12-24 months of regular use.",
+        "key_points": [
+          "Squat suits: 8-15 sessions break-in",
+          "Bench shirts: 10-20+ sessions",
+          "Plan break-in 8-12 weeks pre-meet",
+          "Equipment wears out — replace regularly"
+        ],
+        "tags": ["equipped", "break-in", "gear-management"],
+        "related": ["equip-squat-suits", "equip-bench-shirts"]
+      },
+      {
+        "id": "equip-walkouts-handlers",
+        "title": "Walkouts and Handlers in Equipped",
+        "content": "Equipped squats often involve handlers in IPF/USAPL/USPA — typically 2-3 spotters help unrack and provide a controlled walkout, then back off as the lifter sets up. Monolifts (used in many other feds) eliminate the walkout — bar is unracked, lifter steps back minimally or stays in place, spotters spot but don't lift the bar with the lifter. Equipped bench: handler hands off the bar at unrack since shirt resistance makes self-unrack difficult or impossible at heavy weights. Pre-meet, brief handlers on cues, walkout pace, and how to spot. Bad handlers cost lifts; good handlers turn the room into a tunnel that ends at the bar.",
+        "key_points": [
+          "Equipped squats: handlers spot walkout (or monolift)",
+          "Equipped bench: handler hand-off is standard",
+          "Brief handlers ahead of time",
+          "Monolifts standard in WRPF/SPF/USPA, walkouts standard in IPF"
+        ],
+        "federations": {
+          "IPF": "Walkout standard, no monolift",
+          "USAPL": "IPF rules",
+          "USPA": "Monolift permitted",
+          "WRPF": "Monolift standard",
+          "SPF": "Monolift standard",
+          "100PR": "Walkout standard"
+        },
+        "tags": ["equipped", "walkouts", "handlers", "monolift"],
+        "related": ["equip-squat-suits", "ops-handler-role"]
+      }
+    ]
+  },
+
+  "federations": {
+    "description": "Major powerlifting federations and their distinguishing rules.",
+    "entries": [
+      {
+        "id": "fed-ipf",
+        "title": "IPF — International Powerlifting Federation",
+        "content": "Strictest mainstream federation. Drug-tested with WADA-aligned protocols (in/out of competition testing, banned substance list). Equipment: approved brands only (Inzer, Titan, Metal, SBD, etc. — list updated annually). Single-ply only in equipped; sleeves only in classic raw division. Walkout required (no monolift). Strict commands on all three lifts ('Squat'/'Rack' on squat; 'Start'/'Press'/'Rack' on bench; 'Down' on deadlift). Depth: hip crease below patella. 2-hour weigh-in. Divisions: classic (raw with sleeves), equipped (single-ply suits/shirts/wraps). Affiliates: USAPL (historically), various national feds. Considered the 'Olympic' standard of powerlifting.",
+        "key_rules": [
+          "WADA-aligned drug testing",
+          "Approved brands only",
+          "Single-ply equipped, sleeves-only classic raw",
+          "Walkout required, no monolift",
+          "Strict commands, strict depth (hip crease below patella)",
+          "2-hour weigh-in"
+        ],
+        "tags": ["IPF", "federations", "tested"],
+        "related": ["fed-usapl", "tech-squat-depth-judging"]
+      },
+      {
+        "id": "fed-usapl",
+        "title": "USAPL — USA Powerlifting",
+        "content": "Historically the IPF affiliate in the US. Rules effectively mirror IPF — drug-tested, approved equipment, strict commands. Note: the USAPL/IPF affiliation has shifted over recent years; current status should be verified for any specific meet. Operationally treat USAPL events as IPF rules unless specific event materials state otherwise. Drug testing protocols use IPF-aligned banned list. Walkout required. Single-ply equipped. Knee sleeves in classic raw. Hip crease below patella for depth.",
+        "key_rules": [
+          "IPF-aligned ruleset",
+          "WADA banned list",
+          "Walkout, no monolift",
+          "Hip crease below patella"
+        ],
+        "tags": ["USAPL", "federations", "tested", "IPF-affiliate"],
+        "related": ["fed-ipf"]
+      },
+      {
+        "id": "fed-uspa",
+        "title": "USPA — United States Powerlifting Association",
+        "content": "IPL (International Powerlifting League) affiliate. Both tested and untested divisions in same fed. More permissive equipment list than IPF. Monolift permitted. Single-ply and multi-ply divisions both available. Knee wraps allowed in raw division (this is a major difference from IPF — USPA 'raw' often means raw-with-wraps). 24-hour weigh-in standard. Commands: 'Squat'/'Rack', 'Start'/'Press'/'Rack', 'Down'. Depth: parallel (top of thigh). Considered the most popular non-IPF fed in the US for serious lifters.",
+        "key_rules": [
+          "Tested and untested divisions",
+          "Monolift permitted",
+          "Single-ply and multi-ply",
+          "Knee wraps in raw division",
+          "24-hour weigh-in",
+          "Parallel depth standard"
+        ],
+        "tags": ["USPA", "IPL", "federations"],
+        "related": ["fed-ipl", "fed-ipf"]
+      },
+      {
+        "id": "fed-ipl",
+        "title": "IPL — International Powerlifting League",
+        "content": "International parent of USPA. Same general ruleset — both tested and untested divisions, monolift permitted, knee wraps in raw, multi-ply available. World-level meets run under IPL banner. Considered the largest IPF-alternative on the international circuit.",
+        "key_rules": [
+          "Parent of USPA",
+          "Same ruleset as USPA",
+          "International scope"
+        ],
+        "tags": ["IPL", "federations", "international"],
+        "related": ["fed-uspa"]
+      },
+      {
+        "id": "fed-spf",
+        "title": "SPF — Southern Powerlifting Federation",
+        "content": "Permissive untested federation. Multi-ply allowed. Monolift standard. Less rigorous judging in many practical settings (not officially, but in practice depth and lockout standards are more lenient). 24-hour weigh-in. Common destination for lifters who want big numbers in lenient gear-friendly environments. Variable per meet — some SPF meets are run very strictly, others loosely.",
+        "key_rules": [
+          "Untested",
+          "Multi-ply allowed",
+          "Monolift standard",
+          "Parallel depth, judging varies per meet"
+        ],
+        "tags": ["SPF", "federations", "untested", "multi-ply"],
+        "related": ["fed-wpc", "fed-rps"]
+      },
+      {
+        "id": "fed-wrpf",
+        "title": "WRPF — World Raw Powerlifting Federation",
+        "content": "Raw-focused federation. Untested in core division (some meets offer tested). Monolift standard. Knee wraps standard in raw division. Bench: 'Press' command sometimes dropped (touch-and-go events). 24-hour weigh-in. Popular among raw lifters who want a competitive but less restrictive environment than IPF. Hosts the famous Showdown events.",
+        "key_rules": [
+          "Raw-focused",
+          "Monolift standard",
+          "Wraps in raw division",
+          "Touch-and-go bench events common",
+          "24-hour weigh-in"
+        ],
+        "tags": ["WRPF", "federations", "raw"],
+        "related": ["fed-uspa", "equip-knee-wraps"]
+      },
+      {
+        "id": "fed-wpc-awpc",
+        "title": "WPC / AWPC — World Powerlifting Congress",
+        "content": "WPC: untested division. AWPC: tested arm of WPC. Multi-ply allowed in both. Monolift standard. Permissive equipment list. International scope with strong European presence. Multi-ply lifters often compete here for big totals. 24-hour weigh-in. Knee wraps standard.",
+        "key_rules": [
+          "WPC untested, AWPC tested",
+          "Multi-ply allowed",
+          "Monolift standard",
+          "International, strong in Europe"
+        ],
+        "tags": ["WPC", "AWPC", "federations", "multi-ply"],
+        "related": ["fed-spf", "fed-rps"]
+      },
+      {
+        "id": "fed-rps",
+        "title": "RPS — Revolution Powerlifting Syndicate",
+        "content": "US-based, untested. Multi-ply allowed. Monolift permitted. Lenient equipment list. Popular for big totals and equipped competition. 24-hour weigh-in. Some events known for showcase-style production with crowds and stage lighting.",
+        "key_rules": [
+          "Untested",
+          "Multi-ply allowed",
+          "Monolift permitted",
+          "Showcase-friendly events"
+        ],
+        "tags": ["RPS", "federations", "multi-ply", "untested"],
+        "related": ["fed-wpc-awpc", "fed-spf"]
+      },
+      {
+        "id": "fed-100-raw",
+        "title": "100% Raw Powerlifting Federation",
+        "content": "Strictest raw federation. Drug-tested. No knee wraps (sleeves only). No knee sleeves above a certain thickness in some events. No bench shirts, suits, or wraps of any kind beyond belt and basic wrist wraps. Walkout required. Strict commands. Hip crease below patella depth. 2-hour weigh-in. Smaller than IPF but the standard for purists.",
+        "key_rules": [
+          "Tested",
+          "True raw — no wraps, sleeves limited",
+          "Walkout required",
+          "Strict depth and commands",
+          "2-hour weigh-in"
+        ],
+        "tags": ["100% Raw", "federations", "tested", "raw-purist"],
+        "related": ["fed-ipf", "fed-usapl"]
+      },
+      {
+        "id": "fed-uspf",
+        "title": "USPF — United States Powerlifting Federation",
+        "content": "Historic American fed (founded in the 1980s). Variable rules across regions and time periods. Some events strict, some permissive. Less mainstream relevance today than IPF/USAPL/USPA, but still hosts events. Verify rules per specific meet before competing.",
+        "key_rules": [
+          "Historic fed",
+          "Rules vary by event",
+          "Verify locally"
+        ],
+        "tags": ["USPF", "federations", "historical"],
+        "related": ["fed-ipf"]
+      }
+    ]
+  },
+
+  "diagnostics": {
+    "description": "Weak point analysis — where the miss occurs determines the fix.",
+    "subcategories": {
+      "squat_diagnostics": {
+        "entries": [
+          {
+            "id": "diag-squat-hole",
+            "title": "Stuck in the Hole (Bottom of Squat)",
+            "content": "Symptoms: bar comes down fine, but cannot reverse out of the hole, or hips shoot up immediately to convert the squat into a good morning. Causes: weak quads, weak posterior chain in stretched position, poor bracing at depth, lack of explosive reversal capacity. Fixes: pause squats (1-3 second pause at depth, builds strength out of the bottom without stretch reflex), front squats (loads quads more directly), high bar squats (builds quad strength at depth), pin squats (squats from pins below parallel — eliminate stretch reflex entirely), tempo descents (5-second eccentric to build position), ATG bodybuilding work (deep front squats high reps).",
+            "fixes_priority": [
+              "Pause squats — primary",
+              "Front squats — quad emphasis",
+              "Pin squats — pure starting strength from depth",
+              "Tempo descents — position and control"
+            ],
+            "tags": ["squat", "weak-point", "hole", "diagnostics"],
+            "related": ["tech-squat-ascent", "prog-conjugate"]
+          },
+          {
+            "id": "diag-squat-midrange",
+            "title": "Mid-Range Squat Sticking Point",
+            "content": "Symptoms: lifter clears the hole, then slows and grinds 3-8 inches above parallel before either making or missing. The classic squat sticking point. Causes: weak quads through transition, hips rising faster than chest (good morning conversion), insufficient back strength to maintain torso angle. Fixes: 1.5 reps (squat down, half rep up, full rep down, then full up — drives volume through sticking range), pause squats with longer pauses, banded squats (band tension increases through the sticking range), heavy good mornings (back strength), front squats. Ensure technique addresses chest-up cue — many midrange misses are technical, not strength.",
+            "fixes_priority": [
+              "1.5 squats — volume in sticking range",
+              "Banded squats — accommodating resistance",
+              "Heavy good mornings — back strength",
+              "Front squats"
+            ],
+            "tags": ["squat", "weak-point", "midrange", "diagnostics"],
+            "related": ["diag-squat-hole", "prog-accommodating-resistance"]
+          },
+          {
+            "id": "diag-squat-lockout",
+            "title": "Squat Lockout Sticking Point",
+            "content": "Symptoms: lifter grinds the last few inches of the squat, sometimes failing to fully stand, often with hips behind shoulders at top. Causes: weak glutes, weak lower back, soft lockout habit. Fixes: heavy partial squats from pins above parallel, glute bridges and hip thrusts (heavy), heavy lockouts in the rack from just below standing, RDLs, good mornings. Less common than mid-range stuck points; if you're missing at lockout regularly, often there's a technique issue causing the chest to drop late in the rep.",
+            "fixes_priority": [
+              "Pin squats above parallel — partial range",
+              "Heavy hip thrusts — glutes",
+              "Good mornings — lower back",
+              "Re-examine lockout technique"
+            ],
+            "tags": ["squat", "weak-point", "lockout", "diagnostics"],
+            "related": ["diag-squat-midrange"]
+          }
+        ]
+      },
+      "bench_diagnostics": {
+        "entries": [
+          {
+            "id": "diag-bench-chest",
+            "title": "Bench Off-the-Chest Sticking Point",
+            "content": "Symptoms: bar pauses on chest, fails to leave chest or moves up 1-2 inches before stalling. Causes: weak pecs in stretched position, weak leg drive, poor positioning at touch (elbows flared too wide or tucked too much), bracing failure. Fixes: pause benches (3-5 second pauses on chest), spoto press (pause 1 inch off chest), heavy dumbbell bench (loaded stretch), close grip incline (pec stretch and triceps), feet-up bench (forces chest strength without leg drive). Audit setup — chest-strength weakness is often a positioning problem in disguise.",
+            "fixes_priority": [
+              "Long-pause bench (3-5s)",
+              "Spoto press — just off chest",
+              "Heavy dumbbell bench — stretch position",
+              "Close grip incline"
+            ],
+            "tags": ["bench", "weak-point", "off-chest", "diagnostics"],
+            "related": ["tech-bench-press", "tech-bench-leg-drive"]
+          },
+          {
+            "id": "diag-bench-midrange",
+            "title": "Bench Mid-Range Sticking Point",
+            "content": "Symptoms: bar leaves chest fine, stalls at the halfway point. Causes: weak triceps in transition, weak pecs through ROM, elbow position changing (flaring under fatigue). Fixes: tempo bench (3-5 second eccentric, 1-2 second concentric pause at sticking range), 2-board press (limits ROM to mid-range), banded bench (accommodating resistance through midrange), heavy close grip bench, dumbbell flys for pec midrange.",
+            "fixes_priority": [
+              "Tempo bench — slow through midrange",
+              "2-board press — partial in sticking zone",
+              "Banded bench",
+              "Close grip bench — triceps"
+            ],
+            "tags": ["bench", "weak-point", "midrange", "diagnostics"],
+            "related": ["prog-accommodating-resistance"]
+          },
+          {
+            "id": "diag-bench-lockout",
+            "title": "Bench Lockout Sticking Point",
+            "content": "Symptoms: bar moves well off chest and through midrange but stalls in the last 2-4 inches before lockout. Causes: weak triceps. Fixes: close grip bench (heavy), board presses (3-board, 4-board for partial ROM at lockout range), banded bench (chains/bands ramp load at top), JM press, heavy tricep extensions (skull crushers, overhead extensions). Equipped lifters with shirt-driven lockout problems may need shirt break-in or sizing change rather than triceps work.",
+            "fixes_priority": [
+              "Close grip bench — heavy triceps",
+              "Board press — partial top ROM",
+              "Banded/chained bench — accommodating resistance",
+              "JM press, skull crushers"
+            ],
+            "tags": ["bench", "weak-point", "lockout", "diagnostics", "triceps"],
+            "related": ["prog-accommodating-resistance", "equip-bench-shirts"]
+          }
+        ]
+      },
+      "deadlift_diagnostics": {
+        "entries": [
+          {
+            "id": "diag-deadlift-floor",
+            "title": "Deadlift Off-the-Floor Sticking Point",
+            "content": "Symptoms: bar fails to leave floor, or rises slowly to mid-shin and stalls. Most common in sumo deadlifters. Causes: weak quads (sumo), weak posterior chain in stretch (conventional), bar position too far from body, slack not pulled at start, position breakdown at start. Fixes: deficit deadlifts (1-3 inch deficit, increases ROM and starting strength), pause deadlifts (pause at knee, no pause at floor), Romanian deadlifts (posterior chain stretch), heavy front squats (quad strength for sumo), high-rep block pulls focusing on perfect setup. Audit position before adding strength work — many floor breaks are technical.",
+            "fixes_priority": [
+              "Deficit deadlifts — extended ROM",
+              "Pause deadlifts at knee",
+              "Heavy front squats — sumo quad strength",
+              "Audit setup — bar position, lat engagement"
+            ],
+            "tags": ["deadlift", "weak-point", "floor", "diagnostics"],
+            "related": ["tech-deadlift-conventional-setup", "tech-deadlift-sumo-setup"]
+          },
+          {
+            "id": "diag-deadlift-knee",
+            "title": "Deadlift Mid-Shin to Knee Sticking Point",
+            "content": "Symptoms: bar leaves floor, stalls between mid-shin and knee. Causes: weak posterior chain (lats, upper back, hamstrings) in transition. Fixes: snatch grip deadlifts (loaded upper back), Romanian deadlifts (hamstring strength through ROM), seated rows and chest-supported rows (lat strength), block pulls from below knee (overload at sticking range), deadlifts with chains. Common in lifters who muscle the bar off the floor with hips/legs but lack the back strength to keep the bar moving.",
+            "fixes_priority": [
+              "Snatch grip deadlifts — upper back",
+              "RDLs — hamstring strength through ROM",
+              "Block pulls below knee — overload sticking range",
+              "Heavy rows"
+            ],
+            "tags": ["deadlift", "weak-point", "midrange", "diagnostics"],
+            "related": ["diag-deadlift-floor"]
+          },
+          {
+            "id": "diag-deadlift-lockout",
+            "title": "Deadlift Lockout Sticking Point",
+            "content": "Symptoms: bar reaches knee or above, stalls before full lockout. Less common in sumo, more common in long-armed conventional pullers. Causes: weak glutes/lower back in lockout, weak upper back (rounding at top), insufficient hip extension power. Fixes: rack pulls (just above knee, heavy), block pulls from above knee, hip thrusts and glute bridges, RDLs, good mornings. Hitching is usually a sign of a lockout sticking point — train the lockout, not the avoidance.",
+            "fixes_priority": [
+              "Rack pulls just above knee — heavy",
+              "Hip thrusts — glutes",
+              "Good mornings — lower back",
+              "Block pulls — overload"
+            ],
+            "tags": ["deadlift", "weak-point", "lockout", "diagnostics"],
+            "related": ["tech-deadlift-conventional-pull"]
+          }
+        ]
+      }
+    }
+  },
+
+  "recovery_and_support": {
+    "description": "Sleep, nutrition, supplementation, soft tissue, and injury management.",
+    "entries": [
+      {
+        "id": "recovery-sleep",
+        "title": "Sleep for Powerlifters",
+        "content": "8-9 hours/night for hard-training powerlifters. Sleep is the primary driver of CNS recovery, hormonal restoration (testosterone peaks during deep sleep), and tissue repair. Sleep deprivation drops max strength 5-15% and ruins technical execution. Strategies: consistent bedtime, cool dark room (65-68°F), no screens 30-60 minutes before bed, magnesium (200-400 mg pre-bed) for sleep onset, avoid caffeine within 8 hours of sleep. Track sleep with a wearable for several weeks to find patterns. Pre-meet sleep often disrupted by adrenaline; aim for the 2-3 nights before meet to be excellent — meet eve sleep is often poor and that's okay.",
+        "key_points": [
+          "8-9 hours/night minimum for serious training",
+          "Drives CNS recovery and hormones",
+          "Cool, dark, consistent timing",
+          "Pre-meet: focus on 2-3 nights before, not meet eve"
+        ],
+        "tags": ["recovery", "sleep"],
+        "related": ["recovery-supplementation"]
+      },
+      {
+        "id": "recovery-nutrition-fundamentals",
+        "title": "Nutrition Fundamentals",
+        "content": "Calories: maintenance for technique blocks, surplus (+200-500 above maintenance) for hypertrophy/strength gains, slight deficit (-200-500) for weight class management. Protein: 0.8-1.0 g/lb bodyweight is the productive range — research suggests 0.7g/lb is often sufficient, but 1.0g/lb gives a margin. Carbs: 2-4 g/lb bodyweight on training days, supports glycogen and performance. Fat: 0.3-0.5 g/lb bodyweight, supports hormonal function. Track for 4-8 weeks to calibrate; adjust based on bodyweight trend and performance. Eating preference matters more than perfection — sustainable beats optimal.",
+        "key_points": [
+          "Protein 0.8-1.0 g/lb bodyweight",
+          "Carbs 2-4 g/lb on training days",
+          "Surplus for gains, slight deficit for weight management",
+          "Sustainability beats optimization"
+        ],
+        "tags": ["nutrition", "macros", "calories"],
+        "related": ["recovery-supplementation", "prep-meet-day-nutrition"]
+      },
+      {
+        "id": "recovery-supplementation",
+        "title": "Supplementation",
+        "content": "Evidence-strong: creatine monohydrate (3-5 g/day, no need to load — adds 5-15 lbs of working strength over weeks of consistent use), caffeine (200-400 mg pre-training/competition for performance boost), whey protein (convenient protein source, no special advantage over food), vitamin D (3000-5000 IU/day if deficient, common in indoor athletes). Evidence-moderate: beta-alanine (3-6 g/day for high-rep work capacity), citrulline (6-8 g pre-workout for pumps, mild performance), fish oil (2-4 g EPA+DHA for inflammation). For tested athletes, every supplement must be NSF Certified for Sport or similar third-party verified — many supplements are contaminated with banned substances. Most other supplements are noise.",
+        "key_points": [
+          "Creatine: 3-5 g/day, evidence is overwhelming",
+          "Caffeine: 200-400 mg performance booster",
+          "Vitamin D and protein: sufficiency matters",
+          "Tested athletes: NSF Certified for Sport only"
+        ],
+        "tags": ["supplements", "creatine", "caffeine"],
+        "related": ["recovery-nutrition-fundamentals", "prep-meet-day-nutrition"]
+      },
+      {
+        "id": "recovery-soft-tissue-mobility",
+        "title": "Soft Tissue and Mobility",
+        "content": "Foam rolling and lacrosse ball work for daily tissue maintenance — quads, glutes, lats, pecs, calves are common high-tension areas in powerlifters. Mobility priorities: thoracic spine extension (bench arch and squat upright torso), hip flexion (squat depth), ankle dorsiflexion (squat depth), shoulder mobility (low bar squat shelf, bench setup). Don't over-mobilize before lifting — too much pre-lift stretching reduces stiffness and force production. Save deep stretching for post-training or off-days. Static stretching for problem areas; dynamic warmups before training.",
+        "key_points": [
+          "Foam roll daily, 5-10 minutes target areas",
+          "Mobility priorities: thoracic, hips, ankles, shoulders",
+          "Don't over-stretch pre-training",
+          "Static stretching post-training, dynamic pre-training"
+        ],
+        "tags": ["mobility", "soft-tissue", "recovery"],
+        "related": ["tech-squat-stance", "tech-bench-arch"]
+      },
+      {
+        "id": "recovery-injury-patterns",
+        "title": "Common Powerlifting Injury Patterns",
+        "content": "Lower back: most common injury site. Causes: technical breakdown under heavy load, accumulated fatigue, weak braces. Treatment: rest acute, then progressive reloading (McGill Big Three: bird dog, side plank, dead bug). Pec: bench press tear, often during heavy attempts when bar bounces or shifts off chest. Treatment: surgery for full tears, conservative rehab for partial. Bicep: deadlift tear, exclusively on supinated arm of mixed grip. Treatment: surgical for full tear. Knee: rare in powerlifting compared to running sports — patellar tendinitis is the more common chronic complaint, usually responds to volume management and tendon-loading work. Shoulder: bench-related rotator cuff irritation, often from poor scapular positioning. Treatment: setup audit, accessory work for upper back. The general rule: most injuries are accumulated fatigue + technical breakdown, not single-event traumas. Manage fatigue and prevent injuries.",
+        "key_points": [
+          "Lower back: most common, manage with bracing and recovery",
+          "Pec/bicep tears: heavy lifts, bench (pec) and mixed-grip deadlifts (bicep)",
+          "Patellar tendinitis: volume management",
+          "Shoulder: usually setup-related on bench",
+          "Most injuries are fatigue + technique, not single events"
+        ],
+        "tags": ["injuries", "rehab", "prevention"],
+        "related": ["prog-deload-strategies", "tech-bench-setup"]
+      },
+      {
+        "id": "recovery-stress-management",
+        "title": "Life Stress and Training Stress",
+        "content": "Total allostatic load = training stress + life stress. High life stress (work, family, sleep deprivation) reduces capacity to recover from training. Symptoms of overload: persistent soreness, sleep disruption, mood changes, reduced libido, RPE creep (same weights feeling harder), motivation drop. Adjustment: cut volume 20-40% during high-stress periods, maintain intensity exposure but reduce overall workload. Don't try to out-train life stress — the body doesn't distinguish stress sources. Meet prep is high-stress: simplify life as much as possible the final 4 weeks.",
+        "key_points": [
+          "Life stress + training stress = total load",
+          "Cut volume 20-40% during high life stress",
+          "Watch for RPE creep, sleep disruption, mood changes",
+          "Simplify life pre-meet"
+        ],
+        "tags": ["recovery", "stress", "fatigue-management"],
+        "related": ["prog-deload-strategies", "prep-taper-structure"]
+      }
+    ]
+  },
+
+  "appendix": {
+    "warmup_calculators": {
+      "description": "Generic warmup ladder templates — adjust to lifter recovery profile and opener weight.",
+      "squat_ladder_pct_of_opener": [
+        {"set": 1, "weight_pct": "empty bar", "reps": 5},
+        {"set": 2, "weight_pct": "30%", "reps": 5},
+        {"set": 3, "weight_pct": "50%", "reps": 3},
+        {"set": 4, "weight_pct": "70%", "reps": 2},
+        {"set": 5, "weight_pct": "85%", "reps": 1},
+        {"set": 6, "weight_pct": "92%", "reps": 1},
+        {"set": 7, "weight_pct": "opener (100%)", "reps": "platform"}
+      ],
+      "bench_ladder_pct_of_opener": [
+        {"set": 1, "weight_pct": "empty bar", "reps": 8},
+        {"set": 2, "weight_pct": "40%", "reps": 5},
+        {"set": 3, "weight_pct": "60%", "reps": 3},
+        {"set": 4, "weight_pct": "75%", "reps": 2},
+        {"set": 5, "weight_pct": "85%", "reps": 1},
+        {"set": 6, "weight_pct": "92%", "reps": 1},
+        {"set": 7, "weight_pct": "opener (100%)", "reps": "platform"}
+      ],
+      "deadlift_ladder_pct_of_opener": [
+        {"set": 1, "weight_pct": "40%", "reps": 5},
+        {"set": 2, "weight_pct": "60%", "reps": 3},
+        {"set": 3, "weight_pct": "75%", "reps": 2},
+        {"set": 4, "weight_pct": "85%", "reps": 1},
+        {"set": 5, "weight_pct": "92%", "reps": 1},
+        {"set": 6, "weight_pct": "opener (100%)", "reps": "platform"}
+      ]
+    },
+    "rpe_chart_pct_to_rpe": {
+      "description": "Approximate %1RM ↔ RPE conversions for top single. Reps-in-reserve adds about 4% per rep below RPE 10.",
+      "rpe_10_1rm": "100%",
+      "rpe_9_1rm": "~96%",
+      "rpe_8_1rm": "~92%",
+      "rpe_7_1rm": "~88%",
+      "rpe_6_1rm": "~84%"
+    },
+    "attempt_selection_template": {
+      "description": "Standard meet-day attempt math relative to training 1RM.",
+      "opener_pct_of_training_1rm": "88-92%",
+      "second_attempt_pct_of_training_1rm": "94-97% (or +2-5% over best training double)",
+      "third_attempt_pct_of_training_1rm": "98-103% (PR territory)"
+    }
+  }
+}

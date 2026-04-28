@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/requireAuth';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { checkAndIncrement, capExceededBody } from '@/lib/usageCaps';
 import { FOOD_DB_SYSTEM_INSTRUCTION, buildFoodContextFromMessage } from '@/lib/foodDbContext';
+import { getTacticalContextOrEmpty } from '@/lib/tacticalContext';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
@@ -1635,6 +1636,17 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // but unlocks structured 293-entry nutrition lookups.
     if (!isJuniorOperator && !isOpsMode) {
       systemPrompt += `\n\n${FOOD_DB_SYSTEM_INSTRUCTION}`;
+    }
+
+    // Append the Tactical Fitness Corpus when the operator is on the
+    // tactical training path. Adds ~16k tokens to the system prompt but
+    // gives Gunny sourced 10-module programming protocols (MTI/TB/SOFLETE
+    // + service doctrine) instead of generic tactical advice. Other paths
+    // (bodybuilding, crossfit, hypertrophy, etc.) skip this entirely.
+    // Junior operators bypass — youth athletes use SOCCER_YOUTH_PROMPT.
+    // Ops mode bypass — admin/ops chats don't program workouts.
+    if (!isJuniorOperator && !isOpsMode) {
+      systemPrompt += getTacticalContextOrEmpty(operatorContext);
     }
 
     // Context-aware data gaps block. SITREP_PREAMBLE asserts "you KNOW their

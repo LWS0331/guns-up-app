@@ -1,0 +1,58 @@
+{
+  "$schema_version": "1.0",
+  "build_date": "2026-04-28",
+  "scope": "CrossFit methodology + canonical benchmarks (no hypertrophy/bodybuilding)",
+  "schemas": {
+    "methodology_schema": {
+      "id": "string (snake_case)",
+      "name": "string",
+      "lead_coaches": ["string"],
+      "philosophy": "string",
+      "periodization": "string",
+      "weekly_template": "object",
+      "energy_system_approach": "string",
+      "strength_approach": "string",
+      "accessory_work": "string",
+      "signature_elements": ["string"],
+      "athlete_tiers": "object",
+      "recovery_lifestyle": "string",
+      "source_urls": ["string"]
+    },
+    "benchmark_schema": {
+      "id": "string (snake_case)",
+      "name": "string",
+      "category": "enum [girls, heroes, open, games, classics]",
+      "year_introduced": "integer or null",
+      "honoree": "string or null",
+      "scheme": "enum [for_time, amrap, emom, every_x_min, max_load, total_reps, tabata, chipper]",
+      "movements": [
+        {
+          "exercise": "string",
+          "reps": "integer or string (e.g., 'max')",
+          "weight_male_lb": "integer or null",
+          "weight_female_lb": "integer or null",
+          "distance": "string or null",
+          "scaling": "string"
+        }
+      ],
+      "time_cap_min": "integer or null",
+      "scoring": "enum [time, rounds_reps, max_load, total_reps, points]",
+      "time_domain": "enum [sub_5min, 5_10min, 10_20min, 20_40min, 40plus_min]",
+      "scaling_options": "string",
+      "programming_notes": "string",
+      "equipment_required": ["string"],
+      "source_url": "string",
+      "standards_changed": "boolean",
+      "standards_change_notes": "string or null"
+    },
+    "movement_standard_schema": {
+      "id": "string",
+      "movement": "string",
+      "official_standard": "string",
+      "common_faults": ["string"],
+      "rx_loads_or_dimensions": "object",
+      "scaling_progressions": ["string"],
+      "source_url": "string"
+    }
+  }
+}

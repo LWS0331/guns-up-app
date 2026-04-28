@@ -1,0 +1,80 @@
+{
+  "category": "programming_principles",
+  "description": "Cross-cutting taxonomies that Gunny uses to classify, build, and scale CrossFit programming.",
+  "principles": {
+    "energy_systems": {
+      "definition": "The three primary metabolic pathways used in CrossFit programming. OPEX uses the MAP (Maximal Aerobic Power) 1-10 framework as the most granular system.",
+      "systems": [
+        {"id": "alactic", "name": "Alactic / Phosphocreatine (ATP-PC)", "duration_window": "0-15 sec all-out", "primary_substrate": "stored ATP and creatine phosphate", "training_examples": ["max effort sprints", "1RM lifts", "max-distance jumps"], "recovery_required": "2-5 min between efforts", "opex_map_label": "MAP 10"},
+        {"id": "anaerobic_lactic", "name": "Anaerobic Lactic / Glycolytic", "duration_window": "15 sec - 2 min", "primary_substrate": "muscle glycogen via anaerobic glycolysis", "training_examples": ["Fran", "500m row", "30-60s sprint intervals", "Grace pace"], "recovery_required": "varies by intent (1:1 to 1:5 work:rest)", "opex_map_label": "MAP 7-9"},
+        {"id": "aerobic_threshold", "name": "Aerobic Power / Threshold", "duration_window": "2-15 min", "primary_substrate": "glycogen + fat with O2", "training_examples": ["Helen", "Cindy", "2000m row", "10-15min AMRAPs"], "recovery_required": "1:1 to 2:1", "opex_map_label": "MAP 4-6"},
+        {"id": "aerobic_endurance", "name": "Aerobic Endurance / Z2", "duration_window": "15+ min sustainable", "primary_substrate": "fat oxidation + glycogen", "training_examples": ["Murph", "Triple-3", "long Z2 row/run/bike"], "recovery_required": "minimal, sustainable", "opex_map_label": "MAP 1-3"}
+      ]
+    },
+    "time_domains": {
+      "definition": "Standard CrossFit time domain buckets used for benchmark classification and program balance.",
+      "buckets": [
+        {"id": "sprint_<5", "label": "Sprint (<5 min)", "primary_system": "alactic to anaerobic lactic", "examples": ["Fran", "Grace", "Isabel", "500m row", "12.1 (7min burpee AMRAP)"]},
+        {"id": "short_5_10", "label": "Short (5-10 min)", "primary_system": "anaerobic lactic to aerobic threshold", "examples": ["Diane", "Elizabeth", "Helen", "Annie", "The Chief"]},
+        {"id": "medium_10_20", "label": "Medium (10-20 min)", "primary_system": "aerobic power", "examples": ["Cindy", "Mary", "Karen", "DT", "Fight Gone Bad"]},
+        {"id": "long_20_40", "label": "Long (20-40 min)", "primary_system": "aerobic threshold to endurance", "examples": ["Filthy Fifty", "Triple-3", "Eva", "Linda"]},
+        {"id": "ultra_40_plus", "label": "Ultra (40+ min)", "primary_system": "aerobic endurance", "examples": ["Murph (vested)", "Hero WODs >40min", "Painstorm I"]}
+      ]
+    },
+    "strength_paradigms": {
+      "definition": "The most common strength programming frameworks used in CrossFit-adjacent methodologies.",
+      "paradigms": [
+        {"id": "linear", "name": "Linear Periodization", "description": "Progressive load increase from high-rep/low-load to low-rep/high-load over a cycle. Common in beginner programs.", "example_implementations": ["Starting Strength", "5x5 progressions", "early HWPO blocks for beginners"]},
+        {"id": "block", "name": "Block Periodization", "description": "Sequential focus blocks (accumulation → transmutation → realization). Each block emphasizes one quality.", "example_implementations": ["Misfit's 4-phase blocks", "Mayhem's 5 named mesocycles", "TTT block model"]},
+        {"id": "concurrent", "name": "Concurrent Training", "description": "Multiple qualities trained simultaneously in same week. CrossFit's GPP foundation.", "example_implementations": ["CompTrain affiliate WOD", "Mayhem daily WOD", "most class-based programming"]},
+        {"id": "conjugate", "name": "Conjugate Method", "description": "Westside-derived. Max effort + dynamic effort + repetition method rotated. Adapted for CrossFit by some competitors.", "example_implementations": ["TTT's strength blocks", "OPEX strength bias for individuals"]},
+        {"id": "rpe_based", "name": "RPE / Autoregulated", "description": "Loads selected by Rate of Perceived Exertion (1-10) rather than fixed percentages. Adjusts for daily readiness.", "example_implementations": ["OPEX individual design", "PRVN compete", "many high-level individualized programs"]},
+        {"id": "percentage_based", "name": "Percentage of 1RM", "description": "Loads prescribed as % of athlete's 1RM. Standard in HWPO, Mayhem, Misfit.", "example_implementations": ["HWPO strength templates", "Mayhem weekly strength", "Misfit's 'work up to' patterns"]}
+      ]
+    },
+    "weekly_template_archetypes": {
+      "definition": "Common weekly structures used in CrossFit programming. Choice depends on athlete tier, recovery capacity, and goal.",
+      "templates": [
+        {"id": "5_on_2_off", "name": "5-on / 2-off", "description": "Classic Mon-Fri training, weekend off. Best for beginner-intermediate, lifestyle-focused athletes.", "weekly_volume": "5 main sessions", "deload_pattern": "Every 4-6 weeks, drop volume 20-40%", "used_by": ["Linchpin", "CompTrain Local"]},
+        {"id": "6_day_split", "name": "6-day with 1 rest", "description": "Six training days with one full rest. Most common for serious recreational + competitor athletes.", "weekly_volume": "6 main + accessory", "deload_pattern": "Every 4 weeks", "used_by": ["Mayhem", "HWPO Flagship", "PRVN Compete"]},
+        {"id": "3_on_1_off", "name": "3-on / 1-off rolling", "description": "Train 3 days, rest 1, repeat. ~22 sessions/month. High volume.", "weekly_volume": "5-6 sessions", "deload_pattern": "Every 4 cycles", "used_by": ["Misfit Athletics", "some TTT blocks"]},
+        {"id": "ab_week_split", "name": "A-week / B-week", "description": "Two-week microcycle alternating focus. Reduces stale stimulus.", "weekly_volume": "varies", "deload_pattern": "Built into B-week", "used_by": ["Training Think Tank"]},
+        {"id": "double_days", "name": "Double-day competitor", "description": "AM + PM sessions for elite athletes. Strength AM, conditioning PM (or vice versa).", "weekly_volume": "10-14 sessions", "deload_pattern": "Every 3-4 weeks aggressive deload", "used_by": ["HWPO PRO", "Mayhem Compete", "TTT Compete"]}
+      ]
+    },
+    "scaling_principles": {
+      "definition": "How to scale benchmark workouts to preserve the intended stimulus.",
+      "principles": [
+        {"id": "preserve_stimulus", "name": "Preserve the Stimulus", "description": "Scale to keep the workout's intended time domain and intensity. Fran should stay 3-7min for everyone."},
+        {"id": "scale_volume_first", "name": "Scale Volume Before Load (typically)", "description": "For long workouts, reduce reps before reducing weight. For short workouts, reduce weight before reducing reps."},
+        {"id": "preserve_intent", "name": "Preserve Movement Intent", "description": "If a workout tests muscle-up cycling, sub jumping muscle-ups or banded MUs — not pull-ups + dips, which removes the transition."},
+        {"id": "skill_substitution", "name": "Tier-Appropriate Substitutions", "description": "Pull-up → ring row (beginner), banded pull-up (intermediate), strict pull-up (advanced who lacks kip)."},
+        {"id": "load_percentages", "name": "Load Scaling", "description": "Standard scaling drops: Rx → 80% Rx → 65% Rx → 50% Rx for foundations."},
+        {"id": "time_cap_relevance", "name": "Time Caps Drive Scaling", "description": "If 80% of athletes won't finish in cap, scaling is too heavy/high-volume regardless of Rx label."}
+      ]
+    },
+    "athlete_tiers": {
+      "definition": "Standard tier definitions used for programming decisions. Most methodologies use a 4-5 tier model.",
+      "tiers": [
+        {"id": "foundations", "name": "Foundations / Beginner", "experience_window": "0-6 months", "characteristics": ["Learning movement standards", "Building basic capacity", "No double-unders, no muscle-ups, no kipping pull-ups", "Bodyweight or empty bar most lifts"], "programming_focus": ["Movement quality > intensity", "Linear progression on lifts", "Class-based or beginner-on-ramp"], "examples_of_appropriate_benchmarks": ["Baseline", "Cindy scaled", "Helen scaled", "CrossFit Total"]},
+        {"id": "intermediate", "name": "Intermediate", "experience_window": "6 months - 2 years", "characteristics": ["Has DUs, kipping pull-ups, basic gymnastics", "Can perform most movements at lighter Rx", "Building toward muscle-ups and HSPUs", "Some 1RM data established"], "programming_focus": ["Concurrent training", "Building work capacity", "Skill acquisition (MU, HSPU, OHS)"], "examples_of_appropriate_benchmarks": ["Fran Rx", "Helen Rx", "Murph (partitioned)", "DT scaled"]},
+        {"id": "advanced", "name": "Advanced / Open-level", "experience_window": "2-5 years", "characteristics": ["Hits Rx on most workouts", "Can do all gymnastics movements", "Scoring well in Open (top 25-50%)"], "programming_focus": ["Periodized strength + conditioning", "Weakness-focused accessory", "Competition prep cycles"], "examples_of_appropriate_benchmarks": ["All Rx Girls", "Murph vested", "Hero WODs", "Open WODs Rx"]},
+        {"id": "competitor", "name": "Competitor / Regional-Quarterfinal", "experience_window": "3+ years dedicated", "characteristics": ["Top 10% of Open", "Has 1RM benchmarks above 90% bodyweight class averages", "Can handle 2-a-days"], "programming_focus": ["Block periodization", "Energy system work", "Specific weakness blocks", "Volume + intensity"], "examples_of_appropriate_benchmarks": ["Heavy DT", "Cinco 1/2", "Sprint Couplet", "Amanda"]},
+        {"id": "elite", "name": "Elite / Games", "experience_window": "5+ years competitive", "characteristics": ["Semifinal or Games qualifier", "Full-time training", "Highly individualized programming"], "programming_focus": ["Individual program design", "Sport-specific (lift specialty, gymnastics specialty, engine work)", "Active recovery integration"], "examples_of_appropriate_benchmarks": ["All Games events", "Heavy complexes", "Games-style chippers"]},
+        {"id": "masters", "name": "Masters (35+, 40+, 45+, etc.)", "experience_window": "varies", "characteristics": ["Recovery-prioritized", "Joint and mobility considerations", "Often higher relative-strength bias"], "programming_focus": ["Reduced volume", "More accessory + mobility", "Longer deloads", "Strength preservation"], "examples_of_appropriate_benchmarks": ["Most Rx with reduced volume", "Older Open scaled divisions"]},
+        {"id": "teens", "name": "Teens (14-15, 16-17)", "experience_window": "varies", "characteristics": ["Growth plate considerations", "Lower load ceilings", "Skill-emphasis"], "programming_focus": ["Movement quality", "Sub-maximal loading", "Building broad base"], "examples_of_appropriate_benchmarks": ["Teen Open divisions", "Foundations + intermediate WODs"]}
+      ]
+    },
+    "movement_categorization": {
+      "definition": "How to classify movements for balanced programming. Aim for variety within and across these categories weekly.",
+      "categories": [
+        {"id": "monostructural", "name": "Monostructural / Cardio", "movements": ["Run", "Row", "Bike", "Ski", "Swim", "Jump rope"]},
+        {"id": "weightlifting", "name": "Weightlifting", "movements": ["Snatch", "Clean", "Jerk", "Press", "Squat variants", "Deadlift", "Thruster"]},
+        {"id": "gymnastics", "name": "Gymnastics", "movements": ["Pull-up", "Muscle-up", "Push-up", "HSPU", "Handstand walk", "Toes-to-bar", "Pistol", "GHD", "Rope climb"]},
+        {"id": "odd_object", "name": "Odd Object / Strongman", "movements": ["Sandbag", "D-ball", "Yoke", "Sled", "Atlas stone", "Farmer carry"]},
+        {"id": "plyometric", "name": "Plyometric", "movements": ["Box jump", "Burpee", "Broad jump", "Lateral hop"]}
+      ],
+      "balance_rule": "Weekly programming should hit all 5 categories. Most CrossFit methodologies aim for 3-4 weightlifting sessions, 3-4 gymnastics sessions, 3-5 monostructural pieces, 1-2 odd-object exposures per week."
+    }
+  }
+}

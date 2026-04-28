@@ -1,0 +1,705 @@
+{
+  "category": "girls",
+  "description": "Canonical CrossFit Girl benchmark workouts. Original 6 introduced 2003, expanded over years through 2021 New Girls.",
+  "benchmarks": [
+    {
+      "id": "angie",
+      "name": "Angie",
+      "category": "girls",
+      "year_introduced": 2003,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Pull-up", "reps": 100},
+        {"exercise": "Push-up", "reps": 100},
+        {"exercise": "Sit-up", "reps": 100},
+        {"exercise": "Air Squat", "reps": 100}
+      ],
+      "scheme_notes": "Complete all 100 of one movement before moving to the next.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "10_20min",
+      "scaling_options": "Banded pull-ups, knee push-ups, anchored sit-ups. Reduce reps to 50/50/50/50 for scaled.",
+      "programming_notes": "Tests bodyweight stamina. High pull-up volume - dangerous if pull-up capacity is low. Good early-cycle gymnastics test.",
+      "equipment_required": ["pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "barbara",
+      "name": "Barbara",
+      "category": "girls",
+      "year_introduced": 2003,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Pull-up", "reps": 20},
+        {"exercise": "Push-up", "reps": 30},
+        {"exercise": "Sit-up", "reps": 40},
+        {"exercise": "Air Squat", "reps": 50}
+      ],
+      "scheme_notes": "5 rounds for time. Rest 3 minutes between rounds. Time includes rest periods.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "20_40min",
+      "scaling_options": "Banded pull-ups. Reduce reps proportionally.",
+      "programming_notes": "Tests recovery between bodyweight efforts. The mandatory rest distinguishes Barbara - score reflects intra-round capacity, not pacing.",
+      "equipment_required": ["pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "chelsea",
+      "name": "Chelsea",
+      "category": "girls",
+      "year_introduced": 2003,
+      "scheme": "emom",
+      "movements": [
+        {"exercise": "Pull-up", "reps": 5},
+        {"exercise": "Push-up", "reps": 10},
+        {"exercise": "Air Squat", "reps": 15}
+      ],
+      "scheme_notes": "EMOM 30 minutes. Each minute on the minute: 5 pull-ups, 10 push-ups, 15 squats.",
+      "time_cap_min": 30,
+      "scoring": "rounds_completed",
+      "time_domain": "20_40min",
+      "scaling_options": "Banded pull-ups. Reduce to E2MOM or 20-min cap if capacity is limited.",
+      "programming_notes": "Tests sustained bodyweight capacity under structured pacing. If athlete fails minute, rest one and resume.",
+      "equipment_required": ["pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "diane",
+      "name": "Diane",
+      "category": "girls",
+      "year_introduced": 2003,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Deadlift", "reps": "21-15-9", "weight_male_lb": 225, "weight_female_lb": 155},
+        {"exercise": "Handstand Push-up", "reps": "21-15-9"}
+      ],
+      "scheme_notes": "21-15-9 reps for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "sub_5min",
+      "scaling_options": "Reduce deadlift load. Pike push-ups or box HSPU for scaled.",
+      "programming_notes": "Tests heavy pull + vertical press cycling. Sub-3 elite, 5-8 min typical fit. Watch for HSPU capacity.",
+      "equipment_required": ["barbell", "wall"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "elizabeth",
+      "name": "Elizabeth",
+      "category": "girls",
+      "year_introduced": 2003,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Clean", "reps": "21-15-9", "weight_male_lb": 135, "weight_female_lb": 95},
+        {"exercise": "Ring Dip", "reps": "21-15-9"}
+      ],
+      "scheme_notes": "21-15-9 reps for time. Cleans (squat or power).",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "sub_5min",
+      "scaling_options": "Reduce barbell load. Bar dips or banded ring dips for scaled.",
+      "programming_notes": "Tests barbell cycling + ring strength. Pacing critical - going unbroken on 21 cleans typical mistake.",
+      "equipment_required": ["barbell", "rings"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "fran",
+      "name": "Fran",
+      "category": "girls",
+      "year_introduced": 2003,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Thruster", "reps": "21-15-9", "weight_male_lb": 95, "weight_female_lb": 65},
+        {"exercise": "Pull-up", "reps": "21-15-9"}
+      ],
+      "scheme_notes": "21-15-9 reps for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "sub_5min",
+      "scaling_options": "Reduce thruster load. Banded or jumping pull-ups.",
+      "programming_notes": "The signature CrossFit benchmark. Sub-2 elite, sub-3 advanced, sub-5 strong. Tests anaerobic threshold + pulling capacity.",
+      "equipment_required": ["barbell", "pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "grace",
+      "name": "Grace",
+      "category": "girls",
+      "year_introduced": 2004,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Clean and Jerk", "reps": 30, "weight_male_lb": 135, "weight_female_lb": 95}
+      ],
+      "scheme_notes": "30 clean and jerks for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "sub_5min",
+      "scaling_options": "Reduce load. Power clean + push press acceptable scaling.",
+      "programming_notes": "Pure barbell sprint. Sub-2 elite. Tests Olympic lift cycling capacity.",
+      "equipment_required": ["barbell"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "helen",
+      "name": "Helen",
+      "category": "girls",
+      "year_introduced": 2004,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Run", "reps": 1, "distance": "400m"},
+        {"exercise": "Kettlebell Swing", "reps": 21, "weight_male_lb": 53, "weight_female_lb": 35},
+        {"exercise": "Pull-up", "reps": 12}
+      ],
+      "scheme_notes": "3 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "5_10min",
+      "scaling_options": "Banded pull-ups. Reduce KB load.",
+      "programming_notes": "Classic triplet. Sub-7 elite, sub-9 advanced. Tests aerobic capacity + KB/pull cycling.",
+      "equipment_required": ["kettlebell", "pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "isabel",
+      "name": "Isabel",
+      "category": "girls",
+      "year_introduced": 2004,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Snatch", "reps": 30, "weight_male_lb": 135, "weight_female_lb": 95}
+      ],
+      "scheme_notes": "30 snatches for time. Power or squat.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "sub_5min",
+      "scaling_options": "Reduce load.",
+      "programming_notes": "Snatch sprint. Sub-2 elite. Tests Olympic lift technical proficiency under fatigue.",
+      "equipment_required": ["barbell"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "jackie",
+      "name": "Jackie",
+      "category": "girls",
+      "year_introduced": 2004,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Row", "reps": 1, "distance": "1000m"},
+        {"exercise": "Thruster", "reps": 50, "weight_male_lb": 45, "weight_female_lb": 35},
+        {"exercise": "Pull-up", "reps": 30}
+      ],
+      "scheme_notes": "For time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "5_10min",
+      "scaling_options": "Banded pull-ups. Reduce thruster load.",
+      "programming_notes": "Tests row pacing + light barbell cycling + pulling. Sub-7 elite.",
+      "equipment_required": ["rower", "barbell", "pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "karen",
+      "name": "Karen",
+      "category": "girls",
+      "year_introduced": 2004,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Wall Ball", "reps": 150, "weight_male_lb": 20, "weight_female_lb": 14}
+      ],
+      "scheme_notes": "150 wall balls for time. 10ft target male, 9ft female.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "5_10min",
+      "scaling_options": "Reduce ball weight. Reduce target height. Reduce reps to 100.",
+      "programming_notes": "Pure wall ball test. Sub-5 elite. Tests pacing + leg endurance + breathing.",
+      "equipment_required": ["medicine ball", "wall"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "linda",
+      "name": "Linda",
+      "category": "girls",
+      "year_introduced": 2004,
+      "alternate_name": "Three Bars of Death",
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Deadlift", "reps": "10-9-8-7-6-5-4-3-2-1", "weight_factor": "1.5x bodyweight"},
+        {"exercise": "Bench Press", "reps": "10-9-8-7-6-5-4-3-2-1", "weight_factor": "bodyweight"},
+        {"exercise": "Clean", "reps": "10-9-8-7-6-5-4-3-2-1", "weight_factor": "0.75x bodyweight"}
+      ],
+      "scheme_notes": "10-9-8-7-6-5-4-3-2-1 reps for time. Loads scale with bodyweight.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "20_40min",
+      "scaling_options": "Reduce bodyweight multipliers.",
+      "programming_notes": "Heavy strength endurance test. 'Three Bars of Death' - one barbell per movement set up before start. 15-25 min typical.",
+      "equipment_required": ["3 barbells", "bench"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "mary",
+      "name": "Mary",
+      "category": "girls",
+      "year_introduced": 2004,
+      "scheme": "amrap",
+      "movements": [
+        {"exercise": "Handstand Push-up", "reps": 5},
+        {"exercise": "Pistol", "reps": 10},
+        {"exercise": "Pull-up", "reps": 15}
+      ],
+      "scheme_notes": "AMRAP in 20 minutes.",
+      "time_cap_min": 20,
+      "scoring": "rounds_reps",
+      "time_domain": "20_40min",
+      "scaling_options": "Pike push-ups, alternating step-up pistols, banded pull-ups.",
+      "programming_notes": "Bodyweight gymnastics test. Tests skill capacity under fatigue.",
+      "equipment_required": ["pull-up bar", "wall"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "nancy",
+      "name": "Nancy",
+      "category": "girls",
+      "year_introduced": 2004,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Run", "reps": 1, "distance": "400m"},
+        {"exercise": "Overhead Squat", "reps": 15, "weight_male_lb": 95, "weight_female_lb": 65}
+      ],
+      "scheme_notes": "5 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "10_20min",
+      "scaling_options": "Reduce OHS load. Front squat scaling.",
+      "programming_notes": "Tests OHS positional capacity under aerobic load. Mobility-dependent.",
+      "equipment_required": ["barbell"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "annie",
+      "name": "Annie",
+      "category": "girls",
+      "year_introduced": 2005,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Double-under", "reps": "50-40-30-20-10"},
+        {"exercise": "Sit-up", "reps": "50-40-30-20-10"}
+      ],
+      "scheme_notes": "50-40-30-20-10 reps for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "5_10min",
+      "scaling_options": "Single-unders 2:1 ratio. Anchored or abmat sit-ups.",
+      "programming_notes": "Tests double-under proficiency + midline endurance. Sub-5 elite. Skill-dependent.",
+      "equipment_required": ["jump rope", "abmat optional"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "cindy",
+      "name": "Cindy",
+      "category": "girls",
+      "year_introduced": 2005,
+      "scheme": "amrap",
+      "movements": [
+        {"exercise": "Pull-up", "reps": 5},
+        {"exercise": "Push-up", "reps": 10},
+        {"exercise": "Air Squat", "reps": 15}
+      ],
+      "scheme_notes": "AMRAP in 20 minutes.",
+      "time_cap_min": 20,
+      "scoring": "rounds_reps",
+      "time_domain": "20_40min",
+      "scaling_options": "Banded pull-ups, knee push-ups.",
+      "programming_notes": "Bodyweight engine test. 20+ rounds elite, 15+ advanced. Tests pacing.",
+      "equipment_required": ["pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "eva",
+      "name": "Eva",
+      "category": "girls",
+      "year_introduced": 2008,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Run", "reps": 1, "distance": "800m"},
+        {"exercise": "Kettlebell Swing", "reps": 30, "weight_male_lb": 70, "weight_female_lb": 53},
+        {"exercise": "Pull-up", "reps": 30}
+      ],
+      "scheme_notes": "5 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "40plus_min",
+      "scaling_options": "Reduce KB load. Banded pull-ups. Reduce to 3 rounds.",
+      "programming_notes": "Long grinder. 'Helen on steroids.' 35-50 min typical. Tests aerobic durability.",
+      "equipment_required": ["kettlebell", "pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "kelly",
+      "name": "Kelly",
+      "category": "girls",
+      "year_introduced": 2008,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Run", "reps": 1, "distance": "400m"},
+        {"exercise": "Box Jump", "reps": 30, "height_male_in": 24, "height_female_in": 20},
+        {"exercise": "Wall Ball", "reps": 30, "weight_male_lb": 20, "weight_female_lb": 14}
+      ],
+      "scheme_notes": "5 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "20_40min",
+      "scaling_options": "Reduce box height. Step-ups. Reduce ball weight.",
+      "programming_notes": "Long aerobic grinder. 25-40 min typical. Tests leg durability.",
+      "equipment_required": ["box", "medicine ball", "wall"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "lynne",
+      "name": "Lynne",
+      "category": "girls",
+      "year_introduced": 2008,
+      "scheme": "max_reps_5_rounds",
+      "movements": [
+        {"exercise": "Bench Press", "reps": "max", "weight_factor": "bodyweight"},
+        {"exercise": "Pull-up", "reps": "max"}
+      ],
+      "scheme_notes": "5 rounds, no time component. Max bench reps at bodyweight, then max pull-ups. No rest specified, no time limit. Score is total reps across both movements.",
+      "time_cap_min": null,
+      "scoring": "total_reps",
+      "time_domain": "n/a",
+      "scaling_options": "Reduce bench load. Banded pull-ups.",
+      "programming_notes": "Pure strength endurance test. No clock pressure. Rest as needed between rounds.",
+      "equipment_required": ["bench", "barbell", "pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "nicole",
+      "name": "Nicole",
+      "category": "girls",
+      "year_introduced": 2009,
+      "scheme": "amrap",
+      "movements": [
+        {"exercise": "Run", "reps": 1, "distance": "400m"},
+        {"exercise": "Pull-up", "reps": "max"}
+      ],
+      "scheme_notes": "AMRAP 20 minutes. Run 400m, then max pull-ups until grip breaks. When you come off the bar, run another 400m. Score = total pull-ups.",
+      "time_cap_min": 20,
+      "scoring": "total_reps",
+      "time_domain": "20_40min",
+      "scaling_options": "Banded pull-ups. Reduce run distance.",
+      "programming_notes": "Tests pull-up volume under aerobic load.",
+      "equipment_required": ["pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "amanda",
+      "name": "Amanda",
+      "category": "girls",
+      "year_introduced": 2010,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Muscle-up", "reps": "9-7-5"},
+        {"exercise": "Squat Snatch", "reps": "9-7-5", "weight_male_lb": 135, "weight_female_lb": 95}
+      ],
+      "scheme_notes": "9-7-5 reps for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "5_10min",
+      "scaling_options": "Bar muscle-ups, jumping muscle-ups, or chin-up + dip. Reduce snatch load. Power snatch.",
+      "programming_notes": "Tests muscle-up + heavy snatch capacity. Featured at 2010 CrossFit Games. Skill-gated.",
+      "equipment_required": ["rings", "barbell"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "megan",
+      "name": "Megan",
+      "category": "girls",
+      "year_introduced": 2014,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Burpee", "reps": "21-15-9"},
+        {"exercise": "Kettlebell Swing", "reps": "21-15-9", "weight_male_lb": 53, "weight_female_lb": 35},
+        {"exercise": "Double-under", "reps": "21-15-9"}
+      ],
+      "scheme_notes": "21-15-9 reps for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "5_10min",
+      "scaling_options": "Single-unders 2:1. Reduce KB load.",
+      "programming_notes": "Mixed modal sprint. Tests breathing capacity + skill.",
+      "equipment_required": ["kettlebell", "jump rope"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "maggie",
+      "name": "Maggie",
+      "category": "girls",
+      "year_introduced": 2014,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Handstand Walk", "reps": 1, "distance": "100ft"},
+        {"exercise": "Pull-up", "reps": 50},
+        {"exercise": "Pistol", "reps": 50}
+      ],
+      "scheme_notes": "5 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "20_40min",
+      "scaling_options": "Bear crawl for HS walk. Banded pull-ups. Box pistols or alternating step-ups.",
+      "programming_notes": "Heavy gymnastics test. Skill-gated. Source-version conflict noted in some references.",
+      "equipment_required": ["pull-up bar", "open floor"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": true,
+      "standards_change_notes": "Some references list as 4 rounds. Official CrossFit.com lists 5 rounds."
+    },
+    {
+      "id": "hope",
+      "name": "Hope",
+      "category": "girls",
+      "year_introduced": 2014,
+      "scheme": "amrap",
+      "movements": [
+        {"exercise": "Burpee", "reps": null},
+        {"exercise": "Power Snatch", "reps": null, "weight_male_lb": 75, "weight_female_lb": 55},
+        {"exercise": "Box Jump", "reps": null, "height_male_in": 24, "height_female_in": 20},
+        {"exercise": "Thruster", "reps": null, "weight_male_lb": 75, "weight_female_lb": 55},
+        {"exercise": "Chest-to-Bar Pull-up", "reps": null}
+      ],
+      "scheme_notes": "3 rounds. 1 minute at each station for max reps. Rest 1 minute between rounds. Score = total reps.",
+      "time_cap_min": 17,
+      "scoring": "total_reps",
+      "time_domain": "10_20min",
+      "scaling_options": "Reduce barbell loads. Step-ups. Banded or jumping C2B.",
+      "programming_notes": "Fight Gone Bad format with different movements. Tests breathing capacity station to station.",
+      "equipment_required": ["barbell", "box", "pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "gwen",
+      "name": "Gwen",
+      "category": "girls",
+      "year_introduced": 2014,
+      "scheme": "for_load",
+      "movements": [
+        {"exercise": "Clean and Jerk", "reps": "15-12-9", "weight_factor": "load_self_selected"}
+      ],
+      "scheme_notes": "Clean and jerk 15-12-9 reps. Touch and go at floor only - no resting bar on rack or floor between reps. Set bar down only between sets. Score = heaviest weight successfully completed across all three sets.",
+      "time_cap_min": null,
+      "scoring": "max_load",
+      "time_domain": "n/a",
+      "scaling_options": "Reduce load.",
+      "programming_notes": "Tests heavy barbell cycling. Touch-and-go requirement is the key constraint.",
+      "equipment_required": ["barbell"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "nasty_girls",
+      "name": "Nasty Girls",
+      "category": "girls",
+      "year_introduced": 2005,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Air Squat", "reps": 50},
+        {"exercise": "Muscle-up", "reps": 7},
+        {"exercise": "Hang Power Clean", "reps": 10, "weight_male_lb": 135, "weight_female_lb": 95}
+      ],
+      "scheme_notes": "3 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "10_20min",
+      "scaling_options": "Bar muscle-ups, jumping muscle-ups, or chin-up + dip. Reduce barbell load.",
+      "programming_notes": "Skill-gated by muscle-ups. The original 'Nasty Girls' video introduced CrossFit to many.",
+      "equipment_required": ["rings", "barbell"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "candy",
+      "name": "Candy",
+      "category": "girls",
+      "year_introduced": 2014,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Pull-up", "reps": 20},
+        {"exercise": "Push-up", "reps": 40},
+        {"exercise": "Air Squat", "reps": 60}
+      ],
+      "scheme_notes": "5 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "20_40min",
+      "scaling_options": "Banded pull-ups, knee push-ups.",
+      "programming_notes": "Bodyweight grinder. Higher volume than Cindy. Tests pacing + capacity.",
+      "equipment_required": ["pull-up bar"],
+      "source_url": "https://www.crossfit.com/heroes-and-girls",
+      "standards_changed": false
+    },
+    {
+      "id": "grettel",
+      "name": "Grettel",
+      "category": "girls",
+      "year_introduced": 2021,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Clean and Jerk", "reps": 50, "weight_male_lb": 135, "weight_female_lb": 95}
+      ],
+      "scheme_notes": "50 clean and jerks for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "5_10min",
+      "scaling_options": "Reduce load. Power clean + push press acceptable.",
+      "programming_notes": "New Girl 2021. Higher-volume Grace variant.",
+      "equipment_required": ["barbell"],
+      "source_url": "https://library.crossfit.com/free/pdf/27_04_new_girls.pdf",
+      "standards_changed": false
+    },
+    {
+      "id": "ingrid",
+      "name": "Ingrid",
+      "category": "girls",
+      "year_introduced": 2021,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Snatch", "reps": "10-9-8-7-6-5-4-3-2-1", "weight_male_lb": 135, "weight_female_lb": 95},
+        {"exercise": "Bar Muscle-up", "reps": "1-2-3-4-5-6-7-8-9-10"}
+      ],
+      "scheme_notes": "Descending snatches paired with ascending bar muscle-ups. 10 snatches + 1 BMU, 9 snatches + 2 BMU, etc.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "10_20min",
+      "scaling_options": "Reduce snatch load. Chin-up + dip combo for BMU.",
+      "programming_notes": "New Girl 2021. Skill + barbell test. The total reps of each movement equal 55.",
+      "equipment_required": ["barbell", "pull-up bar"],
+      "source_url": "https://library.crossfit.com/free/pdf/27_04_new_girls.pdf",
+      "standards_changed": false
+    },
+    {
+      "id": "barbara_ann",
+      "name": "Barbara Ann",
+      "category": "girls",
+      "year_introduced": 2021,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Push Press", "reps": 25, "weight_male_lb": 95, "weight_female_lb": 65},
+        {"exercise": "Front Rack Lunge", "reps": 25, "weight_male_lb": 95, "weight_female_lb": 65}
+      ],
+      "scheme_notes": "5 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "10_20min",
+      "scaling_options": "Reduce barbell load. Air lunges acceptable.",
+      "programming_notes": "New Girl 2021. Tests press + leg endurance with shared bar.",
+      "equipment_required": ["barbell"],
+      "source_url": "https://library.crossfit.com/free/pdf/27_04_new_girls.pdf",
+      "standards_changed": false
+    },
+    {
+      "id": "lyla",
+      "name": "Lyla",
+      "category": "girls",
+      "year_introduced": 2021,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Run", "reps": 1, "distance": "800m"},
+        {"exercise": "Devil Press", "reps": 30, "weight_male_lb": "2x50", "weight_female_lb": "2x35"}
+      ],
+      "scheme_notes": "3 rounds for time. Devil press = burpee + double DB snatch overhead.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "20_40min",
+      "scaling_options": "Reduce DB load. Reduce run distance.",
+      "programming_notes": "New Girl 2021. Tests aerobic + anaerobic mix.",
+      "equipment_required": ["dumbbells"],
+      "source_url": "https://library.crossfit.com/free/pdf/27_04_new_girls.pdf",
+      "standards_changed": false
+    },
+    {
+      "id": "ellen",
+      "name": "Ellen",
+      "category": "girls",
+      "year_introduced": 2021,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Wall Walk", "reps": 5},
+        {"exercise": "Toes-to-Bar", "reps": 10},
+        {"exercise": "Single-arm Dumbbell Snatch", "reps": 15, "weight_male_lb": 50, "weight_female_lb": 35}
+      ],
+      "scheme_notes": "10 rounds for time. Alternate DB snatch arms.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "20_40min",
+      "scaling_options": "Inchworm push-up for wall walks. Hanging knee raise for T2B.",
+      "programming_notes": "New Girl 2021. High-volume gymnastics + DB test.",
+      "equipment_required": ["dumbbell", "pull-up bar", "wall"],
+      "source_url": "https://library.crossfit.com/free/pdf/27_04_new_girls.pdf",
+      "standards_changed": false
+    },
+    {
+      "id": "andi",
+      "name": "Andi",
+      "category": "girls",
+      "year_introduced": 2021,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Power Clean", "reps": 50, "weight_male_lb": 135, "weight_female_lb": 95},
+        {"exercise": "Front Squat", "reps": 50, "weight_male_lb": 135, "weight_female_lb": 95},
+        {"exercise": "Jerk", "reps": 50, "weight_male_lb": 135, "weight_female_lb": 95}
+      ],
+      "scheme_notes": "For time. Movements done in order, single barbell.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "10_20min",
+      "scaling_options": "Reduce load.",
+      "programming_notes": "New Girl 2021. Tests sustained barbell capacity across three movements.",
+      "equipment_required": ["barbell"],
+      "source_url": "https://library.crossfit.com/free/pdf/27_04_new_girls.pdf",
+      "standards_changed": false
+    },
+    {
+      "id": "lane",
+      "name": "Lane",
+      "category": "girls",
+      "year_introduced": 2021,
+      "scheme": "for_time",
+      "movements": [
+        {"exercise": "Strict Handstand Push-up", "reps": 5},
+        {"exercise": "Dumbbell Power Snatch", "reps": 10, "weight_male_lb": 70, "weight_female_lb": 50},
+        {"exercise": "Toes-to-Bar", "reps": 15}
+      ],
+      "scheme_notes": "5 rounds for time.",
+      "time_cap_min": null,
+      "scoring": "time",
+      "time_domain": "10_20min",
+      "scaling_options": "Pike push-ups, reduce DB load, hanging knee raise.",
+      "programming_notes": "New Girl 2021. Skill + strength test.",
+      "equipment_required": ["dumbbell", "pull-up bar", "wall"],
+      "source_url": "https://library.crossfit.com/free/pdf/27_04_new_girls.pdf",
+      "standards_changed": false
+    }
+  ]
+}
