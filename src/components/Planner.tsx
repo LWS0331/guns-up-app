@@ -2059,6 +2059,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             ? `Auto-detected from ${workout.title || 'workout'} (prev best ${priorPR.weight} × ${priorPR.reps || 0})`
             : `Auto-detected baseline from ${workout.title || 'workout'}`,
           type: 'strength',
+          // Stamp the operator's current training path so the PR Board
+          // can group lifetime bests by path (a 405 deadlift on
+          // powerlifting and a 315 deadlift on tactical are both "best
+          // for that path"). Falls back to undefined when intake
+          // hasn't been completed.
+          path: operator.intake?.trainingPath,
         });
       });
 

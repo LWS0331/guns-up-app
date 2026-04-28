@@ -2125,6 +2125,21 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           {prs.map((pr, i) => {
             const isPeak = pr.weight === maxWeight;
             const isNew = (Date.now() - new Date(pr.date).getTime()) / (1000 * 60 * 60 * 24) < 7;
+            // Path abbreviation. Apr 2026: PRs are stamped with the
+            // operator's training path at log time (Planner auto-detect +
+            // GunnyChat <pr_json>). gunny_pick is hidden — it means
+            // "operator hasn't picked a path yet," not a real path.
+            const pathAbbr = (() => {
+              switch (pr.path) {
+                case 'bodybuilding': return 'BB';
+                case 'crossfit': return 'CF';
+                case 'powerlifting': return 'PL';
+                case 'athletic': return 'ATH';
+                case 'tactical': return 'TAC';
+                case 'hybrid': return 'HYB';
+                default: return null; // undefined or gunny_pick
+              }
+            })();
             return (
               <div key={pr.id} style={{
                 padding: '3px 8px',
@@ -2134,6 +2149,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               }}>
                 <span style={{ color: isPeak ? '#00ff41' : '#888' }}>{pr.weight}x{pr.reps}</span>
                 <span style={{ color: '#555', marginLeft: 6 }}>{pr.date.slice(5)}</span>
+                {pathAbbr && <span style={{ color: '#5a8a5a', marginLeft: 6 }}>{pathAbbr}</span>}
                 {isNew && <span style={{ color: '#ffb800', marginLeft: 4 }}>NEW</span>}
               </div>
             );

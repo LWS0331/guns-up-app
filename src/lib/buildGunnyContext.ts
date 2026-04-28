@@ -111,6 +111,12 @@ export interface GunnyOperatorContext {
   parentIds?: string[];
   sportProfile?: SportProfile;
   juniorConsent?: JuniorConsent;
+
+  // Surfaces intake fields the server uses to select the Gunny corpus
+  // (src/lib/gunnyCorpus.ts). Both must travel with the operatorContext so
+  // route.ts can resolve them without a separate DB round-trip.
+  trainingPath?: string;
+  lifeStage?: 'pregnancy' | 'postpartum';
 }
 
 export function buildFullGunnyContext(
@@ -374,5 +380,10 @@ export function buildFullGunnyContext(
     parentIds: operator.parentIds,
     sportProfile: operator.sportProfile,
     juniorConsent: operator.juniorConsent,
+    trainingPath: intake?.trainingPath,
+    lifeStage:
+      intake?.lifeStage === 'pregnancy' || intake?.lifeStage === 'postpartum'
+        ? intake.lifeStage
+        : undefined,
   };
 }
