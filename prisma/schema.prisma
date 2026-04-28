@@ -167,6 +167,37 @@ model WearableConnection {
   @@index([vitalUserId])
 }
 
+// WearableSnapshot — one row per operator per calendar day, written
+// by /api/wearables/webhook on each daily.data.* event (and by the
+// sync route's pull). Lets the baselines cron compute TRUE rolling
+// means/SDs from real historical samples instead of the v1
+// approximation that treated each cron run as one data point against
+// an incrementally-updated mean.
+//
+// The unique([operatorId, syncDate]) lets the webhook upsert by
+// (operator, day) so a provider that pushes multiple events for the
+// same day (sleep + recovery + body) collapses to a single row, with
+// each event filling in its own columns via the Prisma `update` half.
+//
+// Migration NOT run automatically; applies via Prisma's runtime
+// `db push` at deploy startup (see scripts/start.* and migrate route).
+model WearableSnapshot {
+  id              String   @id @default(cuid())
+  operatorId      String
+  syncDate        String                  // calendar_date YYYY-MM-DD (provider-reported)
+  hrv             Float?                  // ms
+  restingHr       Float?                  // bpm
+  sleepHours      Float?                  // hours (decimal) — stored consistently with webhook/sync output
+  sleepEfficiency Float?                  // 0-100
+  recoveryScore   Float?                  // 0-100 (provider-computed when present)
+  raw             Json     @default("{}") // last full provider payload for the day, for debugging
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([operatorId, syncDate])
+  @@index([operatorId, syncDate])
+}
+
 // Trainer applications submitted via /trainer-apply landing page form.
 // Public POST endpoint; admin-only GET. Reviewed manually — no auto-acceptance.
 // Migration NOT run automatically; apply via `prisma migrate dev` when ready.

@@ -14,6 +14,7 @@ import JuniorPRBoard from '@/components/JuniorPRBoard';
 import MacrocyclePanel from '@/components/MacrocyclePanel';
 import SupplementStack from '@/components/SupplementStack';
 import RecoveryReadout from '@/components/RecoveryReadout';
+import ReadinessPanel from '@/components/ReadinessPanel';
 import FormAnalysis from '@/components/FormAnalysis';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
@@ -3103,9 +3104,13 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         // Pass currentUser so the COMMANDER+ tier gate uses the viewer's
         // tier (a trainer viewing a client always has access). Upgrade
         // CTA bounces back to the PROFILE tab where BillingPanel lives.
-        // Recovery Readout sits underneath the wearable connect surface
-        // — pulls latest sync data and renders the GO_HARD/NORMAL/
-        // DELOAD/REST recommendation. (Recovery Protocol Engine, #50.)
+        //
+        // Layout:
+        //   1. WearableConnect — connect/disconnect providers
+        //   2. ReadinessPanel  — always-on engine state (Day X of N,
+        //                        confidence, ACWR, factors)
+        //   3. RecoveryReadout — on-demand action surface (GO_HARD/
+        //                        NORMAL/DELOAD/REST + LLM coaching)
         return (
           <div>
             <WearableConnect
@@ -3114,6 +3119,13 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               currentUser={currentUser}
               onOpenBilling={() => setActiveTab('PROFILE')}
             />
+            <div style={{ marginTop: 20 }}>
+              <ReadinessPanel
+                operator={operator}
+                currentUser={currentUser}
+                onOpenBilling={() => setActiveTab('PROFILE')}
+              />
+            </div>
             <div style={{ marginTop: 20 }}>
               <RecoveryReadout
                 operator={operator}

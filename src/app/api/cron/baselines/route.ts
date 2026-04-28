@@ -26,6 +26,7 @@ import { requireCronAuth } from '@/lib/cronAuth';
 const RECENT_WINDOW_DAYS = 28;
 const ACUTE_DAYS = 7;
 const CHRONIC_DAYS = 28;
+const HRV_BASELINE_DAYS = 14;     // standard rolling-mean window for HRV
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 interface Workout {
@@ -33,6 +34,15 @@ interface Workout {
   sessionRpe?: number;
   sessionDurationMin?: number;
   completed?: boolean;
+}
+
+interface SnapshotRow {
+  syncDate: string;
+  hrv: number | null;
+  restingHr: number | null;
+  sleepHours: number | null;
+  sleepEfficiency: number | null;
+  recoveryScore: number | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -45,6 +55,7 @@ export async function GET(req: NextRequest) {
   try {
     const startedAt = new Date();
     const cutoff = new Date(startedAt.getTime() - RECENT_WINDOW_DAYS * MS_PER_DAY);
+    const cutoffDateStr = cutoff.toISOString().slice(0, 10);
 
     // We could narrow this with a where clause, but for closed beta
     // the operator count is small (<20) — straight findMany is fine.
@@ -58,19 +69,35 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // Pull all wearable history in one shot, group in memory.
-    // For each operator we want the syncData snapshots since cutoff.
-    // WearableConnection.syncData is the LATEST snapshot — to compute
-    // a rolling baseline we need historical snapshots. The Vital webhook
-    // currently overwrites syncData on each sync, so for v1 we treat
-    // the latest snapshot as a single data point per operator and
-    // accumulate over time via this cron's incremental writes.
-    //
-    // TODO: add a WearableSnapshot history table for proper rolling
-    // baselines. For now, we increment the rolling mean each cron run
-    // using the latest sync, which approximates a 1-sample-per-day
-    // signal — adequate for daily-summary providers (Oura, WHOOP,
-    // Garmin recovery). This is a known limitation.
+    // True rolling baselines (v2): pull WearableSnapshot rows for the
+    // last 28 days, group by operator. Each row is one calendar day
+    // with explicit columns (hrv, restingHr, sleepHours, etc.) written
+    // by the webhook. This replaces the v1 incremental-mean approximation
+    // that treated each cron run as one data point.
+    const snapshots = await prisma.wearableSnapshot.findMany({
+      where: { syncDate: { gte: cutoffDateStr } },
+      orderBy: { syncDate: 'asc' },
+      select: {
+        operatorId: true,
+        syncDate: true,
+        hrv: true,
+        restingHr: true,
+        sleepHours: true,
+        sleepEfficiency: true,
+        recoveryScore: true,
+      },
+    });
+    const snapshotsByOp = new Map<string, SnapshotRow[]>();
+    for (const s of snapshots) {
+      const list = snapshotsByOp.get(s.operatorId) ?? [];
+      list.push(s);
+      snapshotsByOp.set(s.operatorId, list);
+    }
+
+    // Legacy fallback: operators who haven't accumulated WearableSnapshot
+    // rows yet (e.g. closed-beta users on the day this ships) still get a
+    // single-point read from WearableConnection.syncData. After ~14 days
+    // of webhook activity the snapshot path takes over fully.
     const wearables = await prisma.wearableConnection.findMany({
       where: { active: true },
       select: { operatorId: true, syncData: true, lastSyncAt: true },
@@ -89,7 +116,13 @@ export async function GET(req: NextRequest) {
 
     for (const op of operators) {
       processed += 1;
-      const result = await updateBaselineFor(op.id, op.workouts, wearableByOp.get(op.id), cutoff);
+      const result = await updateBaselineFor(
+        op.id,
+        op.workouts,
+        snapshotsByOp.get(op.id) ?? [],
+        wearableByOp.get(op.id),
+        cutoff,
+      );
       if (result === 'skipped') skipped += 1;
       else updated += 1;
     }
@@ -114,7 +147,8 @@ export async function GET(req: NextRequest) {
 async function updateBaselineFor(
   operatorId: string,
   workoutsJson: unknown,
-  wearable: { syncData: unknown; lastSyncAt: Date | null } | undefined,
+  snapshotRows: SnapshotRow[],
+  legacyWearable: { syncData: unknown; lastSyncAt: Date | null } | undefined,
   cutoff: Date,
 ): Promise<'updated' | 'skipped'> {
   // ── Workouts → load history ──
@@ -134,16 +168,57 @@ async function updateBaselineFor(
     }
   }
 
-  // ── Wearable signals ──
-  const syncData = (wearable?.syncData || {}) as Record<string, unknown>;
-  const sleep = (syncData.sleep || {}) as Record<string, unknown>;
-  const recovery = (syncData.recovery || {}) as Record<string, unknown>;
-  const hrv = typeof recovery.hrv === 'number' ? Number(recovery.hrv) : null;
-  const rhr = typeof recovery.restingHr === 'number' ? Number(recovery.restingHr) : null;
-  const sleepHours = typeof sleep.duration === 'number' ? Number(sleep.duration) / 3600 : null;
+  // ── Wearable signals: prefer WearableSnapshot rows, fall back to
+  //    the legacy single-point WearableConnection.syncData read for
+  //    operators with zero snapshot history. ──
+  let hrvSamples: number[] = [];
+  let rhrSamples: number[] = [];
+  let sleepSamples: number[] = [];
+  let baselineDays = 0;
+
+  if (snapshotRows.length > 0) {
+    // Take the most recent HRV_BASELINE_DAYS samples for HRV/RHR/sleep.
+    // Use slice from the end since rows are ordered by syncDate ASC.
+    const recent = snapshotRows.slice(-HRV_BASELINE_DAYS);
+    for (const r of recent) {
+      if (r.hrv != null) hrvSamples.push(r.hrv);
+      if (r.restingHr != null) rhrSamples.push(r.restingHr);
+      if (r.sleepHours != null) sleepSamples.push(r.sleepHours);
+    }
+    // baselineDays = distinct calendar days with ANY readiness-relevant
+    // signal. This matches what readinessScore() expects (it gates the
+    // confidence tiers off baselineDays).
+    const distinctDates = new Set<string>();
+    for (const r of snapshotRows) {
+      if (r.hrv != null || r.restingHr != null || r.sleepHours != null || r.recoveryScore != null) {
+        distinctDates.add(r.syncDate);
+      }
+    }
+    baselineDays = distinctDates.size;
+  } else if (legacyWearable) {
+    // Legacy single-point fallback. New ops who sync today but haven't
+    // accumulated history yet still register one day of data so the
+    // engine starts the cold-start clock.
+    const syncData = (legacyWearable.syncData || {}) as Record<string, unknown>;
+    const sleep = (syncData.sleep || {}) as Record<string, unknown>;
+    const recovery = (syncData.recovery || {}) as Record<string, unknown>;
+    const hrv = typeof recovery.hrv === 'number' ? Number(recovery.hrv) : null;
+    const rhr = typeof recovery.restingHr === 'number' ? Number(recovery.restingHr) : null;
+    // syncData.sleep.duration is stored in HOURS (see webhook + sync).
+    // The v1 cron divided by 3600 here as if it were seconds — that
+    // bug's been carried since the engine launched. Fixed in the
+    // snapshot read above (column is named sleepHours and stored in
+    // hours); fixing it on the legacy path too so the transition
+    // period doesn't undercount sleep.
+    const sleepH = typeof sleep.duration === 'number' ? Number(sleep.duration) : null;
+    if (hrv != null) hrvSamples = [hrv];
+    if (rhr != null) rhrSamples = [rhr];
+    if (sleepH != null) sleepSamples = [sleepH];
+    baselineDays = (hrv != null || rhr != null || sleepH != null) ? 1 : 0;
+  }
 
   // If we have nothing — no completed workouts, no wearable — skip.
-  if (recentLoads.length === 0 && hrv == null && rhr == null && sleepHours == null) {
+  if (recentLoads.length === 0 && hrvSamples.length === 0 && rhrSamples.length === 0 && sleepSamples.length === 0) {
     return 'skipped';
   }
 
@@ -170,24 +245,11 @@ async function updateBaselineFor(
     : null;
   const sRpeSD = sRpeValues.length > 1 ? stddev(sRpeValues) : null;
 
-  // ── Wearable rolling means ──
-  // Incremental update: pull existing baseline, average new value in.
-  // This is a simplification — a real rolling 14-day mean would
-  // require a snapshot history table (see TODO at top). For closed
-  // beta with daily-summary providers it's an acceptable approximation
-  // because each cron run sees the latest day's reading and folds it
-  // into a running average.
-  const existing = await prisma.operatorBaseline.findUnique({ where: { operatorId } });
-  const days = (existing?.baselineDays ?? 0) + 1;
-
-  const newHrvMean = rollingUpdate(existing?.hrvRollingMean ?? null, hrv, days);
-  const newRhrMean = rollingUpdate(existing?.rhrRollingMean ?? null, rhr, days);
-  const newSleepMean = rollingUpdate(existing?.sleepHoursMean ?? null, sleepHours, days);
-
-  // SD is approximated incrementally via Welford's online algorithm
-  // (good enough). For HRV only — RHR and sleep don't need SD because
-  // we treat them as raw deltas in the readiness scoring.
-  const newHrvSD = welfordSD(existing?.hrvRollingSD ?? null, existing?.hrvRollingMean ?? null, hrv, days);
+  // ── Wearable rolling means + SDs from the actual sample arrays ──
+  const newHrvMean = mean(hrvSamples);
+  const newHrvSD = hrvSamples.length > 1 ? stddev(hrvSamples) : null;
+  const newRhrMean = mean(rhrSamples);
+  const newSleepMean = mean(sleepSamples);
 
   await prisma.operatorBaseline.upsert({
     where: { operatorId },
@@ -201,52 +263,34 @@ async function updateBaselineFor(
       acuteLoad7d: acuteSum,
       chronicLoad28d: chronicLoads.length > 0 ? chronicSum / Math.min(chronicLoads.length, CHRONIC_DAYS) : null,
       acwr,
-      baselineDays: days,
+      baselineDays,
       lastComputedAt: new Date(),
     },
     create: {
       operatorId,
-      hrvRollingMean: hrv,
-      hrvRollingSD: null,
-      rhrRollingMean: rhr,
-      sleepHoursMean: sleepHours,
+      hrvRollingMean: newHrvMean,
+      hrvRollingSD: newHrvSD,
+      rhrRollingMean: newRhrMean,
+      sleepHoursMean: newSleepMean,
       sRpeMean,
       sRpeSD,
       acuteLoad7d: acuteSum,
       chronicLoad28d: chronicLoads.length > 0 ? chronicSum / Math.min(chronicLoads.length, CHRONIC_DAYS) : null,
       acwr,
-      baselineDays: 1,
+      baselineDays,
       lastComputedAt: new Date(),
     },
   });
   return 'updated';
 }
 
-function rollingUpdate(prev: number | null, sample: number | null, days: number): number | null {
-  if (sample == null) return prev;
-  if (prev == null) return sample;
-  // Simple recency-weighted update: each new sample contributes 1/days,
-  // capped so a single bad reading doesn't trash a mature baseline.
-  const weight = 1 / Math.max(days, 1);
-  return prev * (1 - weight) + sample * weight;
-}
-
-function welfordSD(prevSD: number | null, prevMean: number | null, sample: number | null, days: number): number | null {
-  if (sample == null) return prevSD;
-  if (prevMean == null || days < 2) return null;
-  // Approximation — true Welford requires the M2 sum-of-squares which
-  // we don't store. This treats the existing SD as the running estimate
-  // and adjusts it slightly toward the new deviation. Fine for engine
-  // bootstrapping; replace with proper Welford state when we add the
-  // snapshot history table.
-  const deviation = Math.abs(sample - prevMean);
-  if (prevSD == null) return deviation;
-  const weight = 1 / Math.max(days, 2);
-  return prevSD * (1 - weight) + deviation * weight;
+function mean(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
 function stddev(values: number[]): number {
-  const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  const m = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - m) ** 2, 0) / values.length;
   return Math.sqrt(variance);
 }
