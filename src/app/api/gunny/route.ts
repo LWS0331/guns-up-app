@@ -324,6 +324,42 @@ BACKDATING — "date" field (OPTIONAL but POWERFUL):
 - NEVER say "I can't backdate meals" — you CAN, via the date field.
 - The client stamps the exact time; you only control the date bucket.
 
+PR LOGGING PROTOCOL (CRITICAL):
+You CAN write personal records directly to the operator's PR Board. Do NOT
+say "I can't update your PRs" — you CAN, via <pr_json>.
+
+This is a FALLBACK channel. When the operator logs a workout via Workout
+Mode, the app auto-detects new PRs at debrief time and writes them to the
+PR Board automatically. Use <pr_json> when:
+- The operator hit a PR OUTSIDE workout mode (gym session not logged here,
+  retroactive entry, "I just hit 315 on bench last weekend").
+- The operator explicitly says "log a PR", "save this as a PR", "that's a
+  new max for me — record it", "set a new bench PR at 315 for 1".
+- You confirm in chat that a PR was hit and the operator wants it tracked.
+
+Do NOT emit <pr_json> for:
+- Sets that were just logged inside Workout Mode (auto-detection handles them
+  — emitting again would create a duplicate row).
+- Hypothetical / aspirational numbers ("I'm aiming for 405 deadlift").
+- Bodyweight-only or weight=0 movements.
+
+Format:
+
+<pr_json>
+{
+  "exercise": "Bench Press",
+  "weight": 315,
+  "reps": 1,
+  "date": "YYYY-MM-DD",
+  "notes": "First triple-plate"
+}
+</pr_json>
+
+Fields: exercise (string), weight (number, lbs, no units), reps (number,
+default 1 if omitted) are required. date and notes are optional. Match the
+exercise name to existing PR Board entries when possible (case-insensitive)
+so the operator's history threads correctly.
+
 Modification format (pick ONE type):
 
 <workout_modification>
@@ -699,6 +735,24 @@ Format:
 </meal_json>
 
 name + all four macro fields are required and numeric. "date" is OPTIONAL — omit it to log for TODAY, include it (YYYY-MM-DD in the operator's local timezone) to backdate (e.g. "log this for yesterday", "add to April 14"). NEVER say "I can't backdate" — the date field handles it. The client stamps exact time.
+
+PR LOGGING PROTOCOL (CRITICAL — fallback to auto-detect):
+Workout Mode auto-detects PRs at debrief and writes them to the PR Board.
+Use <pr_json> only as a FALLBACK for PRs hit OUTSIDE workout mode — gym
+session not logged here, retroactive entries, or explicit "log a PR" /
+"that's a new max — record it" / "save 315 bench as my new PR" requests.
+
+Format:
+<pr_json>
+{ "exercise": "Bench Press", "weight": 315, "reps": 1, "date": "YYYY-MM-DD", "notes": "First triple-plate" }
+</pr_json>
+
+Required: exercise (string), weight (number, lbs, no units). reps defaults
+to 1 if omitted. date + notes optional. Match exercise to existing PR
+Board entries when possible (case-insensitive) so history threads.
+NEVER emit <pr_json> for sets logged inside Workout Mode (auto-detect
+handles them — duplicates would result), bodyweight-only movements, or
+hypothetical numbers.
 
 POST-WORKOUT ANALYSIS:
 If the operator asks "how did I do" or "analyze my workout" and the context block contains COMPLETED WORKOUT ANALYSIS data, give a specific, number-grounded SITREP: volume, completion %, PRs, compare to last similar session. Never give generic "great job" responses.
@@ -1608,6 +1662,16 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const mealMatch = responseText.match(/<meal_json>([\s\S]*?)<\/meal_json>/);
       if (mealMatch) { try { mealData = JSON.parse(mealMatch[1].trim()); } catch { /* ignore */ } }
 
+      // <pr_json> — Gunny logs a PR when the operator describes hitting one
+      // or asks to log it. Parallel to <meal_json>: the client (GunnyChat)
+      // appends the parsed shape to operator.prs. Auto-PR detection in the
+      // workout-mode debrief is the primary path; this block is the catch
+      // for PRs hit OUTSIDE workout mode (gym session not logged via
+      // workout-mode, retroactive log, etc.).
+      let prData: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string } | null = null;
+      const prMatch = responseText.match(/<pr_json>([\s\S]*?)<\/pr_json>/);
+      if (prMatch) { try { prData = JSON.parse(prMatch[1].trim()); } catch { /* ignore */ } }
+
       let voiceControl: { action?: string } | null = null;
       const voiceMatch = responseText.match(/<voice_control>([\s\S]*?)<\/voice_control>/);
       if (voiceMatch) { try { voiceControl = JSON.parse(voiceMatch[1].trim()); } catch { /* ignore */ } }
@@ -1641,6 +1705,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
         .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
         .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+        .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
         .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
         .trim();
 
@@ -1653,6 +1718,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         workoutDeletes,
         profileData,
         mealData,
+        prData,
         voiceControl,
         // Junior safety events (empty array for adults / flag-disabled juniors).
         // Client surfaces a banner; ParentDashboard polls juniorSafety.events
@@ -1740,6 +1806,14 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             try { mealData = JSON.parse(mm[1].trim()); } catch { /* invalid JSON */ }
           }
 
+          // Extract PR JSON — fallback path for PRs hit outside Workout
+          // Mode (the auto-detect in handleSaveResults is the primary).
+          let prData: Record<string, unknown> | null = null;
+          const prm = fullText.match(/<pr_json>([\s\S]*?)<\/pr_json>/);
+          if (prm) {
+            try { prData = JSON.parse(prm[1].trim()); } catch { /* invalid JSON */ }
+          }
+
           // Extract voice-control command if present (enable/disable TTS)
           let voiceControl: { action?: string } | null = null;
           const vm = fullText.match(/<voice_control>([\s\S]*?)<\/voice_control>/);
@@ -1783,6 +1857,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 workoutDeletes,
                 profileData,
                 mealData,
+                prData,
                 voiceControl,
                 // Junior safety events captured pre-LLM (see non-streaming
                 // payload above for context). Mirrored here so SSE + non-SSE

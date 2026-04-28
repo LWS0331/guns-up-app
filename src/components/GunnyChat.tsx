@@ -1086,7 +1086,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string } } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string } } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1252,6 +1252,7 @@ ${mealSuggestion}`;
         workoutDeletes: data.workoutDeletes,
         profileData: data.profileData,
         mealData: data.mealData,
+        prData: data.prData,
       };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
@@ -1289,6 +1290,9 @@ ${mealSuggestion}`;
     workoutDeletes?: Array<{ date: string }>;
     profileData?: Record<string, unknown>;
     mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string };
+    /** Apr 2026: Gunny <pr_json> fallback channel — see /api/gunny PR LOGGING PROTOCOL.
+     *  Primary path is the auto-detect in Planner workout-mode debrief. */
+    prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string };
     voiceControl?: { action?: string };
   } | null> => {
     try {
@@ -1301,6 +1305,7 @@ ${mealSuggestion}`;
         // double-logging the same meal — see beta hotfix bundle (Apr 2026).
         text: (m.text || '')
           .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+          .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
           .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
           .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
           .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
@@ -1363,6 +1368,7 @@ ${mealSuggestion}`;
           workoutDeletes: Array.isArray(data.workoutDeletes) ? data.workoutDeletes : (data.workoutDelete ? [data.workoutDelete] : []),
           profileData: data.profileData,
           mealData: data.mealData,
+          prData: data.prData,
           voiceControl: data.voiceControl,
         };
       }
@@ -1409,6 +1415,8 @@ ${mealSuggestion}`;
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
                 .replace(/<meal_json>[\s\S]*$/, '')
+                .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
+                .replace(/<pr_json>[\s\S]*$/, '')
                 .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
                 .replace(/<voice_control>[\s\S]*$/, '')
                 // Strip trailing half-streamed markdown table row (pipe-led line missing its closing pipe)
@@ -1441,6 +1449,7 @@ ${mealSuggestion}`;
           workoutDeletes: Array.isArray(finalPayload.workoutDeletes) ? finalPayload.workoutDeletes : (finalPayload.workoutDelete ? [finalPayload.workoutDelete] : []),
           profileData: finalPayload.profileData,
           mealData: finalPayload.mealData,
+          prData: finalPayload.prData,
           voiceControl: finalPayload.voiceControl,
         };
       }
@@ -1777,9 +1786,55 @@ ${mealSuggestion}`;
         }
       }
 
+      // PR LOGGING — Gunny emitted <pr_json>; append to operator.prs.
+      // Fallback channel: Workout Mode debrief auto-detects PRs and writes
+      // them directly. This block handles the OUTSIDE-workout-mode case
+      // (retroactive logs, gym sessions not logged via the app, etc.).
+      // Dedup against existing prs by exercise (case-insensitive) + weight
+      // — same exercise + same weight on the same day is treated as a
+      // duplicate and silently dropped.
+      let prLogged = false;
+      const prPayload = apiResult?.prData;
+      if (prPayload && onUpdateOperator) {
+        const exercise = (prPayload.exercise || '').trim();
+        const weight = Number(prPayload.weight);
+        const reps = Number.isFinite(Number(prPayload.reps))
+          ? Math.max(1, Math.floor(Number(prPayload.reps)))
+          : 1;
+        const valid = exercise.length > 0 && Number.isFinite(weight) && weight > 0;
+        if (valid) {
+          const today = getLocalDateStr();
+          const targetDate = isValidDateStr(prPayload.date) ? prPayload.date! : today;
+          const existingPRs = operator.prs || [];
+          const exKey = exercise.toLowerCase();
+          const dupe = existingPRs.find(p =>
+            (p.exercise || '').trim().toLowerCase() === exKey &&
+            Math.abs((p.weight || 0) - weight) < 0.5 &&
+            p.date === targetDate
+          );
+          if (!dupe) {
+            const newPR = {
+              id: `pr-gunny-${Date.now()}`,
+              exercise,
+              weight: Math.round(weight),
+              reps,
+              date: targetDate,
+              notes: prPayload.notes || 'Logged via Gunny chat',
+              type: (prPayload.type as 'strength' | 'consistency' | 'endurance' | 'milestone' | undefined) || 'strength',
+            };
+            const updatedOp = {
+              ...operator,
+              prs: [...existingPRs, newPR],
+            };
+            onUpdateOperator(updatedOp);
+            prLogged = true;
+          }
+        }
+      }
+
       // Final pass — stamp the workout suffix if a workout was generated
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      if (hasWorkout || wasModification || mealLogged) {
+      if (hasWorkout || wasModification || mealLogged || prLogged) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -1788,7 +1843,8 @@ ${mealSuggestion}`;
                   text: (apiResult?.response || m.text)
                     + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
                     + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
-                    + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : ''),
+                    + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : '')
+                    + (prLogged ? '\n\n[PR LOGGED TO PR BOARD]' : ''),
                   isWorkout: hasWorkout,
                 }
               : m

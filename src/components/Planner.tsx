@@ -342,6 +342,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     totalVolume: number;    // lbs
     completionRate: number; // 0-100
     gunnyMessage: string;
+    /** Auto-detected PRs from this session (Apr 2026 hotfix). Surfaced
+     *  in the completion screen so the operator sees the wins they hit;
+     *  also already appended to operator.prs by handleSaveResults. */
+    newPRs?: Array<{ exercise: string; weight: number; reps: number; isBaseline: boolean }>;
   } | null>(null);
 
   // Voice command state
@@ -1991,6 +1995,67 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         ),
       };
       const updated = { ...operator };
+
+      // ─── AUTO-PR DETECTION ────────────────────────────────────────────────
+      // Scan every exercise block in the just-completed workout. For each
+      // block, find the heaviest completed set; if it beats the operator's
+      // prior best for that exercise (case-insensitive match) — or there
+      // is no prior best for the exercise — append a fresh PRRecord.
+      // Mirrors lib/workoutAnalysis.ts:76 isPR semantics so the "PR flag in
+      // Gunny's context" and "PR row in the PR Board" can't drift.
+      const existingPRs = updated.prs || [];
+      const newPRs: import('@/lib/types').PRRecord[] = [];
+      const todayStr = getLocalDateStr();
+      workout.blocks.forEach(block => {
+        if (block.type !== 'exercise') return;
+        const exerciseName = (block as ExerciseBlock).exerciseName?.trim();
+        if (!exerciseName) return;
+        const blockResult = savedResults.blockResults[block.id];
+        if (!blockResult) return;
+        const completedSets = (blockResult.sets || []).filter(s => s.completed && (s.weight || 0) > 0 && (s.reps || 0) > 0);
+        if (completedSets.length === 0) return;
+        // Heaviest set this session — ties broken by higher reps so logging
+        // 225×8 doesn't get masked by 225×5 on the same day.
+        let topWeight = 0;
+        let topReps = 0;
+        for (const s of completedSets) {
+          const w = s.weight || 0;
+          const r = s.reps || 0;
+          if (w > topWeight || (w === topWeight && r > topReps)) {
+            topWeight = w;
+            topReps = r;
+          }
+        }
+        if (topWeight === 0) return;
+
+        const exNameKey = exerciseName.toLowerCase();
+        const priorPR = existingPRs.find(
+          p => (p.exercise || '').trim().toLowerCase() === exNameKey
+        );
+        const isStrengthPR = priorPR
+          ? topWeight > priorPR.weight ||
+            (topWeight === priorPR.weight && topReps > (priorPR.reps || 0))
+          : true; // first time logging this exercise → baseline PR
+
+        if (!isStrengthPR) return;
+
+        newPRs.push({
+          id: `pr-auto-${Date.now()}-${block.id}`,
+          exercise: exerciseName,
+          weight: topWeight,
+          reps: topReps,
+          date: todayStr,
+          notes: priorPR
+            ? `Auto-detected from ${workout.title || 'workout'} (prev best ${priorPR.weight} × ${priorPR.reps || 0})`
+            : `Auto-detected baseline from ${workout.title || 'workout'}`,
+          type: 'strength',
+        });
+      });
+
+      if (newPRs.length > 0) {
+        updated.prs = [...existingPRs, ...newPRs];
+      }
+
       updated.workouts[dateStr] = { ...workout, results: savedResults, completed: true };
       onUpdateOperator(updated);
 
@@ -2054,6 +2119,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         totalVolume,
         completionRate,
         gunnyMessage,
+        newPRs: newPRs.map(pr => ({
+          exercise: pr.exercise,
+          weight: pr.weight,
+          reps: pr.reps,
+          // pr.notes starts with "Auto-detected baseline" for first-time entries.
+          isBaseline: (pr.notes || '').startsWith('Auto-detected baseline'),
+        })),
       });
       setShowCompletionScreen(true);
 
@@ -3151,6 +3223,47 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 </div>
               ))}
             </div>
+
+            {/* NEW PRs — auto-detected from this session and already
+                appended to operator.prs by handleSaveResults. Shown
+                only when the session produced at least one PR; not a
+                blocker, just a celebration. Distinguishes "baseline"
+                (first time logging this exercise) from "new best"
+                (beat a prior record). */}
+            {completionData.newPRs && completionData.newPRs.length > 0 && (
+              <div
+                style={{
+                  maxWidth: 400,
+                  width: '100%',
+                  padding: '14px 18px',
+                  background: 'rgba(0,255,65,0.05)',
+                  border: '1px solid rgba(0,255,65,0.25)',
+                  borderLeft: '3px solid #00ff41',
+                  borderRadius: 4,
+                  marginBottom: 16,
+                  fontFamily: 'Share Tech Mono, monospace',
+                  fontSize: 13,
+                  color: '#ccc',
+                  lineHeight: 1.6,
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#00ff41', letterSpacing: 1, marginBottom: 8 }}>
+                  ★ {completionData.newPRs.some(p => !p.isBaseline) ? 'NEW PRS HIT' : 'BASELINE PRS LOGGED'} ({completionData.newPRs.length})
+                </div>
+                {completionData.newPRs.map((pr, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span>{pr.exercise}</span>
+                    <span style={{ color: pr.isBaseline ? '#a0a0a0' : '#00ff41', fontWeight: 700 }}>
+                      {pr.weight} × {pr.reps}{pr.isBaseline ? ' · baseline' : ''}
+                    </span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  Saved to your PR Board automatically.
+                </div>
+              </div>
+            )}
 
             <div
               style={{
