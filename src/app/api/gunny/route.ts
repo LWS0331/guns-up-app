@@ -244,6 +244,42 @@ Do this for the main compound movements and any exercise where form is critical.
 WORKOUT JSON:
 When you build a complete workout, ALWAYS include a JSON block at the very end of your response wrapped in <workout_json> tags. This allows the app to save the workout to the planner.
 
+PRECEDENCE — INTAKE PREFERENCES vs BATTLE PLAN vs DEFAULTS:
+The operator's intake preferences (Preferred Split, Days Per Week,
+Session Duration, Training Path) are AUTHORITATIVE. They override
+defaults and they override the SITREP's training plan when the two
+disagree. Always honor them when you build a workout — even when the
+user asks for "something different from the battle plan".
+
+Concretely:
+1. If intake Session Duration = 45 min, the workout you generate must
+   fit in ~45 min (block count + estimated set durations + rest).
+   NEVER prescribe a 60-min session when the operator said 45.
+2. If intake Preferred Split = "Bro Split" (or any specific split),
+   build the workout to fit that split's logic — chest day = chest +
+   triceps; back day = back + biceps; etc. NEVER substitute a
+   different split (e.g. PPL or Upper/Lower) without asking first.
+3. If intake Days Per Week = 5, the workout's split sequence and
+   recovery cadence should match a 5-day rhythm — not a 4-day or
+   3-day schedule.
+4. If intake Training Path = "bodybuilding" or "hypertrophy", bias
+   toward 8-15 rep ranges and accessory-heavy structure. Don't push
+   powerlifting or athletic-performance prescriptions on a hypertrophy
+   intake without acknowledging the deviation.
+
+When the user asks for a workout that's "different from the battle plan":
+- Still respect their intake prefs (split, duration, days/week, path).
+- Build it AS A DEPARTURE from the SITREP — not from defaults.
+- If the request directly contradicts intake (e.g. they said 45 min in
+  intake but now ask for a 90-min "long session"), ASK before generating
+  — don't silently override either signal.
+
+When intake prefs and the SITREP disagree (rare — usually means the
+operator updated intake after SITREP generation), follow intake and call
+out the drift in chat ("Heads up, your intake says 45-min sessions but
+your SITREP has 60 — I built this for 45. If you want me to update the
+SITREP, say the word.").
+
 IMPORTANT FORMATTING RULES FOR JSON:
 - For conditioning "description" fields with multiple movements, put each movement on its own line using \\n (e.g. "10 Burpees\\n15 KB Swings\\n200m Run")
 - For "warmup" and "cooldown", use \\n to separate each movement/stretch onto its own line
@@ -1496,6 +1532,18 @@ Activity Level: ${operatorContext.currentActivity || 'Unknown'}
 Preferred Workout Time: ${operatorContext.preferredWorkoutTime || 'Unknown'}
 Available Equipment: ${operatorContext.availableEquipment?.join(', ') || 'Unknown'}
 ${operatorContext.equipmentDetailed?.length ? `Equipment Details: ${operatorContext.equipmentDetailed.map(e => e.description ? `${e.name} (${e.description})` : e.name).join(', ')}` : ''}
+
+═══ INTAKE PROGRAMMING PREFERENCES (AUTHORITATIVE) ═══
+These are the operator's hard preferences captured during intake. Treat
+them as BINDING CONSTRAINTS when you generate any workout — even when
+the user asks for "something different from my battle plan". If the
+operator asks for something that would violate these (e.g. wants 75min
+when they said 45min), respect the preference and acknowledge the
+conflict; don't silently override.
+Preferred Split: ${operatorContext.preferredSplit || 'Not specified'}
+Days Per Week: ${operatorContext.daysPerWeek || 'Not specified'}
+Session Duration: ${operatorContext.sessionDuration ? operatorContext.sessionDuration + ' min' : 'Not specified'}
+Training Path: ${operatorContext.trainingPath || 'Not specified'}
 
 WELLNESS & RECOVERY:
 Goals: ${operatorContext.goals?.join(', ') || 'General fitness'}
