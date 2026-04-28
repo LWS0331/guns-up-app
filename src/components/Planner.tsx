@@ -346,7 +346,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
      *  in the completion screen so the operator sees the wins they hit;
      *  also already appended to operator.prs by handleSaveResults. */
     newPRs?: Array<{ exercise: string; weight: number; reps: number; isBaseline: boolean }>;
+    /** Workout date — needed to write sessionRpe back from the
+     *  autoregulation completion overlay. */
+    dateStr?: string;
   } | null>(null);
+  // Post-workout sRPE capture — Foster's session RPE 1-10. Bound to
+  // the completion overlay; persisted to Workout.sessionRpe when the
+  // user dismisses with DEBRIEF COMPLETE. Drives the autoregulation
+  // engine (ACWR + load monitoring). Default to 7 (typical "challenging
+  // but doable" working session) so a single tap = capture; user can
+  // adjust before dismissing.
+  const [pendingSrpe, setPendingSrpe] = useState<number>(7);
 
   // Voice command state
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
@@ -2126,7 +2136,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           // pr.notes starts with "Auto-detected baseline" for first-time entries.
           isBaseline: (pr.notes || '').startsWith('Auto-detected baseline'),
         })),
+        dateStr,
       });
+      setPendingSrpe(7);  // reset to default for each new completion
       setShowCompletionScreen(true);
 
       // Ascending victory chord
@@ -3286,8 +3298,75 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               {completionData.gunnyMessage}
             </div>
 
+            {/* Session RPE capture — Foster's sRPE 1-10. One tap to
+                accept the default of 7, or pick a different value.
+                Drives the autoregulation engine. */}
+            <div style={{
+              padding: 16,
+              background: 'rgba(0,0,0,0.4)',
+              border: '1px solid rgba(255,140,0,0.2)',
+              borderRadius: 4,
+              marginBottom: 24,
+            }}>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 12, textAlign: 'center' }}>
+                SESSION RPE — HOW HARD WAS THAT?
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4, marginBottom: 8 }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPendingSrpe(n)}
+                    style={{
+                      padding: '10px 0',
+                      background: pendingSrpe === n
+                        ? n <= 4 ? 'rgba(0,255,65,0.25)' : n <= 7 ? 'rgba(255,184,0,0.25)' : 'rgba(255,77,77,0.25)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: pendingSrpe === n
+                        ? n <= 4 ? '1px solid #00ff41' : n <= 7 ? '1px solid #ffb800' : '1px solid #ff4d4d'
+                        : '1px solid rgba(255,255,255,0.08)',
+                      color: pendingSrpe === n
+                        ? n <= 4 ? '#00ff41' : n <= 7 ? '#ffb800' : '#ff4d4d'
+                        : '#888',
+                      fontFamily: 'Orbitron, sans-serif',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      borderRadius: 3,
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#666', textAlign: 'center', lineHeight: 1.5 }}>
+                {pendingSrpe <= 3 && 'Easy — could have done much more.'}
+                {pendingSrpe >= 4 && pendingSrpe <= 6 && 'Moderate — some gas left in the tank.'}
+                {pendingSrpe === 7 && 'Challenging — solid working session.'}
+                {pendingSrpe === 8 && 'Hard — 2 reps left across most sets.'}
+                {pendingSrpe === 9 && 'Very hard — barely held form on last sets.'}
+                {pendingSrpe === 10 && 'Maximal — could not have done one more rep.'}
+              </div>
+            </div>
+
             <button
               onClick={() => {
+                // Persist the sRPE to the workout record before closing.
+                // Two-step write (initial save above, sRPE follow-up here)
+                // means even if the user dismisses without rating we keep
+                // the completed workout — but if they did rate, the
+                // autoregulation engine has its primary input.
+                const ds = completionData?.dateStr;
+                if (ds && operator.workouts[ds]) {
+                  const updated = { ...operator };
+                  updated.workouts = { ...updated.workouts };
+                  updated.workouts[ds] = {
+                    ...updated.workouts[ds],
+                    sessionRpe: pendingSrpe,
+                    sessionDurationMin: completionData?.duration || undefined,
+                  };
+                  onUpdateOperator(updated);
+                }
                 setShowCompletionScreen(false);
                 setCompletionData(null);
                 setWorkoutMode(false);

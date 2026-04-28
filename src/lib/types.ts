@@ -339,6 +339,19 @@ export interface Workout {
   completed: boolean;
   // Workout mode tracking
   results?: WorkoutResults;
+  // Autoregulation engine inputs (post-session capture):
+  //   sessionRpe — Foster's sRPE 1-10. Captured via single-question
+  //     prompt when the operator marks the workout complete. Drives
+  //     ACWR (acute:chronic workload ratio) calculation in the
+  //     readiness engine. Per-set rpe is good but patchy (skipped
+  //     on warmup, conditioning, etc.); sRPE is one tap, much higher
+  //     completion rate, and the standard input for load monitoring.
+  //   sessionDurationMin — actual time spent training. With sRPE
+  //     this gives load = sRPE × duration (Foster 2001). Auto-
+  //     populated from workout-mode timer when available; manual
+  //     entry as fallback.
+  sessionRpe?: number;
+  sessionDurationMin?: number;
 }
 
 export interface WorkoutResults {

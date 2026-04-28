@@ -24,6 +24,7 @@ import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/requireAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 import { resolveTierModel } from '@/lib/models';
+import { readinessScore } from '@/lib/readiness';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -158,21 +159,67 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Heuristic recommendation based on the rules baked into the
-    // wearable enrichment block in gunny/route.ts:
-    //   recovery score < 33  → REST
-    //   recovery score 33-66 OR sleep < 6h → DELOAD
-    //   recovery score 67+ AND sleep ≥ 7h AND HRV not crashed → GO_HARD
-    //   otherwise → NORMAL
+    // Recommendation derivation — autoregulation engine first, then
+    // hardcoded fallback. The engine returns a confidence-graded
+    // ReadinessScore; if confidence is `baseline_only` (< 7 days of
+    // data), we use the deterministic thresholds below. Otherwise we
+    // honor the engine's call.
+    //
+    // Engine status → Recommendation mapping:
+    //   go_hard  → GO_HARD
+    //   normal   → NORMAL
+    //   caution  → DELOAD
+    //   rest     → REST  (only at confidence ≥ medium; engine itself
+    //                     softens to caution at low confidence)
     let recommendation: Recommendation;
-    if (recoveryScore != null && recoveryScore < 33) {
-      recommendation = 'REST';
-    } else if ((sleepHours != null && sleepHours < 6) || (recoveryScore != null && recoveryScore < 67)) {
-      recommendation = 'DELOAD';
-    } else if (recoveryScore != null && recoveryScore >= 67 && (sleepHours == null || sleepHours >= 7)) {
-      recommendation = 'GO_HARD';
+    let engineRationale: string | null = null;
+    let engineConfidence: string | null = null;
+    let engineBaselineDays: number | null = null;
+
+    const readiness = await readinessScore({ operatorId });
+    engineConfidence = readiness.confidence;
+    engineBaselineDays = readiness.baselineDays;
+
+    if (readiness.fallbackToHardcoded) {
+      // Deterministic thresholds from the original wearable-enrichment
+      // block in gunny/route.ts:
+      //   recovery score < 33  → REST
+      //   recovery score 33-66 OR sleep < 6h → DELOAD
+      //   recovery score 67+ AND sleep ≥ 7h AND HRV not crashed → GO_HARD
+      //   otherwise → NORMAL
+      if (recoveryScore != null && recoveryScore < 33) {
+        recommendation = 'REST';
+      } else if ((sleepHours != null && sleepHours < 6) || (recoveryScore != null && recoveryScore < 67)) {
+        recommendation = 'DELOAD';
+      } else if (recoveryScore != null && recoveryScore >= 67 && (sleepHours == null || sleepHours >= 7)) {
+        recommendation = 'GO_HARD';
+      } else {
+        recommendation = 'NORMAL';
+      }
     } else {
-      recommendation = 'NORMAL';
+      // Engine-driven call.
+      switch (readiness.status) {
+        case 'go_hard': recommendation = 'GO_HARD'; break;
+        case 'normal':  recommendation = 'NORMAL'; break;
+        case 'caution': recommendation = 'DELOAD'; break;
+        case 'rest':    recommendation = 'REST'; break;
+        default:        recommendation = 'NORMAL';
+      }
+      engineRationale = readiness.rationale;
+
+      // Merge engine factors into the surfaced factors list so the
+      // /welcome readout shows what specifically drove the call —
+      // ACWR, HRV vs baseline, etc. — not just the raw wearable
+      // numbers we already had.
+      for (const f of readiness.factors) {
+        // Skip duplicates already present from the wearable raw block.
+        if (factors.some(existing => existing.label.toLowerCase() === f.label.toLowerCase())) continue;
+        factors.push({
+          label: f.label,
+          value: f.value,
+          signal: f.signal === 'neutral' ? 'warn' : f.signal,
+        });
+      }
     }
 
     // Ask Gunny for the headline + 2-3 sentence guidance — short LLM
@@ -248,6 +295,15 @@ Write the headline + guidance JSON.`;
       headline,
       guidance,
       factors,
+      // Engine metadata — UI can surface "Day X of 14 — building
+      // baseline" or "(Low confidence)" disclaimers when present.
+      engine: {
+        confidence: engineConfidence,
+        baselineDays: engineBaselineDays,
+        rationale: engineRationale,
+        usedEngine: !readiness.fallbackToHardcoded,
+        acwr: readiness.acwr ?? null,
+      },
     });
   } catch (error) {
     console.error('[recovery-readout] error', error);
