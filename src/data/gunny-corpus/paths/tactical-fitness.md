@@ -1,24 +1,4 @@
-// Tactical Fitness Corpus v1 — embedded as a TypeScript string constant.
-//
-// Source: compass_artifact research (April 2026). 928 lines covering 10
-// programming modules + assessment standards appendix, sourced from
-// MTI / Tactical Barbell / SOFLETE / StrongFirst / NSCA TSAC and
-// service doctrine (FM 7-22 H2F, MCO 6100.13A, DAFMAN 36-2905).
-//
-// Why embedded as a string instead of read from /docs at runtime:
-// Next.js bundles only files under src/. A markdown in /docs would be
-// stripped from the production build on Railway/Vercel. Embedding
-// guarantees the corpus ships with the deploy.
-//
-// Used by: src/lib/tacticalContext.ts → injected into Gunny's system
-// prompt when operator.preferences.trainingPath === 'tactical'. Other
-// training paths (bodybuilding, crossfit, hypertrophy, etc.) skip
-// this injection to avoid token bloat.
-//
-// Original markdown lives at docs/corpus/tactical/tactical_fitness_
-// corpus_v1.md for human review / re-research.
-
-export const TACTICAL_FITNESS_CORPUS_V1 = `# Gunny Tactical Fitness Corpus — Run 1 of 2
+# Gunny Tactical Fitness Corpus — Run 1 of 2
 
 **Modules 1–10 + Assessment Standards Appendix**
 *Reference corpus for Gunny, an AI tactical fitness coach. Compiled from primary methodology sources (MTI, Tactical Barbell, SOFLETE, StrongFirst, NSCA TSAC), service doctrine (FM 7-22 H2F, MCO 6100.13A, DAFMAN 36-2905), and official assessment publications. Currency: April 2026.*
@@ -946,7 +926,4 @@ National voluntary SWAT standard. 5 AMRAP-style events, 50 pts max. Tested in sl
 - **StrongFirst (anti-glycolytic) vs. CrossFit (glycolytic metcons):** AGT short power bursts + full recovery vs. accumulation of lactate. Different physiological adaptations.
 - **NSW PTG volume caps vs. high-volume calisthenics culture:** NSW explicitly recommends 200/200/50 daily and 1000/1000/250 weekly caps for push-ups/sit-ups/pull-ups; many tactical-prep cultures exceed these and accumulate overuse injuries.
 
-**Run 2 will cover:** Modules 11–20 (in-theater maintenance, post-deployment recovery, female tactical athlete, aging operator/SF45+, K9 handler, fighter pilot, EOD, combat medic, OCS/Academy prep, SWAT in-service, fire engine company, wildland season, rescue swimmer maintenance, hostage rescue tactical operator), the methodology comparison appendix (MTI vs. TB vs. SOFLETE vs. StrongFirst vs. CrossFit), the glossary, and the injury epidemiology / load management evidence base.`;
-
-export const TACTICAL_CORPUS_BYTES = 61864;
-export const TACTICAL_CORPUS_VERSION = 'v1.0 (April 2026)';
+**Run 2 will cover:** Modules 11–20 (in-theater maintenance, post-deployment recovery, female tactical athlete, aging operator/SF45+, K9 handler, fighter pilot, EOD, combat medic, OCS/Academy prep, SWAT in-service, fire engine company, wildland season, rescue swimmer maintenance, hostage rescue tactical operator), the methodology comparison appendix (MTI vs. TB vs. SOFLETE vs. StrongFirst vs. CrossFit), the glossary, and the injury epidemiology / load management evidence base.

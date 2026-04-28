@@ -128,6 +128,26 @@ const PERIODIZATION_OLYMPIC: CorpusFile = {
     '3 templates including Catalyst Athletics block periodization, Bulgarian-style daily max, Hatch squat program.',
 };
 
+const TACTICAL_FITNESS_CORPUS: CorpusFile = {
+  id: 'tactical-fitness-corpus',
+  label: 'Tactical Fitness Corpus (10 modules + assessment standards)',
+  path: 'paths/tactical-fitness.md',
+  format: 'md',
+  approxBytes: 62_932,
+  description:
+    '10 programming modules covering foundational tactical fitness through SWAT/HRT operator selection, plus Appendix A with current 2026 assessment standards (AFT, Marine PFT/CFT, Navy PRT, Air Force PFRA, FBI PFT, BUD/S PST, Ranger RPA, CPAT, NTOA SWAT PFQ, Cooper LE norms). Sourced from MTI / Tactical Barbell / SOFLETE / StrongFirst / NSCA TSAC + service doctrine FM 7-22 H2F, MCO 6100.13A, DAFMAN 36-2905. Methodology disagreements (MTI vs TB on percentage vs 3RM loading, concurrent vs phase-based) flagged inline.',
+};
+
+const CROSSFIT_CORPUS: CorpusFile = {
+  id: 'crossfit-corpus',
+  label: 'CrossFit Corpus (methodologies + benchmarks + standards + principles)',
+  path: 'paths/crossfit.json',
+  format: 'json',
+  approxBytes: 278_219,
+  description:
+    'Master CrossFit reference — schemas, methodologies (CrossFit HQ, CompTrain, Misfit, PRVN, etc.), benchmarks (Girls + Heroes + Classics + Open WODs + Games events), movement standards, programming principles. Phase 2 loader must subset to operator-relevant entries (their goal, available equipment) before injecting into prompt to stay within token budget.',
+};
+
 /**
  * Path → corpus files. Order matters: items earlier in the array are
  * higher-priority for prompt inclusion when the loader has to truncate.
@@ -135,10 +155,12 @@ const PERIODIZATION_OLYMPIC: CorpusFile = {
 export const PATH_CORPUS: Record<TrainingPath, CorpusFile[]> = {
   bodybuilding: [PERIODIZATION_HYPERTROPHY],
 
-  // CrossFit blends Olympic lifting + conditioning. Tactical templates
-  // cover the conditioning side; Olympic technique + Olympic periodization
-  // cover the lift side.
+  // CrossFit blends Olympic lifting + conditioning. The CrossFit master
+  // corpus (methodologies + benchmarks + movement standards + programming
+  // principles) is the centerpiece; Olympic technique + tactical/olympic
+  // periodization fill in the strength/conditioning periodization side.
   crossfit: [
+    CROSSFIT_CORPUS,
     OLYMPIC_TECHNIQUE,
     PERIODIZATION_TACTICAL,
     PERIODIZATION_OLYMPIC,
@@ -150,28 +172,39 @@ export const PATH_CORPUS: Record<TrainingPath, CorpusFile[]> = {
   // primary power tool; tactical templates cover concurrent strength+cond.
   athletic: [OLYMPIC_TECHNIQUE, PERIODIZATION_TACTICAL],
 
-  // Tactical: periodization templates are the centerpiece (Tactical
-  // Barbell etc). Olympic technique included because the clean is
-  // foundational for selection-style training.
-  tactical: [PERIODIZATION_TACTICAL, OLYMPIC_TECHNIQUE],
+  // Tactical: the 10-module Tactical Fitness Corpus is the operational
+  // brain (foundational base building → SWAT/HRT prep, plus Appendix A
+  // current 2026 assessment standards). Periodization templates cover
+  // the strength+conditioning concurrent training side. Olympic technique
+  // included because the clean is foundational for selection-style
+  // training.
+  tactical: [
+    TACTICAL_FITNESS_CORPUS,
+    PERIODIZATION_TACTICAL,
+    OLYMPIC_TECHNIQUE,
+  ],
 
   hybrid: [
+    TACTICAL_FITNESS_CORPUS,
     PERIODIZATION_TACTICAL,
     OLYMPIC_TECHNIQUE,
     POWERLIFTING_TECHNIQUE,
     PERIODIZATION_POWERLIFTING,
     PERIODIZATION_HYPERTROPHY,
     PERIODIZATION_OLYMPIC,
+    CROSSFIT_CORPUS,
   ],
 
   // Gunny needs the full knowledge base to recommend a path well.
   gunny_pick: [
+    TACTICAL_FITNESS_CORPUS,
     PERIODIZATION_TACTICAL,
     OLYMPIC_TECHNIQUE,
     POWERLIFTING_TECHNIQUE,
     PERIODIZATION_POWERLIFTING,
     PERIODIZATION_HYPERTROPHY,
     PERIODIZATION_OLYMPIC,
+    CROSSFIT_CORPUS,
   ],
 };
 
