@@ -81,10 +81,17 @@ interface OperatorReadinessInput {
 export async function readinessScore(input: OperatorReadinessInput): Promise<ReadinessScore> {
   const { operatorId } = input;
 
-  // Pull the three data sources in parallel.
-  const [op, baseline, conns] = await Promise.all([
+  // Pull data sources in parallel. Snapshot-first: the WearableSnapshot
+  // table (added Apr 2026) has explicit, well-typed columns for the
+  // values the engine cares about. Falls back to WearableConnection.syncData
+  // for operators who haven't accumulated snapshot rows yet.
+  const [op, baseline, latestSnapshot, conns] = await Promise.all([
     prisma.operator.findUnique({ where: { id: operatorId } }),
     prisma.operatorBaseline.findUnique({ where: { operatorId } }),
+    prisma.wearableSnapshot.findFirst({
+      where: { operatorId },
+      orderBy: { syncDate: 'desc' },
+    }),
     prisma.wearableConnection.findMany({
       where: { operatorId, active: true },
       orderBy: { lastSyncAt: 'desc' },
@@ -97,15 +104,31 @@ export async function readinessScore(input: OperatorReadinessInput): Promise<Rea
   }
 
   const baselineDays = baseline?.baselineDays ?? 0;
-  const wearable = conns[0];
-  const syncData = (wearable?.syncData || {}) as Record<string, unknown>;
-  const sleep = (syncData.sleep || {}) as Record<string, unknown>;
-  const recovery = (syncData.recovery || {}) as Record<string, unknown>;
 
-  const hrv = typeof recovery.hrv === 'number' ? Number(recovery.hrv) : null;
-  const rhr = typeof recovery.restingHr === 'number' ? Number(recovery.restingHr) : null;
-  const sleepHours = typeof sleep.duration === 'number' ? Number(sleep.duration) / 3600 : null;
-  const recoveryScore = typeof recovery.score === 'number' ? Number(recovery.score) : null;
+  // Snapshot path (preferred): explicit columns, no unit conversion.
+  let hrv: number | null = latestSnapshot?.hrv ?? null;
+  let rhr: number | null = latestSnapshot?.restingHr ?? null;
+  let sleepHours: number | null = latestSnapshot?.sleepHours ?? null;
+  let recoveryScore: number | null = latestSnapshot?.recoveryScore ?? null;
+
+  // Legacy fallback: pull from WearableConnection.syncData when the
+  // snapshot table is empty for this operator.
+  if (hrv == null && rhr == null && sleepHours == null && recoveryScore == null) {
+    const wearable = conns[0];
+    const syncData = (wearable?.syncData || {}) as Record<string, unknown>;
+    const sleep = (syncData.sleep || {}) as Record<string, unknown>;
+    const recovery = (syncData.recovery || {}) as Record<string, unknown>;
+
+    hrv = typeof recovery.hrv === 'number' ? Number(recovery.hrv) : null;
+    rhr = typeof recovery.restingHr === 'number' ? Number(recovery.restingHr) : null;
+    // syncData.sleep.duration is stored in HOURS by the webhook and
+    // sync routes — read it as hours, not seconds. (v1 of the engine
+    // divided by 3600 here, treating duration as seconds, which made
+    // sleep contribute essentially zero to scoring. Fixed Apr 2026
+    // alongside the WearableSnapshot rollout.)
+    sleepHours = typeof sleep.duration === 'number' ? Number(sleep.duration) : null;
+    recoveryScore = typeof recovery.score === 'number' ? Number(recovery.score) : null;
+  }
 
   // ── COLD START ──
   // Less than 7 days of baseline data — don't trust the engine,
