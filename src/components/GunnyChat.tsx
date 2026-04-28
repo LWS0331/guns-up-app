@@ -1821,6 +1821,10 @@ ${mealSuggestion}`;
               date: targetDate,
               notes: prPayload.notes || 'Logged via Gunny chat',
               type: (prPayload.type as 'strength' | 'consistency' | 'endurance' | 'milestone' | undefined) || 'strength',
+              // Stamp current training path — mirrors Planner auto-detect
+              // (Planner.tsx::handleSaveResults). PRs logged outside Workout
+              // Mode still belong to whichever path the operator is on.
+              path: operator.intake?.trainingPath,
             };
             const updatedOp = {
               ...operator,

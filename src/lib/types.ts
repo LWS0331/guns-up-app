@@ -53,6 +53,9 @@ export interface IntakeAssessment {
   sessionDuration?: number; // minutes per session
   preferredSplit?: string; // PPL, Upper/Lower, Full Body, Bro Split, etc.
   trainingPath?: string; // bodybuilding, crossfit, powerlifting, athletic, tactical, hybrid, gunny_pick
+  // Triggers the pregnancy/postpartum corpus overlay in src/lib/gunnyCorpus.ts
+  // when set. UI selector lives in IntakeForm (follow-up).
+  lifeStage?: 'pregnancy' | 'postpartum';
   startingPRs: { exercise: string; weight: number; reps: number }[];
 }
 
@@ -284,6 +287,12 @@ export interface PRRecord {
   notes: string;
   type?: PRType; // defaults to 'strength' for backward compat
   achieved?: boolean; // for milestone-type PRs
+  // Training path active when the PR was logged. One of the IntakeAssessment
+  // trainingPath values (bodybuilding, crossfit, powerlifting, athletic,
+  // tactical, hybrid, gunny_pick). Stamped at ingestion time by both the
+  // Planner auto-detect and the GunnyChat <pr_json> handler. Older PRs
+  // logged before Apr 2026 have no path — UI renders them un-tagged.
+  path?: string;
 }
 
 // Milestone roadmap — generated based on fitness level

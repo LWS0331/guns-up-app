@@ -10,6 +10,8 @@ import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
 import { prisma } from '@/lib/db';
 import type { JuniorSafetyEvent } from '@/lib/types';
+import { loadGunnyCorpus } from '@/lib/gunnyCorpus';
+import type { TrainingPath, CorpusSelectionInput } from '@/data/gunny-corpus';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -1303,6 +1305,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── GUNNY CORPUS — path-aware reference material ──
+    // Loaded server-side from src/data/gunny-corpus/ based on the operator's
+    // intake (trainingPath, injuries, lifeStage). Skipped for junior operators
+    // since SOCCER_YOUTH_PROMPT is its own self-contained, safety-restricted
+    // surface and shouldn't get adult periodization templates layered in.
+    // Memoized in the loader, so disk reads happen at most once per file per
+    // process. Anthropic prompt-cache reuse handles cross-request caching.
+    let corpusBlock = '';
+    if (!isJuniorOperator && operatorContext) {
+      try {
+        const injuries = Array.isArray(operatorContext.injuries) ? operatorContext.injuries : [];
+        const hasActiveInjury = injuries.some(
+          (inj: { status?: string } | null) =>
+            !!inj && (inj.status === 'active' || inj.status === 'rehab'),
+        );
+        const corpusInput: CorpusSelectionInput = {
+          trainingPath: operatorContext.trainingPath as TrainingPath | undefined,
+          hasActiveInjury,
+          lifeStage: operatorContext.lifeStage ?? null,
+          fmsRequested: false,
+          juniorSoccer: false,
+        };
+        const rendered = loadGunnyCorpus(corpusInput);
+        corpusBlock = rendered.text;
+        if (rendered.truncated) {
+          console.warn(
+            '[gunny] corpus truncated to byte budget; included files:',
+            rendered.fileIds,
+          );
+        }
+      } catch (err) {
+        // Never fail the chat over a corpus-load issue. Gunny still has the
+        // existing system prompt + operator context to work with.
+        console.error('[gunny] corpus load failed:', err);
+      }
+    }
+
     // Build rich context about the operator
     let contextBlock = '';
     if (isJuniorOperator) {
@@ -1622,7 +1661,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const response = await client.messages.create({
         model: finalModel,
         max_tokens: maxTokens,
-        system: systemPrompt + gapsBlock + contextBlock,
+        system: systemPrompt + corpusBlock + gapsBlock + contextBlock,
         messages: anthropicMessages,
       });
 
@@ -1742,7 +1781,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     const stream = client.messages.stream({
       model: finalModel,
       max_tokens: maxTokens,
-      system: systemPrompt + contextBlock,
+      system: systemPrompt + corpusBlock + contextBlock,
       messages: anthropicMessages,
     });
 
