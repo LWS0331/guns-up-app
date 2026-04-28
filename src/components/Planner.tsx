@@ -335,6 +335,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
   // Mission Complete overlay — shown after COMPLETE WORKOUT, before returning to day view
   const [showCompletionScreen, setShowCompletionScreen] = useState(false);
+
+  // In-workout "Ask Gunny" overlay (Apr 2026 hotfix). Replaces the
+  // "tap-to-open-Gunny-tab" button that was kicking operators out of
+  // workout mode mid-session and dropping their timer/progress. The
+  // overlay sits on top of the workout view so the underlying state
+  // (timer, set log, current step) keeps running. Submission goes via
+  // the existing onSendGunnyMessage prop; the response comes back
+  // through gunnyVoiceResponse and renders in the existing amber
+  // overlay above the active block.
+  const [showAskGunnyOverlay, setShowAskGunnyOverlay] = useState(false);
+  const [askGunnyDraft, setAskGunnyDraft] = useState('');
   const [completionData, setCompletionData] = useState<{
     title: string;
     duration: number;       // minutes
@@ -2388,6 +2399,147 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
+        {/* ═══ ASK GUNNY OVERLAY (Apr 2026 hotfix) ═══
+            Fixed-position bottom sheet so the workout view stays
+            mounted beneath. Operator types a question, taps Send,
+            the message goes via onSendGunnyMessage (no tab switch),
+            and the response renders in the existing amber voice-
+            response overlay below this one. */}
+        {showAskGunnyOverlay && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Ask Gunny mid-workout"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowAskGunnyOverlay(false);
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.55)',
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: 12,
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 520,
+                background: '#0a0a0a',
+                border: '1px solid rgba(255,140,0,0.55)',
+                borderRadius: 8,
+                padding: 14,
+                boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#FF8C00', letterSpacing: 2 }}>
+                  ⚡ ASK GUNNY · MID-WORKOUT
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAskGunnyOverlay(false)}
+                  aria-label="Close Ask Gunny"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-tertiary)',
+                    fontFamily: 'Share Tech Mono, monospace',
+                    fontSize: 14,
+                    cursor: 'pointer',
+                    padding: 4,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: '#a0a0a0', marginBottom: 8 }}>
+                Quick prompts:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {[
+                  'Form check — what should I focus on?',
+                  'This is too heavy — how should I scale?',
+                  'Substitute this exercise',
+                  'Should I push another set?',
+                ].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setAskGunnyDraft(p)}
+                    style={{
+                      padding: '4px 8px',
+                      background: 'rgba(255,140,0,0.06)',
+                      border: '1px solid rgba(255,140,0,0.3)',
+                      borderRadius: 4,
+                      color: '#FF8C00',
+                      fontFamily: 'Share Tech Mono, monospace',
+                      fontSize: 10,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={askGunnyDraft}
+                onChange={(e) => setAskGunnyDraft(e.target.value)}
+                placeholder="Ask Gunny anything about this workout, set, or movement…"
+                rows={3}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  background: '#000',
+                  color: '#e0e0e0',
+                  border: '1px solid rgba(255,140,0,0.3)',
+                  borderRadius: 4,
+                  fontFamily: 'Share Tech Mono, monospace',
+                  fontSize: 13,
+                  resize: 'vertical',
+                  marginBottom: 10,
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAskGunnyOverlay(false)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!askGunnyDraft.trim() || !onSendGunnyMessage}
+                  onClick={() => {
+                    const text = askGunnyDraft.trim();
+                    if (!text || !onSendGunnyMessage) return;
+                    onSendGunnyMessage(text);
+                    setAskGunnyDraft('');
+                    setShowAskGunnyOverlay(false);
+                  }}
+                  className="btn btn-amber btn-sm"
+                  style={{ flex: 2 }}
+                >
+                  Send to Gunny
+                </button>
+              </div>
+
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: 'var(--text-dim)', marginTop: 8, textAlign: 'center' }}>
+                Workout, timer, and set log stay running underneath. Response shows up here.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ═══ GUNNY VOICE RESPONSE OVERLAY ═══ */}
         {gunnyVoiceResponse && (
           <div
@@ -3060,12 +3212,19 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           title={videoModalState?.title}
         />
 
-        {/* Ask Gunny — mid-workout coaching access. Uses .btn-amber
-            full-width to match the floating GUNNY pill's tone. */}
-        {onOpenGunny && (
+        {/* Ask Gunny — mid-workout coaching access. Apr 2026 hotfix:
+            opens an IN-PLACE overlay instead of switching to the Gunny
+            tab. Operators were losing timer/progress when they got
+            kicked to the chat tab; the overlay keeps Workout Mode
+            mounted underneath. Falls back to onOpenGunny only when
+            onSendGunnyMessage isn't wired (legacy callers). */}
+        {(onSendGunnyMessage || onOpenGunny) && (
           <button
             type="button"
-            onClick={onOpenGunny}
+            onClick={() => {
+              if (onSendGunnyMessage) setShowAskGunnyOverlay(true);
+              else if (onOpenGunny) onOpenGunny();
+            }}
             className="btn btn-amber btn-block"
             style={{ marginTop: 12 }}
           >
