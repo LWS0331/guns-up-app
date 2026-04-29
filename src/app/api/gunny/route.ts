@@ -28,7 +28,7 @@ const SITREP_PREAMBLE = `YOU HAVE FULL ACCESS TO THIS OPERATOR'S PROFILE AND DAT
 - 30-day milestones and priority focus areas
 - Compliance score and daily adjustments
 
-EVERY response must demonstrate awareness of this data. Never say "I don't have access to your data" or "I'd need to know more about your goals." You KNOW their goals. You KNOW their plan. Act like it.
+EVERY response must demonstrate awareness of this data. Never say "I don't have access to your data" or "I'd need to know more about your goals." You KNOW their goals. You KNOW their plan. Act like it. The conversation history below is hydrated from the database every turn and spans prior sessions — never claim your memory resets between chats.
 
 When they ask "what should I do today?" — check their battle plan split, check what they did yesterday, and tell them EXACTLY what to do with specific exercises, weights based on their PRs, and sets/reps per their progression strategy.
 
@@ -1394,7 +1394,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { messages, tier, operatorContext, mode, screenContext, clientDate, clientDateLong, clientTimezone } = body;
+    const { messages, tier, operatorContext, mode, screenContext, clientDate, clientDateLong, clientTimezone, chatType: chatTypeFromBody } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -1754,7 +1754,7 @@ INTAKE AUDIT BEHAVIOR (CRITICAL):
 ` : ''}
 
 ═══ CRITICAL INSTRUCTIONS ═══
-You have access to this operator's COMPLETE profile, battle plan, workout history, nutrition logs, PRs, injuries, and preferences. USE ALL OF IT.
+You have access to this operator's COMPLETE profile, battle plan, workout history, nutrition logs, PRs, injuries, and preferences — AND the full conversation history between you and them, hydrated from the database every turn. The messages above span MULTIPLE sessions, not just today. Never tell the operator you "don't have access to previous chats" or that your "memory resets between conversations" — that is wrong. When they reference a prior chat, scan the messages above and answer from what's actually there. USE ALL OF IT.
 - Reference their specific PRs when recommending weights ("You hit 225 on bench last week — let's push for 230 today")
 - Reference their battle plan when discussing programming ("Your plan calls for Upper/Lower 4-day — today should be...")
 - Reference their meal history when giving nutrition advice ("You've been averaging 2100cal — your target is 2400")
@@ -1815,10 +1815,91 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       contextBlock += `\n\n═══ LIVE OPERATIONAL DATA FROM DATABASE ═══\n${JSON.stringify(body.opsData, null, 2)}`;
     }
 
+    // ── CHAT HISTORY HYDRATION ──
+    // The client only forwards the last ~10 messages to keep the request
+    // small, but ChatHistory in the DB has the full thread. Without this,
+    // Gunny acts amnesic across sessions ("I don't have access to your
+    // previous chat history") even though we've been persisting it the
+    // whole time. Pull the stored thread, splice out the overlap with the
+    // client-supplied tail, and prepend the older turns so the model sees
+    // the real conversation.
+    type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
+    let mergedMessages: IncomingMsg[] = messages;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>[\s\S]*?<\/(?:meal_json|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>/g;
+    const historyChatType: string | null =
+      typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
+        ? chatTypeFromBody
+        : isOpsMode
+          ? null
+          : isOnboardingMode
+            ? 'gunny-onboarding'
+            : 'gunny-tab';
+
+    if (historyChatType && operatorContext?.id) {
+      try {
+        const record = await prisma.chatHistory.findUnique({
+          where: { operatorId_chatType: { operatorId: operatorContext.id, chatType: historyChatType } },
+        });
+        const stored = Array.isArray(record?.messages) ? (record.messages as Array<{ role?: string; text?: string; image?: string }>) : [];
+        if (stored.length > 0) {
+          // Strip structured tags from prior assistant turns so the model
+          // doesn't see its own <meal_json>/<pr_json>/etc and re-emit them,
+          // which would double-log the meal/PR/workout. Same protection the
+          // client streaming path applies before sending recentMessages.
+          const sanitized: IncomingMsg[] = stored
+            .filter((m) => m && (m.role === 'user' || m.role === 'gunny' || m.role === 'assistant'))
+            .map((m) => ({
+              role: m.role === 'assistant' ? 'gunny' : m.role,
+              text: typeof m.text === 'string' ? m.text.replace(STRUCTURED_TAG_RE, '').trim() : '',
+              ...(m.image ? { image: m.image } : {}),
+            }))
+            .filter((m) => (m.text && m.text.length > 0) || m.image);
+
+          // Find the largest k such that the last k stored messages match
+          // the first k incoming messages by (role, normalized text). That
+          // overlap is what the client already replayed; everything before
+          // it is older context we want to prepend, everything after is
+          // fresh from the client (e.g. the new user turn we're answering).
+          const norm = (s: string | undefined) => (s || '').replace(STRUCTURED_TAG_RE, '').trim();
+          const incoming: IncomingMsg[] = messages;
+          let overlap = 0;
+          const maxOverlap = Math.min(sanitized.length, incoming.length);
+          for (let k = 1; k <= maxOverlap; k++) {
+            let match = true;
+            for (let i = 0; i < k; i++) {
+              const a = sanitized[sanitized.length - k + i];
+              const b = incoming[i];
+              if (a.role !== b.role || norm(a.text) !== norm(b.text || b.content)) {
+                match = false;
+                break;
+              }
+            }
+            if (match) overlap = k;
+          }
+
+          const olderHistory = sanitized.slice(0, sanitized.length - overlap);
+          mergedMessages = [...olderHistory, ...incoming];
+
+          // Cap total turns sent to the model. Haiku gets a tighter budget
+          // because the haiku context already strips workout/meal history
+          // upstream; the other tiers can afford a longer recall window.
+          const HISTORY_CAP = tier === 'haiku' ? 20 : 60;
+          if (mergedMessages.length > HISTORY_CAP) {
+            mergedMessages = mergedMessages.slice(-HISTORY_CAP);
+          }
+        }
+      } catch (err) {
+        // Don't block the chat if history lookup fails — Gunny still
+        // works with the client-supplied tail.
+        // eslint-disable-next-line no-console
+        console.error('[gunny] chat history hydration failed', err);
+      }
+    }
+
     // Convert messages to Anthropic format — filter empty and ensure first msg is user role
     // Support vision: if a message has an image field (base64 data URL), build content blocks
-    const anthropicMessages = messages
-      .map((msg: { role: string; text?: string; content?: string; image?: string }) => {
+    const anthropicMessages = mergedMessages
+      .map((msg: { role?: string; text?: string; content?: string; image?: string }) => {
         const role = msg.role === 'gunny' ? 'assistant' as const : 'user' as const;
         const text = msg.text || msg.content || '';
         // If user message has an image, build multi-part content array
