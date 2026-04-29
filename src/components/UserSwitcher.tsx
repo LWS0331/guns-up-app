@@ -21,19 +21,31 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Apr 2026 hotfix: outside-tap detection used to be mousedown-only,
+  // which silently failed on iOS PWA — taps fire pointerdown/touchstart
+  // depending on browser, leaving the dropdown stuck open. Listen on
+  // both pointerdown (modern unified) AND touchstart (older iOS) and
+  // also bind an Escape key handler.
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+    if (!isOpen) return;
+    const handleOutside = (event: Event) => {
+      const target = event.target as Node | null;
+      if (dropdownRef.current && target && !dropdownRef.current.contains(target)) {
         setIsOpen(false);
       }
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('pointerdown', handleOutside);
+    document.addEventListener('touchstart', handleOutside, { passive: true });
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isOpen]);
 
   const handleSelectUser = (user: Operator) => {
     onSelectUser(user);
@@ -95,13 +107,62 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
             border: '1px solid rgba(0, 255, 65, 0.08)',
             borderRadius: '2px',
             zIndex: 1000,
-            minWidth: '180px',
+            minWidth: '220px',
+            // Apr 2026 hotfix: cap height so the list can't render past
+            // the viewport (was causing rows below "Poppy" to be invisible
+            // on a 16-client trainer roster — there was no internal scroll
+            // because of overflow:hidden). The flex column inside owns
+            // its own scroll region (User List below).
+            maxHeight: 'calc(100dvh - 120px)',
+            display: 'flex',
+            flexDirection: 'column',
             boxShadow: '0 8px 24px rgba(0, 0, 0, 0.8)',
-            overflow: 'hidden',
           }}
         >
-          {/* User List */}
-          <div style={{ padding: '8px 0' }}>
+          {/* Close button — explicit affordance for dismissal. The
+              outside-tap + Escape paths both work, but a visible ✕
+              gives the user a discoverable way to dismiss when they
+              don't realize tapping outside closes it. */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              padding: '4px 6px 0',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              aria-label="Close operator switcher"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(0, 255, 65, 0.5)',
+                fontFamily: 'Share Tech Mono, monospace',
+                fontSize: 14,
+                cursor: 'pointer',
+                padding: '4px 8px',
+                lineHeight: 1,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* User List — scrollable column. overflowY:auto + flex:1 so
+              long client rosters scroll inside the dropdown instead of
+              spilling off-screen. overscrollBehavior:contain prevents
+              the page underneath from scrolling when the user reaches
+              the top/bottom. */}
+          <div
+            style={{
+              padding: '4px 0 8px',
+              overflowY: 'auto',
+              overscrollBehavior: 'contain',
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
             {accessibleUsers.map((user) => (
               <button
                 key={user.id}
