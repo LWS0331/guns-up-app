@@ -84,6 +84,17 @@ export default function Home() {
       });
     }
 
+    // Wraps fetch with an AbortController-driven timeout. Without a timeout,
+    // a hung /api/auth/me or /api/operators traps the user on "INITIALIZING
+    // SYSTEMS…" indefinitely (setIsLoaded(true) at the bottom of loadFromDB
+    // never runs). 10s is generous for a healthy backend and short enough
+    // that a real outage flips us to the static-data fallback quickly.
+    const fetchWithTimeout = (url: string, init: RequestInit, timeoutMs = 10_000): Promise<Response> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+    };
+
     const loadFromDB = async () => {
       // Check for stored JWT token FIRST — needed for authenticated API calls
       const token = getAuthToken();
@@ -91,64 +102,82 @@ export default function Home() {
         ? { 'Authorization': `Bearer ${token}` }
         : {};
 
-      // Auto-login if token exists
-      if (token) {
-        try {
-          const meRes = await fetch('/api/auth/me', {
-            headers: { Authorization: `Bearer ${token}` },
+      // Parallel fan-out: /api/auth/me and /api/operators are independent —
+      // operators uses authHeaders (already captured above), not /me's response.
+      // Previously these ran sequentially (~1.6s + ~2.8s = ~4.4s of splash on
+      // the Apr 2026 trace). Running them concurrently halves that.
+      //
+      // Each promise is wrapped to never reject — a network error becomes a
+      // resolved-null so the consumer below handles the no-result case the
+      // same way it handles a non-ok response. This keeps us out of try/catch
+      // tangle and makes setIsLoaded(true) in finally trivially safe.
+      const mePromise: Promise<Response | null> = token
+        ? fetchWithTimeout('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }).catch(err => {
+            console.error('[page.tsx:loadFromDB] /api/auth/me network error:', err);
+            return null;
+          })
+        : Promise.resolve(null);
+
+      const operatorsPromise: Promise<Response | null> = fetchWithTimeout('/api/operators', { headers: authHeaders }).catch(err => {
+        console.error('[page.tsx:loadFromDB] /api/operators network error:', err);
+        return null;
+      });
+
+      try {
+        const [meRes, opsRes] = await Promise.all([mePromise, operatorsPromise]);
+
+        // Handle /api/auth/me result.
+        if (meRes && meRes.ok) {
+          const meData = await meRes.json();
+          setCurrentUser(meData.operator);
+          identifyUser(meData.operator.id, {
+            role: meData.operator.role,
+            tier: meData.operator.tier,
+            callsign: meData.operator.callsign,
           });
-          if (meRes.ok) {
-            const meData = await meRes.json();
-            setCurrentUser(meData.operator);
-            identifyUser(meData.operator.id, {
-              role: meData.operator.role,
-              tier: meData.operator.tier,
-              callsign: meData.operator.callsign
-            });
-          } else {
-            // Token invalid, clear it
-            console.warn('[page.tsx:loadFromDB] Auth /me returned non-ok:', meRes.status);
-            localStorage.removeItem('authToken');
-          }
-        } catch (err) {
-          console.error('[page.tsx:loadFromDB] Auth /me network error:', err);
+        } else if (meRes && !meRes.ok) {
+          // Token invalid (401/403/etc.) — clear it.
+          console.warn('[page.tsx:loadFromDB] Auth /me returned non-ok:', meRes.status);
           localStorage.removeItem('authToken');
         }
-      }
 
-      // Now fetch operators with auth header (so we get DB data, not static fallback)
-      try {
-        const res = await fetch('/api/operators', { headers: authHeaders });
-        if (res.ok) {
-          const data = await res.json();
+        // Handle /api/operators result. Empty DB triggers a seed + re-fetch
+        // (still serial, since they depend on each other — but only inside
+        // the empty-DB branch, which is rare).
+        if (opsRes && opsRes.ok) {
+          const data = await opsRes.json();
           if (data.operators && data.operators.length > 0) {
             setOperators(data.operators as Operator[]);
             setDbReady(true);
           } else {
             // Database is empty — seed it
-            const seedRes = await fetch('/api/seed', { method: 'POST', headers: authHeaders });
-            if (seedRes.ok) {
-              // Re-fetch after seed
-              const reRes = await fetch('/api/operators', { headers: authHeaders });
-              if (reRes.ok) {
-                const reData = await reRes.json();
-                if (reData.operators?.length > 0) {
-                  setOperators(reData.operators as Operator[]);
+            try {
+              const seedRes = await fetchWithTimeout('/api/seed', { method: 'POST', headers: authHeaders });
+              if (seedRes.ok) {
+                const reRes = await fetchWithTimeout('/api/operators', { headers: authHeaders });
+                if (reRes.ok) {
+                  const reData = await reRes.json();
+                  if (reData.operators?.length > 0) {
+                    setOperators(reData.operators as Operator[]);
+                  }
                 }
               }
+            } catch (err) {
+              console.error('[page.tsx:loadFromDB] seed flow failed:', err);
             }
             setDbReady(true);
           }
         } else {
-          // API error — fall back to static data
+          // API error / no response — fall back to static data
           setDbReady(false);
         }
-      } catch (err) {
-        // Network/DB not available — fall back to static data
-        setDbReady(false);
+      } finally {
+        // ALWAYS lift the splash, even if every fetch threw, every parser
+        // failed, or a setter blew up. Operator data falls back to the
+        // static OPERATORS import; auth falls back to logged-out (LandingPage).
+        // Either is recoverable; staying on the splash forever isn't.
+        setIsLoaded(true);
       }
-
-      setIsLoaded(true);
     };
 
     loadFromDB();

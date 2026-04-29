@@ -159,11 +159,25 @@ export const PATH_CORPUS: Record<TrainingPath, CorpusFile[]> = {
   // corpus (methodologies + benchmarks + movement standards + programming
   // principles) is the centerpiece; Olympic technique + tactical/olympic
   // periodization fill in the strength/conditioning periodization side.
+  //
+  // Order is sized for the 400KB Phase 2 budget cap and the loader's
+  // break-on-overflow truncation (gunnyCorpus.ts: stops accumulating on
+  // first file that would exceed budget). ALWAYS_ON operating manual
+  // (~72KB) + CROSSFIT_CORPUS (~278KB) = 350KB. The two small periodization
+  // templates (12KB + 9KB) fit immediately after, bringing the total to
+  // 371KB, before OLYMPIC_TECHNIQUE (113KB) trips truncation at 484KB.
+  // With them earlier in the array, all three small files survive and
+  // only OLYMPIC_TECHNIQUE drops — fine because the CrossFit corpus's
+  // movement_standards section already covers snatch/clean-and-jerk from
+  // a CrossFit-rules perspective. The previous order
+  // ([CROSSFIT, OLYMPIC_TECHNIQUE, TACTICAL, OLYMPIC_PERIO]) broke at
+  // OLYMPIC_TECHNIQUE and silently dropped both periodization templates
+  // that would otherwise have fit, leaving only ALWAYS_ON + CROSSFIT.
   crossfit: [
     CROSSFIT_CORPUS,
-    OLYMPIC_TECHNIQUE,
     PERIODIZATION_TACTICAL,
     PERIODIZATION_OLYMPIC,
+    OLYMPIC_TECHNIQUE,
   ],
 
   powerlifting: [POWERLIFTING_TECHNIQUE, PERIODIZATION_POWERLIFTING],
