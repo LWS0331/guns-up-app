@@ -166,6 +166,29 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
       dietaryRestrictions: intake.dietaryRestrictions || [],
       wearableDevice: intake.wearableDevice,
       startingPRs: intake.startingPRs || [],
+      // Programming preferences. The form captures all four (UI handlers
+      // around lines 407 / 416 / 431 for daysPerWeek / sessionDuration /
+      // preferredSplit; path picker for trainingPath), but `fullIntake`
+      // previously enumerated fields explicitly and silently omitted these,
+      // so they sat in `intake` state and never reached the persisted JSON.
+      // Two visible symptoms downstream:
+      //   - buildGunnyContext.ts reads `intake.trainingPath` (line 424) →
+      //     undefined → Gunny renders "Training Path: Not specified" even
+      //     when the user explicitly chose one (RAMPAGE bug, Apr 2026).
+      //   - The preferences writes below at lines ~273-276 reference
+      //     `fullIntake.daysPerWeek` / `fullIntake.sessionDuration` /
+      //     `fullIntake.preferredSplit`. Those were also undefined, so the
+      //     preferences object got the literal fallback defaults (4, 60,
+      //     'No Preference') instead of the user's selections — which is
+      //     also why PR #76 ("respect intake prefs") and PR #77 didn't
+      //     actually take effect: the values they were trying to respect
+      //     were never being saved in the first place.
+      // Adding them to fullIntake fixes both reads (intake-direct AND
+      // preferences-derived) without any other code changes.
+      daysPerWeek: intake.daysPerWeek || 4,
+      sessionDuration: intake.sessionDuration || 60,
+      preferredSplit: intake.preferredSplit,
+      trainingPath: intake.trainingPath || 'gunny_pick',
     };
 
     // Calculate fitness level
