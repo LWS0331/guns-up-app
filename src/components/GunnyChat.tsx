@@ -486,7 +486,15 @@ const needsOnboarding = (op: Operator): boolean => {
 };
 
 export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, onUpdateOperator }) => {
-  const { t } = useLanguage();
+  // Pull `language` alongside `t` so we can pass the operator's actual UI
+  // language preference into Gunny's API calls. Previously every send
+  // hardcoded `language: 'en'` (3 places below + 1 in a legacy comment),
+  // so Gunny's prompt never saw 'es' even when the operator had toggled
+  // Spanish — the toggle was UI-only theater. Wiring this through unlocks
+  // the prompt-side Spanish behavior that already exists in route.ts
+  // (lines ~574, 1025, 1135: "respond entirely in Spanish with the same
+  // military tone").
+  const { t, language } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
@@ -744,7 +752,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
                 prs: 'None',
                 injuries: 'None',
                 trainerNotes: operator.trainerNotes || 'None',
-                language: 'en',
+                language,
               },
             }),
           });
@@ -1246,10 +1254,10 @@ ${mealSuggestion}`;
 
       // Tasks 12/13: delegate to the shared context builder. AppShell uses
       // the same function, so the main chat and side panel no longer drift.
-      const operatorContext = buildFullGunnyContext(operator, { language: 'en' });
+      const operatorContext = buildFullGunnyContext(operator, { language });
       /* LEGACY inline builder preserved for reference:
       const _legacyContext = {
-        callsign: operator.callsign, name: operator.name, role: operator.role, language: 'en',
+        callsign: operator.callsign, name: operator.name, role: operator.role, language,
         weight: prof?.weight, height: prof?.height, age: prof?.age, bodyFat: prof?.bodyFat, trainingAge: prof?.trainingAge,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         fitnessLevel: (operator as any).fitnessLevel || intake?.fitnessLevel || prof?.fitnessLevel,
@@ -1424,7 +1432,7 @@ ${mealSuggestion}`;
         ...(m.image ? { image: m.image } : {}),
       }));
 
-      const operatorContext = buildFullGunnyContext(operator, { language: 'en' });
+      const operatorContext = buildFullGunnyContext(operator, { language });
       const apiMode = opts.forceMode || (isOnboarding ? 'onboarding' : undefined);
 
       const trainer = operator.trainerId ? allOperators.find(op => op.id === operator.trainerId) : null;
