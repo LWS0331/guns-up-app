@@ -706,7 +706,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           handoff Daily-Brief pattern. */}
       <div className="ds-card bracket" style={{ gridColumn: '1 / -1' }}>
         <span className="bl" /><span className="br" />
-        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>Recovery</span>
+        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>{t('intel.recovery_eyebrow')}</span>
         <div
           style={{
             display: 'grid',
@@ -749,7 +749,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           button. The add input is the canonical .ds-input + .btn so
           it matches every other form-add affordance in the system. */}
       <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
-        <label htmlFor="intel-new-goal">Goals</label>
+        <label htmlFor="intel-new-goal">{t('intel.goals')}</label>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           {state.profile.goals.length === 0 && (
@@ -782,7 +782,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <input
             id="intel-new-goal"
             type="text"
-            placeholder="Add goal..."
+            placeholder={t('intel.add_goal_placeholder')}
             value={state.newGoal}
             onChange={(e) => setState((prev) => ({ ...prev, newGoal: e.target.value }))}
             onKeyPress={(e) => {
@@ -1116,7 +1116,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         <button
           type="button"
           onClick={() => shiftViewingDate(-1)}
-          aria-label="Previous day"
+          aria-label={t('intel.prev_day_aria')}
           className="btn btn-ghost btn-sm"
         >
           ◀ Prev
@@ -1135,7 +1135,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           type="button"
           onClick={() => shiftViewingDate(1)}
           disabled={isViewingToday}
-          aria-label="Next day"
+          aria-label={t('intel.next_day_aria')}
           className="btn btn-ghost btn-sm"
         >
           Next ▶
@@ -1231,7 +1231,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               value={quickFoodInput}
               onChange={e => { setQuickFoodInput(e.target.value); setQuickFoodResult(null); }}
               onKeyDown={e => { if (e.key === 'Enter') handleQuickFoodLog(); }}
-              placeholder="I had chicken breast and rice..."
+              placeholder={t('intel.meal_freeform_placeholder')}
               className="ds-input"
               style={{ flex: 1, borderColor: 'rgba(250, 204, 21, 0.3)', fontFamily: 'var(--mono)' }}
             />
@@ -1429,7 +1429,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               value={usdaSearch}
               onChange={e => setUsdaSearch(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleUsdaSearch(); }}
-              placeholder="Search: chicken breast, brown rice, almonds..."
+              placeholder={t('intel.food_search_placeholder')}
               className="ds-input"
               style={{ flex: 1, borderColor: 'rgba(74, 222, 128, 0.3)', fontFamily: 'var(--mono)' }}
             />
@@ -2118,7 +2118,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               padding: '3px 8px', background: 'rgba(255,184,0,0.1)', border: '1px solid rgba(255,184,0,0.2)',
               borderRadius: 3, fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
             }}>
-              <span style={{ color: '#ffb800' }}>BASELINE</span>
+              <span style={{ color: '#ffb800' }}>{t('intel.baseline')}</span>
               <span style={{ color: '#888', marginLeft: 6 }}>{baseline.weight}x{baseline.reps}</span>
             </div>
           )}
@@ -2150,7 +2150,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                 <span style={{ color: isPeak ? '#00ff41' : '#888' }}>{pr.weight}x{pr.reps}</span>
                 <span style={{ color: '#555', marginLeft: 6 }}>{pr.date.slice(5)}</span>
                 {pathAbbr && <span style={{ color: '#5a8a5a', marginLeft: 6 }}>{pathAbbr}</span>}
-                {isNew && <span style={{ color: '#ffb800', marginLeft: 4 }}>NEW</span>}
+                {isNew && <span style={{ color: '#ffb800', marginLeft: 4 }}>{t('intel.new_tag')}</span>}
               </div>
             );
           })}
@@ -2709,7 +2709,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                       marginBottom: 8,
                       outline: 'none',
                     }}
-                    placeholder="Injury name"
+                    placeholder={t('intel.injury_name_placeholder')}
                   />
 
                   {/* Status pill — solid danger/warn/green per state.
@@ -2743,9 +2743,9 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                         letterSpacing: 2,
                       }}
                     >
-                      <option value="active">ACTIVE</option>
-                      <option value="recovering">RECOVERING</option>
-                      <option value="cleared">CLEARED</option>
+                      <option value="active">{t('intel.injury_status_active')}</option>
+                      <option value="recovering">{t('intel.injury_status_recovering')}</option>
+                      <option value="cleared">{t('intel.injury_status_cleared')}</option>
                     </select>
                   </div>
 
@@ -2753,7 +2753,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                   <textarea
                     value={injury.notes}
                     onChange={(e) => updateInjury(injuryIndex, 'notes', e.target.value)}
-                    placeholder="Description, mechanism, what hurts, what helps…"
+                    placeholder={t('intel.injury_desc_placeholder')}
                     className="ds-textarea"
                     style={{ marginBottom: 12, minHeight: 60, resize: 'vertical' }}
                   />
@@ -2834,7 +2834,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     >
       {/* Training Split */}
       <div className="field" style={{ marginBottom: 0 }}>
-        <label htmlFor="prefs-split">Training Split</label>
+        <label htmlFor="prefs-split">{t('intel.training_split')}</label>
         <input
           id="prefs-split"
           type="text"
@@ -2858,7 +2858,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
       {/* Days Per Week */}
       <div className="field" style={{ marginBottom: 0 }}>
-        <label htmlFor="prefs-days">Days Per Week</label>
+        <label htmlFor="prefs-days">{t('intel.days_per_week')}</label>
         <input
           id="prefs-days"
           type="number"
@@ -2958,7 +2958,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             type="text"
-            placeholder="Type equipment name or describe it (e.g. 'the dual cable pulley machine')…"
+            placeholder={t('intel.equipment_placeholder')}
             value={state.newEquipment}
             onChange={(e) => setState((prev) => ({ ...prev, newEquipment: e.target.value }))}
             onKeyPress={(e) => { if (e.key === 'Enter') addEquipment(); }}
@@ -2981,7 +2981,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
       {/* Weak Points — amber chip group, full-width row. */}
       <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
-        <label htmlFor="prefs-new-weak">Weak Points</label>
+        <label htmlFor="prefs-new-weak">{t('intel.weak_points')}</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           {state.preferences.weakPoints.length === 0 && (
             <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
@@ -3013,7 +3013,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <input
             id="prefs-new-weak"
             type="text"
-            placeholder="Add weak point…"
+            placeholder={t('intel.add_weak_point_placeholder')}
             value={state.newWeakPoint}
             onChange={(e) => setState((prev) => ({ ...prev, newWeakPoint: e.target.value }))}
             onKeyPress={(e) => { if (e.key === 'Enter') addWeakPoint(); }}
@@ -3032,7 +3032,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
       {/* Movements to Avoid — danger chip group. */}
       <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
-        <label htmlFor="prefs-new-avoid">Movements to Avoid</label>
+        <label htmlFor="prefs-new-avoid">{t('intel.movements_avoid')}</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           {state.preferences.movementsToAvoid.length === 0 && (
             <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
@@ -3064,7 +3064,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <input
             id="prefs-new-avoid"
             type="text"
-            placeholder="Add movement…"
+            placeholder={t('intel.add_avoid_placeholder')}
             value={state.newMovementToAvoid}
             onChange={(e) => setState((prev) => ({ ...prev, newMovementToAvoid: e.target.value }))}
             onKeyPress={(e) => { if (e.key === 'Enter') addMovementToAvoid(); }}
@@ -3224,7 +3224,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           glowing underline on active, hidden scrollbar — so it
           matches Planner's sub-nav and any future tabbed screens. */}
       {isMobile ? (
-        <nav className="subtabs" aria-label="Intel sub-navigation">
+        <nav className="subtabs" aria-label={t('intel.subnav_aria')}>
           {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'MACROCYCLE', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (

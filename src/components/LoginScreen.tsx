@@ -343,7 +343,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               transform: mounted ? 'translateY(0)' : 'translateY(10px)',
               transition: 'opacity 0.6s ease 0.4s, transform 0.6s ease 0.4s',
             }}
-            aria-label="Continue with Google"
+            aria-label={t('login.continue_google')}
           >
             {/* Google "G" logo as inline SVG so we don't pull a brand asset
                 into the build. Colors per Google Identity guidelines. */}
@@ -353,7 +353,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
               <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
             </svg>
-            <span>Continue with Google</span>
+            <span>{t('login.continue_google')}</span>
           </button>
         )}
 
@@ -452,7 +452,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Email input */}
             <input
               type="email"
-              placeholder="Email"
+              placeholder={t('login.email_placeholder')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{
@@ -470,7 +470,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Password input */}
             <input
               type="password"
-              placeholder="Password"
+              placeholder={t('login.password_placeholder')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{
@@ -559,7 +559,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Name input */}
             <input
               type="text"
-              placeholder="Full Name"
+              placeholder={t('login.fullname_placeholder')}
               value={name}
               onChange={(e) => setName(e.target.value)}
               style={{
@@ -577,7 +577,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Callsign input */}
             <input
               type="text"
-              placeholder="Callsign (UPPERCASE, no spaces)"
+              placeholder={t('login.callsign_placeholder')}
               value={callsign}
               onChange={(e) => setCallsign(e.target.value.toUpperCase())}
               style={{
@@ -595,7 +595,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Email input */}
             <input
               type="email"
-              placeholder="Email"
+              placeholder={t('login.email_placeholder')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{
@@ -613,7 +613,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Password input */}
             <input
               type="password"
-              placeholder="Password (min 8 chars)"
+              placeholder={t('login.password_min_placeholder')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{
