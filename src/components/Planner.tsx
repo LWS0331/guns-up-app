@@ -1197,7 +1197,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               type="button"
               className="btn btn-sm btn-ghost"
               onClick={handleExportJson}
-              aria-label="Export training plan as JSON"
+              aria-label={t('planner.export_aria')}
             >
               Export
             </button>
@@ -1716,7 +1716,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     {tag.note}
                   </div>
                 ) : (
-                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>No workout</div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>{t('planner.no_workout_short')}</div>
                 )}
               </div>
             );
@@ -2409,7 +2409,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Ask Gunny mid-workout"
+            aria-label={t('planner.ask_gunny_aria')}
             onClick={(e) => {
               if (e.target === e.currentTarget) setShowAskGunnyOverlay(false);
             }}
@@ -2442,7 +2442,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <button
                   type="button"
                   onClick={() => setShowAskGunnyOverlay(false)}
-                  aria-label="Close Ask Gunny"
+                  aria-label={t('planner.close_ask_gunny_aria')}
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -2490,7 +2490,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               <textarea
                 value={askGunnyDraft}
                 onChange={(e) => setAskGunnyDraft(e.target.value)}
-                placeholder="Ask Gunny anything about this workout, set, or movement…"
+                placeholder={t('planner.ask_gunny_placeholder')}
                 rows={3}
                 autoFocus
                 style={{
@@ -2713,7 +2713,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input
                     type="text"
-                    placeholder="Time / Rounds / Score"
+                    placeholder={t('planner.score_placeholder')}
                     value={blockData.sets[0]?.reps ? `${blockData.sets[0].reps}` : ''}
                     onChange={e => {
                       const val = e.target.value;
@@ -2885,7 +2885,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setNotesPopoverFor(block.id); }}
                     className="btn btn-ghost btn-sm"
-                    aria-label="Open notes, form demo, and form-check upload"
+                    aria-label={t('planner.notes_aria')}
                     style={{ padding: '6px 10px', flexShrink: 0 }}
                   >
                     <Icon.Edit size={11} /> Notes
@@ -3056,7 +3056,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                           inputMode="decimal"
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           value={rpeOf(set as any) || ''}
-                          placeholder="RPE"
+                          placeholder={t('planner.rpe_placeholder')}
                           onChange={(e) => {
                             const v = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
                             setResults(prev => {
@@ -3258,7 +3258,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             onClick={goPrev}
             disabled={isFirstStep}
             className="btn btn-ghost btn-sm"
-            aria-label="Previous step"
+            aria-label={t('common.previous')}
             style={{ justifySelf: 'start' }}
           >
             <Icon.ArrowLeft size={12} /> Back
@@ -3869,7 +3869,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           <textarea
             value={builderData.notes}
             onChange={e => setBuilderData({ ...builderData, notes: e.target.value })}
-            placeholder="Add coaching notes or cues..."
+            placeholder={t('planner.coaching_notes_placeholder')}
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -3987,7 +3987,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                             setExerciseSearchQuery(e.target.value);
                             setShowExerciseAutocomplete(e.target.value.length > 0);
                           }}
-                          placeholder="Search exercise..."
+                          placeholder={t('planner.search_exercise_placeholder')}
                           style={{
                             width: '100%',
                             padding: '6px 8px',
@@ -4482,7 +4482,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           type="button"
           onClick={handleNavigatePrevious}
           className="seg"
-          aria-label="Previous"
+          aria-label={t('common.previous')}
           style={{ padding: '9px 12px' }}
         >
           ◀
@@ -4519,7 +4519,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           type="button"
           onClick={handleNavigateNext}
           className="seg"
-          aria-label="Next"
+          aria-label={t('common.next')}
           style={{ padding: '9px 12px' }}
         >
           ▶

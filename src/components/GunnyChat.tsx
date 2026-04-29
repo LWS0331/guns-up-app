@@ -2699,7 +2699,7 @@ ${mealSuggestion}`;
         <button
           type="button"
           onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })}
-          aria-label="Scroll to latest message"
+          aria-label={t('gunnychat.scroll_to_latest')}
           style={{
             position: 'absolute',
             right: 18,
@@ -2838,8 +2838,8 @@ ${mealSuggestion}`;
           <button
             type="button"
             onClick={() => imageInputRef.current?.click()}
-            title="Attach image for analysis"
-            aria-label="Attach image for analysis"
+            title={t('gunnychat.attach_image')}
+            aria-label={t('gunnychat.attach_image')}
             style={{
               background: pendingImage ? 'rgba(255,107,53,0.4)' : 'rgba(0,255,65,0.08)',
               border: `1px solid ${pendingImage ? '#ff6b35' : 'var(--border-green-soft)'}`,

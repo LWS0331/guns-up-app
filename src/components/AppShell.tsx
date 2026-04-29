@@ -1617,16 +1617,16 @@ const AppShell: React.FC<AppShellProps> = ({
 
             <Leaderboard operators={operators} currentUser={currentUser} />
             <div style={{ marginTop: 20 }}>
-              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>ACHIEVEMENTS</h3>
+              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.achievements')}</h3>
               <Achievements operator={currentSelectedOp} />
             </div>
             <div style={{ marginTop: 20 }}>
-              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>SQUAD FEED</h3>
+              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.squad_feed')}</h3>
               <SocialFeed operators={operators} currentOperator={currentSelectedOp} />
             </div>
             {currentSelectedOp.betaUser && (
               <div style={{ marginTop: 20 }}>
-                <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff4444', letterSpacing: 1, marginBottom: 12 }}>BETA FEEDBACK</h3>
+                <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff4444', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.beta_feedback')}</h3>
                 <BetaFeedback operatorId={currentSelectedOp.id} callsign={currentSelectedOp.callsign} />
               </div>
             )}
@@ -2551,7 +2551,7 @@ const AppShell: React.FC<AppShellProps> = ({
             <textarea
               ref={inputRef}
               className="gunny-input"
-              placeholder="Ask about what you see..."
+              placeholder={t('appshell.ask_about_screen')}
               value={gunnyInput}
               onChange={(e) => {
                 setGunnyInput(e.target.value);
