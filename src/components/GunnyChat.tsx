@@ -401,13 +401,35 @@ const saveChatLocal = (opId: string, serialized: ReturnType<typeof serializeMess
 
 // Async API write. `keepalive` lets the request complete even if the document
 // unmounts or navigates away — critical because loadChat prefers API over local.
+//
+// Errors are LOGGED, not swallowed. The previous .catch(()=>{}) silently lost
+// every PUT failure (auth expiry, mobile background-kill aborts, network
+// flakes, 4xx/5xx). A user chatting on mobile would have their conversation
+// stuck on that device because the save never reached the DB and they'd never
+// know — desktop login on the same account would show an empty chat. The
+// trace evidence: a POST(/PUT) to /api/chat with status 0 and 0μs across
+// every phase = aborted-before-flight, exactly the scenario .catch hid.
 const saveChatRemote = (opId: string, chatType: string, serialized: ReturnType<typeof serializeMessages>) => {
   fetch('/api/chat', {
     method: 'PUT',
     keepalive: true,
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
     body: JSON.stringify({ operatorId: opId, chatType, messages: serialized }),
-  }).catch(() => { /* API unavailable — localStorage will cover it */ });
+  })
+    .then(res => {
+      if (!res.ok) {
+        // Body intentionally not parsed — keepalive responses are often
+        // truncated/discarded by the browser anyway. Status alone tells us
+        // enough to flag in the console.
+        console.warn(`[GunnyChat:saveChatRemote] PUT /api/chat returned ${res.status} (${chatType})`);
+      }
+    })
+    .catch(err => {
+      // localStorage already wrote synchronously, so the user's history isn't
+      // lost on THIS device — but cross-device sync is broken until the next
+      // successful save. Logging this surfaces the failure mode.
+      console.error('[GunnyChat:saveChatRemote] PUT /api/chat failed:', err);
+    });
 };
 
 const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
@@ -819,10 +841,36 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     }, 600);
   }, [messages, operator.id, isOnboarding]);
 
-  // On unmount, flush any pending debounced save using keepalive so the final stream
-  // content reaches the API even if the tab was switched / page navigated away.
+  // Flush any pending debounced save with keepalive so the final stream content
+  // reaches the API even if the tab was switched, page navigated away, or — on
+  // mobile — the OS killed the backgrounded tab before React could unmount.
+  //
+  // We listen on three signals (most-reliable first):
+  //
+  //   1. `pagehide`              — fires when the page is being unloaded OR
+  //                                going into bfcache. iOS Safari fires this
+  //                                aggressively on tab-switch / app-background;
+  //                                MUCH more reliable than relying on React
+  //                                unmount, which the OS can skip if it kills
+  //                                the tab process. Spec-mandated.
+  //   2. `visibilitychange`      — fires whenever the document becomes hidden
+  //      (→ hidden)                (tab-switch, minimize, screen-lock).
+  //                                Catches the "user switched apps" case
+  //                                BEFORE the tab is at risk of being killed.
+  //   3. React unmount cleanup   — backstop for SPA navigation away from the
+  //                                Gunny tab while the document stays alive.
+  //
+  // All three call the same flushPending function, which is idempotent: once
+  // it consumes lastPendingSaveRef.current, subsequent calls are no-ops. So
+  // double-firing (e.g. visibilitychange→pagehide on iOS background) is fine.
+  //
+  // Without these handlers, a debounced save sitting at e.g. 400ms-of-600ms
+  // when the user backgrounds the mobile app gets canceled by the OS killing
+  // the tab — that's the exact scenario behind cross-device chat history not
+  // syncing (mobile chat exists in localStorage but never reached /api/chat;
+  // desktop login on same account sees nothing).
   useEffect(() => {
-    return () => {
+    const flushPending = () => {
       if (saveDebounceRef.current) {
         clearTimeout(saveDebounceRef.current);
         saveDebounceRef.current = null;
@@ -832,6 +880,31 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
         saveChatRemote(operator.id, pending.chatType, pending.serialized);
         lastPendingSaveRef.current = null;
       }
+    };
+
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        flushPending();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', flushPending);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', flushPending);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
+      // Backstop: in-SPA unmount (e.g. user navigates from Gunny to Planner
+      // without leaving the document) won't fire pagehide, but will fire here.
+      flushPending();
     };
   }, [operator.id]);
 
