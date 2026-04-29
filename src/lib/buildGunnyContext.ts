@@ -421,7 +421,14 @@ export function buildFullGunnyContext(
     parentIds: operator.parentIds,
     sportProfile: operator.sportProfile,
     juniorConsent: operator.juniorConsent,
-    trainingPath: intake?.trainingPath,
+    // Backward-compat fallback: pre-fix IntakeForm wrote trainingPath to
+    // preferences.trainingPath (line 277 read from intake state directly,
+    // bypassing fullIntake's incomplete enumeration) but never to
+    // intake.trainingPath. Existing operators who completed intake under
+    // that code path have prefs.trainingPath populated and intake.trainingPath
+    // missing — falling back to prefs lets Gunny respect their selection
+    // without forcing a re-intake. New intakes (post-fix) populate both.
+    trainingPath: intake?.trainingPath || prefs?.trainingPath,
     lifeStage:
       intake?.lifeStage === 'pregnancy' || intake?.lifeStage === 'postpartum'
         ? intake.lifeStage
