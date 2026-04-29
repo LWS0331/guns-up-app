@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getAuthOperator } from '@/lib/authMiddleware';
 import { isOperatorAllowed, NOT_ALLOWED_RESPONSE } from '@/lib/allowlist';
+import { generateToken } from '@/lib/auth';
+import { setAuthCookie } from '@/lib/authCookie';
 
 export async function GET(request: NextRequest) {
   try {
@@ -67,7 +69,16 @@ export async function GET(request: NextRequest) {
 
     const { passwordHash: _, ...operatorData } = operator;
 
-    return NextResponse.json({
+    // Apr 2026 fix (iOS PWA persistence): always issue a fresh token AND
+    // refresh the cookie on /me. This serves two purposes:
+    //   1. When localStorage was wiped between sessions but the cookie
+    //      survived, the client receives a fresh token to re-stash so
+    //      subsequent header-based API calls keep working.
+    //   2. Rolling refresh — every successful /me extends the cookie's
+    //      maxAge, so an active operator never sees their session expire.
+    const freshToken = generateToken(operator.id, operator.role);
+    const res = NextResponse.json({
+      token: freshToken,
       operator: {
         ...operatorData,
         intake: operatorData.intake as Record<string, unknown>,
@@ -82,6 +93,8 @@ export async function GET(request: NextRequest) {
         dailyBrief: operatorData.dailyBrief as Record<string, unknown>,
       },
     });
+    setAuthCookie(res, freshToken);
+    return res;
   } catch (error) {
     console.error('Auth check error:', error);
     return NextResponse.json(

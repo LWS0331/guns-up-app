@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword, generateToken } from '@/lib/auth';
+import { setAuthCookie } from '@/lib/authCookie';
 
 // Public registration is CLOSED until June 2026 (Pricing Strategy v2 §6).
 // During the closed beta, operators are seeded by admin via /api/admin/
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
     // Return operator without passwordHash
     const { passwordHash: _, ...operatorData } = operator;
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       {
         token,
         operator: {
@@ -120,6 +121,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
+    // Apr 2026 fix: set httpOnly cookie alongside the JWT in the response
+    // body. iOS PWA reliability — see src/lib/authCookie.ts.
+    setAuthCookie(res, token);
+    return res;
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json(

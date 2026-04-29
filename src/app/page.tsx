@@ -96,7 +96,13 @@ export default function Home() {
     };
 
     const loadFromDB = async () => {
-      // Check for stored JWT token FIRST — needed for authenticated API calls
+      // Check for stored JWT token FIRST — needed for authenticated API calls.
+      // Apr 2026 fix (iOS PWA persistence): even when localStorage is empty,
+      // the user may still have a valid httpOnly auth cookie. Always probe
+      // /api/auth/me with credentials: 'include' so the server can fall back
+      // to the cookie. If /me succeeds, the response carries an operator
+      // object — and the cookie's existence means the user is still
+      // authenticated even though localStorage was wiped between sessions.
       const token = getAuthToken();
       const authHeaders: Record<string, string> = token
         ? { 'Authorization': `Bearer ${token}` }
@@ -111,12 +117,17 @@ export default function Home() {
       // resolved-null so the consumer below handles the no-result case the
       // same way it handles a non-ok response. This keeps us out of try/catch
       // tangle and makes setIsLoaded(true) in finally trivially safe.
-      const mePromise: Promise<Response | null> = token
-        ? fetchWithTimeout('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }).catch(err => {
-            console.error('[page.tsx:loadFromDB] /api/auth/me network error:', err);
-            return null;
-          })
-        : Promise.resolve(null);
+      //
+      // Always make the /me call (even without a localStorage token) so the
+      // cookie path can resurrect the session. credentials:'include' ensures
+      // the cookie travels with the request.
+      const mePromise: Promise<Response | null> = fetchWithTimeout('/api/auth/me', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
+      }).catch(err => {
+        console.error('[page.tsx:loadFromDB] /api/auth/me network error:', err);
+        return null;
+      });
 
       const operatorsPromise: Promise<Response | null> = fetchWithTimeout('/api/operators', { headers: authHeaders }).catch(err => {
         console.error('[page.tsx:loadFromDB] /api/operators network error:', err);
@@ -135,10 +146,25 @@ export default function Home() {
             tier: meData.operator.tier,
             callsign: meData.operator.callsign,
           });
-        } else if (meRes && !meRes.ok) {
-          // Token invalid (401/403/etc.) — clear it.
-          console.warn('[page.tsx:loadFromDB] Auth /me returned non-ok:', meRes.status);
+          // Apr 2026 fix: /me now returns a fresh token (rolling refresh).
+          // Re-stash to localStorage so subsequent header-based API calls
+          // continue to work even if the prior localStorage entry was
+          // wiped and the cookie carried the auth.
+          if (meData.token && typeof meData.token === 'string') {
+            try { localStorage.setItem('authToken', meData.token); } catch { /* storage full */ }
+          }
+        } else if (meRes && !meRes.ok && meRes.status === 401) {
+          // Truly unauthorized — neither header nor cookie valid. Clear
+          // the localStorage entry; the cookie will get cleared when the
+          // user logs out, or naturally expire after 7 days.
+          console.warn('[page.tsx:loadFromDB] Auth /me returned 401, clearing localStorage token');
           localStorage.removeItem('authToken');
+        } else if (meRes && !meRes.ok) {
+          // Other non-ok (403 not_allowed, 404 operator-not-found, 5xx).
+          // Don't blindly clear localStorage — 5xx is transient, and 403
+          // means the operator was de-allowlisted; the user will see the
+          // login screen but their token survives any reauth.
+          console.warn('[page.tsx:loadFromDB] Auth /me non-ok status:', meRes.status);
         }
 
         // Handle /api/operators result. Empty DB triggers a seed + re-fetch
@@ -295,6 +321,13 @@ export default function Home() {
     trackEvent(EVENTS.LOGOUT);
     resetAnalytics();
     localStorage.removeItem('authToken');
+    // Apr 2026 fix: also clear the persistent httpOnly auth cookie. Without
+    // this, logout only clears localStorage — the cookie would silently
+    // re-authenticate the next visitor on a shared device on next /me probe.
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {
+      // Best-effort — a network failure here is OK; the cookie expires in 7 days
+      // anyway and the user is already client-side logged out.
+    });
     setCurrentUser(null);
   };
 
