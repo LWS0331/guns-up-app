@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
 import { isOperatorAllowed, NOT_ALLOWED_RESPONSE } from '@/lib/allowlist';
+import { setAuthCookie } from '@/lib/authCookie';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
 
       const { passwordHash: _, ...operatorData } = operator;
 
-      return NextResponse.json({
+      const res = NextResponse.json({
         token,
         operator: {
           ...operatorData,
@@ -45,6 +46,10 @@ export async function POST(request: NextRequest) {
           dayTags: operatorData.dayTags as Record<string, unknown>,
         },
       });
+      // Apr 2026 fix: also set httpOnly cookie so iOS PWA users don't get
+      // kicked back to login when localStorage is cleared between sessions.
+      setAuthCookie(res, token);
+      return res;
     }
 
     // Email/password login
@@ -86,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     const { passwordHash: _, ...operatorData } = operator;
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       token,
       operator: {
         ...operatorData,
@@ -99,6 +104,9 @@ export async function POST(request: NextRequest) {
         dayTags: operatorData.dayTags as Record<string, unknown>,
       },
     });
+    // Apr 2026 fix — see PIN branch above for rationale.
+    setAuthCookie(res, token);
+    return res;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

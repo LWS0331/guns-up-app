@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
 import { isOperatorAllowed } from '@/lib/allowlist';
+import { setAuthCookie } from '@/lib/authCookie';
 import {
   compareStateNonce,
   decodeIdToken,
@@ -143,5 +144,10 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.redirect(dest, { status: 302 });
   res.cookies.delete(OAUTH_STATE_COOKIE);
   res.cookies.delete(NEXT_COOKIE);
+  // Apr 2026 fix: set the persistent httpOnly auth cookie alongside the
+  // URL-token (which the /auth/oauth-callback page stashes in localStorage).
+  // The cookie is what survives iOS PWA close/reopen when localStorage
+  // gets wiped.
+  setAuthCookie(res, token);
   return res;
 }
