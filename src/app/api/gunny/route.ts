@@ -9,6 +9,8 @@ import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
 import { prisma } from '@/lib/db';
+import { buildMacroCycle, recomputeOnGoalDateChange } from '@/lib/macrocycle';
+import type { MacroGoal, MacroGoalType, MacroCycle, PRRecord } from '@/lib/types';
 import type { JuniorSafetyEvent } from '@/lib/types';
 import { loadGunnyCorpus } from '@/lib/gunnyCorpus';
 import type { TrainingPath, CorpusSelectionInput } from '@/data/gunny-corpus';
@@ -504,6 +506,417 @@ in your plain-text reply UNLESS you also emit a <workout_delete> block.
 Lying about state changes is the worst kind of UX trust violation —
 the operator will check the planner, see the workout still there, and
 lose trust in everything else you say.
+
+DELETE A MEAL FROM THE NUTRITION LOG — <meal_delete>:
+When the operator asks to delete, remove, or undo a logged meal —
+including duplicates — emit a <meal_delete> block. <meal_json> is for
+ADDING meals; <meal_delete> is the inverse channel for REMOVING them.
+Without this signal you can talk about the deletion in chat but the
+nutrition log row stays — operators have hit this confused state on
+duplicate cleanups.
+
+Triggers for <meal_delete>:
+- "delete that meal" / "remove that entry" / "scrub the duplicate"
+- "the first one is wrong, only keep the second" (emit delete on the
+  first, no <meal_json> needed since the second already exists)
+- "I logged that twice — clean it up"
+
+Match shape (use whichever fields you have — server tries each in order):
+1. id (exact match — strongest, but the operator usually doesn't know it)
+2. name + calories + date (name case-insensitive, calories ±5)
+3. name + date (deletes the most recent matching name on that date)
+
+Format:
+<meal_delete>
+{
+  "name": "Cheesy Egg Hash Brown Scramble + Mixed Berries",
+  "calories": 600,
+  "date": "2026-04-27"
+}
+</meal_delete>
+
+Multiple <meal_delete> blocks per response are allowed (e.g. "wipe
+all of yesterday's mistakes"). Pull date from clientDate / today in
+context — never guess.
+
+After emitting <meal_delete>, confirm in plain text what was removed
+("Cheesy Egg Hash Brown Scramble + Mixed Berries scrubbed. Today's
+total recalculated."). Same trust rule as workout_delete: NEVER claim
+a meal was deleted in plain text without emitting <meal_delete>.
+
+LOG HYDRATION — <hydration_json>:
+When the operator says they drank water — "log 16oz", "had a bottle",
+"finished my hydroflask", "drank 32oz so far today", "add 24oz" — emit
+a <hydration_json> block. The server stores the day's running total in
+operator.nutrition.hydration[date] (oz). Same DRY rule as <meal_json>:
+ONE block per turn. If they say "add 16oz", emit "add"; if they tell
+you a new total ("I'm at 64oz so far"), emit "set".
+
+Format:
+<hydration_json>
+{
+  "date": "2026-04-30",
+  "oz": 16,
+  "op": "add"
+}
+</hydration_json>
+
+Fields:
+- date — YYYY-MM-DD, defaults to clientDate.
+- oz — positive integer ounces.
+- op — "add" (default, increments today's total) | "set" (overrides
+  today's total, e.g. wearable resync).
+
+Then confirm in plain text with the new total ("Logged 16oz. You're at
+48oz today — 16oz to your 64oz target."). NEVER claim hydration was
+logged in plain text without emitting <hydration_json>.
+
+LOG DAILY READINESS / MOOD / SLEEP — <readiness_json>:
+Daily check-ins. When the operator volunteers any of:
+- sleep ("slept 7/10", "got 5 hours", "slept like trash")
+- stress ("work is stressing me out — 8/10", "stress is low today")
+- mood ("feeling crushed", "lit today", "decent")
+- readiness / energy ("readiness is 6", "energy's tanking")
+
+…emit ONE <readiness_json> with whatever fields they touched. Sleep /
+stress / energy / readiness are 1-10 integers. Mood is a short string
+(one or two words is enough — "crushed", "wired", "fine"). The server
+writes the entry to operator.dailyReadiness[date] AND mirrors readiness/
+sleep/stress to operator.profile so the readiness engine sees fresh
+values.
+
+Format:
+<readiness_json>
+{
+  "date": "2026-04-30",
+  "readiness": 7,
+  "sleep": 8,
+  "stress": 4,
+  "energy": 7,
+  "mood": "locked in",
+  "notes": "back pain gone after stretching"
+}
+</readiness_json>
+
+All fields except date are optional — only emit ones the operator
+actually told you. Don't fill in numbers from prior context as if they
+just said them. After emitting, confirm in plain text with one line of
+context ("Sleep 8, stress 4 — green-light for the heavy session.").
+
+UPDATE / CLEAR INJURIES — <injury_modification>:
+<profile_json> can ADD a new injury but can't update or clear one.
+This is the inverse channel for changes to existing injuries OR for
+explicit single-injury adds outside onboarding.
+
+Triggers:
+- "my shoulder feels better — clear it" → action: "clear"
+- "knee is recovering, downgrade the status" → action: "update"
+- "logged the wrong restriction on my low back" → action: "update"
+- "add a new injury — left ankle sprain" (mid-session) → action: "add"
+
+Format:
+<injury_modification>
+{
+  "action": "update",
+  "match": { "name": "left shoulder" },
+  "patch": { "status": "recovering", "notes": "RICE + light press tolerant" }
+}
+</injury_modification>
+
+Actions:
+- "add" — patch becomes a new Injury (id auto-assigned). Server treats
+  patch.name as required.
+- "update" — match locates the injury (by id OR case-insensitive name);
+  patch fields overwrite. status must be one of active|recovering|cleared.
+- "clear" — match locates the injury; status flipped to "cleared". (No
+  destructive removal — the historical record stays so future workouts
+  still see "previously injured shoulder.")
+- "remove" — for true mistake entries; permanently deletes the row.
+
+Multiple blocks per response allowed (e.g. clearing two old injuries at
+once). After emitting, confirm in plain text. Trust rule still applies.
+
+TAG / UNTAG A DAY — <day_tag_json>:
+The Planner has a per-day status badge ("rest day", "deload", "travel",
+"missed — life happened"). When the operator says any of:
+- "tomorrow's a rest day"
+- "tag Friday as deload"
+- "I'm sick today, mark it"
+- "untag yesterday — I actually trained"
+
+…emit a <day_tag_json>. The server writes to operator.dayTags[date].
+Color is the visual chip — green (good signal), amber (caution), red
+(missed/sick), cyan (informational).
+
+Format:
+<day_tag_json>
+{
+  "date": "2026-05-01",
+  "color": "amber",
+  "note": "Rest day — sleep was 5/10",
+  "op": "set"
+}
+</day_tag_json>
+
+op: "set" (default, creates or replaces) | "clear" (removes the tag).
+Color must be one of green|amber|red|cyan. Note is the operator's
+own short phrase — don't ad-lib if they didn't supply one.
+
+UPDATE MACRO TARGETS — <nutrition_targets_json>:
+When the operator asks to change daily macro targets — "bump protein to
+220", "drop calories to 2200", "set my macros to 2400/200/250/70" —
+emit a <nutrition_targets_json>. Server overwrites the matching fields
+of operator.nutrition.targets and leaves the rest alone (so a single
+"bump protein" doesn't reset calories/carbs/fat).
+
+Format:
+<nutrition_targets_json>
+{
+  "calories": 2400,
+  "protein": 220,
+  "carbs": 240,
+  "fat": 70
+}
+</nutrition_targets_json>
+
+All four fields optional — only include the ones the operator told you
+to change. Numbers must be positive integers. After emitting, recap the
+new full target in plain text ("New targets: 2400 cal, 220P / 240C /
+70F. Same workouts will hit harder on this fuel."). Don't suggest goal-
+shape changes (cut/bulk/recomp) here — that's a sitrep-level call. This
+channel is the dial-the-numbers channel.
+
+MANAGE GOALS — <goal_json>:
+operator.profile.goals is a flat list of free-text mission statements
+("hit 405 squat by July", "stop skipping sundays"). Channel ops:
+- "add" — append a new goal string.
+- "remove" — drop a goal that case-insensitively matches `match`.
+- "replace" — swap `match` with a new string in `value`.
+
+Triggers:
+- "add a goal: [goal]" / "new goal — [goal]"
+- "drop the [goal] goal" / "remove that 405 squat goal — recovery first"
+- "rephrase my squat goal as 425 by August"
+
+Format:
+<goal_json>
+{
+  "action": "add",
+  "value": "Hit 425 lb squat by Aug 15"
+}
+</goal_json>
+
+For "replace" include both `match` (existing string, case-insensitive
+substring is fine) and `value` (new string). For "remove" include only
+`match`. Multiple <goal_json> blocks per turn allowed (e.g. "scrap two
+old goals and add this one"). After emitting, confirm in plain text.
+Trust rule applies — don't claim a goal change without emitting.
+
+UPDATE DIETARY RESTRICTIONS / SUPPLEMENTS — <dietary_json>:
+operator.intake.dietaryRestrictions and operator.intake.supplements
+are flat string arrays. Both editable via this channel.
+
+Triggers:
+- "I'm cutting dairy" / "no more gluten" → add to dietaryRestrictions
+- "I'm not actually allergic to nuts" → remove from dietaryRestrictions
+- "started creatine" / "added 5g creatine, 3g L-citrulline" → add to supplements
+- "stopped pre-workout" → remove from supplements
+
+Format:
+<dietary_json>
+{
+  "field": "dietaryRestrictions",
+  "action": "add",
+  "values": ["dairy"]
+}
+</dietary_json>
+
+field: "dietaryRestrictions" | "supplements".
+action: "add" | "remove" | "replace_all".
+values: array of strings. For "replace_all" the array becomes the new
+list; for "add"/"remove" the array is merged/filtered (case-insensitive
+dedupe so "Dairy" and "dairy" don't both stick). Multiple blocks per
+turn allowed (e.g. one for restrictions + one for supplements).
+
+After emitting, confirm in plain text and call out any programming
+implications ("Cutting dairy noted — I'll swap whey out for plant
+protein in macro guidance.").
+
+MANAGE A MACROCYCLE — <macrocycle_json>:
+The macrocycle engine plans 6-12 month periodized blocks toward a major
+goal (powerlifting meet, hypertrophy phase, season prep, fat loss). It
+lives in operator.macroCycles[]. This channel handles the lifecycle.
+
+Actions:
+- "start" — Gunny supplies the goal shape, server runs buildMacroCycle
+  to lay out the blocks. Use when the operator commits to a long-horizon
+  target ("I want to peak for the Nov 15 meet at 1500 total"). Required
+  fields: type, name, targetDate, priority. Optional: targetMetrics.
+- "update_date" — operator moved the target date. Server re-runs the
+  block math via recomputeOnGoalDateChange.
+- "complete" — operator hit the target / event passed.
+- "cancel" — operator dropped the goal.
+- "clear" — REMOVES the cycle from the list (use sparingly — usually
+  prefer "cancel" so the historical record stays).
+
+Format (start):
+<macrocycle_json>
+{
+  "action": "start",
+  "goal": {
+    "type": "powerlifting_meet",
+    "name": "Springfield PL Open",
+    "targetDate": "2026-11-15",
+    "priority": 1,
+    "targetMetrics": { "squat": 425, "bench": 285, "deadlift": 525 }
+  }
+}
+</macrocycle_json>
+
+Format (update_date / complete / cancel / clear):
+<macrocycle_json>
+{
+  "action": "update_date",
+  "goalId": "macro-goal-abc",
+  "newDate": "2026-12-06"
+}
+</macrocycle_json>
+
+For non-start actions you can match by goalId OR by name (case-
+insensitive). type must be one of: powerlifting_meet | hypertrophy_phase
+| season_prep | fat_loss. priority must be 1 or 2.
+
+After emitting, summarize the resulting block sequence in plain text.
+
+EDIT / REMOVE A PR — <pr_modification> and <pr_delete>:
+<pr_json> ADDS a new PR. These are the inverse channels.
+
+<pr_modification> — edit fields on an existing PR.
+<pr_modification>
+{
+  "match": { "id": "pr-1234" },
+  "patch": { "weight": 410, "reps": 3, "notes": "lift video reviewed — RPE 9" }
+}
+</pr_modification>
+
+match shape:
+- id (preferred) OR
+- exercise (case-insensitive) + date (YYYY-MM-DD)
+patch fields: any of exercise, weight, reps, date, notes, type.
+
+<pr_delete> — remove a PR.
+<pr_delete>
+{
+  "match": { "exercise": "Back Squat", "date": "2026-04-12" }
+}
+</pr_delete>
+
+Use match: id when you have it. Use match: { exercise, date } when the
+operator says "scrub yesterday's bench PR — wrong number." If neither
+fits ("delete my squat PR"), refuse — too ambiguous (could be any of
+several entries). Multiple <pr_modification> / <pr_delete> blocks per
+turn allowed.
+
+Trust rule: never claim a PR was edited or deleted in plain text without
+emitting the appropriate block. Confirm with the new value after emit
+("Bench PR corrected — 285 × 3 logged.").
+
+DISCONNECT A WEARABLE — <wearable_control>:
+operator.WearableConnection rows live in their own table (Oura, Whoop,
+Garmin, Fitbit, etc.). Connection itself is OAuth-redirect — has to
+happen via the Settings → Wearables flow, you can't drive it from chat.
+DISCONNECT, however, is a one-shot DB write you CAN drive.
+
+Trigger only on explicit disconnect requests:
+- "disconnect my Oura"
+- "kill the Whoop sync — switching devices"
+- "drop my Fitbit, I'm getting a Garmin"
+
+Format:
+<wearable_control>
+{
+  "action": "disconnect",
+  "provider": "oura"
+}
+</wearable_control>
+
+action: must be "disconnect" (other actions reserved).
+provider: lowercase short name. Common values: oura | whoop_v2 | garmin
+| fitbit | apple_health | google_fit. If the operator names a device
+that isn't connected, refuse — don't emit a block. Confirm in plain
+text after emit ("Oura disconnected. Readiness scores will roll back to
+manual entry until you reconnect.").
+
+For "connect" requests, do NOT emit this channel. Tell the operator to
+go to Settings → Wearables → tap the provider — that path runs the
+OAuth flow that this channel can't replace.
+
+UPDATE NOTIFICATION PREFERENCES — <notification_json>:
+Notification settings are device-local (localStorage), not per-account.
+The channel emits a patch; the client merges it into the active prefs.
+Cross-device propagation is intentional NOT — different devices may want
+different reminder schedules.
+
+Triggers:
+- "turn off hydration reminders"
+- "move workout reminders to 6am"
+- "kill the evening check-in for now"
+- "remind me about meals at noon and 6pm only"
+
+Format:
+<notification_json>
+{
+  "patch": {
+    "hydrationReminders": false,
+    "reminderTime": "06:00"
+  }
+}
+</notification_json>
+
+patch fields (all optional, only include the ones the operator changed):
+- workoutReminders, streakWarnings, prAlerts, gunnyCheckIns,
+  mealReminders, hydrationReminders, dailyBriefAlerts,
+  complianceAlerts, eveningCheckIn — boolean.
+- reminderTime, eveningCheckInTime — "HH:MM" string (24h).
+- mealReminderTimes — array of "HH:MM" strings.
+- hydrationInterval — integer hours (0 disables).
+
+Confirm in plain text after emit. The change applies on this device
+immediately; if they switch devices it doesn't carry over.
+
+WRITE A TRAINER NOTE — <trainer_note_json>:
+operator.trainerNotes is a free-text directive a TRAINER writes ABOUT
+a client. Gunny reads it as additional context for that client's
+sessions. Channel handles two cases:
+- Trainer talking to Gunny about a specific client ("note for VALKYRIE:
+  back is flaring, no deadlifts this week"). targetOperatorId or
+  targetCallsign required. Server verifies the caller is the target's
+  trainer.
+- Client writing their own internal notes (less common — usually
+  athlete journaling). target self-resolves to caller.
+
+Format:
+<trainer_note_json>
+{
+  "targetCallsign": "VALKYRIE",
+  "op": "set",
+  "value": "Back flare-up — no deadlifts or rows this week. Keep volume up via accessories."
+}
+</trainer_note_json>
+
+target: targetOperatorId (preferred when known) OR targetCallsign
+  (case-insensitive match against allOperators). If neither is given,
+  defaults to caller's own operator.
+op: "set" overwrites trainerNotes; "append" adds a timestamped line
+  to the existing notes ("[2026-04-30] new line").
+value: the note string.
+
+Server REJECTS the write if the caller is not the target's trainer
+AND not the target. Don't bypass — if the operator says "update someone
+else's notes" and they're not coaching that person, refuse.
+
+After emit, confirm in plain text identifying the target. Trust rule
+applies.
 
 VOICE OUTPUT — YOU HAVE IT (HANDS-FREE TTS):
 The GUNS UP app renders your responses as text AND can speak them aloud via
@@ -1381,6 +1794,892 @@ async function applyServerSideDedup(
   return { mealData: nextMeal, prData: nextPr, dedupNote };
 }
 
+// ─── Server-side <meal_delete> application ────────────────────────────────
+//
+// When Gunny emits one or more <meal_delete> blocks, mutate the operator's
+// nutrition.meals[date] in Postgres to drop matching rows. Match precedence
+// (most specific first):
+//   1. id (exact)
+//   2. name (case-insensitive trim) + calories within ±5 + date
+//   3. name + date — deletes the most-recent matching name on that date
+//
+// Returns the deletion descriptors that ACTUALLY matched something so the
+// client can render a confirmation row + apply the same removal to its
+// in-memory state without a round-trip.
+
+interface MealDeleteRequest {
+  id?: string;
+  name?: string;
+  calories?: number;
+  date?: string;
+}
+
+async function applyMealDeletes(
+  operatorId: string,
+  deletes: MealDeleteRequest[],
+  clientDate: string | undefined,
+): Promise<MealDeleteRequest[]> {
+  if (!deletes || deletes.length === 0) return [];
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({
+      where: { id: operatorId },
+      select: { nutrition: true },
+    });
+  } catch (err) {
+    console.error('[gunny/applyMealDeletes] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+
+  const nutrition = (operator.nutrition || {}) as { meals?: Record<string, Array<{ id?: string; name?: string; calories?: number }>>; targets?: unknown };
+  const meals = { ...(nutrition.meals || {}) };
+  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const applied: MealDeleteRequest[] = [];
+  let mutated = false;
+
+  for (const del of deletes) {
+    const targetDate = del.date && /^\d{4}-\d{2}-\d{2}$/.test(del.date) ? del.date : today;
+    const bucket = meals[targetDate];
+    if (!Array.isArray(bucket) || bucket.length === 0) continue;
+
+    let removeIdx = -1;
+
+    // 1. Exact id match — strongest.
+    if (del.id) {
+      removeIdx = bucket.findIndex(m => m.id === del.id);
+    }
+
+    // 2. name + calories ± 5
+    if (removeIdx < 0 && del.name && Number.isFinite(del.calories)) {
+      const wantName = del.name.toLowerCase().trim();
+      const wantCal = del.calories as number;
+      removeIdx = bucket.findIndex(m =>
+        (m.name || '').toLowerCase().trim() === wantName &&
+        Math.abs((m.calories || 0) - wantCal) <= 5,
+      );
+    }
+
+    // 3. name only (most-recent matching) — iterate from the end so we
+    //    pick the freshest entry; that's almost always what the operator
+    //    means when they say "delete the duplicate."
+    if (removeIdx < 0 && del.name) {
+      const wantName = del.name.toLowerCase().trim();
+      for (let i = bucket.length - 1; i >= 0; i--) {
+        if ((bucket[i].name || '').toLowerCase().trim() === wantName) {
+          removeIdx = i;
+          break;
+        }
+      }
+    }
+
+    if (removeIdx < 0) continue;
+
+    const next = [...bucket];
+    next.splice(removeIdx, 1);
+    meals[targetDate] = next;
+    mutated = true;
+    applied.push({ ...del, date: targetDate });
+  }
+
+  if (!mutated) return [];
+
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: {
+        nutrition: { ...nutrition, meals } as object,
+      },
+    });
+  } catch (err) {
+    console.error('[gunny/applyMealDeletes] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+// ─── Tier-1 chat-driven channels (Apr 2026) ──────────────────────────────
+//
+// Five applier helpers that mutate the operator's JSON columns based on
+// structured blocks Gunny emits. Each returns the descriptor of what
+// actually changed (so the client can mirror the update without a /me
+// refetch). All five follow the same "read first, write second" pattern
+// as applyMealDeletes / applyServerSideDedup — the operator's current
+// Postgres row is fetched and the mutation diffs against fresh state, not
+// the client's possibly-stale snapshot.
+
+interface HydrationRequest { date?: string; oz?: number; op?: 'add' | 'set' }
+interface HydrationApplied { date: string; oz: number; total: number; op: 'add' | 'set' }
+
+async function applyHydration(
+  operatorId: string,
+  req: HydrationRequest | null,
+  clientDate: string | undefined,
+): Promise<HydrationApplied | null> {
+  if (!req) return null;
+  const oz = Math.max(0, Math.round(Number(req.oz)));
+  if (!Number.isFinite(oz) || oz === 0) return null;
+  const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
+    ? req.date
+    : (clientDate || new Date().toISOString().slice(0, 10));
+  const op: 'add' | 'set' = req.op === 'set' ? 'set' : 'add';
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { nutrition: true } });
+  } catch (err) {
+    console.error('[gunny/applyHydration] DB read failed:', err);
+    return null;
+  }
+  if (!operator) return null;
+  const nutrition = (operator.nutrition || {}) as { hydration?: Record<string, number> };
+  const hydration = { ...(nutrition.hydration || {}) };
+  const prior = Number(hydration[date]) || 0;
+  const total = op === 'set' ? oz : prior + oz;
+  hydration[date] = total;
+
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { nutrition: { ...nutrition, hydration } as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyHydration] DB update failed:', err);
+    return null;
+  }
+  return { date, oz, total, op };
+}
+
+interface ReadinessRequest {
+  date?: string;
+  readiness?: number;
+  sleep?: number;
+  stress?: number;
+  energy?: number;
+  mood?: string;
+  notes?: string;
+}
+
+async function applyReadinessEntry(
+  operatorId: string,
+  req: ReadinessRequest | null,
+  clientDate: string | undefined,
+): Promise<(ReadinessRequest & { date: string; recordedAt: string }) | null> {
+  if (!req) return null;
+  const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
+    ? req.date
+    : (clientDate || new Date().toISOString().slice(0, 10));
+
+  // Coerce + validate. Numeric fields clamped to 1-10. Skip silently if
+  // the operator gave us a value outside that range — better to drop a
+  // single field than to refuse the whole entry.
+  const clamp = (v: unknown): number | undefined => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return undefined;
+    return Math.max(1, Math.min(10, Math.round(n)));
+  };
+  const entry: ReadinessRequest & { date: string; recordedAt: string } = {
+    date,
+    recordedAt: new Date().toISOString(),
+  };
+  const r = clamp(req.readiness); if (r !== undefined) entry.readiness = r;
+  const s = clamp(req.sleep); if (s !== undefined) entry.sleep = s;
+  const st = clamp(req.stress); if (st !== undefined) entry.stress = st;
+  const e = clamp(req.energy); if (e !== undefined) entry.energy = e;
+  if (typeof req.mood === 'string' && req.mood.trim().length > 0) entry.mood = req.mood.trim().slice(0, 80);
+  if (typeof req.notes === 'string' && req.notes.trim().length > 0) entry.notes = req.notes.trim().slice(0, 500);
+
+  // Need at least one field besides date/recordedAt to be meaningful.
+  const hasContent = entry.readiness !== undefined || entry.sleep !== undefined
+    || entry.stress !== undefined || entry.energy !== undefined
+    || entry.mood !== undefined || entry.notes !== undefined;
+  if (!hasContent) return null;
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({
+      where: { id: operatorId },
+      select: { dailyReadiness: true, profile: true },
+    });
+  } catch (err) {
+    console.error('[gunny/applyReadinessEntry] DB read failed:', err);
+    return null;
+  }
+  if (!operator) return null;
+  const dailyReadiness = { ...((operator.dailyReadiness || {}) as Record<string, unknown>) };
+  dailyReadiness[date] = entry;
+
+  // Mirror today's numerics to profile so existing readers (readiness
+  // engine, BattlePlanRef, etc.) see fresh values without a schema migration.
+  // Skip the mirror when the entry is for a past date.
+  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const profile = { ...((operator.profile || {}) as Record<string, unknown>) };
+  if (date === today) {
+    if (entry.readiness !== undefined) profile.readiness = entry.readiness;
+    if (entry.sleep !== undefined) profile.sleep = entry.sleep;
+    if (entry.stress !== undefined) profile.stress = entry.stress;
+  }
+
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: {
+        dailyReadiness: dailyReadiness as object,
+        profile: profile as object,
+      },
+    });
+  } catch (err) {
+    console.error('[gunny/applyReadinessEntry] DB update failed:', err);
+    return null;
+  }
+  return entry;
+}
+
+interface InjuryModification {
+  action?: 'add' | 'update' | 'clear' | 'remove';
+  match?: { id?: string; name?: string };
+  patch?: { name?: string; status?: 'active' | 'recovering' | 'cleared'; notes?: string; restrictions?: string[] };
+}
+
+async function applyInjuryModifications(
+  operatorId: string,
+  mods: InjuryModification[],
+): Promise<InjuryModification[]> {
+  if (!mods || mods.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { injuries: true } });
+  } catch (err) {
+    console.error('[gunny/applyInjuryModifications] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let injuries = [...((operator.injuries || []) as any[])];
+  const applied: InjuryModification[] = [];
+  let mutated = false;
+
+  for (const mod of mods) {
+    if (!mod || typeof mod !== 'object') continue;
+    const action = mod.action || 'update';
+
+    if (action === 'add') {
+      const name = mod.patch?.name?.trim();
+      if (!name) continue;
+      const status = (['active', 'recovering', 'cleared'].includes(mod.patch?.status || '')
+        ? mod.patch?.status
+        : 'active') as 'active' | 'recovering' | 'cleared';
+      injuries.push({
+        id: `inj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name,
+        status,
+        notes: mod.patch?.notes || '',
+        restrictions: Array.isArray(mod.patch?.restrictions) ? mod.patch.restrictions : [],
+      });
+      mutated = true;
+      applied.push(mod);
+      continue;
+    }
+
+    // For update / clear / remove we need a match.
+    const matchId = mod.match?.id;
+    const matchName = (mod.match?.name || '').toLowerCase().trim();
+    const idx = injuries.findIndex((inj) => {
+      if (matchId && inj.id === matchId) return true;
+      if (matchName && (inj.name || '').toLowerCase().trim() === matchName) return true;
+      return false;
+    });
+    if (idx < 0) continue;
+
+    if (action === 'remove') {
+      injuries.splice(idx, 1);
+      mutated = true;
+      applied.push(mod);
+      continue;
+    }
+    if (action === 'clear') {
+      injuries[idx] = { ...injuries[idx], status: 'cleared' };
+      mutated = true;
+      applied.push(mod);
+      continue;
+    }
+    // update
+    const patch: Record<string, unknown> = {};
+    if (mod.patch?.name && typeof mod.patch.name === 'string') patch.name = mod.patch.name.trim();
+    if (mod.patch?.status && ['active', 'recovering', 'cleared'].includes(mod.patch.status)) patch.status = mod.patch.status;
+    if (typeof mod.patch?.notes === 'string') patch.notes = mod.patch.notes;
+    if (Array.isArray(mod.patch?.restrictions)) patch.restrictions = mod.patch.restrictions;
+    if (Object.keys(patch).length === 0) continue;
+    injuries[idx] = { ...injuries[idx], ...patch };
+    mutated = true;
+    applied.push(mod);
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({ where: { id: operatorId }, data: { injuries: injuries as object } });
+  } catch (err) {
+    console.error('[gunny/applyInjuryModifications] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface DayTagRequest {
+  date?: string;
+  color?: 'green' | 'amber' | 'red' | 'cyan';
+  note?: string;
+  op?: 'set' | 'clear';
+}
+
+async function applyDayTags(
+  operatorId: string,
+  reqs: DayTagRequest[],
+  clientDate: string | undefined,
+): Promise<DayTagRequest[]> {
+  if (!reqs || reqs.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { dayTags: true } });
+  } catch (err) {
+    console.error('[gunny/applyDayTags] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  const dayTags = { ...((operator.dayTags || {}) as Record<string, { color: string; note: string }>) };
+  const applied: DayTagRequest[] = [];
+  let mutated = false;
+
+  for (const req of reqs) {
+    const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
+      ? req.date
+      : (clientDate || new Date().toISOString().slice(0, 10));
+    const op = req.op === 'clear' ? 'clear' : 'set';
+    if (op === 'clear') {
+      if (dayTags[date]) {
+        delete dayTags[date];
+        mutated = true;
+        applied.push({ ...req, date, op: 'clear' });
+      }
+      continue;
+    }
+    const color = (['green', 'amber', 'red', 'cyan'].includes(req.color || '')
+      ? req.color
+      : 'amber') as 'green' | 'amber' | 'red' | 'cyan';
+    const note = (typeof req.note === 'string' ? req.note : '').slice(0, 200);
+    dayTags[date] = { color, note };
+    mutated = true;
+    applied.push({ date, color, note, op: 'set' });
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({ where: { id: operatorId }, data: { dayTags: dayTags as object } });
+  } catch (err) {
+    console.error('[gunny/applyDayTags] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface NutritionTargetsRequest { calories?: number; protein?: number; carbs?: number; fat?: number }
+
+async function applyNutritionTargets(
+  operatorId: string,
+  req: NutritionTargetsRequest | null,
+): Promise<NutritionTargetsRequest | null> {
+  if (!req) return null;
+  const fields: NutritionTargetsRequest = {};
+  for (const k of ['calories', 'protein', 'carbs', 'fat'] as const) {
+    const n = Number(req[k]);
+    if (Number.isFinite(n) && n > 0) fields[k] = Math.round(n);
+  }
+  if (Object.keys(fields).length === 0) return null;
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { nutrition: true } });
+  } catch (err) {
+    console.error('[gunny/applyNutritionTargets] DB read failed:', err);
+    return null;
+  }
+  if (!operator) return null;
+  const nutrition = (operator.nutrition || {}) as { targets?: NutritionTargetsRequest };
+  const targets = { ...(nutrition.targets || {}), ...fields };
+
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { nutrition: { ...nutrition, targets } as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyNutritionTargets] DB update failed:', err);
+    return null;
+  }
+  return targets;
+}
+
+// ─── Tier-2 chat-driven channels (Apr 2026) ──────────────────────────────
+// Same read-first/write-second pattern as Tier 1. Five appliers that fan
+// out across operator.profile.goals, operator.intake (dietary +
+// supplements), operator.macroCycles, and operator.prs.
+
+interface GoalRequest { action?: 'add' | 'remove' | 'replace'; value?: string; match?: string }
+
+async function applyGoalChanges(
+  operatorId: string,
+  reqs: GoalRequest[],
+): Promise<GoalRequest[]> {
+  if (!reqs || reqs.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { profile: true } });
+  } catch (err) {
+    console.error('[gunny/applyGoalChanges] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  const profile = (operator.profile || {}) as { goals?: string[] };
+  let goals = Array.isArray(profile.goals) ? [...profile.goals] : [];
+  const applied: GoalRequest[] = [];
+  let mutated = false;
+
+  for (const req of reqs) {
+    const action = req.action || 'add';
+    if (action === 'add') {
+      const v = (req.value || '').trim();
+      if (!v) continue;
+      // Case-insensitive dedupe so "Hit 405" and "hit 405" don't both stack.
+      if (goals.some((g) => g.toLowerCase().trim() === v.toLowerCase())) continue;
+      goals.push(v);
+      mutated = true;
+      applied.push({ action: 'add', value: v });
+      continue;
+    }
+    if (action === 'remove') {
+      const m = (req.match || '').toLowerCase().trim();
+      if (!m) continue;
+      const before = goals.length;
+      goals = goals.filter((g) => !g.toLowerCase().includes(m));
+      if (goals.length !== before) {
+        mutated = true;
+        applied.push({ action: 'remove', match: req.match });
+      }
+      continue;
+    }
+    if (action === 'replace') {
+      const m = (req.match || '').toLowerCase().trim();
+      const v = (req.value || '').trim();
+      if (!m || !v) continue;
+      const idx = goals.findIndex((g) => g.toLowerCase().includes(m));
+      if (idx < 0) continue;
+      goals[idx] = v;
+      mutated = true;
+      applied.push({ action: 'replace', match: req.match, value: v });
+    }
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { profile: { ...profile, goals } as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyGoalChanges] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface DietaryRequest {
+  field?: 'dietaryRestrictions' | 'supplements';
+  action?: 'add' | 'remove' | 'replace_all';
+  values?: string[];
+}
+
+async function applyDietaryChanges(
+  operatorId: string,
+  reqs: DietaryRequest[],
+): Promise<DietaryRequest[]> {
+  if (!reqs || reqs.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { intake: true } });
+  } catch (err) {
+    console.error('[gunny/applyDietaryChanges] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  const intake = (operator.intake || {}) as { dietaryRestrictions?: string[]; supplements?: string[] };
+  const applied: DietaryRequest[] = [];
+  let mutated = false;
+  let nextRestrictions = Array.isArray(intake.dietaryRestrictions) ? [...intake.dietaryRestrictions] : [];
+  let nextSupplements = Array.isArray(intake.supplements) ? [...intake.supplements] : [];
+
+  for (const req of reqs) {
+    const field = req.field === 'supplements' ? 'supplements' : 'dietaryRestrictions';
+    const action = req.action || 'add';
+    const values = Array.isArray(req.values)
+      ? req.values.map((v) => String(v).trim()).filter((v) => v.length > 0)
+      : [];
+    if (values.length === 0 && action !== 'replace_all') continue;
+
+    const target = field === 'supplements' ? nextSupplements : nextRestrictions;
+    let changed = false;
+    if (action === 'replace_all') {
+      const lowered = new Set<string>();
+      const deduped: string[] = [];
+      for (const v of values) {
+        const k = v.toLowerCase();
+        if (!lowered.has(k)) { lowered.add(k); deduped.push(v); }
+      }
+      if (field === 'supplements') nextSupplements = deduped; else nextRestrictions = deduped;
+      changed = true;
+    } else if (action === 'add') {
+      const lowered = new Set(target.map((v) => v.toLowerCase()));
+      for (const v of values) {
+        if (!lowered.has(v.toLowerCase())) { target.push(v); lowered.add(v.toLowerCase()); changed = true; }
+      }
+    } else if (action === 'remove') {
+      const dropSet = new Set(values.map((v) => v.toLowerCase()));
+      const filtered = target.filter((v) => !dropSet.has(v.toLowerCase()));
+      if (filtered.length !== target.length) {
+        if (field === 'supplements') nextSupplements = filtered; else nextRestrictions = filtered;
+        changed = true;
+      }
+    }
+    if (changed) { mutated = true; applied.push({ field, action, values }); }
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: {
+        intake: {
+          ...intake,
+          dietaryRestrictions: nextRestrictions,
+          supplements: nextSupplements,
+        } as object,
+      },
+    });
+  } catch (err) {
+    console.error('[gunny/applyDietaryChanges] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface MacrocycleRequest {
+  action?: 'start' | 'update_date' | 'complete' | 'cancel' | 'clear';
+  goal?: {
+    type?: MacroGoalType;
+    name?: string;
+    targetDate?: string;
+    priority?: 1 | 2;
+    targetMetrics?: Record<string, number>;
+  };
+  goalId?: string;
+  goalName?: string;
+  newDate?: string;
+}
+
+interface MacrocycleApplied {
+  action: string;
+  cycleId?: string;
+  goalName?: string;
+  blockCount?: number;
+  status?: string;
+}
+
+const VALID_MACRO_TYPES: MacroGoalType[] = ['powerlifting_meet', 'hypertrophy_phase', 'season_prep', 'fat_loss'];
+
+async function applyMacrocycleChanges(
+  operatorId: string,
+  reqs: MacrocycleRequest[],
+  clientDate: string | undefined,
+): Promise<MacrocycleApplied[]> {
+  if (!reqs || reqs.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { macroCycles: true } });
+  } catch (err) {
+    console.error('[gunny/applyMacrocycleChanges] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  let cycles = Array.isArray(operator.macroCycles) ? [...(operator.macroCycles as unknown as MacroCycle[])] : [];
+  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const applied: MacrocycleApplied[] = [];
+  let mutated = false;
+
+  const findCycleIdx = (req: MacrocycleRequest): number => {
+    if (req.goalId) {
+      const i = cycles.findIndex((c) => c.goal?.id === req.goalId);
+      if (i >= 0) return i;
+    }
+    const name = (req.goalName || req.goal?.name || '').toLowerCase().trim();
+    if (!name) return -1;
+    return cycles.findIndex((c) => (c.goal?.name || '').toLowerCase().trim() === name);
+  };
+
+  for (const req of reqs) {
+    const action = req.action || 'start';
+
+    if (action === 'start') {
+      const g = req.goal;
+      if (!g?.name?.trim() || !g?.type || !g?.targetDate) continue;
+      if (!VALID_MACRO_TYPES.includes(g.type)) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(g.targetDate)) continue;
+      const goal: MacroGoal = {
+        id: `macro-goal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        type: g.type,
+        name: g.name.trim(),
+        targetDate: g.targetDate,
+        priority: g.priority === 2 ? 2 : 1,
+        targetMetrics: g.targetMetrics && typeof g.targetMetrics === 'object' ? g.targetMetrics : undefined,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      };
+      const cycle = buildMacroCycle(goal, today);
+      cycles.push(cycle);
+      mutated = true;
+      applied.push({ action: 'start', cycleId: cycle.id, goalName: goal.name, blockCount: cycle.blocks.length });
+      continue;
+    }
+
+    const idx = findCycleIdx(req);
+    if (idx < 0) continue;
+
+    if (action === 'update_date') {
+      if (!req.newDate || !/^\d{4}-\d{2}-\d{2}$/.test(req.newDate)) continue;
+      const updatedGoal: MacroGoal = { ...cycles[idx].goal, targetDate: req.newDate };
+      cycles[idx] = recomputeOnGoalDateChange(cycles[idx], updatedGoal, today);
+      mutated = true;
+      applied.push({ action: 'update_date', cycleId: cycles[idx].id, goalName: cycles[idx].goal.name });
+      continue;
+    }
+
+    if (action === 'complete' || action === 'cancel') {
+      const status = action === 'complete' ? 'completed' : 'cancelled';
+      cycles[idx] = { ...cycles[idx], goal: { ...cycles[idx].goal, status } };
+      mutated = true;
+      applied.push({ action, cycleId: cycles[idx].id, goalName: cycles[idx].goal.name, status });
+      continue;
+    }
+
+    if (action === 'clear') {
+      const removed = cycles[idx];
+      cycles.splice(idx, 1);
+      mutated = true;
+      applied.push({ action: 'clear', cycleId: removed.id, goalName: removed.goal.name });
+    }
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { macroCycles: cycles as unknown as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyMacrocycleChanges] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface PRMatch { id?: string; exercise?: string; date?: string }
+interface PRPatch {
+  exercise?: string;
+  weight?: number;
+  reps?: number;
+  date?: string;
+  notes?: string;
+  type?: 'strength' | 'consistency' | 'endurance' | 'milestone';
+}
+interface PRModificationRequest { match?: PRMatch; patch?: PRPatch }
+interface PRDeleteRequest { match?: PRMatch }
+
+function findPRIndex(prs: PRRecord[], match: PRMatch | undefined): number {
+  if (!match) return -1;
+  if (match.id) {
+    const i = prs.findIndex((p) => p.id === match.id);
+    if (i >= 0) return i;
+  }
+  const ex = (match.exercise || '').toLowerCase().trim();
+  const date = (match.date || '').trim();
+  if (!ex || !date) return -1;
+  return prs.findIndex((p) => (p.exercise || '').toLowerCase().trim() === ex && p.date === date);
+}
+
+async function applyPRChanges(
+  operatorId: string,
+  mods: PRModificationRequest[],
+  deletes: PRDeleteRequest[],
+): Promise<{ modifications: PRModificationRequest[]; deletes: PRDeleteRequest[] }> {
+  const out = { modifications: [] as PRModificationRequest[], deletes: [] as PRDeleteRequest[] };
+  if ((!mods || mods.length === 0) && (!deletes || deletes.length === 0)) return out;
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { prs: true } });
+  } catch (err) {
+    console.error('[gunny/applyPRChanges] DB read failed:', err);
+    return out;
+  }
+  if (!operator) return out;
+  let prs = Array.isArray(operator.prs) ? [...(operator.prs as unknown as PRRecord[])] : [];
+  let mutated = false;
+
+  for (const mod of mods || []) {
+    const idx = findPRIndex(prs, mod.match);
+    if (idx < 0) continue;
+    const patch: Partial<PRRecord> = {};
+    if (typeof mod.patch?.exercise === 'string' && mod.patch.exercise.trim()) patch.exercise = mod.patch.exercise.trim();
+    if (Number.isFinite(mod.patch?.weight) && (mod.patch!.weight as number) > 0) patch.weight = Math.round(mod.patch!.weight as number);
+    if (Number.isFinite(mod.patch?.reps) && (mod.patch!.reps as number) > 0) patch.reps = Math.max(1, Math.floor(mod.patch!.reps as number));
+    if (typeof mod.patch?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(mod.patch.date)) patch.date = mod.patch.date;
+    if (typeof mod.patch?.notes === 'string') patch.notes = mod.patch.notes;
+    if (mod.patch?.type && ['strength', 'consistency', 'endurance', 'milestone'].includes(mod.patch.type)) patch.type = mod.patch.type;
+    if (Object.keys(patch).length === 0) continue;
+    prs[idx] = { ...prs[idx], ...patch };
+    mutated = true;
+    out.modifications.push(mod);
+  }
+
+  for (const del of deletes || []) {
+    const idx = findPRIndex(prs, del.match);
+    if (idx < 0) continue;
+    prs.splice(idx, 1);
+    mutated = true;
+    out.deletes.push(del);
+  }
+
+  if (!mutated) return out;
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { prs: prs as unknown as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyPRChanges] DB update failed:', err);
+    return { modifications: [], deletes: [] };
+  }
+  return out;
+}
+
+// ─── Tier-3 chat-driven channels (Apr 2026) ──────────────────────────────
+// Wearable disconnect (server, separate WearableConnection table) and
+// trainer-note write (server, with cross-account permission check).
+// Notification prefs are client-only (localStorage) — handled in
+// GunnyChat.tsx, no server applier here.
+
+interface WearableControlRequest { action?: 'disconnect'; provider?: string }
+interface WearableControlApplied { provider: string; affected: number }
+
+async function applyWearableControl(
+  operatorId: string,
+  req: WearableControlRequest | null,
+): Promise<WearableControlApplied | null> {
+  if (!req || req.action !== 'disconnect') return null;
+  const provider = (req.provider || '').toLowerCase().trim();
+  if (!provider) return null;
+  try {
+    const result = await prisma.wearableConnection.updateMany({
+      where: { operatorId, provider, active: true },
+      data: { active: false },
+    });
+    if (result.count === 0) return null;
+    return { provider, affected: result.count };
+  } catch (err) {
+    console.error('[gunny/applyWearableControl] DB update failed:', err);
+    return null;
+  }
+}
+
+interface TrainerNoteRequest {
+  targetOperatorId?: string;
+  targetCallsign?: string;
+  op?: 'set' | 'append';
+  value?: string;
+}
+interface TrainerNoteApplied {
+  targetOperatorId: string;
+  targetCallsign?: string;
+  op: 'set' | 'append';
+}
+
+async function applyTrainerNoteWrite(
+  callerId: string,
+  req: TrainerNoteRequest | null,
+  clientDate: string | undefined,
+): Promise<TrainerNoteApplied | null> {
+  if (!req) return null;
+  const value = (req.value || '').trim();
+  if (!value) return null;
+  const op: 'set' | 'append' = req.op === 'append' ? 'append' : 'set';
+
+  let target;
+  try {
+    if (req.targetOperatorId) {
+      target = await prisma.operator.findUnique({
+        where: { id: req.targetOperatorId },
+        select: { id: true, callsign: true, trainerId: true, trainerNotes: true },
+      });
+    } else if (req.targetCallsign) {
+      // Callsigns aren't unique-indexed, but conventional usage is unique.
+      // We grab the first match. If a trainer has two clients with the
+      // same callsign, they should use targetOperatorId.
+      target = await prisma.operator.findFirst({
+        where: { callsign: { equals: req.targetCallsign, mode: 'insensitive' } },
+        select: { id: true, callsign: true, trainerId: true, trainerNotes: true },
+      });
+    } else {
+      // Self-write fallback.
+      target = await prisma.operator.findUnique({
+        where: { id: callerId },
+        select: { id: true, callsign: true, trainerId: true, trainerNotes: true },
+      });
+    }
+  } catch (err) {
+    console.error('[gunny/applyTrainerNoteWrite] DB read failed:', err);
+    return null;
+  }
+  if (!target) return null;
+
+  // Permission: caller must BE the target OR be the target's trainer.
+  const isSelf = target.id === callerId;
+  const isTrainer = target.trainerId === callerId;
+  if (!isSelf && !isTrainer) {
+    console.warn('[gunny/applyTrainerNoteWrite] permission denied', { callerId, targetId: target.id });
+    return null;
+  }
+
+  const today = clientDate || new Date().toISOString().slice(0, 10);
+  let nextNotes = '';
+  if (op === 'append') {
+    const prior = (target.trainerNotes || '').trim();
+    nextNotes = prior
+      ? `${prior}\n[${today}] ${value}`
+      : `[${today}] ${value}`;
+  } else {
+    nextNotes = value;
+  }
+
+  try {
+    await prisma.operator.update({
+      where: { id: target.id },
+      data: { trainerNotes: nextNotes },
+    });
+  } catch (err) {
+    console.error('[gunny/applyTrainerNoteWrite] DB update failed:', err);
+    return null;
+  }
+  return { targetOperatorId: target.id, targetCallsign: target.callsign, op };
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireAuth(req);
   if (auth instanceof NextResponse) return auth;
@@ -1863,7 +3162,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // the real conversation.
     type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
     let mergedMessages: IncomingMsg[] = messages;
-    const STRUCTURED_TAG_RE = /<(?:meal_json|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>[\s\S]*?<\/(?:meal_json|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>/g;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json)>/g;
     const historyChatType: string | null =
       typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
         ? chatTypeFromBody
@@ -2138,6 +3437,121 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       }
       const workoutDelete = workoutDeletes[0] || null;
 
+      // <meal_delete> — Gunny removes a logged meal from the nutrition log.
+      // Apr 2026: parallel to <workout_delete>. Triggered when an operator
+      // asks to scrub a duplicate or undo a wrong entry. Server applies
+      // the delete via prisma; the client also re-renders state-side via
+      // the same array in the response payload.
+      // Match precedence: id > (name+calories+date) > (name+date).
+      // Multiple <meal_delete> blocks per response are supported.
+      const mealDeletes: Array<{ id?: string; name?: string; calories?: number; date?: string }> = [];
+      for (const m of responseText.matchAll(/<meal_delete>([\s\S]*?)<\/meal_delete>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') {
+            mealDeletes.push({
+              id: typeof parsed.id === 'string' ? parsed.id : undefined,
+              name: typeof parsed.name === 'string' ? parsed.name : undefined,
+              calories: Number.isFinite(parsed.calories) ? Number(parsed.calories) : undefined,
+              date: typeof parsed.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : undefined,
+            });
+          }
+        } catch { /* ignore malformed block */ }
+      }
+
+      // ─── Tier-1 channel parsers (Apr 2026) ──────────────────────────────
+      // <hydration_json>, <readiness_json>, <injury_modification>,
+      // <day_tag_json>, <nutrition_targets_json>. Each is parsed once;
+      // applier helpers above this function persist + return the diff.
+
+      let hydrationReq: HydrationRequest | null = null;
+      const hydM = responseText.match(/<hydration_json>([\s\S]*?)<\/hydration_json>/);
+      if (hydM) {
+        try { hydrationReq = JSON.parse(hydM[1].trim()) as HydrationRequest; } catch { /* invalid */ }
+      }
+
+      let readinessReq: ReadinessRequest | null = null;
+      const rdM = responseText.match(/<readiness_json>([\s\S]*?)<\/readiness_json>/);
+      if (rdM) {
+        try { readinessReq = JSON.parse(rdM[1].trim()) as ReadinessRequest; } catch { /* invalid */ }
+      }
+
+      const injuryMods: InjuryModification[] = [];
+      for (const m of responseText.matchAll(/<injury_modification>([\s\S]*?)<\/injury_modification>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') injuryMods.push(parsed as InjuryModification);
+        } catch { /* invalid */ }
+      }
+
+      const dayTagReqs: DayTagRequest[] = [];
+      for (const m of responseText.matchAll(/<day_tag_json>([\s\S]*?)<\/day_tag_json>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') dayTagReqs.push(parsed as DayTagRequest);
+        } catch { /* invalid */ }
+      }
+
+      let targetsReq: NutritionTargetsRequest | null = null;
+      const ntM = responseText.match(/<nutrition_targets_json>([\s\S]*?)<\/nutrition_targets_json>/);
+      if (ntM) {
+        try { targetsReq = JSON.parse(ntM[1].trim()) as NutritionTargetsRequest; } catch { /* invalid */ }
+      }
+
+      // Tier-2 channel parsers (Apr 2026).
+      const goalReqs: GoalRequest[] = [];
+      for (const m of responseText.matchAll(/<goal_json>([\s\S]*?)<\/goal_json>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') goalReqs.push(parsed as GoalRequest);
+        } catch { /* invalid */ }
+      }
+      const dietaryReqs: DietaryRequest[] = [];
+      for (const m of responseText.matchAll(/<dietary_json>([\s\S]*?)<\/dietary_json>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') dietaryReqs.push(parsed as DietaryRequest);
+        } catch { /* invalid */ }
+      }
+      const macrocycleReqs: MacrocycleRequest[] = [];
+      for (const m of responseText.matchAll(/<macrocycle_json>([\s\S]*?)<\/macrocycle_json>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') macrocycleReqs.push(parsed as MacrocycleRequest);
+        } catch { /* invalid */ }
+      }
+      const prMods: PRModificationRequest[] = [];
+      for (const m of responseText.matchAll(/<pr_modification>([\s\S]*?)<\/pr_modification>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') prMods.push(parsed as PRModificationRequest);
+        } catch { /* invalid */ }
+      }
+      const prDeletes: PRDeleteRequest[] = [];
+      for (const m of responseText.matchAll(/<pr_delete>([\s\S]*?)<\/pr_delete>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') prDeletes.push(parsed as PRDeleteRequest);
+        } catch { /* invalid */ }
+      }
+
+      // Tier-3 channel parsers (Apr 2026).
+      let wearableReq: WearableControlRequest | null = null;
+      const wcM = responseText.match(/<wearable_control>([\s\S]*?)<\/wearable_control>/);
+      if (wcM) {
+        try { wearableReq = JSON.parse(wcM[1].trim()) as WearableControlRequest; } catch { /* invalid */ }
+      }
+      let notificationPatch: { patch?: Record<string, unknown> } | null = null;
+      const npM = responseText.match(/<notification_json>([\s\S]*?)<\/notification_json>/);
+      if (npM) {
+        try { notificationPatch = JSON.parse(npM[1].trim()); } catch { /* invalid */ }
+      }
+      let trainerNoteReq: TrainerNoteRequest | null = null;
+      const tnM = responseText.match(/<trainer_note_json>([\s\S]*?)<\/trainer_note_json>/);
+      if (tnM) {
+        try { trainerNoteReq = JSON.parse(tnM[1].trim()) as TrainerNoteRequest; } catch { /* invalid */ }
+      }
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -2148,8 +3562,22 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
         .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
         .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+        .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
         .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
         .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
+        .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+        .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+        .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+        .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+        .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+        .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+        .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+        .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+        .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+        .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+        .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+        .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+        .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
         .trim();
 
       // Read-first-then-write dedup. Looks at the operator's CURRENT
@@ -2164,6 +3592,45 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const finalMealData = dedupResult.mealData;
       const finalPrData = dedupResult.prData;
 
+      // Apply <meal_delete> blocks server-side. We mutate the canonical
+      // operator.nutrition.meals[date] in Postgres so the next /me or
+      // /api/operators read returns the cleaned state. Client also
+      // applies the same deletes from the response payload to keep
+      // its in-memory operator in sync without round-tripping.
+      const appliedMealDeletes = await applyMealDeletes(
+        auth.operatorId,
+        mealDeletes,
+        clientDate,
+      );
+
+      // Tier-1/2/3 appliers — fired in parallel since each touches a disjoint
+      // JSON column / table and there's no ordering dependency between them.
+      const [
+        hydrationApplied,
+        readinessApplied,
+        injuryModsApplied,
+        dayTagsApplied,
+        nutritionTargetsApplied,
+        goalsApplied,
+        dietaryApplied,
+        macrocycleApplied,
+        prChangesApplied,
+        wearableApplied,
+        trainerNoteApplied,
+      ] = await Promise.all([
+        applyHydration(auth.operatorId, hydrationReq, clientDate),
+        applyReadinessEntry(auth.operatorId, readinessReq, clientDate),
+        applyInjuryModifications(auth.operatorId, injuryMods),
+        applyDayTags(auth.operatorId, dayTagReqs, clientDate),
+        applyNutritionTargets(auth.operatorId, targetsReq),
+        applyGoalChanges(auth.operatorId, goalReqs),
+        applyDietaryChanges(auth.operatorId, dietaryReqs),
+        applyMacrocycleChanges(auth.operatorId, macrocycleReqs, clientDate),
+        applyPRChanges(auth.operatorId, prMods, prDeletes),
+        applyWearableControl(auth.operatorId, wearableReq),
+        applyTrainerNoteWrite(auth.operatorId, trainerNoteReq, clientDate),
+      ]);
+
       return NextResponse.json({
         response: dedupResult.dedupNote ? `${cleanResponse}\n\n[${dedupResult.dedupNote}]` : cleanResponse,
         workoutData,
@@ -2174,6 +3641,20 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         profileData,
         mealData: finalMealData,
         prData: finalPrData,
+        mealDeletes: appliedMealDeletes,
+        wearable: wearableApplied,
+        notification: notificationPatch?.patch || null,
+        trainerNote: trainerNoteApplied,
+        hydration: hydrationApplied,
+        readiness: readinessApplied,
+        injuryModifications: injuryModsApplied,
+        dayTags: dayTagsApplied,
+        nutritionTargets: nutritionTargetsApplied,
+        goals: goalsApplied,
+        dietary: dietaryApplied,
+        macrocycles: macrocycleApplied,
+        prModifications: prChangesApplied.modifications,
+        prDeletes: prChangesApplied.deletes,
         dedupNote: dedupResult.dedupNote,
         voiceControl,
         // Junior safety events (empty array for adults / flag-disabled juniors).
@@ -2291,6 +3772,108 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           }
           const workoutDelete = workoutDeletes[0] || null;
 
+          // <meal_delete> — mirror of the non-streaming parser. See the
+          // companion block above for rationale.
+          const mealDeletes: Array<{ id?: string; name?: string; calories?: number; date?: string }> = [];
+          for (const m of fullText.matchAll(/<meal_delete>([\s\S]*?)<\/meal_delete>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') {
+                mealDeletes.push({
+                  id: typeof parsed.id === 'string' ? parsed.id : undefined,
+                  name: typeof parsed.name === 'string' ? parsed.name : undefined,
+                  calories: Number.isFinite(parsed.calories) ? Number(parsed.calories) : undefined,
+                  date: typeof parsed.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : undefined,
+                });
+              }
+            } catch { /* ignore malformed block */ }
+          }
+
+          // Tier-1 channel parsers — mirror of the non-streaming path.
+          let hydrationReq: HydrationRequest | null = null;
+          const hydM = fullText.match(/<hydration_json>([\s\S]*?)<\/hydration_json>/);
+          if (hydM) {
+            try { hydrationReq = JSON.parse(hydM[1].trim()) as HydrationRequest; } catch { /* invalid */ }
+          }
+          let readinessReq: ReadinessRequest | null = null;
+          const rdM = fullText.match(/<readiness_json>([\s\S]*?)<\/readiness_json>/);
+          if (rdM) {
+            try { readinessReq = JSON.parse(rdM[1].trim()) as ReadinessRequest; } catch { /* invalid */ }
+          }
+          const injuryMods: InjuryModification[] = [];
+          for (const m of fullText.matchAll(/<injury_modification>([\s\S]*?)<\/injury_modification>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') injuryMods.push(parsed as InjuryModification);
+            } catch { /* invalid */ }
+          }
+          const dayTagReqs: DayTagRequest[] = [];
+          for (const m of fullText.matchAll(/<day_tag_json>([\s\S]*?)<\/day_tag_json>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') dayTagReqs.push(parsed as DayTagRequest);
+            } catch { /* invalid */ }
+          }
+          let targetsReq: NutritionTargetsRequest | null = null;
+          const ntM = fullText.match(/<nutrition_targets_json>([\s\S]*?)<\/nutrition_targets_json>/);
+          if (ntM) {
+            try { targetsReq = JSON.parse(ntM[1].trim()) as NutritionTargetsRequest; } catch { /* invalid */ }
+          }
+
+          // Tier-2 channel parsers — mirror of the non-streaming path.
+          const goalReqs: GoalRequest[] = [];
+          for (const m of fullText.matchAll(/<goal_json>([\s\S]*?)<\/goal_json>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') goalReqs.push(parsed as GoalRequest);
+            } catch { /* invalid */ }
+          }
+          const dietaryReqs: DietaryRequest[] = [];
+          for (const m of fullText.matchAll(/<dietary_json>([\s\S]*?)<\/dietary_json>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') dietaryReqs.push(parsed as DietaryRequest);
+            } catch { /* invalid */ }
+          }
+          const macrocycleReqs: MacrocycleRequest[] = [];
+          for (const m of fullText.matchAll(/<macrocycle_json>([\s\S]*?)<\/macrocycle_json>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') macrocycleReqs.push(parsed as MacrocycleRequest);
+            } catch { /* invalid */ }
+          }
+          const prMods: PRModificationRequest[] = [];
+          for (const m of fullText.matchAll(/<pr_modification>([\s\S]*?)<\/pr_modification>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') prMods.push(parsed as PRModificationRequest);
+            } catch { /* invalid */ }
+          }
+          const prDeletes: PRDeleteRequest[] = [];
+          for (const m of fullText.matchAll(/<pr_delete>([\s\S]*?)<\/pr_delete>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') prDeletes.push(parsed as PRDeleteRequest);
+            } catch { /* invalid */ }
+          }
+
+          // Tier-3 channel parsers — mirror of the non-streaming path.
+          let wearableReq: WearableControlRequest | null = null;
+          const wcM = fullText.match(/<wearable_control>([\s\S]*?)<\/wearable_control>/);
+          if (wcM) {
+            try { wearableReq = JSON.parse(wcM[1].trim()) as WearableControlRequest; } catch { /* invalid */ }
+          }
+          let notificationPatch: { patch?: Record<string, unknown> } | null = null;
+          const npM = fullText.match(/<notification_json>([\s\S]*?)<\/notification_json>/);
+          if (npM) {
+            try { notificationPatch = JSON.parse(npM[1].trim()); } catch { /* invalid */ }
+          }
+          let trainerNoteReq: TrainerNoteRequest | null = null;
+          const tnM = fullText.match(/<trainer_note_json>([\s\S]*?)<\/trainer_note_json>/);
+          if (tnM) {
+            try { trainerNoteReq = JSON.parse(tnM[1].trim()) as TrainerNoteRequest; } catch { /* invalid */ }
+          }
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
@@ -2299,8 +3882,22 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
             .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
             .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+            .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
             .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
             .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
+            .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+            .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+            .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+            .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+            .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+            .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+            .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+            .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+            .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+            .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+            .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+            .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+            .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
             .trim();
 
           // Read-first-then-write dedup. Mirrors the non-streaming path —
@@ -2321,6 +3918,41 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             ? `${cleanText}\n\n[${dedupResult.dedupNote}]`
             : cleanText;
 
+          // Apply <meal_delete> blocks server-side. Mirrors non-streaming
+          // path — see applyMealDeletes for match-precedence details.
+          const appliedMealDeletes = await applyMealDeletes(
+            auth.operatorId,
+            mealDeletes,
+            clientDate,
+          );
+
+          // Tier-1/2/3 appliers in parallel. See non-streaming path for rationale.
+          const [
+            hydrationApplied,
+            readinessApplied,
+            injuryModsApplied,
+            dayTagsApplied,
+            nutritionTargetsApplied,
+            goalsApplied,
+            dietaryApplied,
+            macrocycleApplied,
+            prChangesApplied,
+            wearableApplied,
+            trainerNoteApplied,
+          ] = await Promise.all([
+            applyHydration(auth.operatorId, hydrationReq, clientDate),
+            applyReadinessEntry(auth.operatorId, readinessReq, clientDate),
+            applyInjuryModifications(auth.operatorId, injuryMods),
+            applyDayTags(auth.operatorId, dayTagReqs, clientDate),
+            applyNutritionTargets(auth.operatorId, targetsReq),
+            applyGoalChanges(auth.operatorId, goalReqs),
+            applyDietaryChanges(auth.operatorId, dietaryReqs),
+            applyMacrocycleChanges(auth.operatorId, macrocycleReqs, clientDate),
+            applyPRChanges(auth.operatorId, prMods, prDeletes),
+            applyWearableControl(auth.operatorId, wearableReq),
+            applyTrainerNoteWrite(auth.operatorId, trainerNoteReq, clientDate),
+          ]);
+
           controller.enqueue(
             encoder.encode(
               `event: final\ndata: ${JSON.stringify({
@@ -2333,6 +3965,20 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 profileData,
                 mealData: finalMealData,
                 prData: finalPrData,
+                mealDeletes: appliedMealDeletes,
+                wearable: wearableApplied,
+                notification: notificationPatch?.patch || null,
+                trainerNote: trainerNoteApplied,
+                hydration: hydrationApplied,
+                readiness: readinessApplied,
+                injuryModifications: injuryModsApplied,
+                dayTags: dayTagsApplied,
+                nutritionTargets: nutritionTargetsApplied,
+                goals: goalsApplied,
+                dietary: dietaryApplied,
+                macrocycles: macrocycleApplied,
+                prModifications: prChangesApplied.modifications,
+                prDeletes: prChangesApplied.deletes,
                 dedupNote: dedupResult.dedupNote,
                 voiceControl,
                 // Junior safety events captured pre-LLM (see non-streaming

@@ -17,6 +17,7 @@ import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getAuthToken } from '@/lib/authClient';
+import { loadNotificationPrefs, saveNotificationPrefs, type NotificationPreferences } from '@/lib/notifications';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -1205,7 +1206,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string } } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>; hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null; readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null; injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>; dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>; nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null; goals?: Array<{ action?: string; value?: string; match?: string }>; dietary?: Array<{ field?: string; action?: string; values?: string[] }>; macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>; prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>; prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>; wearable?: { provider: string; affected: number } | null; notification?: Record<string, unknown> | null; trainerNote?: { targetOperatorId: string; targetCallsign?: string; op: 'set' | 'append' } | null } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1372,6 +1373,20 @@ ${mealSuggestion}`;
         profileData: data.profileData,
         mealData: data.mealData,
         prData: data.prData,
+        mealDeletes: data.mealDeletes,
+        hydration: data.hydration || null,
+        readiness: data.readiness || null,
+        injuryModifications: Array.isArray(data.injuryModifications) ? data.injuryModifications : [],
+        dayTags: Array.isArray(data.dayTags) ? data.dayTags : [],
+        nutritionTargets: data.nutritionTargets || null,
+        goals: Array.isArray(data.goals) ? data.goals : [],
+        dietary: Array.isArray(data.dietary) ? data.dietary : [],
+        macrocycles: Array.isArray(data.macrocycles) ? data.macrocycles : [],
+        prModifications: Array.isArray(data.prModifications) ? data.prModifications : [],
+        prDeletes: Array.isArray(data.prDeletes) ? data.prDeletes : [],
+        wearable: data.wearable || null,
+        notification: data.notification || null,
+        trainerNote: data.trainerNote || null,
       };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
@@ -1412,6 +1427,30 @@ ${mealSuggestion}`;
     /** Apr 2026: Gunny <pr_json> fallback channel — see /api/gunny PR LOGGING PROTOCOL.
      *  Primary path is the auto-detect in Planner workout-mode debrief. */
     prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string };
+    /**
+     * <meal_delete> — descriptors of meals that the server actually removed
+     * from operator.nutrition.meals[date]. Mirror of <workout_delete>.
+     * Apr 2026: added because Gunny was acknowledging duplicate-meal cleanup
+     * in plain text but had no channel to actually delete.
+     */
+    mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>;
+    /** Tier-1 chat-driven channels (Apr 2026). Each is the server-applied
+     *  diff for a single channel — null/empty when the channel didn't fire. */
+    hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null;
+    readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null;
+    injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>;
+    dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>;
+    nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null;
+    /** Tier-2 chat-driven channels (Apr 2026). */
+    goals?: Array<{ action?: string; value?: string; match?: string }>;
+    dietary?: Array<{ field?: string; action?: string; values?: string[] }>;
+    macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>;
+    prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>;
+    prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>;
+    /** Tier-3 chat-driven channels (Apr 2026). */
+    wearable?: { provider: string; affected: number } | null;
+    notification?: Record<string, unknown> | null;
+    trainerNote?: { targetOperatorId: string; targetCallsign?: string; op: 'set' | 'append' } | null;
     voiceControl?: { action?: string };
   } | null> => {
     try {
@@ -1424,10 +1463,25 @@ ${mealSuggestion}`;
         // double-logging the same meal — see beta hotfix bundle (Apr 2026).
         text: (m.text || '')
           .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+          .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
           .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
           .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
           .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+          .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
           .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
+          .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+          .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+          .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+          .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+          .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+          .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+          .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+          .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+          .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+          .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+          .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+          .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+          .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
           .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, ''),
         ...(m.image ? { image: m.image } : {}),
       }));
@@ -1488,6 +1542,20 @@ ${mealSuggestion}`;
           profileData: data.profileData,
           mealData: data.mealData,
           prData: data.prData,
+          mealDeletes: Array.isArray(data.mealDeletes) ? data.mealDeletes : [],
+          hydration: data.hydration || null,
+          readiness: data.readiness || null,
+          injuryModifications: Array.isArray(data.injuryModifications) ? data.injuryModifications : [],
+          dayTags: Array.isArray(data.dayTags) ? data.dayTags : [],
+          nutritionTargets: data.nutritionTargets || null,
+          goals: Array.isArray(data.goals) ? data.goals : [],
+          dietary: Array.isArray(data.dietary) ? data.dietary : [],
+          macrocycles: Array.isArray(data.macrocycles) ? data.macrocycles : [],
+          prModifications: Array.isArray(data.prModifications) ? data.prModifications : [],
+          prDeletes: Array.isArray(data.prDeletes) ? data.prDeletes : [],
+          wearable: data.wearable || null,
+          notification: data.notification || null,
+          trainerNote: data.trainerNote || null,
           voiceControl: data.voiceControl,
         };
       }
@@ -1530,12 +1598,42 @@ ${mealSuggestion}`;
                 .replace(/<workout_json>[\s\S]*$/, '')
                 .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
                 .replace(/<workout_modification>[\s\S]*$/, '')
+                .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
+                .replace(/<workout_delete>[\s\S]*$/, '')
                 .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
                 .replace(/<meal_json>[\s\S]*$/, '')
+                .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
+                .replace(/<meal_delete>[\s\S]*$/, '')
                 .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
                 .replace(/<pr_json>[\s\S]*$/, '')
+                .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+                .replace(/<hydration_json>[\s\S]*$/, '')
+                .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+                .replace(/<readiness_json>[\s\S]*$/, '')
+                .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+                .replace(/<injury_modification>[\s\S]*$/, '')
+                .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+                .replace(/<day_tag_json>[\s\S]*$/, '')
+                .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+                .replace(/<nutrition_targets_json>[\s\S]*$/, '')
+                .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+                .replace(/<goal_json>[\s\S]*$/, '')
+                .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+                .replace(/<dietary_json>[\s\S]*$/, '')
+                .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+                .replace(/<macrocycle_json>[\s\S]*$/, '')
+                .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+                .replace(/<pr_modification>[\s\S]*$/, '')
+                .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+                .replace(/<pr_delete>[\s\S]*$/, '')
+                .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+                .replace(/<wearable_control>[\s\S]*$/, '')
+                .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+                .replace(/<notification_json>[\s\S]*$/, '')
+                .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+                .replace(/<trainer_note_json>[\s\S]*$/, '')
                 .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
                 .replace(/<voice_control>[\s\S]*$/, '')
                 // Strip trailing half-streamed markdown table row (pipe-led line missing its closing pipe)
@@ -1569,6 +1667,20 @@ ${mealSuggestion}`;
           profileData: finalPayload.profileData,
           mealData: finalPayload.mealData,
           prData: finalPayload.prData,
+          mealDeletes: Array.isArray(finalPayload.mealDeletes) ? finalPayload.mealDeletes : [],
+          hydration: finalPayload.hydration || null,
+          readiness: finalPayload.readiness || null,
+          injuryModifications: Array.isArray(finalPayload.injuryModifications) ? finalPayload.injuryModifications : [],
+          dayTags: Array.isArray(finalPayload.dayTags) ? finalPayload.dayTags : [],
+          nutritionTargets: finalPayload.nutritionTargets || null,
+          goals: Array.isArray(finalPayload.goals) ? finalPayload.goals : [],
+          dietary: Array.isArray(finalPayload.dietary) ? finalPayload.dietary : [],
+          macrocycles: Array.isArray(finalPayload.macrocycles) ? finalPayload.macrocycles : [],
+          prModifications: Array.isArray(finalPayload.prModifications) ? finalPayload.prModifications : [],
+          prDeletes: Array.isArray(finalPayload.prDeletes) ? finalPayload.prDeletes : [],
+          wearable: finalPayload.wearable || null,
+          notification: finalPayload.notification || null,
+          trainerNote: finalPayload.trainerNote || null,
           voiceControl: finalPayload.voiceControl,
         };
       }
@@ -1796,6 +1908,301 @@ ${mealSuggestion}`;
         if (touched) onUpdateOperator(workingOp);
       }
 
+      // MEAL DELETE — server already mutated nutrition.meals[date] when it
+      // saw <meal_delete>. We mirror that mutation in the local operator
+      // snapshot so the Nutrition tab reflects the cleanup without waiting
+      // for a /me refetch. Server returns ONLY the entries it actually
+      // matched, so we apply the same precedence here against the latest
+      // in-memory bucket. See applyMealDeletes in /api/gunny/route.ts.
+      const mealDeletesList = (apiResult?.mealDeletes || []) as Array<{ id?: string; name?: string; calories?: number; date?: string }>;
+      let mealsDeletedCount = 0;
+      if (mealDeletesList.length > 0 && onUpdateOperator) {
+        const today = getLocalDateStr();
+        let workingOp = operator;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (workingOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const meals = { ...(nutri.meals || {}) } as Record<string, Meal[]>;
+        let touched = false;
+        for (const del of mealDeletesList) {
+          const targetDate = del.date && isValidDateStr(del.date) ? del.date : today;
+          const bucket = meals[targetDate];
+          if (!Array.isArray(bucket) || bucket.length === 0) continue;
+          let removeIdx = -1;
+          if (del.id) removeIdx = bucket.findIndex((m: Meal) => m.id === del.id);
+          if (removeIdx < 0 && del.name && Number.isFinite(del.calories)) {
+            const wantName = del.name.toLowerCase().trim();
+            const wantCal = del.calories as number;
+            removeIdx = bucket.findIndex((m: Meal) =>
+              (m.name || '').toLowerCase().trim() === wantName &&
+              Math.abs((m.calories || 0) - wantCal) <= 5,
+            );
+          }
+          if (removeIdx < 0 && del.name) {
+            const wantName = del.name.toLowerCase().trim();
+            for (let i = bucket.length - 1; i >= 0; i--) {
+              if ((bucket[i].name || '').toLowerCase().trim() === wantName) {
+                removeIdx = i;
+                break;
+              }
+            }
+          }
+          if (removeIdx < 0) continue;
+          const next = [...bucket];
+          next.splice(removeIdx, 1);
+          meals[targetDate] = next;
+          touched = true;
+          mealsDeletedCount++;
+        }
+        if (touched) {
+          workingOp = { ...workingOp, nutrition: { ...nutri, meals } };
+          onUpdateOperator(workingOp);
+        }
+      }
+
+      // ─── Tier-1 chat-driven channels (Apr 2026) ─────────────────────────
+      // Server already persisted each diff. We mirror into the local
+      // operator snapshot so UI tabs reflect the change without a /me
+      // refetch — same pattern as MEAL DELETE above.
+
+      let hydrationLogged = false;
+      const hydration = apiResult?.hydration;
+      if (hydration && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const hydMap = { ...(nutri.hydration || {}) } as Record<string, number>;
+        hydMap[hydration.date] = hydration.total;
+        onUpdateOperator({ ...operator, nutrition: { ...nutri, hydration: hydMap } });
+        hydrationLogged = true;
+      }
+
+      let readinessLogged = false;
+      const readiness = apiResult?.readiness;
+      if (readiness && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dailyReadiness = { ...((operator as any).dailyReadiness || {}) } as Record<string, unknown>;
+        dailyReadiness[readiness.date] = readiness;
+        const today = getLocalDateStr();
+        const profile = { ...operator.profile };
+        if (readiness.date === today) {
+          if (typeof readiness.readiness === 'number') profile.readiness = readiness.readiness;
+          if (typeof readiness.sleep === 'number') profile.sleep = readiness.sleep;
+          if (typeof readiness.stress === 'number') profile.stress = readiness.stress;
+        }
+        onUpdateOperator({ ...operator, profile, dailyReadiness } as typeof operator);
+        readinessLogged = true;
+      }
+
+      let injuriesChangedCount = 0;
+      const injuryMods = apiResult?.injuryModifications || [];
+      if (injuryMods.length > 0 && onUpdateOperator) {
+        let injuries = [...(operator.injuries || [])];
+        for (const mod of injuryMods) {
+          const action = mod.action || 'update';
+          if (action === 'add') {
+            const name = mod.patch?.name?.trim();
+            if (!name) continue;
+            const status = (['active', 'recovering', 'cleared'].includes(mod.patch?.status || '')
+              ? mod.patch?.status
+              : 'active') as 'active' | 'recovering' | 'cleared';
+            injuries.push({
+              id: `inj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              name,
+              status,
+              notes: mod.patch?.notes || '',
+              restrictions: Array.isArray(mod.patch?.restrictions) ? mod.patch!.restrictions! : [],
+            });
+            injuriesChangedCount++;
+            continue;
+          }
+          const matchId = mod.match?.id;
+          const matchName = (mod.match?.name || '').toLowerCase().trim();
+          const idx = injuries.findIndex((inj) => {
+            if (matchId && inj.id === matchId) return true;
+            if (matchName && (inj.name || '').toLowerCase().trim() === matchName) return true;
+            return false;
+          });
+          if (idx < 0) continue;
+          if (action === 'remove') { injuries.splice(idx, 1); injuriesChangedCount++; continue; }
+          if (action === 'clear') {
+            injuries[idx] = { ...injuries[idx], status: 'cleared' };
+            injuriesChangedCount++;
+            continue;
+          }
+          // update
+          const patch: Record<string, unknown> = {};
+          if (mod.patch?.name) patch.name = mod.patch.name;
+          if (mod.patch?.status && ['active', 'recovering', 'cleared'].includes(mod.patch.status)) patch.status = mod.patch.status;
+          if (typeof mod.patch?.notes === 'string') patch.notes = mod.patch.notes;
+          if (Array.isArray(mod.patch?.restrictions)) patch.restrictions = mod.patch!.restrictions;
+          if (Object.keys(patch).length === 0) continue;
+          injuries[idx] = { ...injuries[idx], ...patch };
+          injuriesChangedCount++;
+        }
+        if (injuriesChangedCount > 0) onUpdateOperator({ ...operator, injuries });
+      }
+
+      let dayTagsChangedCount = 0;
+      const dayTagDiffs = apiResult?.dayTags || [];
+      if (dayTagDiffs.length > 0 && onUpdateOperator) {
+        const dayTags = { ...(operator.dayTags || {}) };
+        for (const diff of dayTagDiffs) {
+          if (!diff?.date || !isValidDateStr(diff.date)) continue;
+          if (diff.op === 'clear') { delete dayTags[diff.date]; dayTagsChangedCount++; continue; }
+          const color = (['green', 'amber', 'red', 'cyan'].includes(diff.color || '')
+            ? diff.color
+            : 'amber') as 'green' | 'amber' | 'red' | 'cyan';
+          dayTags[diff.date] = { color, note: diff.note || '' };
+          dayTagsChangedCount++;
+        }
+        if (dayTagsChangedCount > 0) onUpdateOperator({ ...operator, dayTags });
+      }
+
+      let targetsChanged = false;
+      const newTargets = apiResult?.nutritionTargets;
+      if (newTargets && onUpdateOperator) {
+        const existing = operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+        const targets = { ...existing.targets, ...newTargets };
+        onUpdateOperator({ ...operator, nutrition: { ...existing, targets } });
+        targetsChanged = true;
+      }
+
+      // ─── Tier-2 mirrors (Apr 2026) ──────────────────────────────────────
+      let goalsChangedCount = 0;
+      const goalDiffs = apiResult?.goals || [];
+      if (goalDiffs.length > 0 && onUpdateOperator) {
+        let goals = [...(operator.profile?.goals || [])];
+        for (const d of goalDiffs) {
+          if (d.action === 'add' && d.value) {
+            if (!goals.some((g) => g.toLowerCase() === d.value!.toLowerCase())) {
+              goals.push(d.value);
+              goalsChangedCount++;
+            }
+          } else if (d.action === 'remove' && d.match) {
+            const m = d.match.toLowerCase();
+            const before = goals.length;
+            goals = goals.filter((g) => !g.toLowerCase().includes(m));
+            if (goals.length !== before) goalsChangedCount++;
+          } else if (d.action === 'replace' && d.match && d.value) {
+            const m = d.match.toLowerCase();
+            const idx = goals.findIndex((g) => g.toLowerCase().includes(m));
+            if (idx >= 0) { goals[idx] = d.value; goalsChangedCount++; }
+          }
+        }
+        if (goalsChangedCount > 0) onUpdateOperator({ ...operator, profile: { ...operator.profile, goals } });
+      }
+
+      let dietaryChangedCount = 0;
+      const dietaryDiffs = apiResult?.dietary || [];
+      if (dietaryDiffs.length > 0 && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const intake = ({ ...(operator.intake || {}) }) as any;
+        let restrictions = Array.isArray(intake.dietaryRestrictions) ? [...intake.dietaryRestrictions] : [];
+        let supplements = Array.isArray(intake.supplements) ? [...intake.supplements] : [];
+        for (const d of dietaryDiffs) {
+          const target = d.field === 'supplements' ? supplements : restrictions;
+          const values = (d.values || []).map((v) => String(v).trim()).filter(Boolean);
+          if (d.action === 'replace_all') {
+            const seen = new Set<string>();
+            const dedup: string[] = [];
+            for (const v of values) { const k = v.toLowerCase(); if (!seen.has(k)) { seen.add(k); dedup.push(v); } }
+            if (d.field === 'supplements') supplements = dedup; else restrictions = dedup;
+            dietaryChangedCount++;
+          } else if (d.action === 'add') {
+            const seen = new Set(target.map((v) => v.toLowerCase()));
+            for (const v of values) {
+              if (!seen.has(v.toLowerCase())) { target.push(v); seen.add(v.toLowerCase()); }
+            }
+            dietaryChangedCount++;
+          } else if (d.action === 'remove') {
+            const drop = new Set(values.map((v) => v.toLowerCase()));
+            const filtered = target.filter((v) => !drop.has(v.toLowerCase()));
+            if (filtered.length !== target.length) {
+              if (d.field === 'supplements') supplements = filtered; else restrictions = filtered;
+              dietaryChangedCount++;
+            }
+          }
+        }
+        if (dietaryChangedCount > 0) {
+          onUpdateOperator({ ...operator, intake: { ...intake, dietaryRestrictions: restrictions, supplements } });
+        }
+      }
+
+      // For macrocycles + PR mods/deletes, server-side mutation is the
+      // source of truth — we don't have the full Postgres-resolved
+      // operator on the client at this point (the server returned only
+      // applied diff descriptors). The next /me refetch (or a manual
+      // refresh on the relevant tab) reflects the change. We only stamp
+      // a confirmation suffix here so the operator gets visible feedback.
+      const macrocyclesChanged = (apiResult?.macrocycles || []).length;
+      const prMods = apiResult?.prModifications || [];
+      const prDels = apiResult?.prDeletes || [];
+
+      // PR mods + deletes — apply locally for snappier feedback. Server
+      // already wrote canonical state; we just sync our in-memory copy.
+      let prsChangedCount = 0;
+      if ((prMods.length > 0 || prDels.length > 0) && onUpdateOperator) {
+        let prs = [...(operator.prs || [])];
+        const findIdx = (match: { id?: string; exercise?: string; date?: string } | undefined) => {
+          if (!match) return -1;
+          if (match.id) {
+            const i = prs.findIndex((p) => p.id === match.id);
+            if (i >= 0) return i;
+          }
+          const ex = (match.exercise || '').toLowerCase().trim();
+          const date = (match.date || '').trim();
+          if (!ex || !date) return -1;
+          return prs.findIndex((p) => (p.exercise || '').toLowerCase().trim() === ex && p.date === date);
+        };
+        for (const m of prMods) {
+          const idx = findIdx(m.match);
+          if (idx < 0) continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          prs[idx] = { ...prs[idx], ...(m.patch as any) };
+          prsChangedCount++;
+        }
+        for (const d of prDels) {
+          const idx = findIdx(d.match);
+          if (idx < 0) continue;
+          prs.splice(idx, 1);
+          prsChangedCount++;
+        }
+        if (prsChangedCount > 0) onUpdateOperator({ ...operator, prs });
+      }
+
+      // ─── Tier-3 mirrors (Apr 2026) ──────────────────────────────────────
+      let wearableDisconnected: { provider: string; affected: number } | null = apiResult?.wearable || null;
+      // Server already disconnected the wearable. The wearable list is
+      // fetched separately via /api/wearables, so no operator-level state
+      // to mirror here — just keep the diff for the suffix stamp.
+
+      let notificationApplied: Record<string, unknown> | null = null;
+      const notifPatch = apiResult?.notification;
+      if (notifPatch && typeof notifPatch === 'object') {
+        // Notification prefs are localStorage-only. Merge the patch into
+        // the active prefs and persist. Other components reading these
+        // re-load from localStorage on tab focus, so no event bus needed.
+        try {
+          const current = loadNotificationPrefs(operator.id);
+          const merged: NotificationPreferences = { ...current, ...(notifPatch as Partial<NotificationPreferences>) };
+          saveNotificationPrefs(operator.id, merged);
+          notificationApplied = notifPatch;
+        } catch (e) {
+          console.error('Failed to apply notification patch:', e);
+        }
+      }
+
+      let trainerNoteApplied = apiResult?.trainerNote || null;
+      // For self-writes, mirror locally so the next request's context
+      // sees the fresh trainerNotes without a /me round-trip. For
+      // cross-account writes, the change is on the OTHER operator's row
+      // and only visible after that operator's session re-fetches.
+      if (trainerNoteApplied && trainerNoteApplied.targetOperatorId === operator.id && onUpdateOperator) {
+        // We don't know the exact merged string from the diff (server
+        // computed append-with-timestamp), so the safest UI signal is
+        // just to flag that something changed and let the next /me
+        // settle the actual value.
+      }
+
       // SURGICAL MODIFICATION — apply each targeted change Gunny emitted. Gunny
       // can emit multiple <workout_modification> blocks (e.g. prefill_weights
       // for every exercise on today's workout); we iterate and apply them in
@@ -1957,7 +2364,12 @@ ${mealSuggestion}`;
 
       // Final pass — stamp the workout suffix if a workout was generated
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      if (hasWorkout || wasModification || mealLogged || prLogged) {
+      const tier1Touched = hydrationLogged || readinessLogged
+        || injuriesChangedCount > 0 || dayTagsChangedCount > 0 || targetsChanged;
+      const tier2Touched = goalsChangedCount > 0 || dietaryChangedCount > 0
+        || macrocyclesChanged > 0 || prsChangedCount > 0;
+      const tier3Touched = !!wearableDisconnected || !!notificationApplied || !!trainerNoteApplied;
+      if (hasWorkout || wasModification || mealLogged || prLogged || mealsDeletedCount > 0 || tier1Touched || tier2Touched || tier3Touched) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -1967,7 +2379,20 @@ ${mealSuggestion}`;
                     + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
                     + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
                     + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : '')
-                    + (prLogged ? '\n\n[PR LOGGED TO PR BOARD]' : ''),
+                    + (prLogged ? '\n\n[PR LOGGED TO PR BOARD]' : '')
+                    + (mealsDeletedCount > 0 ? `\n\n[${mealsDeletedCount === 1 ? 'MEAL REMOVED' : `${mealsDeletedCount} MEALS REMOVED`}]` : '')
+                    + (hydrationLogged && apiResult?.hydration ? `\n\n[HYDRATION ${apiResult.hydration.op === 'set' ? 'SET' : 'LOGGED'} — ${apiResult.hydration.total}oz TOTAL]` : '')
+                    + (readinessLogged ? '\n\n[READINESS CHECK-IN LOGGED]' : '')
+                    + (injuriesChangedCount > 0 ? `\n\n[${injuriesChangedCount === 1 ? 'INJURY UPDATED' : `${injuriesChangedCount} INJURIES UPDATED`}]` : '')
+                    + (dayTagsChangedCount > 0 ? `\n\n[${dayTagsChangedCount === 1 ? 'DAY TAGGED' : `${dayTagsChangedCount} DAYS TAGGED`}]` : '')
+                    + (targetsChanged ? '\n\n[MACRO TARGETS UPDATED]' : '')
+                    + (goalsChangedCount > 0 ? `\n\n[${goalsChangedCount === 1 ? 'GOAL UPDATED' : `${goalsChangedCount} GOALS UPDATED`}]` : '')
+                    + (dietaryChangedCount > 0 ? '\n\n[DIETARY PROFILE UPDATED]' : '')
+                    + (macrocyclesChanged > 0 ? `\n\n[${macrocyclesChanged === 1 ? 'MACROCYCLE UPDATED' : `${macrocyclesChanged} MACROCYCLES UPDATED`}]` : '')
+                    + (prsChangedCount > 0 ? `\n\n[${prsChangedCount === 1 ? 'PR UPDATED' : `${prsChangedCount} PRS UPDATED`}]` : '')
+                    + (wearableDisconnected ? `\n\n[${wearableDisconnected.provider.toUpperCase()} DISCONNECTED]` : '')
+                    + (notificationApplied ? '\n\n[NOTIFICATION PREFERENCES UPDATED — this device only]' : '')
+                    + (trainerNoteApplied ? `\n\n[TRAINER NOTE ${trainerNoteApplied.op === 'append' ? 'APPENDED' : 'SET'}${trainerNoteApplied.targetCallsign ? ` for ${trainerNoteApplied.targetCallsign}` : ''}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
@@ -2056,6 +2481,264 @@ ${mealSuggestion}`;
         if (touched) onUpdateOperator(workingOp);
       }
 
+      // QA-path meal-delete mirror — see normal-mode handler for rationale.
+      const qaMealDeletes = (apiResult?.mealDeletes || []) as Array<{ id?: string; name?: string; calories?: number; date?: string }>;
+      let qaMealsDeletedCount = 0;
+      if (qaMealDeletes.length > 0 && onUpdateOperator) {
+        const today = getLocalDateStr();
+        let workingOp = operator;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (workingOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const meals = { ...(nutri.meals || {}) } as Record<string, Meal[]>;
+        let touched = false;
+        for (const del of qaMealDeletes) {
+          const targetDate = del.date && isValidDateStr(del.date) ? del.date : today;
+          const bucket = meals[targetDate];
+          if (!Array.isArray(bucket) || bucket.length === 0) continue;
+          let removeIdx = -1;
+          if (del.id) removeIdx = bucket.findIndex((m: Meal) => m.id === del.id);
+          if (removeIdx < 0 && del.name && Number.isFinite(del.calories)) {
+            const wantName = del.name.toLowerCase().trim();
+            const wantCal = del.calories as number;
+            removeIdx = bucket.findIndex((m: Meal) =>
+              (m.name || '').toLowerCase().trim() === wantName &&
+              Math.abs((m.calories || 0) - wantCal) <= 5,
+            );
+          }
+          if (removeIdx < 0 && del.name) {
+            const wantName = del.name.toLowerCase().trim();
+            for (let i = bucket.length - 1; i >= 0; i--) {
+              if ((bucket[i].name || '').toLowerCase().trim() === wantName) {
+                removeIdx = i;
+                break;
+              }
+            }
+          }
+          if (removeIdx < 0) continue;
+          const next = [...bucket];
+          next.splice(removeIdx, 1);
+          meals[targetDate] = next;
+          touched = true;
+          qaMealsDeletedCount++;
+        }
+        if (touched) {
+          workingOp = { ...workingOp, nutrition: { ...nutri, meals } };
+          onUpdateOperator(workingOp);
+        }
+      }
+
+      // QA-path Tier-1 mirrors — same handlers as the normal-mode path.
+      let qaHydrationLogged = false;
+      const qaHydration = apiResult?.hydration;
+      if (qaHydration && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const hydMap = { ...(nutri.hydration || {}) } as Record<string, number>;
+        hydMap[qaHydration.date] = qaHydration.total;
+        onUpdateOperator({ ...operator, nutrition: { ...nutri, hydration: hydMap } });
+        qaHydrationLogged = true;
+      }
+
+      let qaReadinessLogged = false;
+      const qaReadiness = apiResult?.readiness;
+      if (qaReadiness && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dailyReadiness = { ...((operator as any).dailyReadiness || {}) } as Record<string, unknown>;
+        dailyReadiness[qaReadiness.date] = qaReadiness;
+        const today = getLocalDateStr();
+        const profile = { ...operator.profile };
+        if (qaReadiness.date === today) {
+          if (typeof qaReadiness.readiness === 'number') profile.readiness = qaReadiness.readiness;
+          if (typeof qaReadiness.sleep === 'number') profile.sleep = qaReadiness.sleep;
+          if (typeof qaReadiness.stress === 'number') profile.stress = qaReadiness.stress;
+        }
+        onUpdateOperator({ ...operator, profile, dailyReadiness } as typeof operator);
+        qaReadinessLogged = true;
+      }
+
+      let qaInjuriesChangedCount = 0;
+      const qaInjuryMods = apiResult?.injuryModifications || [];
+      if (qaInjuryMods.length > 0 && onUpdateOperator) {
+        let injuries = [...(operator.injuries || [])];
+        for (const mod of qaInjuryMods) {
+          const action = mod.action || 'update';
+          if (action === 'add') {
+            const name = mod.patch?.name?.trim();
+            if (!name) continue;
+            const status = (['active', 'recovering', 'cleared'].includes(mod.patch?.status || '')
+              ? mod.patch?.status
+              : 'active') as 'active' | 'recovering' | 'cleared';
+            injuries.push({
+              id: `inj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              name,
+              status,
+              notes: mod.patch?.notes || '',
+              restrictions: Array.isArray(mod.patch?.restrictions) ? mod.patch!.restrictions! : [],
+            });
+            qaInjuriesChangedCount++;
+            continue;
+          }
+          const matchId = mod.match?.id;
+          const matchName = (mod.match?.name || '').toLowerCase().trim();
+          const idx = injuries.findIndex((inj) => {
+            if (matchId && inj.id === matchId) return true;
+            if (matchName && (inj.name || '').toLowerCase().trim() === matchName) return true;
+            return false;
+          });
+          if (idx < 0) continue;
+          if (action === 'remove') { injuries.splice(idx, 1); qaInjuriesChangedCount++; continue; }
+          if (action === 'clear') {
+            injuries[idx] = { ...injuries[idx], status: 'cleared' };
+            qaInjuriesChangedCount++;
+            continue;
+          }
+          const patch: Record<string, unknown> = {};
+          if (mod.patch?.name) patch.name = mod.patch.name;
+          if (mod.patch?.status && ['active', 'recovering', 'cleared'].includes(mod.patch.status)) patch.status = mod.patch.status;
+          if (typeof mod.patch?.notes === 'string') patch.notes = mod.patch.notes;
+          if (Array.isArray(mod.patch?.restrictions)) patch.restrictions = mod.patch!.restrictions;
+          if (Object.keys(patch).length === 0) continue;
+          injuries[idx] = { ...injuries[idx], ...patch };
+          qaInjuriesChangedCount++;
+        }
+        if (qaInjuriesChangedCount > 0) onUpdateOperator({ ...operator, injuries });
+      }
+
+      let qaDayTagsChangedCount = 0;
+      const qaDayTagDiffs = apiResult?.dayTags || [];
+      if (qaDayTagDiffs.length > 0 && onUpdateOperator) {
+        const dayTags = { ...(operator.dayTags || {}) };
+        for (const diff of qaDayTagDiffs) {
+          if (!diff?.date || !isValidDateStr(diff.date)) continue;
+          if (diff.op === 'clear') { delete dayTags[diff.date]; qaDayTagsChangedCount++; continue; }
+          const color = (['green', 'amber', 'red', 'cyan'].includes(diff.color || '')
+            ? diff.color
+            : 'amber') as 'green' | 'amber' | 'red' | 'cyan';
+          dayTags[diff.date] = { color, note: diff.note || '' };
+          qaDayTagsChangedCount++;
+        }
+        if (qaDayTagsChangedCount > 0) onUpdateOperator({ ...operator, dayTags });
+      }
+
+      let qaTargetsChanged = false;
+      const qaNewTargets = apiResult?.nutritionTargets;
+      if (qaNewTargets && onUpdateOperator) {
+        const existing = operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+        const targets = { ...existing.targets, ...qaNewTargets };
+        onUpdateOperator({ ...operator, nutrition: { ...existing, targets } });
+        qaTargetsChanged = true;
+      }
+
+      // Tier-2 mirrors (QA path).
+      let qaGoalsChangedCount = 0;
+      const qaGoalDiffs = apiResult?.goals || [];
+      if (qaGoalDiffs.length > 0 && onUpdateOperator) {
+        let goals = [...(operator.profile?.goals || [])];
+        for (const d of qaGoalDiffs) {
+          if (d.action === 'add' && d.value) {
+            if (!goals.some((g) => g.toLowerCase() === d.value!.toLowerCase())) {
+              goals.push(d.value);
+              qaGoalsChangedCount++;
+            }
+          } else if (d.action === 'remove' && d.match) {
+            const m = d.match.toLowerCase();
+            const before = goals.length;
+            goals = goals.filter((g) => !g.toLowerCase().includes(m));
+            if (goals.length !== before) qaGoalsChangedCount++;
+          } else if (d.action === 'replace' && d.match && d.value) {
+            const m = d.match.toLowerCase();
+            const idx = goals.findIndex((g) => g.toLowerCase().includes(m));
+            if (idx >= 0) { goals[idx] = d.value; qaGoalsChangedCount++; }
+          }
+        }
+        if (qaGoalsChangedCount > 0) onUpdateOperator({ ...operator, profile: { ...operator.profile, goals } });
+      }
+
+      let qaDietaryChangedCount = 0;
+      const qaDietaryDiffs = apiResult?.dietary || [];
+      if (qaDietaryDiffs.length > 0 && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const intake = ({ ...(operator.intake || {}) }) as any;
+        let restrictions = Array.isArray(intake.dietaryRestrictions) ? [...intake.dietaryRestrictions] : [];
+        let supplements = Array.isArray(intake.supplements) ? [...intake.supplements] : [];
+        for (const d of qaDietaryDiffs) {
+          const target = d.field === 'supplements' ? supplements : restrictions;
+          const values = (d.values || []).map((v) => String(v).trim()).filter(Boolean);
+          if (d.action === 'replace_all') {
+            const seen = new Set<string>();
+            const dedup: string[] = [];
+            for (const v of values) { const k = v.toLowerCase(); if (!seen.has(k)) { seen.add(k); dedup.push(v); } }
+            if (d.field === 'supplements') supplements = dedup; else restrictions = dedup;
+            qaDietaryChangedCount++;
+          } else if (d.action === 'add') {
+            const seen = new Set(target.map((v) => v.toLowerCase()));
+            for (const v of values) {
+              if (!seen.has(v.toLowerCase())) { target.push(v); seen.add(v.toLowerCase()); }
+            }
+            qaDietaryChangedCount++;
+          } else if (d.action === 'remove') {
+            const drop = new Set(values.map((v) => v.toLowerCase()));
+            const filtered = target.filter((v) => !drop.has(v.toLowerCase()));
+            if (filtered.length !== target.length) {
+              if (d.field === 'supplements') supplements = filtered; else restrictions = filtered;
+              qaDietaryChangedCount++;
+            }
+          }
+        }
+        if (qaDietaryChangedCount > 0) {
+          onUpdateOperator({ ...operator, intake: { ...intake, dietaryRestrictions: restrictions, supplements } });
+        }
+      }
+
+      const qaMacrocyclesChanged = (apiResult?.macrocycles || []).length;
+      const qaPrMods = apiResult?.prModifications || [];
+      const qaPrDels = apiResult?.prDeletes || [];
+      let qaPrsChangedCount = 0;
+      if ((qaPrMods.length > 0 || qaPrDels.length > 0) && onUpdateOperator) {
+        let prs = [...(operator.prs || [])];
+        const findIdx = (match: { id?: string; exercise?: string; date?: string } | undefined) => {
+          if (!match) return -1;
+          if (match.id) {
+            const i = prs.findIndex((p) => p.id === match.id);
+            if (i >= 0) return i;
+          }
+          const ex = (match.exercise || '').toLowerCase().trim();
+          const date = (match.date || '').trim();
+          if (!ex || !date) return -1;
+          return prs.findIndex((p) => (p.exercise || '').toLowerCase().trim() === ex && p.date === date);
+        };
+        for (const m of qaPrMods) {
+          const idx = findIdx(m.match);
+          if (idx < 0) continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          prs[idx] = { ...prs[idx], ...(m.patch as any) };
+          qaPrsChangedCount++;
+        }
+        for (const d of qaPrDels) {
+          const idx = findIdx(d.match);
+          if (idx < 0) continue;
+          prs.splice(idx, 1);
+          qaPrsChangedCount++;
+        }
+        if (qaPrsChangedCount > 0) onUpdateOperator({ ...operator, prs });
+      }
+
+      // QA-path Tier-3 mirrors.
+      const qaWearableDisconnected: { provider: string; affected: number } | null = apiResult?.wearable || null;
+      let qaNotificationApplied: Record<string, unknown> | null = null;
+      const qaNotifPatch = apiResult?.notification;
+      if (qaNotifPatch && typeof qaNotifPatch === 'object') {
+        try {
+          const current = loadNotificationPrefs(operator.id);
+          const merged: NotificationPreferences = { ...current, ...(qaNotifPatch as Partial<NotificationPreferences>) };
+          saveNotificationPrefs(operator.id, merged);
+          qaNotificationApplied = qaNotifPatch;
+        } catch (e) {
+          console.error('Failed to apply notification patch:', e);
+        }
+      }
+      const qaTrainerNoteApplied = apiResult?.trainerNote || null;
+
       // Same loop pattern as the normal-mode path above — apply every
       // workout_modification Gunny emitted, prefills via event bus, block
       // mods folded into a single operator update.
@@ -2090,7 +2773,12 @@ ${mealSuggestion}`;
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      if (hasWorkout || wasModification) {
+      const qaTier1Touched = qaHydrationLogged || qaReadinessLogged
+        || qaInjuriesChangedCount > 0 || qaDayTagsChangedCount > 0 || qaTargetsChanged;
+      const qaTier2Touched = qaGoalsChangedCount > 0 || qaDietaryChangedCount > 0
+        || qaMacrocyclesChanged > 0 || qaPrsChangedCount > 0;
+      const qaTier3Touched = !!qaWearableDisconnected || !!qaNotificationApplied || !!qaTrainerNoteApplied;
+      if (hasWorkout || wasModification || qaMealsDeletedCount > 0 || qaTier1Touched || qaTier2Touched || qaTier3Touched) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -2098,7 +2786,20 @@ ${mealSuggestion}`;
                   ...m,
                   text: (apiResult?.response || m.text)
                     + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
-                    + (wasModification ? '\n\n[WORKOUT UPDATED]' : ''),
+                    + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
+                    + (qaMealsDeletedCount > 0 ? `\n\n[${qaMealsDeletedCount === 1 ? 'MEAL REMOVED' : `${qaMealsDeletedCount} MEALS REMOVED`}]` : '')
+                    + (qaHydrationLogged && apiResult?.hydration ? `\n\n[HYDRATION ${apiResult.hydration.op === 'set' ? 'SET' : 'LOGGED'} — ${apiResult.hydration.total}oz TOTAL]` : '')
+                    + (qaReadinessLogged ? '\n\n[READINESS CHECK-IN LOGGED]' : '')
+                    + (qaInjuriesChangedCount > 0 ? `\n\n[${qaInjuriesChangedCount === 1 ? 'INJURY UPDATED' : `${qaInjuriesChangedCount} INJURIES UPDATED`}]` : '')
+                    + (qaDayTagsChangedCount > 0 ? `\n\n[${qaDayTagsChangedCount === 1 ? 'DAY TAGGED' : `${qaDayTagsChangedCount} DAYS TAGGED`}]` : '')
+                    + (qaTargetsChanged ? '\n\n[MACRO TARGETS UPDATED]' : '')
+                    + (qaGoalsChangedCount > 0 ? `\n\n[${qaGoalsChangedCount === 1 ? 'GOAL UPDATED' : `${qaGoalsChangedCount} GOALS UPDATED`}]` : '')
+                    + (qaDietaryChangedCount > 0 ? '\n\n[DIETARY PROFILE UPDATED]' : '')
+                    + (qaMacrocyclesChanged > 0 ? `\n\n[${qaMacrocyclesChanged === 1 ? 'MACROCYCLE UPDATED' : `${qaMacrocyclesChanged} MACROCYCLES UPDATED`}]` : '')
+                    + (qaPrsChangedCount > 0 ? `\n\n[${qaPrsChangedCount === 1 ? 'PR UPDATED' : `${qaPrsChangedCount} PRS UPDATED`}]` : '')
+                    + (qaWearableDisconnected ? `\n\n[${qaWearableDisconnected.provider.toUpperCase()} DISCONNECTED]` : '')
+                    + (qaNotificationApplied ? '\n\n[NOTIFICATION PREFERENCES UPDATED — this device only]' : '')
+                    + (qaTrainerNoteApplied ? `\n\n[TRAINER NOTE ${qaTrainerNoteApplied.op === 'append' ? 'APPENDED' : 'SET'}${qaTrainerNoteApplied.targetCallsign ? ` for ${qaTrainerNoteApplied.targetCallsign}` : ''}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
