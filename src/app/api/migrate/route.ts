@@ -82,6 +82,10 @@ export async function POST(req: NextRequest) {
       { name: 'lastActivationEmailAt', type: 'TIMESTAMP(3)' },
       { name: 'passwordResetRequestedAt', type: 'TIMESTAMP(3)' },
       { name: 'recoveryAttempts', type: 'INTEGER NOT NULL DEFAULT 0' },
+      // Tier-1 chat-driven channels (Apr 2026, PR #93). Daily readiness
+      // check-ins from Gunny's <readiness_json> channel land here. Without
+      // this column the channel writes silently fail at the DB layer.
+      { name: 'dailyReadiness', type: "JSONB NOT NULL DEFAULT '{}'" },
     ];
     for (const col of newColumns) {
       await pool.query(`
