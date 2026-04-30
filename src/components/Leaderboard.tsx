@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Operator, TEAMS, LEADERBOARD_POINTS } from '@/lib/types';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
+import { useLanguage } from '@/lib/i18n';
 
 interface LeaderboardProps {
   operators: Operator[];
@@ -10,6 +11,7 @@ interface LeaderboardProps {
 }
 
 const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => {
+  const { t } = useLanguage();
   const [teamFilter, setTeamFilter] = useState<string>('all');
 
   // Calculate points for each operator
@@ -65,7 +67,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
         callsign: op.callsign,
         name: op.name,
         teamId: team?.id || '',
-        teamName: team?.name || 'UNASSIGNED',
+        teamName: team?.name || t('leaderboard.unassigned'),
         points,
         streak,
         workoutsCompleted,
@@ -76,7 +78,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
         fitnessLevel: op.fitnessLevel,
       };
     }).sort((a, b) => b.points - a.points);
-  }, [operators]);
+  }, [operators, t]);
 
   const filteredData = teamFilter === 'all'
     ? leaderboardData
@@ -112,14 +114,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
   return (
     <div style={{ padding: '0 16px 80px', maxWidth: 600, margin: '0 auto' }}>
       <h2 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00ff41', letterSpacing: 2, marginBottom: 16 }}>
-        LEADERBOARD
+        {t('leaderboard.title')}
       </h2>
 
       {/* Team Filter */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         <button onClick={() => setTeamFilter('all')}
           style={{ padding: '6px 14px', background: teamFilter === 'all' ? '#00ff41' : '#0a0a0a', color: teamFilter === 'all' ? '#000' : '#888', border: `1px solid ${teamFilter === 'all' ? '#00ff41' : '#333'}`, fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700, cursor: 'pointer', borderRadius: 4, letterSpacing: 1 }}>
-          ALL
+          {t('leaderboard.all_filter')}
         </button>
         {TEAMS.map(team => (
           <button key={team.id} onClick={() => setTeamFilter(team.id)}
@@ -132,13 +134,13 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
       {/* Team Standings */}
       {teamFilter === 'all' && (
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#ffb800', letterSpacing: 1, marginBottom: 10 }}>TEAM STANDINGS</div>
+          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#ffb800', letterSpacing: 1, marginBottom: 10 }}>{t('leaderboard.team_standings')}</div>
           <div style={{ display: 'flex', gap: 12 }}>
             {teamTotals.map((team, idx) => (
               <div key={team.id} style={{ flex: 1, padding: 12, background: '#0a0a0a', border: `1px solid ${idx === 0 ? '#ffb800' : '#333'}`, borderRadius: 8, textAlign: 'center' }}>
                 <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 13, color: idx === 0 ? '#ffb800' : '#00ff41', marginBottom: 4 }}>{team.name}</div>
                 <div style={{ fontFamily: 'Share Tech Mono', fontSize: 22, color: '#e0e0e0', fontWeight: 700 }}>{team.totalPoints}</div>
-                <div style={{ fontFamily: 'Share Tech Mono', fontSize: 10, color: '#666' }}>{team.memberCount} members | {team.avgConsistency}% consistency</div>
+                <div style={{ fontFamily: 'Share Tech Mono', fontSize: 10, color: '#666' }}>{team.memberCount} {t('leaderboard.members_suffix')} | {team.avgConsistency}% {t('leaderboard.consistency_suffix')}</div>
               </div>
             ))}
           </div>
@@ -172,14 +174,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
                   </span>
                 </div>
                 <div style={{ fontFamily: 'Share Tech Mono', fontSize: 10, color: '#666', marginTop: 2 }}>
-                  {entry.workoutsCompleted} workouts | {entry.mealsLogged} meals | {entry.prsHit} PRs | {entry.streak}d streak | {entry.consistencyScore}% consistency
+                  {entry.workoutsCompleted} {t('leaderboard.workouts_suffix')} | {entry.mealsLogged} {t('leaderboard.meals_suffix')} | {entry.prsHit} {t('leaderboard.prs_suffix')} | {entry.streak}{t('leaderboard.streak_suffix')} | {entry.consistencyScore}% {t('leaderboard.consistency_short')}
                 </div>
               </div>
 
               {/* Points */}
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: '#ffb800', fontWeight: 700 }}>{entry.points}</div>
-                <div style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#666' }}>PTS</div>
+                <div style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#666' }}>{t('leaderboard.points_suffix')}</div>
               </div>
             </div>
           );
@@ -188,9 +190,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
 
       {/* Points Legend */}
       <div style={{ marginTop: 20, padding: 12, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 4 }}>
-        <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#666', letterSpacing: 1, marginBottom: 8 }}>HOW POINTS WORK</div>
+        <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#666', letterSpacing: 1, marginBottom: 8 }}>{t('leaderboard.how_points_work')}</div>
         <div style={{ fontFamily: 'Share Tech Mono', fontSize: 11, color: '#888', lineHeight: 1.8 }}>
-          Workout Completed: +{LEADERBOARD_POINTS.workoutCompleted} | Meal Logged: +{LEADERBOARD_POINTS.mealLogged} | PR Hit: +{LEADERBOARD_POINTS.prHit} | 7-Day Streak: +{LEADERBOARD_POINTS.streakBonus7} | 30-Day Streak: +{LEADERBOARD_POINTS.streakBonus30} | Intake Done: +{LEADERBOARD_POINTS.intakeCompleted} | Wearable Connected: +{LEADERBOARD_POINTS.wearableConnected}
+          {t('leaderboard.points.workout')}: +{LEADERBOARD_POINTS.workoutCompleted} | {t('leaderboard.points.meal')}: +{LEADERBOARD_POINTS.mealLogged} | {t('leaderboard.points.pr')}: +{LEADERBOARD_POINTS.prHit} | {t('leaderboard.points.streak7')}: +{LEADERBOARD_POINTS.streakBonus7} | {t('leaderboard.points.streak30')}: +{LEADERBOARD_POINTS.streakBonus30} | {t('leaderboard.points.intake')}: +{LEADERBOARD_POINTS.intakeCompleted} | {t('leaderboard.points.wearable')}: +{LEADERBOARD_POINTS.wearableConnected}
         </div>
       </div>
     </div>
