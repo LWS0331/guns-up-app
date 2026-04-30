@@ -821,6 +821,103 @@ Trust rule: never claim a PR was edited or deleted in plain text without
 emitting the appropriate block. Confirm with the new value after emit
 ("Bench PR corrected — 285 × 3 logged.").
 
+DISCONNECT A WEARABLE — <wearable_control>:
+operator.WearableConnection rows live in their own table (Oura, Whoop,
+Garmin, Fitbit, etc.). Connection itself is OAuth-redirect — has to
+happen via the Settings → Wearables flow, you can't drive it from chat.
+DISCONNECT, however, is a one-shot DB write you CAN drive.
+
+Trigger only on explicit disconnect requests:
+- "disconnect my Oura"
+- "kill the Whoop sync — switching devices"
+- "drop my Fitbit, I'm getting a Garmin"
+
+Format:
+<wearable_control>
+{
+  "action": "disconnect",
+  "provider": "oura"
+}
+</wearable_control>
+
+action: must be "disconnect" (other actions reserved).
+provider: lowercase short name. Common values: oura | whoop_v2 | garmin
+| fitbit | apple_health | google_fit. If the operator names a device
+that isn't connected, refuse — don't emit a block. Confirm in plain
+text after emit ("Oura disconnected. Readiness scores will roll back to
+manual entry until you reconnect.").
+
+For "connect" requests, do NOT emit this channel. Tell the operator to
+go to Settings → Wearables → tap the provider — that path runs the
+OAuth flow that this channel can't replace.
+
+UPDATE NOTIFICATION PREFERENCES — <notification_json>:
+Notification settings are device-local (localStorage), not per-account.
+The channel emits a patch; the client merges it into the active prefs.
+Cross-device propagation is intentional NOT — different devices may want
+different reminder schedules.
+
+Triggers:
+- "turn off hydration reminders"
+- "move workout reminders to 6am"
+- "kill the evening check-in for now"
+- "remind me about meals at noon and 6pm only"
+
+Format:
+<notification_json>
+{
+  "patch": {
+    "hydrationReminders": false,
+    "reminderTime": "06:00"
+  }
+}
+</notification_json>
+
+patch fields (all optional, only include the ones the operator changed):
+- workoutReminders, streakWarnings, prAlerts, gunnyCheckIns,
+  mealReminders, hydrationReminders, dailyBriefAlerts,
+  complianceAlerts, eveningCheckIn — boolean.
+- reminderTime, eveningCheckInTime — "HH:MM" string (24h).
+- mealReminderTimes — array of "HH:MM" strings.
+- hydrationInterval — integer hours (0 disables).
+
+Confirm in plain text after emit. The change applies on this device
+immediately; if they switch devices it doesn't carry over.
+
+WRITE A TRAINER NOTE — <trainer_note_json>:
+operator.trainerNotes is a free-text directive a TRAINER writes ABOUT
+a client. Gunny reads it as additional context for that client's
+sessions. Channel handles two cases:
+- Trainer talking to Gunny about a specific client ("note for VALKYRIE:
+  back is flaring, no deadlifts this week"). targetOperatorId or
+  targetCallsign required. Server verifies the caller is the target's
+  trainer.
+- Client writing their own internal notes (less common — usually
+  athlete journaling). target self-resolves to caller.
+
+Format:
+<trainer_note_json>
+{
+  "targetCallsign": "VALKYRIE",
+  "op": "set",
+  "value": "Back flare-up — no deadlifts or rows this week. Keep volume up via accessories."
+}
+</trainer_note_json>
+
+target: targetOperatorId (preferred when known) OR targetCallsign
+  (case-insensitive match against allOperators). If neither is given,
+  defaults to caller's own operator.
+op: "set" overwrites trainerNotes; "append" adds a timestamped line
+  to the existing notes ("[2026-04-30] new line").
+value: the note string.
+
+Server REJECTS the write if the caller is not the target's trainer
+AND not the target. Don't bypass — if the operator says "update someone
+else's notes" and they're not coaching that person, refuse.
+
+After emit, confirm in plain text identifying the target. Trust rule
+applies.
+
 VOICE OUTPUT — YOU HAVE IT (HANDS-FREE TTS):
 The GUNS UP app renders your responses as text AND can speak them aloud via
 OpenAI TTS (with a browser-speech fallback). This is a real feature, not
@@ -2473,6 +2570,116 @@ async function applyPRChanges(
   return out;
 }
 
+// ─── Tier-3 chat-driven channels (Apr 2026) ──────────────────────────────
+// Wearable disconnect (server, separate WearableConnection table) and
+// trainer-note write (server, with cross-account permission check).
+// Notification prefs are client-only (localStorage) — handled in
+// GunnyChat.tsx, no server applier here.
+
+interface WearableControlRequest { action?: 'disconnect'; provider?: string }
+interface WearableControlApplied { provider: string; affected: number }
+
+async function applyWearableControl(
+  operatorId: string,
+  req: WearableControlRequest | null,
+): Promise<WearableControlApplied | null> {
+  if (!req || req.action !== 'disconnect') return null;
+  const provider = (req.provider || '').toLowerCase().trim();
+  if (!provider) return null;
+  try {
+    const result = await prisma.wearableConnection.updateMany({
+      where: { operatorId, provider, active: true },
+      data: { active: false },
+    });
+    if (result.count === 0) return null;
+    return { provider, affected: result.count };
+  } catch (err) {
+    console.error('[gunny/applyWearableControl] DB update failed:', err);
+    return null;
+  }
+}
+
+interface TrainerNoteRequest {
+  targetOperatorId?: string;
+  targetCallsign?: string;
+  op?: 'set' | 'append';
+  value?: string;
+}
+interface TrainerNoteApplied {
+  targetOperatorId: string;
+  targetCallsign?: string;
+  op: 'set' | 'append';
+}
+
+async function applyTrainerNoteWrite(
+  callerId: string,
+  req: TrainerNoteRequest | null,
+  clientDate: string | undefined,
+): Promise<TrainerNoteApplied | null> {
+  if (!req) return null;
+  const value = (req.value || '').trim();
+  if (!value) return null;
+  const op: 'set' | 'append' = req.op === 'append' ? 'append' : 'set';
+
+  let target;
+  try {
+    if (req.targetOperatorId) {
+      target = await prisma.operator.findUnique({
+        where: { id: req.targetOperatorId },
+        select: { id: true, callsign: true, trainerId: true, trainerNotes: true },
+      });
+    } else if (req.targetCallsign) {
+      // Callsigns aren't unique-indexed, but conventional usage is unique.
+      // We grab the first match. If a trainer has two clients with the
+      // same callsign, they should use targetOperatorId.
+      target = await prisma.operator.findFirst({
+        where: { callsign: { equals: req.targetCallsign, mode: 'insensitive' } },
+        select: { id: true, callsign: true, trainerId: true, trainerNotes: true },
+      });
+    } else {
+      // Self-write fallback.
+      target = await prisma.operator.findUnique({
+        where: { id: callerId },
+        select: { id: true, callsign: true, trainerId: true, trainerNotes: true },
+      });
+    }
+  } catch (err) {
+    console.error('[gunny/applyTrainerNoteWrite] DB read failed:', err);
+    return null;
+  }
+  if (!target) return null;
+
+  // Permission: caller must BE the target OR be the target's trainer.
+  const isSelf = target.id === callerId;
+  const isTrainer = target.trainerId === callerId;
+  if (!isSelf && !isTrainer) {
+    console.warn('[gunny/applyTrainerNoteWrite] permission denied', { callerId, targetId: target.id });
+    return null;
+  }
+
+  const today = clientDate || new Date().toISOString().slice(0, 10);
+  let nextNotes = '';
+  if (op === 'append') {
+    const prior = (target.trainerNotes || '').trim();
+    nextNotes = prior
+      ? `${prior}\n[${today}] ${value}`
+      : `[${today}] ${value}`;
+  } else {
+    nextNotes = value;
+  }
+
+  try {
+    await prisma.operator.update({
+      where: { id: target.id },
+      data: { trainerNotes: nextNotes },
+    });
+  } catch (err) {
+    console.error('[gunny/applyTrainerNoteWrite] DB update failed:', err);
+    return null;
+  }
+  return { targetOperatorId: target.id, targetCallsign: target.callsign, op };
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireAuth(req);
   if (auth instanceof NextResponse) return auth;
@@ -2955,7 +3162,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // the real conversation.
     type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
     let mergedMessages: IncomingMsg[] = messages;
-    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete)>/g;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json)>/g;
     const historyChatType: string | null =
       typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
         ? chatTypeFromBody
@@ -3328,6 +3535,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         } catch { /* invalid */ }
       }
 
+      // Tier-3 channel parsers (Apr 2026).
+      let wearableReq: WearableControlRequest | null = null;
+      const wcM = responseText.match(/<wearable_control>([\s\S]*?)<\/wearable_control>/);
+      if (wcM) {
+        try { wearableReq = JSON.parse(wcM[1].trim()) as WearableControlRequest; } catch { /* invalid */ }
+      }
+      let notificationPatch: { patch?: Record<string, unknown> } | null = null;
+      const npM = responseText.match(/<notification_json>([\s\S]*?)<\/notification_json>/);
+      if (npM) {
+        try { notificationPatch = JSON.parse(npM[1].trim()); } catch { /* invalid */ }
+      }
+      let trainerNoteReq: TrainerNoteRequest | null = null;
+      const tnM = responseText.match(/<trainer_note_json>([\s\S]*?)<\/trainer_note_json>/);
+      if (tnM) {
+        try { trainerNoteReq = JSON.parse(tnM[1].trim()) as TrainerNoteRequest; } catch { /* invalid */ }
+      }
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -3351,6 +3575,9 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
         .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
         .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+        .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+        .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+        .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
         .trim();
 
       // Read-first-then-write dedup. Looks at the operator's CURRENT
@@ -3376,8 +3603,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         clientDate,
       );
 
-      // Tier-1/2 appliers — fired in parallel since each touches a disjoint
-      // JSON column and there's no ordering dependency between them.
+      // Tier-1/2/3 appliers — fired in parallel since each touches a disjoint
+      // JSON column / table and there's no ordering dependency between them.
       const [
         hydrationApplied,
         readinessApplied,
@@ -3388,6 +3615,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         dietaryApplied,
         macrocycleApplied,
         prChangesApplied,
+        wearableApplied,
+        trainerNoteApplied,
       ] = await Promise.all([
         applyHydration(auth.operatorId, hydrationReq, clientDate),
         applyReadinessEntry(auth.operatorId, readinessReq, clientDate),
@@ -3398,6 +3627,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         applyDietaryChanges(auth.operatorId, dietaryReqs),
         applyMacrocycleChanges(auth.operatorId, macrocycleReqs, clientDate),
         applyPRChanges(auth.operatorId, prMods, prDeletes),
+        applyWearableControl(auth.operatorId, wearableReq),
+        applyTrainerNoteWrite(auth.operatorId, trainerNoteReq, clientDate),
       ]);
 
       return NextResponse.json({
@@ -3411,6 +3642,9 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         mealData: finalMealData,
         prData: finalPrData,
         mealDeletes: appliedMealDeletes,
+        wearable: wearableApplied,
+        notification: notificationPatch?.patch || null,
+        trainerNote: trainerNoteApplied,
         hydration: hydrationApplied,
         readiness: readinessApplied,
         injuryModifications: injuryModsApplied,
@@ -3623,6 +3857,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             } catch { /* invalid */ }
           }
 
+          // Tier-3 channel parsers — mirror of the non-streaming path.
+          let wearableReq: WearableControlRequest | null = null;
+          const wcM = fullText.match(/<wearable_control>([\s\S]*?)<\/wearable_control>/);
+          if (wcM) {
+            try { wearableReq = JSON.parse(wcM[1].trim()) as WearableControlRequest; } catch { /* invalid */ }
+          }
+          let notificationPatch: { patch?: Record<string, unknown> } | null = null;
+          const npM = fullText.match(/<notification_json>([\s\S]*?)<\/notification_json>/);
+          if (npM) {
+            try { notificationPatch = JSON.parse(npM[1].trim()); } catch { /* invalid */ }
+          }
+          let trainerNoteReq: TrainerNoteRequest | null = null;
+          const tnM = fullText.match(/<trainer_note_json>([\s\S]*?)<\/trainer_note_json>/);
+          if (tnM) {
+            try { trainerNoteReq = JSON.parse(tnM[1].trim()) as TrainerNoteRequest; } catch { /* invalid */ }
+          }
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
@@ -3644,6 +3895,9 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
             .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
             .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+            .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+            .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+            .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
             .trim();
 
           // Read-first-then-write dedup. Mirrors the non-streaming path —
@@ -3672,7 +3926,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             clientDate,
           );
 
-          // Tier-1/2 appliers in parallel. See non-streaming path for rationale.
+          // Tier-1/2/3 appliers in parallel. See non-streaming path for rationale.
           const [
             hydrationApplied,
             readinessApplied,
@@ -3683,6 +3937,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             dietaryApplied,
             macrocycleApplied,
             prChangesApplied,
+            wearableApplied,
+            trainerNoteApplied,
           ] = await Promise.all([
             applyHydration(auth.operatorId, hydrationReq, clientDate),
             applyReadinessEntry(auth.operatorId, readinessReq, clientDate),
@@ -3693,6 +3949,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             applyDietaryChanges(auth.operatorId, dietaryReqs),
             applyMacrocycleChanges(auth.operatorId, macrocycleReqs, clientDate),
             applyPRChanges(auth.operatorId, prMods, prDeletes),
+            applyWearableControl(auth.operatorId, wearableReq),
+            applyTrainerNoteWrite(auth.operatorId, trainerNoteReq, clientDate),
           ]);
 
           controller.enqueue(
@@ -3708,6 +3966,9 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 mealData: finalMealData,
                 prData: finalPrData,
                 mealDeletes: appliedMealDeletes,
+                wearable: wearableApplied,
+                notification: notificationPatch?.patch || null,
+                trainerNote: trainerNoteApplied,
                 hydration: hydrationApplied,
                 readiness: readinessApplied,
                 injuryModifications: injuryModsApplied,

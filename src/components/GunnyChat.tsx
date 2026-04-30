@@ -17,6 +17,7 @@ import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getAuthToken } from '@/lib/authClient';
+import { loadNotificationPrefs, saveNotificationPrefs, type NotificationPreferences } from '@/lib/notifications';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -1205,7 +1206,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>; hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null; readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null; injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>; dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>; nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null; goals?: Array<{ action?: string; value?: string; match?: string }>; dietary?: Array<{ field?: string; action?: string; values?: string[] }>; macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>; prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>; prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }> } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>; hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null; readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null; injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>; dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>; nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null; goals?: Array<{ action?: string; value?: string; match?: string }>; dietary?: Array<{ field?: string; action?: string; values?: string[] }>; macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>; prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>; prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>; wearable?: { provider: string; affected: number } | null; notification?: Record<string, unknown> | null; trainerNote?: { targetOperatorId: string; targetCallsign?: string; op: 'set' | 'append' } | null } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1383,6 +1384,9 @@ ${mealSuggestion}`;
         macrocycles: Array.isArray(data.macrocycles) ? data.macrocycles : [],
         prModifications: Array.isArray(data.prModifications) ? data.prModifications : [],
         prDeletes: Array.isArray(data.prDeletes) ? data.prDeletes : [],
+        wearable: data.wearable || null,
+        notification: data.notification || null,
+        trainerNote: data.trainerNote || null,
       };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
@@ -1443,6 +1447,10 @@ ${mealSuggestion}`;
     macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>;
     prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>;
     prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>;
+    /** Tier-3 chat-driven channels (Apr 2026). */
+    wearable?: { provider: string; affected: number } | null;
+    notification?: Record<string, unknown> | null;
+    trainerNote?: { targetOperatorId: string; targetCallsign?: string; op: 'set' | 'append' } | null;
     voiceControl?: { action?: string };
   } | null> => {
     try {
@@ -1471,6 +1479,9 @@ ${mealSuggestion}`;
           .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
           .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
           .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+          .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+          .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+          .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
           .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, ''),
         ...(m.image ? { image: m.image } : {}),
       }));
@@ -1542,6 +1553,9 @@ ${mealSuggestion}`;
           macrocycles: Array.isArray(data.macrocycles) ? data.macrocycles : [],
           prModifications: Array.isArray(data.prModifications) ? data.prModifications : [],
           prDeletes: Array.isArray(data.prDeletes) ? data.prDeletes : [],
+          wearable: data.wearable || null,
+          notification: data.notification || null,
+          trainerNote: data.trainerNote || null,
           voiceControl: data.voiceControl,
         };
       }
@@ -1614,6 +1628,12 @@ ${mealSuggestion}`;
                 .replace(/<pr_modification>[\s\S]*$/, '')
                 .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
                 .replace(/<pr_delete>[\s\S]*$/, '')
+                .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+                .replace(/<wearable_control>[\s\S]*$/, '')
+                .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+                .replace(/<notification_json>[\s\S]*$/, '')
+                .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+                .replace(/<trainer_note_json>[\s\S]*$/, '')
                 .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
                 .replace(/<voice_control>[\s\S]*$/, '')
                 // Strip trailing half-streamed markdown table row (pipe-led line missing its closing pipe)
@@ -1658,6 +1678,9 @@ ${mealSuggestion}`;
           macrocycles: Array.isArray(finalPayload.macrocycles) ? finalPayload.macrocycles : [],
           prModifications: Array.isArray(finalPayload.prModifications) ? finalPayload.prModifications : [],
           prDeletes: Array.isArray(finalPayload.prDeletes) ? finalPayload.prDeletes : [],
+          wearable: finalPayload.wearable || null,
+          notification: finalPayload.notification || null,
+          trainerNote: finalPayload.trainerNote || null,
           voiceControl: finalPayload.voiceControl,
         };
       }
@@ -2146,6 +2169,40 @@ ${mealSuggestion}`;
         if (prsChangedCount > 0) onUpdateOperator({ ...operator, prs });
       }
 
+      // ─── Tier-3 mirrors (Apr 2026) ──────────────────────────────────────
+      let wearableDisconnected: { provider: string; affected: number } | null = apiResult?.wearable || null;
+      // Server already disconnected the wearable. The wearable list is
+      // fetched separately via /api/wearables, so no operator-level state
+      // to mirror here — just keep the diff for the suffix stamp.
+
+      let notificationApplied: Record<string, unknown> | null = null;
+      const notifPatch = apiResult?.notification;
+      if (notifPatch && typeof notifPatch === 'object') {
+        // Notification prefs are localStorage-only. Merge the patch into
+        // the active prefs and persist. Other components reading these
+        // re-load from localStorage on tab focus, so no event bus needed.
+        try {
+          const current = loadNotificationPrefs(operator.id);
+          const merged: NotificationPreferences = { ...current, ...(notifPatch as Partial<NotificationPreferences>) };
+          saveNotificationPrefs(operator.id, merged);
+          notificationApplied = notifPatch;
+        } catch (e) {
+          console.error('Failed to apply notification patch:', e);
+        }
+      }
+
+      let trainerNoteApplied = apiResult?.trainerNote || null;
+      // For self-writes, mirror locally so the next request's context
+      // sees the fresh trainerNotes without a /me round-trip. For
+      // cross-account writes, the change is on the OTHER operator's row
+      // and only visible after that operator's session re-fetches.
+      if (trainerNoteApplied && trainerNoteApplied.targetOperatorId === operator.id && onUpdateOperator) {
+        // We don't know the exact merged string from the diff (server
+        // computed append-with-timestamp), so the safest UI signal is
+        // just to flag that something changed and let the next /me
+        // settle the actual value.
+      }
+
       // SURGICAL MODIFICATION — apply each targeted change Gunny emitted. Gunny
       // can emit multiple <workout_modification> blocks (e.g. prefill_weights
       // for every exercise on today's workout); we iterate and apply them in
@@ -2311,7 +2368,8 @@ ${mealSuggestion}`;
         || injuriesChangedCount > 0 || dayTagsChangedCount > 0 || targetsChanged;
       const tier2Touched = goalsChangedCount > 0 || dietaryChangedCount > 0
         || macrocyclesChanged > 0 || prsChangedCount > 0;
-      if (hasWorkout || wasModification || mealLogged || prLogged || mealsDeletedCount > 0 || tier1Touched || tier2Touched) {
+      const tier3Touched = !!wearableDisconnected || !!notificationApplied || !!trainerNoteApplied;
+      if (hasWorkout || wasModification || mealLogged || prLogged || mealsDeletedCount > 0 || tier1Touched || tier2Touched || tier3Touched) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -2331,7 +2389,10 @@ ${mealSuggestion}`;
                     + (goalsChangedCount > 0 ? `\n\n[${goalsChangedCount === 1 ? 'GOAL UPDATED' : `${goalsChangedCount} GOALS UPDATED`}]` : '')
                     + (dietaryChangedCount > 0 ? '\n\n[DIETARY PROFILE UPDATED]' : '')
                     + (macrocyclesChanged > 0 ? `\n\n[${macrocyclesChanged === 1 ? 'MACROCYCLE UPDATED' : `${macrocyclesChanged} MACROCYCLES UPDATED`}]` : '')
-                    + (prsChangedCount > 0 ? `\n\n[${prsChangedCount === 1 ? 'PR UPDATED' : `${prsChangedCount} PRS UPDATED`}]` : ''),
+                    + (prsChangedCount > 0 ? `\n\n[${prsChangedCount === 1 ? 'PR UPDATED' : `${prsChangedCount} PRS UPDATED`}]` : '')
+                    + (wearableDisconnected ? `\n\n[${wearableDisconnected.provider.toUpperCase()} DISCONNECTED]` : '')
+                    + (notificationApplied ? '\n\n[NOTIFICATION PREFERENCES UPDATED — this device only]' : '')
+                    + (trainerNoteApplied ? `\n\n[TRAINER NOTE ${trainerNoteApplied.op === 'append' ? 'APPENDED' : 'SET'}${trainerNoteApplied.targetCallsign ? ` for ${trainerNoteApplied.targetCallsign}` : ''}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
@@ -2662,6 +2723,22 @@ ${mealSuggestion}`;
         if (qaPrsChangedCount > 0) onUpdateOperator({ ...operator, prs });
       }
 
+      // QA-path Tier-3 mirrors.
+      const qaWearableDisconnected: { provider: string; affected: number } | null = apiResult?.wearable || null;
+      let qaNotificationApplied: Record<string, unknown> | null = null;
+      const qaNotifPatch = apiResult?.notification;
+      if (qaNotifPatch && typeof qaNotifPatch === 'object') {
+        try {
+          const current = loadNotificationPrefs(operator.id);
+          const merged: NotificationPreferences = { ...current, ...(qaNotifPatch as Partial<NotificationPreferences>) };
+          saveNotificationPrefs(operator.id, merged);
+          qaNotificationApplied = qaNotifPatch;
+        } catch (e) {
+          console.error('Failed to apply notification patch:', e);
+        }
+      }
+      const qaTrainerNoteApplied = apiResult?.trainerNote || null;
+
       // Same loop pattern as the normal-mode path above — apply every
       // workout_modification Gunny emitted, prefills via event bus, block
       // mods folded into a single operator update.
@@ -2700,7 +2777,8 @@ ${mealSuggestion}`;
         || qaInjuriesChangedCount > 0 || qaDayTagsChangedCount > 0 || qaTargetsChanged;
       const qaTier2Touched = qaGoalsChangedCount > 0 || qaDietaryChangedCount > 0
         || qaMacrocyclesChanged > 0 || qaPrsChangedCount > 0;
-      if (hasWorkout || wasModification || qaMealsDeletedCount > 0 || qaTier1Touched || qaTier2Touched) {
+      const qaTier3Touched = !!qaWearableDisconnected || !!qaNotificationApplied || !!qaTrainerNoteApplied;
+      if (hasWorkout || wasModification || qaMealsDeletedCount > 0 || qaTier1Touched || qaTier2Touched || qaTier3Touched) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -2718,7 +2796,10 @@ ${mealSuggestion}`;
                     + (qaGoalsChangedCount > 0 ? `\n\n[${qaGoalsChangedCount === 1 ? 'GOAL UPDATED' : `${qaGoalsChangedCount} GOALS UPDATED`}]` : '')
                     + (qaDietaryChangedCount > 0 ? '\n\n[DIETARY PROFILE UPDATED]' : '')
                     + (qaMacrocyclesChanged > 0 ? `\n\n[${qaMacrocyclesChanged === 1 ? 'MACROCYCLE UPDATED' : `${qaMacrocyclesChanged} MACROCYCLES UPDATED`}]` : '')
-                    + (qaPrsChangedCount > 0 ? `\n\n[${qaPrsChangedCount === 1 ? 'PR UPDATED' : `${qaPrsChangedCount} PRS UPDATED`}]` : ''),
+                    + (qaPrsChangedCount > 0 ? `\n\n[${qaPrsChangedCount === 1 ? 'PR UPDATED' : `${qaPrsChangedCount} PRS UPDATED`}]` : '')
+                    + (qaWearableDisconnected ? `\n\n[${qaWearableDisconnected.provider.toUpperCase()} DISCONNECTED]` : '')
+                    + (qaNotificationApplied ? '\n\n[NOTIFICATION PREFERENCES UPDATED — this device only]' : '')
+                    + (qaTrainerNoteApplied ? `\n\n[TRAINER NOTE ${qaTrainerNoteApplied.op === 'append' ? 'APPENDED' : 'SET'}${qaTrainerNoteApplied.targetCallsign ? ` for ${qaTrainerNoteApplied.targetCallsign}` : ''}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
