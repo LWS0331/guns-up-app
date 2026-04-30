@@ -47,13 +47,11 @@ export const OPERATING_MANUAL: CorpusFile = {
   label: 'Gunny Operating Manual',
   path: 'operating-manual.md',
   format: 'md',
-  // Size grew from 72_109 → 86_088 in i18n Phase 6 when the Spanish
-  // Output Style Guide was appended. Guide is conditional ("only when
-  // language === 'es'") so it costs ~14KB of always-on context for
-  // English operators too. Trade-off: idiomatic Spanish output beats
-  // stiff machine translation; ~3K extra prompt tokens is trivial
-  // against the cache-hit cost.
-  approxBytes: 86_088,
+  // Size grew 72_109 → 86_088 (Phase 6: Spanish Output Style Guide)
+  // → 87_709 (Marine Brand Voice callout — Oorah not Hooah, Marine
+  // not soldier, USMC vocabulary). Both additions are always-on;
+  // marginal cost vs. cache-hit savings is trivial.
+  approxBytes: 87_709,
   description:
     'Persona, scope, refusal boundaries, voice. System-level instructions for Gunny. Includes a Spanish Output Style Guide that activates when language === "es".',
 };

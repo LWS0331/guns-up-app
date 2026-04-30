@@ -1030,7 +1030,7 @@ const AppShell: React.FC<AppShellProps> = ({
               ? { ...m, text: errMsg } : m
           ));
         } else {
-          const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
+          const replyText = data.response || data.message || data.text || 'Copy that, Marine.';
           setGunnyMessages(prev => prev.map(m =>
             (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
               ? { ...m, text: replyText } : m
@@ -1380,7 +1380,7 @@ const AppShell: React.FC<AppShellProps> = ({
             const errMsg = data?.error || 'Gunny AI temporarily offline.';
             setGunnyMessages(prev => [...prev, { role: 'gunny' as const, text: errMsg, timestamp: Date.now() }]);
           } else {
-            const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
+            const replyText = data.response || data.message || data.text || 'Copy that, Marine.';
             setGunnyMessages(prev => [...prev, { role: 'gunny' as const, text: replyText, timestamp: Date.now() }]);
             // Show response on workout screen + speak it
             showGunnyVoiceResponse(replyText);
