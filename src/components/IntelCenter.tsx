@@ -281,6 +281,33 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     newMovementToAvoid: '',
   });
 
+  // Re-sync the mirrored mealLogs slice whenever the operator prop changes.
+  //
+  // state.nutrition.mealLogs was originally seeded once at mount from
+  // operator.nutrition.meals[today] and never refreshed. That stale-state
+  // window meant: if the operator logged meals via Gunny chat (or in
+  // another tab/device) while IntelCenter was mounted, the user could
+  // click "Save Changes" on the form and the handleSave write would
+  // overwrite operator.nutrition.meals[today] with the stale snapshot —
+  // silently deleting recently-added meals.
+  //
+  // Only update when the canonical bucket actually differs from local state
+  // (compare via JSON.stringify; meal arrays are tiny, max ~10 entries).
+  // The meal-add handlers below also setState mealLogs immediately after
+  // onUpdateOperator, so this effect is a no-op in the synchronous case;
+  // it only fires for the cross-tab / cross-channel scenario.
+  useEffect(() => {
+    const todayStr = getTodayStr();
+    const serverBucket = operator.nutrition?.meals?.[todayStr] || [];
+    const stateBucket = state.nutrition.mealLogs;
+    if (JSON.stringify(serverBucket) === JSON.stringify(stateBucket)) return;
+    setState(prev => ({
+      ...prev,
+      nutrition: { ...prev.nutrition, mealLogs: serverBucket },
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operator.nutrition?.meals]);
+
   const handleSave = useCallback(() => {
     // Convert Goal objects back to strings
     const goalsAsStrings = state.profile.goals.map((g) => g.name);
