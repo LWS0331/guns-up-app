@@ -108,6 +108,11 @@ interface LocalState {
     nutritionHabits: string;
     dietaryRestrictions: string[];
     supplements: string[];
+    // motivationFactors: previously typed but had no IntakeForm capture
+    // UI, so the array was permanently empty. IntakeForm now collects
+    // this on the lifestyle step; surfacing it here so post-intake edits
+    // round-trip cleanly. Multi-select strings, 'None' clears.
+    motivationFactors: string[];
   };
   newGoal: string;
   newEquipment: string;
@@ -274,6 +279,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       nutritionHabits: operator.intake?.nutritionHabits || 'fair',
       dietaryRestrictions: operator.intake?.dietaryRestrictions || [],
       supplements: operator.intake?.supplements || [],
+      motivationFactors: operator.intake?.motivationFactors || [],
     },
     newGoal: '',
     newEquipment: '',
@@ -351,6 +357,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         nutritionHabits: state.intakeFields.nutritionHabits,
         dietaryRestrictions: state.intakeFields.dietaryRestrictions,
         supplements: state.intakeFields.supplements,
+        motivationFactors: state.intakeFields.motivationFactors,
       } as Operator['intake'],
     };
     onUpdateOperator(updated);
@@ -561,11 +568,11 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
   };
 
   // Toggle helper for the array-typed intakeFields (healthConditions,
-  // dietaryRestrictions, supplements). Mirrors IntakeForm's
-  // toggleArrayItem behavior: clicking 'None' clears the whole list,
-  // clicking any other item toggles it in/out.
+  // dietaryRestrictions, supplements, motivationFactors). Mirrors
+  // IntakeForm's toggleArrayItem behavior: clicking 'None' clears the
+  // whole list, clicking any other item toggles it in/out.
   const toggleIntakeArrayItem = (
-    field: 'healthConditions' | 'dietaryRestrictions' | 'supplements',
+    field: 'healthConditions' | 'dietaryRestrictions' | 'supplements' | 'motivationFactors',
     item: string,
   ) => {
     setState((prev) => {
@@ -956,6 +963,43 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               onChange={(e) => handleIntakeFieldChange('movementScreenScore', parseInt(e.target.value) || 5)}
               className="ds-input"
             />
+          </div>
+        </div>
+
+        {/* What Drives You — motivation factors. Gunny calibrates tone
+            and priorities from these. Captured at IntakeForm's lifestyle
+            step (added in the same PR as this surface). 'None' clears. */}
+        <div className="field" style={{ marginTop: 16, marginBottom: 0 }}>
+          <label>What Drives You? (select all that apply)</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {[
+              'Look Better / Aesthetics', 'Get Stronger', 'Athletic Performance',
+              'Sport-Specific Goals', 'Stay Healthy / Longevity', 'Recover from Injury',
+              'Mental Health / Stress Relief', 'Build Confidence',
+              'Discipline / Structure', 'Set Example for Family', 'Compete', 'None',
+            ].map((m) => {
+              const active = (state.intakeFields.motivationFactors || []).includes(m);
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => toggleIntakeArrayItem('motivationFactors', m)}
+                  style={{
+                    padding: '6px 10px',
+                    fontFamily: 'Chakra Petch, sans-serif',
+                    fontSize: 12,
+                    background: active ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.02)',
+                    border: `1px solid ${active ? 'rgba(0,255,65,0.55)' : 'rgba(0,255,65,0.15)'}`,
+                    color: active ? '#00ff41' : '#888',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {m}
+                </button>
+              );
+            })}
           </div>
         </div>
 
