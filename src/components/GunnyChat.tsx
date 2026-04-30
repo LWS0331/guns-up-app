@@ -2402,9 +2402,25 @@ ${mealSuggestion}`;
 
       // If the API returned nothing at all, show the fallback
       if (!apiResult) {
-        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
-          ? formatOwnerDiagnostic(errorInfo)
-          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        // Build a more useful fallback message. RAMPAGE (admin) gets the
+        // full diagnostic dump for debugging. Everyone else gets a hint
+        // about the failure type when we can — image uploads in
+        // particular benefit from "try a smaller photo" guidance because
+        // the most common failure mode is the Anthropic vision payload
+        // limit. The actual error.message is logged server-side
+        // (Railway) so we can correlate; we don't surface it raw to
+        // users because it can include internal details.
+        const hadImage = !!pendingImage;
+        let fallbackText: string;
+        if (operator.callsign === 'RAMPAGE' && errorInfo) {
+          fallbackText = formatOwnerDiagnostic(errorInfo);
+        } else if (errorInfo?.errorType === 'stream_error') {
+          fallbackText = hadImage
+            ? `⚠ The image couldn't be processed. Try a smaller photo (under 5MB) or retry without the image, ${operator.callsign}.`
+            : `⚠ Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
+        } else {
+          fallbackText = `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        }
         setMessages((prev) =>
           prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
@@ -2807,9 +2823,17 @@ ${mealSuggestion}`;
         );
       }
       if (!apiResult) {
-        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
-          ? formatOwnerDiagnostic(errorInfo)
-          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        // Quick-action path (no image attach surface) — same fallback
+        // tiering as the main-message path. Stream errors get a more
+        // specific hint; pure network drops keep the generic message.
+        let fallbackText: string;
+        if (operator.callsign === 'RAMPAGE' && errorInfo) {
+          fallbackText = formatOwnerDiagnostic(errorInfo);
+        } else if (errorInfo?.errorType === 'stream_error') {
+          fallbackText = `⚠ Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
+        } else {
+          fallbackText = `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        }
         setMessages((prev) =>
           prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
