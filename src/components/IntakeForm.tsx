@@ -61,6 +61,20 @@ const COMMON_CONDITIONS = [
   'Previous Surgery', 'Pregnancy/Postpartum', 'None',
 ];
 
+// Motivation factors — intake field that was always typed but never had
+// a UI capture. Surfacing it here so Gunny can calibrate tone/priorities
+// (e.g. "look better" calls for hypertrophy + photo-progress framing;
+// "stay healthy" calls for longevity + injury-prevention framing).
+// Multi-select with 'None' as escape valve. Order is curated: aesthetic
+// → strength/sport → health/longevity → mental → social, so the
+// operator scans top-to-bottom and recognizes their primary driver fast.
+const MOTIVATION_OPTIONS = [
+  'Look Better / Aesthetics', 'Get Stronger', 'Athletic Performance',
+  'Sport-Specific Goals', 'Stay Healthy / Longevity', 'Recover from Injury',
+  'Mental Health / Stress Relief', 'Build Confidence',
+  'Discipline / Structure', 'Set Example for Family', 'Compete', 'None',
+];
+
 // Training-path picker — emoji icons replaced with SVG icon components
 // from the design-system Icons set so the picker stays on-brand and
 // scales cleanly. Each path maps to the closest semantic glyph.
@@ -622,6 +636,20 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
               <button key={n} style={{ ...s.optionBtn, ...(intake.nutritionHabits === n ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, nutritionHabits: n }))}>
                 {n.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          {/* Motivation factors — Gunny calibrates tone and priorities
+              from these. "Look better" → hypertrophy + photo-progress
+              framing; "stay healthy" → longevity + injury-prevention
+              framing. Field was previously typed but had no capture UI,
+              so Gunny had to guess from goals alone. */}
+          <label style={s.label}>WHAT DRIVES YOU? (SELECT ALL THAT APPLY)</label>
+          <div style={s.optionGrid}>
+            {MOTIVATION_OPTIONS.map(m => (
+              <button key={m} style={{ ...s.optionBtn, ...(((intake.motivationFactors || []).includes(m)) ? s.optionBtnActive : {}) }}
+                onClick={() => toggleArrayItem('motivationFactors', m)}>
+                {m.toUpperCase()}
               </button>
             ))}
           </div>
