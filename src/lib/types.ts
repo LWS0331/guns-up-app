@@ -225,6 +225,12 @@ export interface Operator {
   workouts: Record<string, Workout>; // key = "YYYY-MM-DD"
   dayTags: Record<string, DayTag>; // key = "YYYY-MM-DD"
 
+  /** Daily readiness check-in log (Apr 2026). Captures sleep / stress /
+   *  mood / readiness / energy + optional notes per local date. Gunny's
+   *  <readiness_json> channel writes here; profile.readiness/sleep/stress
+   *  also get mirrored to "today's value" so existing readers keep working. */
+  dailyReadiness?: Record<string, DailyReadinessEntry>;
+
   /** Macrocycle engine (Apr 2026). Up to 2 active goals — see
    *  src/lib/macrocycle.ts. Empty/undefined for operators who haven't
    *  set a long-horizon goal. */
@@ -264,6 +270,11 @@ export interface OperatorProfile {
 export interface NutritionData {
   targets: { calories: number; protein: number; carbs: number; fat: number };
   meals: Record<string, Meal[]>; // key = "YYYY-MM-DD"
+  /** Daily hydration log — total ounces consumed per local date.
+   *  Apr 2026: added so Gunny's <hydration_json> channel and the
+   *  Nutrition tab can both record / read the same source of truth.
+   *  Optional + Record<> so legacy operators load without migration. */
+  hydration?: Record<string, number>;
 }
 
 export interface Meal {
@@ -411,6 +422,21 @@ export interface ConditioningBlock {
 export interface DayTag {
   color: 'green' | 'amber' | 'red' | 'cyan';
   note: string;
+}
+
+/** Daily readiness check-in. All numeric fields 1-10. `mood` is a free-form
+ *  short string ("crushing it" / "wiped" / etc.). Stored on
+ *  Operator.dailyReadiness keyed by YYYY-MM-DD. */
+export interface DailyReadinessEntry {
+  date: string;
+  readiness?: number;
+  sleep?: number;
+  stress?: number;
+  energy?: number;
+  mood?: string;
+  notes?: string;
+  /** When the entry was recorded (ISO). Used for "last check-in" UI. */
+  recordedAt: string;
 }
 
 // Exercise library
