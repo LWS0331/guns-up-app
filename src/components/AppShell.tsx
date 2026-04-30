@@ -2328,15 +2328,24 @@ const AppShell: React.FC<AppShellProps> = ({
           />
         </div>
 
-        {/* Mobile: compact user switcher */}
+        {/* Mobile: compact language toggle + user switcher.
+            Previously only the user switcher rendered here, so the
+            EN/ES toggle was invisible on mobile (hidden inside the
+            desktop-only block above). That made the bilingual claim
+            literally invisible on the surface where 80%+ of operators
+            actually use the app. Toggle is small (compact={true})
+            and sits flush-right next to the callsign chip. */}
         {isMobile && (
-          <UserSwitcher
-            currentUser={currentUser}
-            accessibleUsers={accessibleUsers}
-            selectedUser={currentSelectedOp}
-            onSelectUser={setSelectedOperator}
-            onLogout={onLogout}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <LanguageToggle compact={true} />
+            <UserSwitcher
+              currentUser={currentUser}
+              accessibleUsers={accessibleUsers}
+              selectedUser={currentSelectedOp}
+              onSelectUser={setSelectedOperator}
+              onLogout={onLogout}
+            />
+          </div>
         )}
       </header>
 

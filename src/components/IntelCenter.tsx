@@ -84,6 +84,13 @@ interface LocalState {
     daysPerWeek: number;
     weakPoints: string[];
     movementsToAvoid: string[];
+    // Apr 2026 audit: trainingPath was captured during intake but had
+    // ZERO UI surface in IntelCenter. That's why Gunny kept drifting on
+    // the field — the operator had no way to verify or correct what was
+    // saved. Surfacing it here closes the loop. Same logic applied to
+    // preferredWorkoutTime which was also intake-only.
+    trainingPath: string;
+    preferredWorkoutTime: string;
   };
   newGoal: string;
   newEquipment: string;
@@ -235,6 +242,12 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       daysPerWeek: operator.preferences?.daysPerWeek || 6,
       weakPoints: operator.preferences?.weakPoints || [],
       movementsToAvoid: operator.preferences?.avoidMovements || [],
+      // Read trainingPath from intake first (the canonical source per
+      // buildGunnyContext.ts:424) and fall back to preferences for
+      // operators who completed intake before PR #82 — same fallback
+      // pattern as buildGunnyContext.
+      trainingPath: operator.intake?.trainingPath || operator.preferences?.trainingPath || 'gunny_pick',
+      preferredWorkoutTime: operator.intake?.preferredWorkoutTime || 'morning',
     },
     newGoal: '',
     newEquipment: '',
@@ -290,7 +303,21 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         daysPerWeek: state.preferences.daysPerWeek,
         weakPoints: state.preferences.weakPoints,
         avoidMovements: state.preferences.movementsToAvoid,
+        // Mirror trainingPath into preferences too so the buildGunnyContext
+        // fallback (intake → prefs) keeps working for legacy operators.
+        // The intake write below is the canonical source.
+        trainingPath: state.preferences.trainingPath,
       },
+      // Write trainingPath + preferredWorkoutTime into intake (the
+      // canonical read source — see buildGunnyContext.ts:424 + :265).
+      // Without this, an edit in PREFERENCES would only update the
+      // mirror copy in preferences and Gunny would keep reading the
+      // stale intake value (the exact bug surfaced in PR #82).
+      intake: {
+        ...(operator.intake || {}),
+        trainingPath: state.preferences.trainingPath,
+        preferredWorkoutTime: state.preferences.preferredWorkoutTime,
+      } as Operator['intake'],
     };
     onUpdateOperator(updated);
   }, [state, operator, onUpdateOperator]);
@@ -2824,6 +2851,12 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     // Per the handoff Intel/Preferences spec: training split + duration
     // + days/week fields, Equipment Arsenal grid (tap-to-select chips
     // + custom add input), Weak Points + Movements to Avoid sections.
+    //
+    // Apr 2026: trainingPath + preferredWorkoutTime added to the top of
+    // this tab. They were captured during intake but had no UI surface,
+    // which broke the user→Gunny feedback loop and caused recurring
+    // drift complaints. Editing here writes to both preferences (legacy
+    // mirror) and intake (canonical, read by buildGunnyContext).
     <div
       className="stack-4"
       style={{
@@ -2832,6 +2865,46 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         gap: 14,
       }}
     >
+      {/* Training Path — span full width, dropdown of the 7 options
+          captured during intake. Showing this lets the operator verify
+          and correct what Gunny is using to pick programming templates. */}
+      <div className="field" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
+        <label htmlFor="prefs-training-path">Training Path</label>
+        <select
+          id="prefs-training-path"
+          value={state.preferences.trainingPath}
+          onChange={(e) => handlePreferencesChange('trainingPath', e.target.value)}
+          className="ds-input"
+        >
+          <option value="bodybuilding">Bodybuilding / Hypertrophy</option>
+          <option value="crossfit">Functional Fitness / CrossFit</option>
+          <option value="powerlifting">Powerlifting</option>
+          <option value="athletic">Athletic Performance</option>
+          <option value="tactical">Tactical / Military</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="gunny_pick">Let Gunny Decide</option>
+        </select>
+      </div>
+
+      {/* Preferred Workout Time — captured during intake, no UI surface
+          before. Affects when Gunny suggests training and how it phrases
+          recovery/wake/post-workout advice. */}
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="prefs-workout-time">Preferred Workout Time</label>
+        <select
+          id="prefs-workout-time"
+          value={state.preferences.preferredWorkoutTime}
+          onChange={(e) => handlePreferencesChange('preferredWorkoutTime', e.target.value)}
+          className="ds-input"
+        >
+          <option value="morning">Morning</option>
+          <option value="midday">Midday</option>
+          <option value="afternoon">Afternoon</option>
+          <option value="evening">Evening</option>
+          <option value="late_night">Late Night</option>
+        </select>
+      </div>
+
       {/* Training Split */}
       <div className="field" style={{ marginBottom: 0 }}>
         <label htmlFor="prefs-split">{t('intel.training_split')}</label>
@@ -3219,22 +3292,78 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         position: 'relative',
       }}
     >
-      {/* Sidebar (desktop) / Top tabs (mobile). The mobile strip uses
-          the canonical .subtabs utility — horizontal scrollable, 2px
-          glowing underline on active, hidden scrollbar — so it
-          matches Planner's sub-nav and any future tabbed screens. */}
+      {/* Sidebar (desktop) / 3x3 grid (mobile).
+          The previous mobile design was a single-row .subtabs strip,
+          horizontal-scrollable. That hid 5 of 9 tabs offscreen by
+          default — the operator literally didn't know FORM_CHECK or
+          MACROCYCLE existed (Apr 2026 reproduction). Switched to a
+          3-column × 3-row grid: all 9 tabs visible above the fold,
+          icon + label per cell, no cramming. Uses ~225px of vertical
+          real estate but the tabs bar is the operator's only entry
+          point to half the IntelCenter surface — discoverability
+          dominates compactness here. */}
       {isMobile ? (
-        <nav className="subtabs" aria-label={t('intel.subnav_aria')}>
+        <nav
+          aria-label={t('intel.subnav_aria')}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '6px',
+            padding: '12px',
+            borderBottom: '1px solid rgba(0,255,65,0.06)',
+            background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
+          }}
+        >
           {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'MACROCYCLE', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
                 key={tab}
                 type="button"
-                className={isActive ? 'active' : ''}
                 onClick={() => setActiveTab(tab)}
+                style={{
+                  // Cell: icon top, label bottom. On a 375px-wide phone
+                  // each cell is ~115px wide — readable, not cramped.
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '14px 6px',
+                  minHeight: '70px',
+                  // Active: tinted bg + bright green border/glow.
+                  // Inactive: subtle fill + dim border so cells still
+                  // read as tappable instead of vanishing into the bg.
+                  background: isActive ? 'rgba(0,255,65,0.08)' : 'rgba(0,255,65,0.015)',
+                  border: isActive
+                    ? '1px solid rgba(0,255,65,0.55)'
+                    : '1px solid rgba(0,255,65,0.12)',
+                  borderRadius: '4px',
+                  color: isActive ? '#00ff41' : '#777',
+                  fontFamily: 'Orbitron, sans-serif',
+                  fontSize: '10px',
+                  fontWeight: isActive ? 700 : 400,
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease',
+                  boxShadow: isActive
+                    ? '0 0 12px rgba(0,255,65,0.18), inset 0 0 12px rgba(0,255,65,0.04)'
+                    : 'none',
+                }}
               >
-                {getTabLabels()[tab]}
+                <span
+                  aria-hidden
+                  style={{
+                    fontSize: '22px',
+                    lineHeight: 1,
+                    opacity: isActive ? 1 : 0.45,
+                  }}
+                >
+                  {tabIcons[tab]}
+                </span>
+                <span style={{ lineHeight: 1.1 }}>{getTabLabels()[tab]}</span>
               </button>
             );
           })}
