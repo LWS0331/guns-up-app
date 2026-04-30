@@ -54,9 +54,15 @@ interface QueueEmailInput {
  * Provider wiring (Resend/Postmark/SendGrid) is DEFERRED to its own
  * follow-up — when it lands, the implementation here becomes a real
  * send while keeping the same callsite contract.
+ *
+ * i18n: subject is selected from the operator's
+ * `preferences.language` ('es' or 'en'), defaulting to EN. Bodies are
+ * still TODO — when the React templates land in src/emails/ they'll
+ * each need both EN + ES variants.
  */
 export async function queueActivationEmail(input: QueueEmailInput): Promise<{ ok: boolean; sent: boolean }> {
-  const subject = SUBJECT_FOR_KIND[input.kind] || 'GUNS UP';
+  const language = await resolveOperatorLanguage(input.operatorId);
+  const subject = subjectForKind(input.kind, language);
   const dispatched = await dispatch({
     to: input.email,
     subject,
@@ -86,15 +92,56 @@ const CADENCE_KINDS = new Set<ActivationEmailKind>([
   'activation_1', 'activation_2', 'activation_3', 'activation_4',
 ]);
 
-const SUBJECT_FOR_KIND: Record<ActivationEmailKind, string> = {
-  activation_1: 'Your access is ready.',
-  activation_2: 'Did you get logged in?',
-  activation_3: 'Your access is waiting.',
-  activation_4: 'I\'d rather refund you than charge you for nothing.',
-  magic_link: 'Your GUNS UP sign-in link',
-  password_reset: 'Reset your GUNS UP password',
-  tier_upgraded: 'Tier unlocked',
+// Subject translations keyed by language. Mirrors the `email.*.subject`
+// keys in src/lib/i18n.tsx — kept duplicated here because i18n.tsx is a
+// `'use client'` module that can't be imported from server code. If a
+// subject changes, update BOTH this map and the corresponding key in
+// i18n.tsx so the table stays the single source of truth for client
+// surfaces (and this file stays the source of truth for the server).
+const SUBJECT_FOR_KIND: Record<'en' | 'es', Record<ActivationEmailKind, string>> = {
+  en: {
+    activation_1: 'Your access is ready.',
+    activation_2: 'Did you get logged in?',
+    activation_3: 'Your access is waiting.',
+    activation_4: 'I\'d rather refund you than charge you for nothing.',
+    magic_link: 'Your GUNS UP sign-in link',
+    password_reset: 'Reset your GUNS UP password',
+    tier_upgraded: 'Tier unlocked',
+  },
+  es: {
+    activation_1: 'Tu acceso está listo.',
+    activation_2: '¿Pudiste iniciar sesión?',
+    activation_3: 'Tu acceso te espera.',
+    activation_4: 'Prefiero reembolsarte que cobrarte por nada.',
+    magic_link: 'Tu enlace de inicio de sesión GUNS UP',
+    password_reset: 'Restablece tu contraseña GUNS UP',
+    tier_upgraded: 'Nivel desbloqueado',
+  },
 };
+
+function subjectForKind(kind: ActivationEmailKind, language: 'en' | 'es'): string {
+  return SUBJECT_FOR_KIND[language][kind] || SUBJECT_FOR_KIND.en[kind] || 'GUNS UP';
+}
+
+/**
+ * Look up the operator's preferred language from the `preferences` JSONB
+ * column. Defaults to 'en'. The schema doesn't have a typed `locale`
+ * column yet — adding it would let us avoid this Postgres round-trip,
+ * but for now activation cadence already does at least one operator
+ * read per send so the cost is folded in.
+ */
+async function resolveOperatorLanguage(operatorId: string): Promise<'en' | 'es'> {
+  try {
+    const op = await prisma.operator.findUnique({
+      where: { id: operatorId },
+      select: { preferences: true },
+    });
+    const prefs = (op?.preferences ?? {}) as { language?: unknown };
+    return prefs.language === 'es' ? 'es' : 'en';
+  } catch {
+    return 'en';
+  }
+}
 
 interface DispatchInput {
   to: string;
