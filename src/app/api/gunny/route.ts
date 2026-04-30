@@ -690,8 +690,8 @@ MANAGE GOALS — <goal_json>:
 operator.profile.goals is a flat list of free-text mission statements
 ("hit 405 squat by July", "stop skipping sundays"). Channel ops:
 - "add" — append a new goal string.
-- "remove" — drop a goal that case-insensitively matches `match`.
-- "replace" — swap `match` with a new string in `value`.
+- "remove" — drop a goal that case-insensitively matches the "match" field.
+- "replace" — swap the "match" field with a new string in the "value" field.
 
 Triggers:
 - "add a goal: [goal]" / "new goal — [goal]"
@@ -706,9 +706,9 @@ Format:
 }
 </goal_json>
 
-For "replace" include both `match` (existing string, case-insensitive
-substring is fine) and `value` (new string). For "remove" include only
-`match`. Multiple <goal_json> blocks per turn allowed (e.g. "scrap two
+For "replace" include both "match" (existing string, case-insensitive
+substring is fine) and "value" (new string). For "remove" include only
+"match". Multiple <goal_json> blocks per turn allowed (e.g. "scrap two
 old goals and add this one"). After emitting, confirm in plain text.
 Trust rule applies — don't claim a goal change without emitting.
 
