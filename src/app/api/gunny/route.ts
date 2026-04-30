@@ -3237,6 +3237,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
 
     // Convert messages to Anthropic format — filter empty and ensure first msg is user role
     // Support vision: if a message has an image field (base64 data URL), build content blocks
+    //
+    // Anthropic vision API rejects any image whose BASE64 payload is > 5 MB
+    // with HTTP 400 invalid_request_error. The reject blows up the entire
+    // turn, even if the offender is buried in chat history. We've seen
+    // this in production (Railway logs Apr 30 — VALKYRIE's chat became
+    // unusable because a prior 6 MB photo lived in history; every
+    // subsequent turn — including text-only follow-ups — failed because
+    // the persisted history slice still contained the oversized image).
+    //
+    // Defense: strip images whose base64 chunk would exceed the API's
+    // 5 MB cap. We keep the message's text so the conversation thread
+    // stays intact; only the offending image is replaced with a short
+    // placeholder so Gunny knows there WAS a photo there. New uploads
+    // are already client-side-compressed (see src/lib/imageCompress.ts);
+    // this is the chat-history poison-cleanup half of the fix.
+    const MAX_IMAGE_BASE64_BYTES = 5 * 1024 * 1024;
+    let strippedHistoryImages = 0;
     const anthropicMessages = mergedMessages
       .map((msg: { role?: string; text?: string; content?: string; image?: string }) => {
         const role = msg.role === 'gunny' ? 'assistant' as const : 'user' as const;
@@ -3248,11 +3265,21 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           const parts: Array<{ type: 'image'; source: { type: 'base64'; media_type: SupportedMediaType; data: string } } | { type: 'text'; text: string }> = [];
           // Extract media type and base64 data from data URL
           const match = msg.image.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-          if (match && ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) {
+          const oversized = match && match[2].length > MAX_IMAGE_BASE64_BYTES;
+          if (oversized) {
+            // Drop the image but stamp the text so context isn't lost.
+            // Don't emit the image part at all — Anthropic counts every
+            // base64 byte we send, even history.
+            strippedHistoryImages++;
+          } else if (match && ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) {
             parts.push({ type: 'image', source: { type: 'base64', media_type: match[1] as SupportedMediaType, data: match[2] } });
           }
-          if (text.trim()) {
-            parts.push({ type: 'text', text });
+          let outText = text;
+          if (oversized) {
+            outText = (text ? `${text}\n` : '') + '[image omitted from history — exceeded vision API size limit]';
+          }
+          if (outText.trim()) {
+            parts.push({ type: 'text', text: outText });
           } else {
             parts.push({ type: 'text', text: 'Analyze this image.' });
           }
@@ -3264,6 +3291,12 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         if (typeof msg.content === 'string') return msg.content.trim().length > 0;
         return Array.isArray(msg.content) && msg.content.length > 0;
       });
+    if (strippedHistoryImages > 0) {
+      console.warn('[gunny] stripped oversized images from history', {
+        operatorId: auth.operatorId,
+        count: strippedHistoryImages,
+      });
+    }
 
     // Anthropic requires the first message to be from the user
     while (anthropicMessages.length > 0 && anthropicMessages[0].role === 'assistant') {
