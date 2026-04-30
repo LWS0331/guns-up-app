@@ -99,9 +99,38 @@ const MARKETING_PLATFORMS: MarketingPlatform[] = [
   { name: 'LinkedIn', slug: 'linkedin', color: '#0077B5', connected: false, apiEndpoint: null, description: 'Post professional content' },
 ];
 
+/** Feedback entry shape mirrored from /api/beta-feedback. The DB stores a
+ *  String[] of JSON strings, so each `betaFeedback` slot here is the parsed
+ *  form of one of those strings. resolutionNote/resolvedAt/resolvedBy are
+ *  set when an admin updates status to FIXED/WONTFIX (Apr 2026, PR #100). */
+type FeedbackStatus = 'NEW' | 'REVIEWING' | 'FIXED' | 'WONTFIX';
+interface ParsedFeedback {
+  id: string;
+  operatorId: string;
+  callsign: string;
+  type: 'BUG' | 'RECOMMENDATION' | 'UI/UX' | 'PERFORMANCE';
+  category: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  description: string;
+  screenshot?: string;
+  timestamp: string;
+  status: FeedbackStatus;
+  resolutionNote?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+const STATUS_COLOR: Record<FeedbackStatus, string> = {
+  NEW: '#ff4444',
+  REVIEWING: '#ffb800',
+  FIXED: '#00ff41',
+  WONTFIX: '#888',
+};
+
 const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const [activeTab, setActiveTab] = useState<OpsTab>('REVENUE');
   const [metrics, setMetrics] = useState<DbMetrics | null>(null);
+  /** Optimistic overrides for feedback status. Keyed by feedback id; merged
+   *  on top of the operator-prop snapshot until the parent re-fetches. */
+  const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, FeedbackStatus>>({});
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<string>('');
   const [selectedOperatorForPromo, setSelectedOperatorForPromo] = useState<string | null>(null);
@@ -711,14 +740,62 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     );
   };
 
+  /**
+   * Flip the status of a single beta-feedback entry via PATCH. Optimistic —
+   * merge the new status into local feedbackOverrides immediately so the
+   * row re-renders, then call the server. On failure, the override is
+   * rolled back and we surface a console error (no toast system here yet).
+   */
+  const handleFeedbackStatusChange = async (id: string, next: FeedbackStatus, resolutionNote?: string) => {
+    setFeedbackOverrides(prev => ({ ...prev, [id]: next }));
+    try {
+      const res = await fetch('/api/beta-feedback', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({ id, status: next, resolutionNote }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('[OpsCenter:feedbackStatus] PATCH failed', err);
+        setFeedbackOverrides(prev => {
+          const copy = { ...prev };
+          delete copy[id];
+          return copy;
+        });
+      }
+    } catch (e) {
+      console.error('[OpsCenter:feedbackStatus] network error', e);
+      setFeedbackOverrides(prev => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+    }
+  };
+
   const renderBeta = () => {
     const betaOps = operators.map(op => ({
       ...op, createdAt: '', updatedAt: '',
     })).filter(op => op.betaUser);
 
-    const allFeedback = operators.flatMap(op =>
-      (op.betaFeedback || []).map(fb => ({ callsign: op.callsign, feedback: fb, tier: op.tier }))
-    );
+    // Parse betaFeedback (array of JSON strings) into typed entries. Skip
+    // malformed rows so one bad write doesn't blank the whole list.
+    const allFeedback: Array<ParsedFeedback & { tier: string }> = [];
+    for (const op of operators) {
+      if (!Array.isArray(op.betaFeedback)) continue;
+      for (const raw of op.betaFeedback) {
+        try {
+          const parsed = JSON.parse(raw) as ParsedFeedback;
+          if (parsed && typeof parsed === 'object' && parsed.id) {
+            // Apply the in-flight optimistic override if any.
+            if (feedbackOverrides[parsed.id]) parsed.status = feedbackOverrides[parsed.id];
+            allFeedback.push({ ...parsed, tier: op.tier });
+          }
+        } catch { /* malformed — skip */ }
+      }
+    }
+    // Newest first.
+    allFeedback.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     const dbBeta = metrics?.operators;
 
@@ -811,15 +888,67 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
             No feedback submitted yet.
           </div>
         ) : (
-          allFeedback.map((fb, i) => (
-            <div key={i} style={{
-              padding: '12px 16px', marginBottom: '6px',
+          allFeedback.map((fb) => (
+            <div key={fb.id} style={{
+              padding: '12px 16px', marginBottom: '8px',
               background: 'rgba(0,255,65,0.03)', border: '1px solid rgba(0,255,65,0.08)',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ color: tierColor(fb.tier as AiTier), fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', fontWeight: 600 }}>{fb.callsign}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ color: tierColor(fb.tier as AiTier), fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', fontWeight: 600 }}>{fb.callsign}</span>
+                  <span style={{ color: '#888', fontSize: '11px', fontFamily: '"Share Tech Mono", monospace' }}>{fb.type}</span>
+                  <span style={{ color: '#888', fontSize: '11px', fontFamily: '"Share Tech Mono", monospace' }}>{fb.category}</span>
+                </div>
+                <span style={{
+                  color: STATUS_COLOR[fb.status] || '#888',
+                  border: `1px solid ${STATUS_COLOR[fb.status] || '#888'}40`,
+                  padding: '2px 8px',
+                  fontSize: '10px',
+                  fontFamily: '"Share Tech Mono", monospace',
+                  letterSpacing: '1px',
+                }}>{fb.status}</span>
               </div>
-              <div style={{ color: '#aaa', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.5' }}>{fb.feedback}</div>
+              <div style={{ color: '#ddd', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{fb.description}</div>
+              {fb.resolutionNote && (
+                <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(0,255,65,0.04)', borderLeft: '2px solid #00ff41', color: '#aaa', fontSize: '12px', fontFamily: '"Chakra Petch", sans-serif' }}>
+                  Resolution: {fb.resolutionNote}
+                </div>
+              )}
+              <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '10px', marginTop: '6px' }}>
+                {new Date(fb.timestamp).toLocaleString()}
+                {fb.resolvedAt && ` · resolved ${new Date(fb.resolvedAt).toLocaleDateString()}`}
+              </div>
+              {/* Admin status controls. OpsCenter is already gated to OPS_CENTER_ACCESS
+                  in the parent so the buttons are safe to render unconditionally here. */}
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {(['NEW', 'REVIEWING', 'FIXED', 'WONTFIX'] as FeedbackStatus[]).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      if (s === fb.status) return;
+                      const note = (s === 'FIXED' || s === 'WONTFIX')
+                        ? (window.prompt(`Optional resolution note for ${fb.callsign}'s ${fb.type}:`) || undefined)
+                        : undefined;
+                      handleFeedbackStatusChange(fb.id, s, note);
+                    }}
+                    disabled={s === fb.status}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '10px',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      letterSpacing: '1px',
+                      background: s === fb.status ? `${STATUS_COLOR[s]}20` : 'transparent',
+                      color: STATUS_COLOR[s],
+                      border: `1px solid ${STATUS_COLOR[s]}60`,
+                      cursor: s === fb.status ? 'default' : 'pointer',
+                      opacity: s === fb.status ? 0.5 : 1,
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           ))
         )}

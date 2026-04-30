@@ -139,3 +139,85 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// PATCH /api/beta-feedback — update an existing entry's status.
+// AUTH: required + admin (OPS_CENTER_ACCESS) only. Non-admins cannot change
+// status — even on their own tickets — to keep the resolution audit clean.
+//
+// Body: { id: string, status: 'NEW'|'REVIEWING'|'FIXED'|'WONTFIX',
+//         resolutionNote?: string }
+//
+// Storage gotcha: betaFeedback is a String[] of JSON-stringified entries
+// (legacy schema, predates JSON column support). To update one entry we
+// have to scan every operator's array (the entry's owning operatorId is
+// embedded in the JSON, not surfaced as a separate column). This is fine
+// at current scale — beta is < 100 operators — but should be revisited if
+// the array gets indexed for filtering.
+export async function PATCH(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
+  if (!OPS_CENTER_ACCESS.includes(auth.operatorId)) {
+    return NextResponse.json({ ok: false, error: 'Admin only' }, { status: 403 });
+  }
+
+  try {
+    const body = await request.json();
+    const { id, status, resolutionNote } = body;
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ ok: false, error: 'id required' }, { status: 400 });
+    }
+    const validStatuses: BetaFeedbackEntry['status'][] = ['NEW', 'REVIEWING', 'FIXED', 'WONTFIX'];
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json({ ok: false, error: 'invalid status' }, { status: 400 });
+    }
+
+    // Find the operator that owns this feedback id by scanning their JSON-
+    // stringified arrays. We could narrow by `id` prefix but the prefix is
+    // a timestamp, not the operator. Linear scan is acceptable here.
+    const operators = await prisma.operator.findMany({
+      select: { id: true, betaFeedback: true },
+    });
+
+    for (const op of operators) {
+      if (!Array.isArray(op.betaFeedback) || op.betaFeedback.length === 0) continue;
+      let found = false;
+      const updated: string[] = [];
+      for (const json of op.betaFeedback) {
+        try {
+          const entry = JSON.parse(json) as BetaFeedbackEntry & { resolutionNote?: string; resolvedAt?: string; resolvedBy?: string };
+          if (entry.id === id) {
+            entry.status = status;
+            if (typeof resolutionNote === 'string' && resolutionNote.trim().length > 0) {
+              entry.resolutionNote = resolutionNote.trim();
+            }
+            if (status === 'FIXED' || status === 'WONTFIX') {
+              entry.resolvedAt = new Date().toISOString();
+              entry.resolvedBy = auth.operatorId;
+            }
+            found = true;
+          }
+          updated.push(JSON.stringify(entry));
+        } catch {
+          updated.push(json); // keep malformed rows untouched
+        }
+      }
+      if (found) {
+        await prisma.operator.update({
+          where: { id: op.id },
+          data: { betaFeedback: updated },
+        });
+        return NextResponse.json({ ok: true, id, status });
+      }
+    }
+
+    return NextResponse.json({ ok: false, error: 'feedback id not found' }, { status: 404 });
+  } catch (error) {
+    console.error('PATCH /api/beta-feedback error:', error);
+    return NextResponse.json(
+      { ok: false, error: 'Failed to update feedback' },
+      { status: 500 },
+    );
+  }
+}
