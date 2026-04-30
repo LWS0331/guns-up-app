@@ -17,11 +17,13 @@ interface DailyBriefProps {
 
 import { getLocalDateStr, getLocalYesterdayStr, getLocalDateLongStr, getLocalTimezone } from '@/lib/dateUtils';
 import { getAuthToken } from '@/lib/authClient';
+import { useLanguage } from '@/lib/i18n';
 
 const getTodayStr = getLocalDateStr;
 const getYesterdayStr = getLocalYesterdayStr;
 
 export default function DailyBriefComponent({ operator, onUpdateOperator, onViewPriorNutrition }: DailyBriefProps) {
+  const { t } = useLanguage();
   const [brief, setBrief] = useState<DailyBriefType | null>(operator.dailyBrief?.date === getTodayStr() ? operator.dailyBrief : null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -167,12 +169,12 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
         }),
       });
       const data = await res.json();
-      setAdaptedMealPlan(data.response || data.message || data.text || 'Could not generate meal plan.');
+      setAdaptedMealPlan(data.response || data.message || data.text || t('daily.could_not_generate'));
     } catch {
-      setAdaptedMealPlan('Failed to generate meal plan. Try again.');
+      setAdaptedMealPlan(t('daily.failed_to_generate'));
     }
     setNutritionLoading(false);
-  }, [nutritionInput, operator]);
+  }, [nutritionInput, operator, t]);
 
   // Auto-generate on mount if no brief for today
   useEffect(() => {
@@ -190,9 +192,9 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
         textAlign: 'center',
       }}>
         <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#00ff41', letterSpacing: 1, marginBottom: 8 }}>
-          GENERATING DAILY BRIEF...
+          {t('daily.generating')}
         </div>
-        <div style={{ fontSize: 10, color: '#555' }}>Gunny is reviewing your data</div>
+        <div style={{ fontSize: 10, color: '#555' }}>{t('daily.gunny_reviewing')}</div>
       </div>
     );
   }
@@ -224,17 +226,17 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
       <div style={{ padding: '16px', cursor: 'pointer' }} onClick={() => setExpanded(!expanded)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#00ff41', letterSpacing: 1 }}>
-            ⚔️ DAILY BRIEF
+            {t('daily.title')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {brief.complianceScore != null && (
               <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: compColor }}>
-                {brief.complianceScore}% COMPLIANCE
+                {brief.complianceScore}{t('daily.compliance')}
               </span>
             )}
             {brief.streakDays != null && brief.streakDays > 0 && (
               <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#facc15' }}>
-                🔥 {brief.streakDays}d streak
+                🔥 {brief.streakDays}{t('daily.streak_suffix')}
               </span>
             )}
             <span style={{ fontSize: 12, color: '#555' }}>{expanded ? '▲' : '▼'}</span>
@@ -258,7 +260,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
           {/* Adjustments */}
           {(brief.adjustments || []).length > 0 && (
             <div style={{ marginTop: 12, marginBottom: 12, padding: 10, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.15)', borderRadius: 4 }}>
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#facc15', letterSpacing: 1, marginBottom: 4 }}>ADJUSTMENTS</div>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#facc15', letterSpacing: 1, marginBottom: 4 }}>{t('daily.adjustments')}</div>
               {brief.adjustments.map((a, i) => (
                 <div key={i} style={{ fontSize: 11, color: '#ccc', padding: '2px 0' }}>• {a}</div>
               ))}
@@ -270,18 +272,18 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#00ff41', letterSpacing: 1 }}>
-                  TODAY&apos;S WORKOUT — {brief.workout.title}
+                  {t('daily.todays_workout')} — {brief.workout.title}
                 </div>
                 {brief.workout.duration && (
                   <span style={{ fontSize: 9, color: '#555' }}>{brief.workout.duration}</span>
                 )}
               </div>
               {brief.workout.warmup && (
-                <div style={{ fontSize: 10, color: '#888', marginBottom: 6 }}>Warmup: {brief.workout.warmup}</div>
+                <div style={{ fontSize: 10, color: '#888', marginBottom: 6 }}>{t('daily.warmup_label')}: {brief.workout.warmup}</div>
               )}
               {(brief.workout.exercises || []).map((ex, i) => renderExercise(ex, i))}
               {brief.workout.cooldown && (
-                <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>Cooldown: {brief.workout.cooldown}</div>
+                <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>{t('daily.cooldown_label')}: {brief.workout.cooldown}</div>
               )}
 
               {/* Load to Planner button */}
@@ -297,25 +299,25 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
                   fontFamily: 'Orbitron, sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: 1,
                 }}
               >
-                {workoutLoaded ? '✓ LOADED IN PLANNER' : '⚔️ LOAD WORKOUT TO PLANNER'}
+                {workoutLoaded ? t('daily.loaded_in_planner') : t('daily.load_to_planner')}
               </button>
             </div>
           ) : (
             <div style={{ marginBottom: 12, padding: 12, background: '#0a0808', border: '1px solid rgba(255,107,53,0.15)', borderRadius: 4, textAlign: 'center' }}>
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#ff6b35' }}>REST DAY</div>
-              <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>Recovery is part of the mission. Stretch, hydrate, sleep.</div>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#ff6b35' }}>{t('daily.rest_day')}</div>
+              <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>{t('daily.rest_day_msg')}</div>
             </div>
           )}
 
           {/* Nutrition Reminder */}
           <div style={{ padding: 10, background: 'rgba(0,255,65,0.05)', border: '1px solid rgba(0,255,65,0.15)', borderRadius: 4, marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#00ff41', letterSpacing: 1 }}>NUTRITION</div>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#00ff41', letterSpacing: 1 }}>{t('daily.nutrition')}</div>
               {onViewPriorNutrition && (
                 <button
                   type="button"
                   onClick={onViewPriorNutrition}
-                  aria-label="View prior days of nutrition"
+                  aria-label={t('daily.view_prior_days_aria')}
                   style={{
                     background: 'transparent', border: 'none',
                     fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
@@ -323,7 +325,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
                     textDecoration: 'underline',
                   }}
                 >
-                  ← View prior days
+                  {t('daily.view_prior_days')}
                 </button>
               )}
             </div>
@@ -333,10 +335,10 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
           {/* Nutrition Coaching — "What do you have?" */}
           <div style={{ padding: 12, background: 'rgba(250,204,21,0.03)', border: '1px solid rgba(250,204,21,0.12)', borderRadius: 4, marginBottom: 12 }}>
             <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#facc15', letterSpacing: 1, marginBottom: 6 }}>
-              🍽️ WHAT&apos;S IN YOUR KITCHEN?
+              {t('daily.kitchen_title')}
             </div>
             <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>
-              Tell Gunny what ingredients you have — he&apos;ll build today&apos;s meals with exact portions to hit your macros.
+              {t('daily.kitchen_desc')}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <input
@@ -344,7 +346,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
                 value={nutritionInput}
                 onChange={e => setNutritionInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleNutritionCoach()}
-                placeholder="e.g. chicken breast, rice, eggs, broccoli, olive oil..."
+                placeholder={t('daily.kitchen_placeholder')}
                 style={{
                   flex: 1, padding: '8px 10px', background: '#0a0a0a', border: '1px solid #333',
                   borderRadius: 4, color: '#ddd', fontFamily: 'Share Tech Mono, monospace', fontSize: 11,
@@ -361,7 +363,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
                   fontFamily: 'Orbitron, sans-serif', fontSize: 9, fontWeight: 700,
                 }}
               >
-                {nutritionLoading ? '...' : 'ADAPT'}
+                {nutritionLoading ? '...' : t('daily.adapt_btn')}
               </button>
             </div>
 
@@ -369,7 +371,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
             {adaptedMealPlan && (
               <div style={{ marginTop: 10, padding: 10, background: '#0a0a0a', border: '1px solid rgba(0,255,65,0.1)', borderRadius: 4 }}>
                 <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 9, color: '#00ff41', letterSpacing: 1, marginBottom: 6 }}>
-                  GUNNY&apos;S ADAPTED MEAL PLAN
+                  {t('daily.gunny_meal_plan')}
                 </div>
                 <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                   {adaptedMealPlan}
@@ -383,7 +385,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
             <div style={{ fontSize: 12, color: '#00ff41', fontStyle: 'italic' }}>
               &ldquo;{brief.motivation}&rdquo;
             </div>
-            <div style={{ fontSize: 9, color: '#555', marginTop: 4 }}>— GUNNY AI</div>
+            <div style={{ fontSize: 9, color: '#555', marginTop: 4 }}>{t('daily.gunny_ai')}</div>
           </div>
 
           {/* Refresh button */}
@@ -393,7 +395,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
               color: '#666', fontFamily: 'Share Tech Mono, monospace', fontSize: 10, borderRadius: 4,
               cursor: loading ? 'default' : 'pointer',
             }}>
-            {loading ? 'REFRESHING...' : '↻ REFRESH BRIEF'}
+            {loading ? t('daily.refreshing') : t('daily.refresh_brief')}
           </button>
         </div>
       )}

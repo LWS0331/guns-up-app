@@ -15,6 +15,7 @@
 
 import React, { useMemo, useState } from 'react';
 import type { Operator, JuniorSafetyEvent, JuniorSafetyFlags, JuniorConsent } from '@/lib/types';
+import { useLanguage } from '@/lib/i18n';
 
 interface ParentDashboardProps {
   parent: Operator;
@@ -23,28 +24,30 @@ interface ParentDashboardProps {
   onSelectJuniorForChat?: (junior: Operator) => void;
 }
 
-const TYPE_LABEL: Record<JuniorSafetyEvent['type'], { label: string; color: string }> = {
-  concussion_keyword: { label: 'CONCUSSION KEYWORD', color: '#ff4444' },
-  pain_report: { label: 'PAIN REPORT', color: '#ff8800' },
-  red_flag: { label: 'RED FLAG', color: '#ffaa00' },
-  refusal: { label: 'GUNNY REFUSAL', color: '#888' },
-  parent_alert: { label: 'PARENT ALERT', color: '#00aaff' },
+// Type labels — color stays static, label resolved at render time via t().
+const TYPE_LABEL: Record<JuniorSafetyEvent['type'], { labelKey: string; color: string }> = {
+  concussion_keyword: { labelKey: 'parent.evt.concussion', color: '#ff4444' },
+  pain_report: { labelKey: 'parent.evt.pain', color: '#ff8800' },
+  red_flag: { labelKey: 'parent.evt.red_flag', color: '#ffaa00' },
+  refusal: { labelKey: 'parent.evt.refusal', color: '#888' },
+  parent_alert: { labelKey: 'parent.evt.parent_alert', color: '#00aaff' },
 };
 
-function formatRelative(iso: string): string {
-  const t = new Date(iso).getTime();
-  const diff = Date.now() - t;
+function formatRelative(iso: string, t: (k: string) => string): string {
+  const ts = new Date(iso).getTime();
+  const diff = Date.now() - ts;
   const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return t('parent.time.just_now');
+  if (m < 60) return `${m} ${t('parent.time.m_suffix')}`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return `${h} ${t('parent.time.h_suffix')}`;
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
+  if (d < 7) return `${d} ${t('parent.time.d_suffix')}`;
   return new Date(iso).toLocaleDateString();
 }
 
 export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSelectJuniorForChat }: ParentDashboardProps) {
+  const { t } = useLanguage();
   const [activeJuniorId, setActiveJuniorId] = useState<string>(juniors[0]?.id || '');
   const activeJunior = juniors.find(j => j.id === activeJuniorId) || juniors[0];
 
@@ -146,11 +149,11 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
     <div style={s.container}>
       <div style={s.headerRow}>
         <div>
-          <div style={s.title}>PARENT DASHBOARD</div>
+          <div style={s.title}>{t('parent.title')}</div>
           <div style={s.subtitle}>
-            {juniors.length} junior operator{juniors.length === 1 ? '' : 's'} linked
+            {juniors.length} {juniors.length === 1 ? t('parent.linked_singular') : t('parent.linked_plural')}
             {allUnresolvedCount > 0 && (
-              <span style={badgeStyle('#ff8800')}>{allUnresolvedCount} unresolved</span>
+              <span style={badgeStyle('#ff8800')}>{allUnresolvedCount} {t('parent.unresolved_suffix')}</span>
             )}
           </div>
         </div>
@@ -172,21 +175,23 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
 
       {/* SAFETY EVENTS — most important block, first */}
       <div style={s.card}>
-        <div style={s.cardTitle}>SAFETY EVENTS</div>
+        <div style={s.cardTitle}>{t('parent.safety_events')}</div>
         {unresolved.length === 0 && resolved.length === 0 && (
-          <div style={s.note}>No safety events on file. The system flags pain, head-impact, and red-flag language automatically.</div>
+          <div style={s.note}>{t('parent.no_safety_events')}</div>
         )}
         {unresolved.map((event, idx) => {
-          const cfg = TYPE_LABEL[event.type] || { label: event.type.toUpperCase(), color: '#888' };
+          const cfg = TYPE_LABEL[event.type];
+          const label = cfg ? t(cfg.labelKey) : event.type.toUpperCase();
+          const color = cfg ? cfg.color : '#888';
           return (
-            <div key={`u-${idx}`} style={eventCardStyle(cfg.color)}>
+            <div key={`u-${idx}`} style={eventCardStyle(color)}>
               <div style={s.eventHeader}>
-                <span style={eventTypeStyle(cfg.color)}>{cfg.label}</span>
-                <span style={s.eventTime}>{formatRelative(event.timestamp)}</span>
+                <span style={eventTypeStyle(color)}>{label}</span>
+                <span style={s.eventTime}>{formatRelative(event.timestamp, t)}</span>
               </div>
               <div style={s.eventDetail}>{event.detail}</div>
               <button style={s.resolveBtn} onClick={() => handleResolveEvent((safety.events || []).indexOf(event))}>
-                MARK RESOLVED
+                {t('parent.mark_resolved')}
               </button>
             </div>
           );
@@ -194,20 +199,22 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
         {resolved.length > 0 && (
           <details style={{ marginTop: 8 }}>
             <summary style={{ fontSize: 11, color: '#666', cursor: 'pointer', letterSpacing: 1 }}>
-              {resolved.length} resolved
+              {resolved.length} {t('parent.resolved_count_suffix')}
             </summary>
             <div style={{ marginTop: 8 }}>
               {resolved.map((event, idx) => {
-                const cfg = TYPE_LABEL[event.type] || { label: event.type.toUpperCase(), color: '#888' };
+                const cfg = TYPE_LABEL[event.type];
+                const label = cfg ? t(cfg.labelKey) : event.type.toUpperCase();
+                const color = cfg ? cfg.color : '#888';
                 return (
                   <div key={`r-${idx}`} style={{ ...eventCardStyle('#333'), opacity: 0.6 }}>
                     <div style={s.eventHeader}>
-                      <span style={eventTypeStyle(cfg.color)}>{cfg.label}</span>
-                      <span style={s.eventTime}>{formatRelative(event.timestamp)}</span>
+                      <span style={eventTypeStyle(color)}>{label}</span>
+                      <span style={s.eventTime}>{formatRelative(event.timestamp, t)}</span>
                     </div>
                     <div style={s.eventDetail}>{event.detail}</div>
                     <span style={s.resolvedTag}>
-                      Resolved by {event.resolvedBy || 'unknown'} {event.resolvedAt ? formatRelative(event.resolvedAt) : ''}
+                      {t('parent.resolved_by_prefix')} {event.resolvedBy || t('parent.unknown')} {event.resolvedAt ? formatRelative(event.resolvedAt, t) : ''}
                     </span>
                   </div>
                 );
@@ -219,59 +226,59 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
 
       {/* COMPLIANCE / TRAINING SUMMARY */}
       <div style={s.card}>
-        <div style={s.cardTitle}>{activeJunior.callsign} — LAST 7 DAYS</div>
+        <div style={s.cardTitle}>{activeJunior.callsign} {t('parent.last_7_days_suffix')}</div>
         <div style={s.statsRow}>
           <div style={s.statBox}>
             <div style={s.statValue}>{last7Done}</div>
-            <div style={s.statLabel}>Sessions Done</div>
+            <div style={s.statLabel}>{t('parent.sessions_done')}</div>
           </div>
           <div style={s.statBox}>
             <div style={s.statValue}>{last7Planned}</div>
-            <div style={s.statLabel}>Sessions Planned</div>
+            <div style={s.statLabel}>{t('parent.sessions_planned')}</div>
           </div>
           <div style={s.statBox}>
             <div style={s.statValue}>{(activeJunior.prs || []).length}</div>
-            <div style={s.statLabel}>PRs Logged</div>
+            <div style={s.statLabel}>{t('parent.prs_logged')}</div>
           </div>
         </div>
       </div>
 
       {/* RECENT TRAINING */}
       <div style={s.card}>
-        <div style={s.cardTitle}>RECENT TRAINING</div>
+        <div style={s.cardTitle}>{t('parent.recent_training')}</div>
         {Object.entries(activeJunior.workouts || {})
           .sort(([a], [b]) => b.localeCompare(a))
           .slice(0, 7)
           .map(([date, w]) => (
             <div key={date} style={s.historyRow}>
               <span style={{ color: '#888' }}>{date}</span>
-              <span style={{ color: '#e0e0e0' }}>{w.title || 'Untitled'}</span>
-              <span style={{ color: w.completed ? '#00ff41' : '#666' }}>{w.completed ? '✓ DONE' : 'PLANNED'}</span>
+              <span style={{ color: '#e0e0e0' }}>{w.title || t('parent.untitled')}</span>
+              <span style={{ color: w.completed ? '#00ff41' : '#666' }}>{w.completed ? t('parent.done') : t('parent.planned')}</span>
             </div>
           ))}
         {Object.keys(activeJunior.workouts || {}).length === 0 && (
-          <div style={s.note}>No training logged yet.</div>
+          <div style={s.note}>{t('parent.no_training')}</div>
         )}
       </div>
 
       {/* PEDIATRICIAN + EMERGENCY CONTACT — parent-editable */}
       <div style={s.card}>
-        <div style={s.cardTitle}>EMERGENCY CONTACT</div>
-        <label style={s.label}>NAME</label>
+        <div style={s.cardTitle}>{t('parent.emergency_contact')}</div>
+        <label style={s.label}>{t('parent.name_label')}</label>
         <input
           type="text"
           style={s.input}
           value={consent?.emergencyContact?.name || ''}
           onChange={e => handleUpdateEmergencyContact('name', e.target.value)}
         />
-        <label style={s.label}>RELATIONSHIP</label>
+        <label style={s.label}>{t('parent.relationship_label')}</label>
         <input
           type="text"
           style={s.input}
           value={consent?.emergencyContact?.relationship || ''}
           onChange={e => handleUpdateEmergencyContact('relationship', e.target.value)}
         />
-        <label style={s.label}>PHONE</label>
+        <label style={s.label}>{t('parent.phone_label')}</label>
         <input
           type="tel"
           style={s.input}
@@ -280,11 +287,11 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
         />
 
         <div style={{ ...s.pediatricianRow, marginTop: 8 }}>
-          <span style={{ fontSize: 10, color: '#888', letterSpacing: 1 }}>PEDIATRICIAN CLEARANCE:</span>
+          <span style={{ fontSize: 10, color: '#888', letterSpacing: 1 }}>{t('parent.pediatrician_label')}</span>
           <span style={{ color: consent?.pediatricianClearance ? '#00ff41' : '#888', fontSize: 12 }}>
             {consent?.pediatricianClearance
-              ? `✓ ON FILE${consent?.pediatricianClearanceDate ? ` (${consent.pediatricianClearanceDate})` : ''}`
-              : 'NOT ON FILE'}
+              ? `${t('parent.pediatrician_on_file')}${consent?.pediatricianClearanceDate ? ` (${consent.pediatricianClearanceDate})` : ''}`
+              : t('parent.pediatrician_not_on_file')}
           </span>
         </div>
       </div>
@@ -292,24 +299,24 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
       {/* COACH CONTACT */}
       {activeJunior.trainerId && (
         <div style={s.card}>
-          <div style={s.cardTitle}>COACH</div>
-          <p style={s.note}>Reach out to your junior&apos;s trainer directly. In-app secure messaging is on the roadmap.</p>
-          <a style={s.coachLink} href={`mailto:?subject=Question about ${activeJunior.callsign}`}>
-            EMAIL COACH
+          <div style={s.cardTitle}>{t('parent.coach')}</div>
+          <p style={s.note}>{t('parent.coach_note')}</p>
+          <a style={s.coachLink} href={`mailto:?subject=${t('parent.email_subject_prefix')} ${activeJunior.callsign}`}>
+            {t('parent.email_coach')}
           </a>
           {onSelectJuniorForChat && (
             <button
               style={{ ...s.coachLink, marginLeft: 8, background: 'transparent' }}
               onClick={() => onSelectJuniorForChat(activeJunior)}
             >
-              VIEW {activeJunior.callsign}&apos;S CHAT
+              {t('parent.view_chat_prefix')} {activeJunior.callsign}{t('parent.view_chat_suffix')}
             </button>
           )}
         </div>
       )}
 
       <p style={s.note}>
-        You have read-only visibility into {activeJunior.callsign}&apos;s training log and Gunny chat. You cannot modify their workouts or chat history. Safety events are flagged automatically; resolving an event records your callsign as the resolver.
+        {t('parent.footer').replace('{callsign}', activeJunior.callsign)}
       </p>
     </div>
   );

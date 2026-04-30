@@ -17,17 +17,18 @@ import type { MacroCycle, MacroGoal, MacroGoalType, Operator } from '@/lib/types
 import { buildMacroCycle, getActiveBlock, daysToGoal, recomputeOnGoalDateChange } from '@/lib/macrocycle';
 import { getTemplateNominalWeeks } from '@/lib/macrocycleLibrary';
 import { getLocalDateStr } from '@/lib/dateUtils';
+import { useLanguage } from '@/lib/i18n';
 
 interface MacrocyclePanelProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
 }
 
-const GOAL_TYPE_OPTIONS: { value: MacroGoalType; label: string; nominalWeeks: number }[] = [
-  { value: 'powerlifting_meet', label: 'Powerlifting Meet', nominalWeeks: getTemplateNominalWeeks('powerlifting_meet') },
-  { value: 'hypertrophy_phase', label: 'Hypertrophy Phase', nominalWeeks: getTemplateNominalWeeks('hypertrophy_phase') },
-  { value: 'season_prep',       label: 'Season Prep',       nominalWeeks: getTemplateNominalWeeks('season_prep') },
-  { value: 'fat_loss',          label: 'Fat Loss',          nominalWeeks: getTemplateNominalWeeks('fat_loss') },
+const GOAL_TYPE_OPTIONS: { value: MacroGoalType; labelKey: string; nominalWeeks: number }[] = [
+  { value: 'powerlifting_meet', labelKey: 'macrocycle.goal.powerlifting_meet', nominalWeeks: getTemplateNominalWeeks('powerlifting_meet') },
+  { value: 'hypertrophy_phase', labelKey: 'macrocycle.goal.hypertrophy_phase', nominalWeeks: getTemplateNominalWeeks('hypertrophy_phase') },
+  { value: 'season_prep',       labelKey: 'macrocycle.goal.season_prep',       nominalWeeks: getTemplateNominalWeeks('season_prep') },
+  { value: 'fat_loss',          labelKey: 'macrocycle.goal.fat_loss',          nominalWeeks: getTemplateNominalWeeks('fat_loss') },
 ];
 
 const BLOCK_COLORS: Record<string, string> = {
@@ -44,6 +45,7 @@ const BLOCK_COLORS: Record<string, string> = {
 };
 
 export default function MacrocyclePanel({ operator, onUpdateOperator }: MacrocyclePanelProps) {
+  const { t } = useLanguage();
   const cycles = operator.macroCycles || [];
   const today = getLocalDateStr();
 
@@ -58,7 +60,7 @@ export default function MacrocyclePanel({ operator, onUpdateOperator }: Macrocyc
     const goal: MacroGoal = {
       id: `mg-${Date.now()}`,
       type: form.type,
-      name: form.name.trim() || GOAL_TYPE_OPTIONS.find((o) => o.value === form.type)!.label,
+      name: form.name.trim() || t(GOAL_TYPE_OPTIONS.find((o) => o.value === form.type)!.labelKey),
       targetDate: form.targetDate,
       priority: form.priority,
       status: 'active',
@@ -68,7 +70,7 @@ export default function MacrocyclePanel({ operator, onUpdateOperator }: Macrocyc
     // Cap at 2 active cycles. If already 2, refuse — UI prevents this.
     const active = (operator.macroCycles || []).filter((c) => c.goal.status === 'active');
     if (active.length >= 2) {
-      alert('Max 2 active macrocycles. Pause or complete one before adding another.');
+      alert(t('macrocycle.alert_max'));
       return;
     }
     onUpdateOperator({
@@ -79,7 +81,7 @@ export default function MacrocyclePanel({ operator, onUpdateOperator }: Macrocyc
   };
 
   const handleRemoveGoal = (cycleId: string) => {
-    if (!confirm('Remove this macrocycle? Block history is preserved in workouts.')) return;
+    if (!confirm(t('macrocycle.confirm_remove'))) return;
     onUpdateOperator({
       ...operator,
       macroCycles: (operator.macroCycles || []).filter((c) => c.id !== cycleId),
@@ -101,10 +103,10 @@ export default function MacrocyclePanel({ operator, onUpdateOperator }: Macrocyc
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
         <div>
           <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1 }}>
-            // MACROCYCLE
+            {t('macrocycle.title')}
           </div>
           <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-            Calendar-aware planning for 6-12 month goals
+            {t('macrocycle.subtitle')}
           </div>
         </div>
         {cycles.length < 2 && (
@@ -113,7 +115,7 @@ export default function MacrocyclePanel({ operator, onUpdateOperator }: Macrocyc
             onClick={() => setShowSetup(true)}
             className="btn btn-primary btn-sm"
           >
-            + Set Goal
+            {t('macrocycle.set_goal')}
           </button>
         )}
       </div>
@@ -131,11 +133,7 @@ export default function MacrocyclePanel({ operator, onUpdateOperator }: Macrocyc
             lineHeight: 1.6,
           }}
         >
-          No active goal yet. Set a target — meet date, hypertrophy phase
-          end, season opener, fat-loss deadline — and Gunny will reverse-
-          engineer the training blocks. Daily Brief becomes calendar-aware:
-          you'll see &quot;Week 3 of Accumulation, push volume&quot; instead of just
-          today&apos;s prescription in isolation.
+          {t('macrocycle.empty_state')}
         </div>
       )}
 
@@ -171,6 +169,7 @@ interface GoalSetupFormProps {
 }
 
 function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFormProps) {
+  const { t } = useLanguage();
   const [type, setType] = useState<MacroGoalType>('powerlifting_meet');
   const [name, setName] = useState('');
   const [targetDate, setTargetDate] = useState(() => {
@@ -193,10 +192,10 @@ function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFo
 
   const fitNote =
     intervalWeeks < nominalWeeks
-      ? `⚠ ${intervalWeeks}wk interval is shorter than the ${nominalWeeks}wk template — flexible front blocks will compress.`
+      ? t('macrocycle.fit_short').replace('{interval}', String(intervalWeeks)).replace('{nominal}', String(nominalWeeks))
       : intervalWeeks > nominalWeeks
-        ? `${intervalWeeks}wk interval is longer than the ${nominalWeeks}wk template — flexible front blocks will extend.`
-        : `${intervalWeeks}wk fits the ${nominalWeeks}wk template exactly.`;
+        ? t('macrocycle.fit_long').replace('{interval}', String(intervalWeeks)).replace('{nominal}', String(nominalWeeks))
+        : t('macrocycle.fit_exact').replace('{interval}', String(intervalWeeks)).replace('{nominal}', String(nominalWeeks));
 
   return (
     <div
@@ -209,11 +208,11 @@ function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFo
       }}
     >
       <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#00ff41', letterSpacing: 2, marginBottom: 12 }}>
-        SET GOAL
+        {t('macrocycle.setup_heading')}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
         <label style={{ display: 'block', fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#888' }}>
-          Goal type
+          {t('macrocycle.goal_type')}
           <select
             value={type}
             onChange={(e) => setType(e.target.value as MacroGoalType)}
@@ -229,13 +228,13 @@ function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFo
           >
             {GOAL_TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
-                {o.label} · {o.nominalWeeks}wk nominal
+                {t(o.labelKey)} · {o.nominalWeeks}{t('macrocycle.nominal_suffix')}
               </option>
             ))}
           </select>
         </label>
         <label style={{ display: 'block', fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#888' }}>
-          Priority
+          {t('macrocycle.priority')}
           <select
             value={priority}
             onChange={(e) => setPriority(Number(e.target.value) as 1 | 2)}
@@ -249,18 +248,18 @@ function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFo
               fontFamily: 'inherit',
             }}
           >
-            <option value={1}>1 — Primary (this is THE goal)</option>
-            <option value={2}>2 — Secondary (runs alongside primary)</option>
+            <option value={1}>{t('macrocycle.priority_1')}</option>
+            <option value={2}>{t('macrocycle.priority_2')}</option>
           </select>
         </label>
       </div>
       <label style={{ display: 'block', fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#888', marginBottom: 10 }}>
-        Goal name (optional)
+        {t('macrocycle.goal_name_label')}
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Springfield PL Open 2026"
+          placeholder={t('macrocycle.goal_name_placeholder')}
           style={{
             width: '100%',
             marginTop: 4,
@@ -273,7 +272,7 @@ function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFo
         />
       </label>
       <label style={{ display: 'block', fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#888', marginBottom: 8 }}>
-        Target date
+        {t('macrocycle.target_date')}
         <input
           type="date"
           value={targetDate}
@@ -302,7 +301,7 @@ function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFo
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={onCancel} className="btn btn-ghost btn-sm">
-          Cancel
+          {t('macrocycle.cancel')}
         </button>
         <button
           type="button"
@@ -311,7 +310,7 @@ function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFo
           className="btn btn-primary btn-sm"
           style={{ flex: 1 }}
         >
-          Build Macrocycle
+          {t('macrocycle.build')}
         </button>
       </div>
     </div>
@@ -328,6 +327,7 @@ interface CycleCardProps {
 }
 
 const CycleCard: React.FC<CycleCardProps> = ({ cycle, today, onRemove, onMoveDate }) => {
+  const { t } = useLanguage();
   const active = getActiveBlock(cycle, today);
   const dToGoal = daysToGoal(cycle, today);
   const totalDays = (() => {
@@ -361,13 +361,13 @@ const CycleCard: React.FC<CycleCardProps> = ({ cycle, today, onRemove, onMoveDat
             {cycle.goal.name}
           </div>
           <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
-            {cycle.goal.type.replace(/_/g, ' ').toUpperCase()} · Priority {cycle.goal.priority} · {dToGoal >= 0 ? `${dToGoal} days to goal` : `${Math.abs(dToGoal)} days past`}
+            {cycle.goal.type.replace(/_/g, ' ').toUpperCase()} · {t('macrocycle.priority_label')} {cycle.goal.priority} · {dToGoal >= 0 ? `${dToGoal} ${t('macrocycle.days_to_goal_suffix')}` : `${Math.abs(dToGoal)} ${t('macrocycle.days_past_suffix')}`}
           </div>
         </div>
         <button
           type="button"
           onClick={onRemove}
-          aria-label="Remove macrocycle"
+          aria-label={t('macrocycle.remove_aria')}
           style={{
             background: 'transparent',
             border: 'none',
@@ -428,19 +428,19 @@ const CycleCard: React.FC<CycleCardProps> = ({ cycle, today, onRemove, onMoveDat
       {active && (
         <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 12, color: '#a0a0a0', marginTop: 8 }}>
           <div style={{ color: '#00ff41', fontWeight: 700, marginBottom: 4 }}>
-            ▸ ACTIVE: {active.name}
+            {t('macrocycle.active_label')} {active.name}
           </div>
           <div style={{ marginBottom: 4 }}>{active.description}</div>
           <div style={{ color: 'var(--text-tertiary)' }}>
-            Vol ×{active.volumeMultiplier.toFixed(2)} · Int ×{active.intensityMultiplier.toFixed(2)}
-            {active.performanceMarker && ` · Marker: ${active.performanceMarker.label}`}
+            {t('macrocycle.vol_int').replace('{vol}', active.volumeMultiplier.toFixed(2)).replace('{int}', active.intensityMultiplier.toFixed(2))}
+            {active.performanceMarker && ` · ${t('macrocycle.marker_prefix')} ${active.performanceMarker.label}`}
           </div>
         </div>
       )}
 
       <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: 'var(--text-dim)' }}>
-          Target: {cycle.goal.targetDate}
+          {t('macrocycle.target_label')} {cycle.goal.targetDate}
         </div>
         {editingDate ? (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -463,14 +463,14 @@ const CycleCard: React.FC<CycleCardProps> = ({ cycle, today, onRemove, onMoveDat
               onClick={() => { onMoveDate(pendingDate); setEditingDate(false); }}
               className="btn btn-primary btn-sm"
             >
-              Save
+              {t('macrocycle.save')}
             </button>
             <button
               type="button"
               onClick={() => { setPendingDate(cycle.goal.targetDate); setEditingDate(false); }}
               className="btn btn-ghost btn-sm"
             >
-              Cancel
+              {t('macrocycle.cancel')}
             </button>
           </div>
         ) : (
@@ -479,7 +479,7 @@ const CycleCard: React.FC<CycleCardProps> = ({ cycle, today, onRemove, onMoveDat
             onClick={() => setEditingDate(true)}
             className="btn btn-ghost btn-sm"
           >
-            Move date
+            {t('macrocycle.move_date')}
           </button>
         )}
       </div>

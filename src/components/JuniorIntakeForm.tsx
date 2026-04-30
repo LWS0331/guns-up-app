@@ -25,6 +25,7 @@ import {
   DayOfWeek,
   formatHeightInput,
 } from '@/lib/types';
+import { useLanguage } from '@/lib/i18n';
 
 interface JuniorIntakeFormProps {
   operator: Operator;
@@ -53,68 +54,73 @@ const STEP_ORDER: JuniorStep[] = [
 
 // Youth-safe goal options. Explicitly omitted: weight loss, body
 // composition, "lean out". See docs/youth-soccer-corpus.md §11.
+// `label` is the canonical English value stored in DB (sportProfile
+// focusAreas + operator goals are seeded from this). `labelKey` is the
+// i18n key resolved at render time for display.
 export const JUNIOR_GOAL_OPTIONS = [
-  { id: 'speed', label: 'GET FASTER', desc: 'Sprint speed, acceleration, top-end' },
-  { id: 'agility', label: 'IMPROVE AGILITY', desc: 'Change direction, reactive movement' },
-  { id: 'strength', label: 'BUILD STRENGTH', desc: 'Age-appropriate, body-control first' },
-  { id: 'mechanics', label: 'RUNNING MECHANICS', desc: 'Posture, stride, foot strike' },
-  { id: 'aggression', label: 'COMPETE HARDER', desc: 'On-field confidence, physicality' },
-  { id: 'ball_skills', label: 'BALL SKILLS', desc: 'Touch, control, 1v1' },
-  { id: 'fitness', label: 'MATCH FITNESS', desc: 'Last the full game, recover faster' },
-  { id: 'injury_prev', label: 'STAY HEALTHY', desc: 'FIFA 11+, ACL prevention, mobility' },
+  { id: 'speed', label: 'GET FASTER', labelKey: 'junior.goal.speed.label', descKey: 'junior.goal.speed.desc' },
+  { id: 'agility', label: 'IMPROVE AGILITY', labelKey: 'junior.goal.agility.label', descKey: 'junior.goal.agility.desc' },
+  { id: 'strength', label: 'BUILD STRENGTH', labelKey: 'junior.goal.strength.label', descKey: 'junior.goal.strength.desc' },
+  { id: 'mechanics', label: 'RUNNING MECHANICS', labelKey: 'junior.goal.mechanics.label', descKey: 'junior.goal.mechanics.desc' },
+  { id: 'aggression', label: 'COMPETE HARDER', labelKey: 'junior.goal.aggression.label', descKey: 'junior.goal.aggression.desc' },
+  { id: 'ball_skills', label: 'BALL SKILLS', labelKey: 'junior.goal.ball_skills.label', descKey: 'junior.goal.ball_skills.desc' },
+  { id: 'fitness', label: 'MATCH FITNESS', labelKey: 'junior.goal.fitness.label', descKey: 'junior.goal.fitness.desc' },
+  { id: 'injury_prev', label: 'STAY HEALTHY', labelKey: 'junior.goal.injury_prev.label', descKey: 'junior.goal.injury_prev.desc' },
 ];
 
-const POSITION_OPTIONS: { id: SoccerPosition; label: string; desc: string }[] = [
-  { id: 'GK', label: 'GOALKEEPER', desc: 'Between the posts' },
-  { id: 'CB', label: 'CENTRE BACK', desc: 'Defend the box' },
-  { id: 'FB', label: 'FULL BACK', desc: 'Wide defender' },
-  { id: 'CM', label: 'MIDFIELDER', desc: 'Central / box-to-box' },
-  { id: 'W', label: 'WINGER', desc: 'Wide attacker' },
-  { id: 'ST', label: 'STRIKER', desc: 'Number 9 / forward' },
-  { id: 'unsure', label: 'NOT SURE YET', desc: 'Coach will help confirm' },
+const POSITION_OPTIONS: { id: SoccerPosition; labelKey: string; descKey: string }[] = [
+  { id: 'GK', labelKey: 'junior.pos.gk.label', descKey: 'junior.pos.gk.desc' },
+  { id: 'CB', labelKey: 'junior.pos.cb.label', descKey: 'junior.pos.cb.desc' },
+  { id: 'FB', labelKey: 'junior.pos.fb.label', descKey: 'junior.pos.fb.desc' },
+  { id: 'CM', labelKey: 'junior.pos.cm.label', descKey: 'junior.pos.cm.desc' },
+  { id: 'W', labelKey: 'junior.pos.w.label', descKey: 'junior.pos.w.desc' },
+  { id: 'ST', labelKey: 'junior.pos.st.label', descKey: 'junior.pos.st.desc' },
+  { id: 'unsure', labelKey: 'junior.pos.unsure.label', descKey: 'junior.pos.unsure.desc' },
 ];
 
-const LEVEL_OPTIONS: { id: CompetitionLevel; label: string; desc: string }[] = [
-  { id: 'recreational', label: 'RECREATIONAL', desc: 'Local rec league' },
-  { id: 'club', label: 'CLUB', desc: 'Travel / select club' },
-  { id: 'academy', label: 'ACADEMY', desc: 'ECNL / MLS Next / development academy' },
-  { id: 'high_school_varsity', label: 'HIGH SCHOOL VARSITY', desc: 'Varsity team' },
-  { id: 'mixed', label: 'MIXED', desc: 'Club + school + tournaments' },
+const LEVEL_OPTIONS: { id: CompetitionLevel; labelKey: string; descKey: string }[] = [
+  { id: 'recreational', labelKey: 'junior.lvl.recreational.label', descKey: 'junior.lvl.recreational.desc' },
+  { id: 'club', labelKey: 'junior.lvl.club.label', descKey: 'junior.lvl.club.desc' },
+  { id: 'academy', labelKey: 'junior.lvl.academy.label', descKey: 'junior.lvl.academy.desc' },
+  { id: 'high_school_varsity', labelKey: 'junior.lvl.high_school.label', descKey: 'junior.lvl.high_school.desc' },
+  { id: 'mixed', labelKey: 'junior.lvl.mixed.label', descKey: 'junior.lvl.mixed.desc' },
 ];
 
-const DAY_OPTIONS: { id: DayOfWeek; label: string }[] = [
-  { id: 'mon', label: 'MON' },
-  { id: 'tue', label: 'TUE' },
-  { id: 'wed', label: 'WED' },
-  { id: 'thu', label: 'THU' },
-  { id: 'fri', label: 'FRI' },
-  { id: 'sat', label: 'SAT' },
-  { id: 'sun', label: 'SUN' },
+const DAY_OPTIONS: { id: DayOfWeek; labelKey: string }[] = [
+  { id: 'mon', labelKey: 'junior.day.mon' },
+  { id: 'tue', labelKey: 'junior.day.tue' },
+  { id: 'wed', labelKey: 'junior.day.wed' },
+  { id: 'thu', labelKey: 'junior.day.thu' },
+  { id: 'fri', labelKey: 'junior.day.fri' },
+  { id: 'sat', labelKey: 'junior.day.sat' },
+  { id: 'sun', labelKey: 'junior.day.sun' },
 ];
 
-const MATURATION_OPTIONS: { id: MaturationStage; label: string; desc: string }[] = [
-  { id: 'pre_phv', label: 'PRE-PHV', desc: 'Hasn’t hit growth spurt yet (typical: girls <11, boys <13)' },
-  { id: 'peri_phv', label: 'PERI-PHV', desc: 'Currently in growth spurt — fast height gain, "awkward" coordination' },
-  { id: 'post_phv', label: 'POST-PHV', desc: 'Growth spurt complete, height stable for 12+ months' },
-  { id: 'unknown', label: 'NOT SURE', desc: 'Trainer will assess at first session' },
+const MATURATION_OPTIONS: { id: MaturationStage; labelKey: string; descKey: string }[] = [
+  { id: 'pre_phv', labelKey: 'junior.mat.pre_phv.label', descKey: 'junior.mat.pre_phv.desc' },
+  { id: 'peri_phv', labelKey: 'junior.mat.peri_phv.label', descKey: 'junior.mat.peri_phv.desc' },
+  { id: 'post_phv', labelKey: 'junior.mat.post_phv.label', descKey: 'junior.mat.post_phv.desc' },
+  { id: 'unknown', labelKey: 'junior.mat.unknown.label', descKey: 'junior.mat.unknown.desc' },
 ];
 
 // Common youth athletic focus areas — checkbox list, athlete + parent pick
-// what matters. Free-form additions handled in coachNotes.
-const FOCUS_OPTIONS = [
-  'Aggressive on-field play',
-  'Agility / change of direction',
-  'Running mechanics',
-  'Ball mastery / touch',
-  '1v1 confidence',
-  'Decision-making under pressure',
-  'Match fitness / endurance',
-  'Strength / body control',
-  'Mobility / flexibility',
-  'Injury prevention (FIFA 11+ / ACL)',
+// what matters. Free-form additions handled in coachNotes. Stored value
+// is the English label; translated for display.
+const FOCUS_OPTIONS: { value: string; labelKey: string }[] = [
+  { value: 'Aggressive on-field play', labelKey: 'junior.focus.aggressive' },
+  { value: 'Agility / change of direction', labelKey: 'junior.focus.agility' },
+  { value: 'Running mechanics', labelKey: 'junior.focus.mechanics' },
+  { value: 'Ball mastery / touch', labelKey: 'junior.focus.ball_mastery' },
+  { value: '1v1 confidence', labelKey: 'junior.focus.confidence' },
+  { value: 'Decision-making under pressure', labelKey: 'junior.focus.decisions' },
+  { value: 'Match fitness / endurance', labelKey: 'junior.focus.match_fitness' },
+  { value: 'Strength / body control', labelKey: 'junior.focus.strength' },
+  { value: 'Mobility / flexibility', labelKey: 'junior.focus.mobility' },
+  { value: 'Injury prevention (FIFA 11+ / ACL)', labelKey: 'junior.focus.injury_prev' },
 ];
 
 export default function JuniorIntakeForm({ operator, onComplete, onSkip }: JuniorIntakeFormProps) {
+  const { t } = useLanguage();
   const [step, setStep] = useState<JuniorStep>('welcome');
 
   // Basics
@@ -340,9 +346,9 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
   return (
     <div style={s.container}>
       <div style={s.header}>
-        <div style={s.title}>JUNIOR OPERATOR INTAKE</div>
-        <div style={s.subtitle}>OPERATOR: {operator.callsign}</div>
-        <div style={s.badge}>YOUTH PROGRAM (10–18)</div>
+        <div style={s.title}>{t('junior.title')}</div>
+        <div style={s.subtitle}>{t('junior.operator_label')} {operator.callsign}</div>
+        <div style={s.badge}>{t('junior.youth_badge')}</div>
       </div>
       <div style={s.progressBar}>
         <div style={{ ...s.progressFill, width: `${progress}%` }} />
@@ -350,47 +356,47 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
 
       {step === 'welcome' && (
         <div>
-          <div style={s.stepTitle}>WELCOME, {operator.callsign}</div>
+          <div style={s.stepTitle}>{t('junior.welcome_step').replace('{callsign}', operator.callsign)}</div>
           <p style={{ color: '#ccc', lineHeight: 1.6, fontSize: 13, marginBottom: 16 }}>
-            Welcome to GUNS UP. Let&apos;s get to know you so we can build a smart program for the field.
+            {t('junior.welcome_intro')}
           </p>
           <p style={{ color: '#ccc', lineHeight: 1.6, fontSize: 13, marginBottom: 16 }}>
-            Heads up — your parents can see your training log and our conversations. That&apos;s part of how the Junior Operator program works. So when you talk to Gunny, talk how you&apos;d talk to a coach in front of your parents.
+            {t('junior.welcome_transparency')}
           </p>
           <p style={{ color: '#888', fontSize: 12, marginBottom: 24 }}>
-            Estimated time: 4–6 minutes
+            {t('junior.welcome_time')}
           </p>
           <div style={s.navRow}>
-            {onSkip && <button style={s.btnSecondary} onClick={onSkip}>SKIP FOR NOW</button>}
-            <button style={s.btnPrimary} onClick={nextStep}>BEGIN</button>
+            {onSkip && <button style={s.btnSecondary} onClick={onSkip}>{t('junior.skip')}</button>}
+            <button style={s.btnPrimary} onClick={nextStep}>{t('junior.begin')}</button>
           </div>
         </div>
       )}
 
       {step === 'basics' && (
         <div>
-          <div style={s.stepTitle}>BASICS</div>
-          <label style={s.label}>AGE</label>
-          <input type="number" style={s.input} value={age || ''} onChange={e => setAge(parseInt(e.target.value) || 0)} placeholder="12" min={10} max={18} />
-          <label style={s.label}>HEIGHT (type digits, e.g. 411 for 4&apos;11&quot;)</label>
-          <input type="text" style={s.input} value={heightRaw} onChange={e => setHeightRaw(e.target.value)} onBlur={() => setHeightRaw(formatHeightInput(heightRaw))} placeholder="411" />
-          <label style={s.label}>WEIGHT (lbs, optional but helps with hydration math)</label>
-          <input type="number" style={s.input} value={weight || ''} onChange={e => setWeight(parseFloat(e.target.value) || 0)} placeholder="90" />
+          <div style={s.stepTitle}>{t('junior.basics')}</div>
+          <label style={s.label}>{t('junior.age')}</label>
+          <input type="number" style={s.input} value={age || ''} onChange={e => setAge(parseInt(e.target.value) || 0)} placeholder={t('junior.age_placeholder')} min={10} max={18} />
+          <label style={s.label}>{t('junior.height_label')}</label>
+          <input type="text" style={s.input} value={heightRaw} onChange={e => setHeightRaw(e.target.value)} onBlur={() => setHeightRaw(formatHeightInput(heightRaw))} placeholder={t('junior.height_placeholder')} />
+          <label style={s.label}>{t('junior.weight_label')}</label>
+          <input type="number" style={s.input} value={weight || ''} onChange={e => setWeight(parseFloat(e.target.value) || 0)} placeholder={t('junior.weight_placeholder')} />
           <p style={s.note}>
-            We don&apos;t track body-fat % or any body-composition number for junior operators. Performance is what we measure — speed, jump, endurance, recovery.
+            {t('junior.no_body_comp_note')}
           </p>
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('junior.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('junior.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'sport_profile' && (
         <div>
-          <div style={s.stepTitle}>SPORT PROFILE — SOCCER</div>
+          <div style={s.stepTitle}>{t('junior.sport_profile')}</div>
 
-          <label style={s.label}>POSITION</label>
+          <label style={s.label}>{t('junior.position')}</label>
           <div style={{ ...s.optionGrid, gridTemplateColumns: 'repeat(2, 1fr)' }}>
             {POSITION_OPTIONS.map(p => (
               <div
@@ -398,13 +404,13 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
                 style={{ ...s.optionCard, ...(position === p.id ? s.optionCardActive : {}) }}
                 onClick={() => setPosition(p.id)}
               >
-                <div style={{ ...s.optionCardLabel, ...(position === p.id ? s.optionCardLabelActive : {}) }}>{p.label}</div>
-                <div style={s.optionCardDesc}>{p.desc}</div>
+                <div style={{ ...s.optionCardLabel, ...(position === p.id ? s.optionCardLabelActive : {}) }}>{t(p.labelKey)}</div>
+                <div style={s.optionCardDesc}>{t(p.descKey)}</div>
               </div>
             ))}
           </div>
 
-          <label style={s.label}>COMPETITION LEVEL</label>
+          <label style={s.label}>{t('junior.competition_level')}</label>
           <div style={s.optionCol}>
             {LEVEL_OPTIONS.map(l => (
               <div
@@ -412,19 +418,19 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
                 style={{ ...s.optionCard, ...(level === l.id ? s.optionCardActive : {}) }}
                 onClick={() => setLevel(l.id)}
               >
-                <div style={{ ...s.optionCardLabel, ...(level === l.id ? s.optionCardLabelActive : {}) }}>{l.label}</div>
-                <div style={s.optionCardDesc}>{l.desc}</div>
+                <div style={{ ...s.optionCardLabel, ...(level === l.id ? s.optionCardLabelActive : {}) }}>{t(l.labelKey)}</div>
+                <div style={s.optionCardDesc}>{t(l.descKey)}</div>
               </div>
             ))}
           </div>
 
-          <label style={s.label}>YEARS PLAYING SOCCER</label>
-          <input type="number" style={s.input} value={yearsPlaying || ''} onChange={e => setYearsPlaying(parseInt(e.target.value) || 0)} placeholder="4" min={0} max={18} />
+          <label style={s.label}>{t('junior.years_playing')}</label>
+          <input type="number" style={s.input} value={yearsPlaying || ''} onChange={e => setYearsPlaying(parseInt(e.target.value) || 0)} placeholder={t('junior.years_playing_placeholder')} min={0} max={18} />
 
-          <label style={s.label}>SOCCER PRACTICES PER WEEK (with team, not GUNS UP)</label>
-          <input type="number" style={s.input} value={trainingDaysPerWeek || ''} onChange={e => setTrainingDaysPerWeek(parseInt(e.target.value) || 0)} placeholder="3" min={0} max={7} />
+          <label style={s.label}>{t('junior.practices_per_week')}</label>
+          <input type="number" style={s.input} value={trainingDaysPerWeek || ''} onChange={e => setTrainingDaysPerWeek(parseInt(e.target.value) || 0)} placeholder={t('junior.practices_per_week_placeholder')} min={0} max={7} />
 
-          <label style={s.label}>GAME DAY</label>
+          <label style={s.label}>{t('junior.game_day')}</label>
           <div style={s.dayRow}>
             {DAY_OPTIONS.map(d => (
               <div
@@ -432,12 +438,12 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
                 style={{ ...s.dayBtn, ...(gameDay === d.id ? s.dayBtnActive : {}) }}
                 onClick={() => setGameDay(d.id)}
               >
-                {d.label}
+                {t(d.labelKey)}
               </div>
             ))}
           </div>
 
-          <label style={s.label}>NO-S&amp;C DAYS (other sports / rest — tap to toggle)</label>
+          <label style={s.label}>{t('junior.no_sc_days')}</label>
           <div style={s.dayRow}>
             {DAY_OPTIONS.map(d => (
               <div
@@ -445,24 +451,24 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
                 style={{ ...s.dayBtn, ...(noTrainingDays.includes(d.id) ? s.dayBtnActive : {}) }}
                 onClick={() => toggleNoTrainingDay(d.id)}
               >
-                {d.label}
+                {t(d.labelKey)}
               </div>
             ))}
           </div>
 
-          <label style={s.label}>TRAINING WINDOW (when can you usually train?)</label>
-          <input type="text" style={s.input} value={trainingWindow} onChange={e => setTrainingWindow(e.target.value)} placeholder="6:00 PM" />
+          <label style={s.label}>{t('junior.training_window')}</label>
+          <input type="text" style={s.input} value={trainingWindow} onChange={e => setTrainingWindow(e.target.value)} placeholder={t('junior.training_window_placeholder')} />
 
-          <label style={s.label}>OTHER SPORTS YOU PLAY (multi-sport is encouraged)</label>
+          <label style={s.label}>{t('junior.other_sports_label')}</label>
           <div style={{ ...s.checkboxRow, ...(multiSport ? s.checkboxRowActive : {}) }} onClick={() => setMultiSport(!multiSport)}>
             <input type="checkbox" style={s.checkbox} checked={multiSport} readOnly />
-            <span style={{ fontSize: 12 }}>I play another sport too</span>
+            <span style={{ fontSize: 12 }}>{t('junior.other_sports_check')}</span>
           </div>
           {multiSport && (
-            <input type="text" style={s.input} value={otherSports} onChange={e => setOtherSports(e.target.value)} placeholder="dance, basketball, track" />
+            <input type="text" style={s.input} value={otherSports} onChange={e => setOtherSports(e.target.value)} placeholder={t('junior.other_sports_placeholder')} />
           )}
 
-          <label style={s.label}>MATURATION STAGE (trainer can update later)</label>
+          <label style={s.label}>{t('junior.maturation_label')}</label>
           <div style={s.optionCol}>
             {MATURATION_OPTIONS.map(m => (
               <div
@@ -470,37 +476,37 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
                 style={{ ...s.optionCard, ...(maturationStage === m.id ? s.optionCardActive : {}) }}
                 onClick={() => setMaturationStage(m.id)}
               >
-                <div style={{ ...s.optionCardLabel, ...(maturationStage === m.id ? s.optionCardLabelActive : {}) }}>{m.label}</div>
-                <div style={s.optionCardDesc}>{m.desc}</div>
+                <div style={{ ...s.optionCardLabel, ...(maturationStage === m.id ? s.optionCardLabelActive : {}) }}>{t(m.labelKey)}</div>
+                <div style={s.optionCardDesc}>{t(m.descKey)}</div>
               </div>
             ))}
           </div>
 
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('junior.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('junior.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'focus_areas' && (
         <div>
-          <div style={s.stepTitle}>WHAT DO YOU WANT TO WORK ON?</div>
-          <p style={s.note}>Pick as many as apply — your trainer will balance them in your program.</p>
+          <div style={s.stepTitle}>{t('junior.focus_step')}</div>
+          <p style={s.note}>{t('junior.focus_note')}</p>
           <div style={s.optionCol}>
             {FOCUS_OPTIONS.map(f => (
               <div
-                key={f}
-                style={{ ...s.checkboxRow, ...(focusAreas.includes(f) ? s.checkboxRowActive : {}) }}
-                onClick={() => toggleFocus(f)}
+                key={f.value}
+                style={{ ...s.checkboxRow, ...(focusAreas.includes(f.value) ? s.checkboxRowActive : {}) }}
+                onClick={() => toggleFocus(f.value)}
               >
-                <input type="checkbox" style={s.checkbox} checked={focusAreas.includes(f)} readOnly />
-                <span style={{ fontSize: 12, color: focusAreas.includes(f) ? '#00ff41' : '#ccc' }}>{f}</span>
+                <input type="checkbox" style={s.checkbox} checked={focusAreas.includes(f.value)} readOnly />
+                <span style={{ fontSize: 12, color: focusAreas.includes(f.value) ? '#00ff41' : '#ccc' }}>{t(f.labelKey)}</span>
               </div>
             ))}
           </div>
 
-          <label style={s.label}>PRIMARY GOALS</label>
+          <label style={s.label}>{t('junior.primary_goals')}</label>
           <div style={s.optionGrid}>
             {JUNIOR_GOAL_OPTIONS.map(g => (
               <div
@@ -508,107 +514,107 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
                 style={{ ...s.optionCard, ...(primaryGoals.includes(g.id) ? s.optionCardActive : {}) }}
                 onClick={() => toggleGoal(g.id)}
               >
-                <div style={{ ...s.optionCardLabel, ...(primaryGoals.includes(g.id) ? s.optionCardLabelActive : {}) }}>{g.label}</div>
-                <div style={s.optionCardDesc}>{g.desc}</div>
+                <div style={{ ...s.optionCardLabel, ...(primaryGoals.includes(g.id) ? s.optionCardLabelActive : {}) }}>{t(g.labelKey)}</div>
+                <div style={s.optionCardDesc}>{t(g.descKey)}</div>
               </div>
             ))}
           </div>
 
-          <label style={s.label}>COACH / PARENT NOTES (optional — anything Gunny should know)</label>
-          <textarea style={s.textarea} value={coachNotes} onChange={e => setCoachNotes(e.target.value)} placeholder="e.g. Speed is a strength. Slightly undersized — leverage quickness over physicality. Running tech needs work — knee drive, foot strike, posture." />
+          <label style={s.label}>{t('junior.coach_notes_label')}</label>
+          <textarea style={s.textarea} value={coachNotes} onChange={e => setCoachNotes(e.target.value)} placeholder={t('junior.coach_notes_placeholder')} />
 
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('junior.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('junior.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'health' && (
         <div>
-          <div style={s.stepTitle}>HEALTH SCREEN</div>
+          <div style={s.stepTitle}>{t('junior.health')}</div>
 
-          <label style={s.label}>ANY CURRENT PAIN OR INJURY?</label>
+          <label style={s.label}>{t('junior.current_pain_label')}</label>
           <div style={{ ...s.checkboxRow, ...(hasCurrentPain ? s.checkboxRowActive : {}) }} onClick={() => setHasCurrentPain(!hasCurrentPain)}>
             <input type="checkbox" style={s.checkbox} checked={hasCurrentPain} readOnly />
-            <span style={{ fontSize: 12 }}>Yes, something hurts right now</span>
+            <span style={{ fontSize: 12 }}>{t('junior.current_pain_check')}</span>
           </div>
           {hasCurrentPain && (
             <>
-              <textarea style={s.textarea} value={painDescription} onChange={e => setPainDescription(e.target.value)} placeholder="e.g. left knee aches after games, started 2 weeks ago" />
+              <textarea style={s.textarea} value={painDescription} onChange={e => setPainDescription(e.target.value)} placeholder={t('junior.pain_placeholder')} />
               <p style={s.note}>
-                Gunny will not coach you through pain. Anything that hurts gets a pediatrician or athletic trainer first — your trainer will follow up.
+                {t('junior.pain_note')}
               </p>
             </>
           )}
 
-          <label style={s.label}>PEDIATRICIAN CLEARANCE</label>
+          <label style={s.label}>{t('junior.pediatrician_label')}</label>
           <div style={{ ...s.checkboxRow, ...(pediatricianClearance ? s.checkboxRowActive : {}) }} onClick={() => setPediatricianClearance(!pediatricianClearance)}>
             <input type="checkbox" style={s.checkbox} checked={pediatricianClearance} readOnly />
-            <span style={{ fontSize: 12 }}>Pediatrician has cleared this athlete for sport</span>
+            <span style={{ fontSize: 12 }}>{t('junior.pediatrician_check')}</span>
           </div>
           {pediatricianClearance && (
             <>
-              <label style={s.label}>CLEARANCE DATE (optional)</label>
+              <label style={s.label}>{t('junior.clearance_date_label')}</label>
               <input type="date" style={s.input} value={pediatricianClearanceDate} onChange={e => setPediatricianClearanceDate(e.target.value)} />
             </>
           )}
 
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('junior.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('junior.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'consent' && (
         <div>
-          <div style={s.stepTitle}>PARENT CONSENT</div>
+          <div style={s.stepTitle}>{t('junior.consent_step')}</div>
           <p style={s.note}>
-            For a junior operator to participate, we need a parent or guardian to confirm consent. Both checkboxes are required, plus an emergency contact.
+            {t('junior.consent_intro')}
           </p>
 
           <div style={s.consentBlock}>
             <div style={s.consentText}>
-              I confirm my junior&apos;s participation in the GUNS UP Junior Operator program. I understand Gunny is an AI coach, not a clinician — any pain, injury, suspected concussion, or mental-health concern is referred to a qualified medical professional, not coached. I also understand that programming is age-appropriate and follows published youth-soccer guidelines (FIFA 11+, NSCA youth resistance training, AAP/AOSSM workload caps).
+              {t('junior.consent_participation_text')}
             </div>
             <div style={{ ...s.checkboxRow, ...(participationConsent ? s.checkboxRowActive : {}) }} onClick={() => setParticipationConsent(!participationConsent)}>
               <input type="checkbox" style={s.checkbox} checked={participationConsent} readOnly />
-              <span style={{ fontSize: 12 }}>PARTICIPATION CONSENT</span>
+              <span style={{ fontSize: 12 }}>{t('junior.consent_participation_check')}</span>
             </div>
           </div>
 
           <div style={s.consentBlock}>
             <div style={s.consentText}>
-              I consent to GUNS UP storing my junior&apos;s training log, Gunny chat history, sport profile, and health-screen answers. I understand I have full visibility into the account via my parent dashboard, and I can request deletion at any time.
+              {t('junior.consent_data_text')}
             </div>
             <div style={{ ...s.checkboxRow, ...(dataConsent ? s.checkboxRowActive : {}) }} onClick={() => setDataConsent(!dataConsent)}>
               <input type="checkbox" style={s.checkbox} checked={dataConsent} readOnly />
-              <span style={{ fontSize: 12 }}>DATA CONSENT</span>
+              <span style={{ fontSize: 12 }}>{t('junior.consent_data_check')}</span>
             </div>
           </div>
 
-          <label style={s.label}>EMERGENCY CONTACT — NAME *</label>
-          <input type="text" style={s.input} value={emergencyName} onChange={e => setEmergencyName(e.target.value)} placeholder="Full name" />
+          <label style={s.label}>{t('junior.emergency_name_label')}</label>
+          <input type="text" style={s.input} value={emergencyName} onChange={e => setEmergencyName(e.target.value)} placeholder={t('junior.emergency_name_placeholder')} />
 
-          <label style={s.label}>RELATIONSHIP</label>
-          <input type="text" style={s.input} value={emergencyRelationship} onChange={e => setEmergencyRelationship(e.target.value)} placeholder="Mother / Father / Guardian" />
+          <label style={s.label}>{t('junior.relationship_label')}</label>
+          <input type="text" style={s.input} value={emergencyRelationship} onChange={e => setEmergencyRelationship(e.target.value)} placeholder={t('junior.relationship_placeholder')} />
 
-          <label style={s.label}>PHONE *</label>
-          <input type="tel" style={s.input} value={emergencyPhone} onChange={e => setEmergencyPhone(e.target.value)} placeholder="(555) 123-4567" />
+          <label style={s.label}>{t('junior.phone_label')}</label>
+          <input type="tel" style={s.input} value={emergencyPhone} onChange={e => setEmergencyPhone(e.target.value)} placeholder={t('junior.phone_placeholder')} />
 
           <p style={s.note}>
-            Parent e-signature collection is part of the parent dashboard (coming next phase). For now, your trainer will confirm parent consent off-app.
+            {t('junior.consent_signature_note')}
           </p>
 
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('junior.back')}</button>
             <button
               style={consentReady ? s.btnPrimary : s.btnPrimaryDisabled}
               disabled={!consentReady}
               onClick={() => consentReady && nextStep()}
             >
-              REVIEW
+              {t('junior.review')}
             </button>
           </div>
         </div>
@@ -616,44 +622,44 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
 
       {step === 'review' && (
         <div>
-          <div style={s.stepTitle}>REVIEW</div>
+          <div style={s.stepTitle}>{t('junior.review_step')}</div>
 
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>Operator</div>
-            <div style={s.reviewValue}>{operator.callsign} — age {age}</div>
+            <div style={s.reviewLabel}>{t('junior.review_operator')}</div>
+            <div style={s.reviewValue}>{operator.callsign} {t('junior.review_age_suffix')} {age}</div>
           </div>
 
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>Sport Profile</div>
+            <div style={s.reviewLabel}>{t('junior.review_sport_profile')}</div>
             <div style={s.reviewValue}>
-              {POSITION_OPTIONS.find(p => p.id === position)?.label} · {LEVEL_OPTIONS.find(l => l.id === level)?.label} · {yearsPlaying} yrs
+              {(() => { const p = POSITION_OPTIONS.find(p => p.id === position); return p ? t(p.labelKey) : ''; })()} · {(() => { const l = LEVEL_OPTIONS.find(l => l.id === level); return l ? t(l.labelKey) : ''; })()} · {yearsPlaying} {t('junior.review_yrs_suffix')}
             </div>
             <div style={{ ...s.reviewValue, fontSize: 12, color: '#888' }}>
-              Game day: {gameDay.toUpperCase()} · S&amp;C off: {noTrainingDays.length ? noTrainingDays.map(d => d.toUpperCase()).join(', ') : 'none'}
+              {t('junior.review_game_day')} {(() => { const d = DAY_OPTIONS.find(d => d.id === gameDay); return d ? t(d.labelKey) : gameDay.toUpperCase(); })()} · {t('junior.review_sc_off')} {noTrainingDays.length ? noTrainingDays.map(id => { const d = DAY_OPTIONS.find(d => d.id === id); return d ? t(d.labelKey) : id.toUpperCase(); }).join(', ') : t('junior.review_none')}
             </div>
             {multiSport && (
               <div style={{ ...s.reviewValue, fontSize: 12, color: '#888' }}>
-                Also: {otherSports || 'multi-sport (unspecified)'}
+                {t('junior.review_also')} {otherSports || t('junior.review_multisport_unspec')}
               </div>
             )}
           </div>
 
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>Maturation</div>
-            <div style={s.reviewValue}>{MATURATION_OPTIONS.find(m => m.id === maturationStage)?.label}</div>
+            <div style={s.reviewLabel}>{t('junior.review_maturation')}</div>
+            <div style={s.reviewValue}>{(() => { const m = MATURATION_OPTIONS.find(m => m.id === maturationStage); return m ? t(m.labelKey) : ''; })()}</div>
           </div>
 
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>Focus Areas</div>
-            <div style={s.reviewValue}>{focusAreas.length ? focusAreas.join(' · ') : 'general athletic development'}</div>
+            <div style={s.reviewLabel}>{t('junior.review_focus_areas')}</div>
+            <div style={s.reviewValue}>{focusAreas.length ? focusAreas.map(v => { const f = FOCUS_OPTIONS.find(f => f.value === v); return f ? t(f.labelKey) : v; }).join(' · ') : t('junior.review_focus_default')}</div>
           </div>
 
           {primaryGoals.length > 0 && (
             <div style={s.reviewSection}>
-              <div style={s.reviewLabel}>Goals</div>
+              <div style={s.reviewLabel}>{t('junior.review_goals')}</div>
               <div style={s.reviewValue}>
                 {primaryGoals
-                  .map(id => JUNIOR_GOAL_OPTIONS.find(g => g.id === id)?.label)
+                  .map(id => { const g = JUNIOR_GOAL_OPTIONS.find(g => g.id === id); return g ? t(g.labelKey) : null; })
                   .filter(Boolean)
                   .join(' · ')}
               </div>
@@ -661,26 +667,26 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
           )}
 
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>Health</div>
+            <div style={s.reviewLabel}>{t('junior.review_health')}</div>
             <div style={s.reviewValue}>
-              {hasCurrentPain ? `Pain: ${painDescription || 'unspecified — trainer will follow up'}` : 'No current pain reported'}
+              {hasCurrentPain ? `${t('junior.review_pain_prefix')} ${painDescription || t('junior.review_pain_unspec')}` : t('junior.review_no_pain')}
             </div>
             <div style={{ ...s.reviewValue, fontSize: 12, color: pediatricianClearance ? '#00ff41' : '#888' }}>
-              Pediatrician clearance: {pediatricianClearance ? `YES${pediatricianClearanceDate ? ` (${pediatricianClearanceDate})` : ''}` : 'not on file'}
+              {t('junior.review_pediatrician_label')} {pediatricianClearance ? `${t('junior.review_pediatrician_yes')}${pediatricianClearanceDate ? ` (${pediatricianClearanceDate})` : ''}` : t('junior.review_pediatrician_none')}
             </div>
           </div>
 
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>Consent</div>
-            <div style={s.reviewValue}>Participation: {participationConsent ? '✓' : '✗'} · Data: {dataConsent ? '✓' : '✗'}</div>
+            <div style={s.reviewLabel}>{t('junior.review_consent')}</div>
+            <div style={s.reviewValue}>{t('junior.review_participation')} {participationConsent ? '✓' : '✗'} · {t('junior.review_data')} {dataConsent ? '✓' : '✗'}</div>
             <div style={{ ...s.reviewValue, fontSize: 12, color: '#888' }}>
-              Emergency: {emergencyName} {emergencyRelationship && `(${emergencyRelationship})`} — {emergencyPhone}
+              {t('junior.review_emergency')} {emergencyName} {emergencyRelationship && `(${emergencyRelationship})`} — {emergencyPhone}
             </div>
           </div>
 
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={handleComplete}>SUBMIT INTAKE</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('junior.back')}</button>
+            <button style={s.btnPrimary} onClick={handleComplete}>{t('junior.submit')}</button>
           </div>
         </div>
       )}
