@@ -2455,8 +2455,10 @@ async function applyMacrocycleChanges(
 
     if (action === 'update_date') {
       if (!req.newDate || !/^\d{4}-\d{2}-\d{2}$/.test(req.newDate)) continue;
-      const updatedGoal: MacroGoal = { ...cycles[idx].goal, targetDate: req.newDate };
-      cycles[idx] = recomputeOnGoalDateChange(cycles[idx], updatedGoal, today);
+      // recomputeOnGoalDateChange takes the raw target-date string and
+      // builds the updated goal internally — it preserves the prior goal's
+      // type/name/priority. Don't pre-spread the goal object here.
+      cycles[idx] = recomputeOnGoalDateChange(cycles[idx], req.newDate, today);
       mutated = true;
       applied.push({ action: 'update_date', cycleId: cycles[idx].id, goalName: cycles[idx].goal.name });
       continue;
