@@ -4,6 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { Operator, IntakeAssessment, FitnessLevel, calculateFitnessLevel, calculateTrainingAge, calculateReadiness, formatHeightInput } from '@/lib/types';
 import { getLocalDateStr } from '@/lib/dateUtils';
 import Icon from '@/components/Icons';
+import { useLanguage } from '@/lib/i18n';
 
 interface IntakeFormProps {
   operator: Operator;
@@ -15,17 +16,22 @@ type IntakeStep = 'welcome' | 'basics' | 'experience' | 'goals' | 'training_path
 
 const STEP_ORDER: IntakeStep[] = ['welcome', 'basics', 'experience', 'goals', 'training_path', 'health', 'lifestyle', 'nutrition', 'equipment', 'prs', 'review'];
 
-const DIET_OPTIONS = [
-  { id: 'no_plan', label: 'NO PLAN', desc: 'I eat whatever, no tracking' },
-  { id: 'basic_tracking', label: 'BASIC TRACKING', desc: 'I loosely count calories' },
-  { id: 'strict_macros', label: 'STRICT MACROS', desc: 'I hit protein/carb/fat targets daily' },
-  { id: 'meal_prep', label: 'MEAL PREP', desc: 'I batch cook and plan meals ahead' },
-  { id: 'keto', label: 'KETO / LOW CARB', desc: 'High fat, very low carb' },
-  { id: 'paleo', label: 'PALEO', desc: 'Whole foods, no processed' },
-  { id: 'vegan', label: 'VEGAN', desc: 'No animal products' },
-  { id: 'vegetarian', label: 'VEGETARIAN', desc: 'No meat, dairy OK' },
-  { id: 'mediterranean', label: 'MEDITERRANEAN', desc: 'Balanced, plant-forward' },
-  { id: 'other', label: 'OTHER', desc: 'Something custom' },
+// i18n note: module-level constants store DB id/value strings. The
+// translation keys (`labelKey` / `descKey` on object arrays, and the
+// sibling `*_LABEL_KEYS` maps for plain string arrays) are resolved
+// via `t()` at render time inside the component.
+
+const DIET_OPTIONS: { id: string; labelKey: string; descKey: string }[] = [
+  { id: 'no_plan', labelKey: 'intake.nutrition.diet.no_plan.label', descKey: 'intake.nutrition.diet.no_plan.desc' },
+  { id: 'basic_tracking', labelKey: 'intake.nutrition.diet.basic_tracking.label', descKey: 'intake.nutrition.diet.basic_tracking.desc' },
+  { id: 'strict_macros', labelKey: 'intake.nutrition.diet.strict_macros.label', descKey: 'intake.nutrition.diet.strict_macros.desc' },
+  { id: 'meal_prep', labelKey: 'intake.nutrition.diet.meal_prep.label', descKey: 'intake.nutrition.diet.meal_prep.desc' },
+  { id: 'keto', labelKey: 'intake.nutrition.diet.keto.label', descKey: 'intake.nutrition.diet.keto.desc' },
+  { id: 'paleo', labelKey: 'intake.nutrition.diet.paleo.label', descKey: 'intake.nutrition.diet.paleo.desc' },
+  { id: 'vegan', labelKey: 'intake.nutrition.diet.vegan.label', descKey: 'intake.nutrition.diet.vegan.desc' },
+  { id: 'vegetarian', labelKey: 'intake.nutrition.diet.vegetarian.label', descKey: 'intake.nutrition.diet.vegetarian.desc' },
+  { id: 'mediterranean', labelKey: 'intake.nutrition.diet.mediterranean.label', descKey: 'intake.nutrition.diet.mediterranean.desc' },
+  { id: 'other', labelKey: 'intake.nutrition.diet.other.label', descKey: 'intake.nutrition.diet.other.desc' },
 ];
 
 const SUPPLEMENT_OPTIONS = [
@@ -33,20 +39,47 @@ const SUPPLEMENT_OPTIONS = [
   'Multivitamin', 'Vitamin D', 'Magnesium', 'Caffeine', 'Collagen', 'None',
 ];
 
+const SUPPLEMENT_LABEL_KEYS: Record<string, string> = {
+  'Protein Powder': 'intake.nutrition.supp.protein',
+  'Creatine': 'intake.nutrition.supp.creatine',
+  'Pre-Workout': 'intake.nutrition.supp.preworkout',
+  'BCAAs': 'intake.nutrition.supp.bcaa',
+  'Fish Oil / Omega-3': 'intake.nutrition.supp.fish_oil',
+  'Multivitamin': 'intake.nutrition.supp.multivitamin',
+  'Vitamin D': 'intake.nutrition.supp.vitamin_d',
+  'Magnesium': 'intake.nutrition.supp.magnesium',
+  'Caffeine': 'intake.nutrition.supp.caffeine',
+  'Collagen': 'intake.nutrition.supp.collagen',
+  'None': 'intake.nutrition.supp.none',
+};
+
 const DIETARY_RESTRICTIONS = [
   'Gluten Free', 'Dairy Free', 'Nut Allergy', 'Soy Free', 'Shellfish Allergy',
   'Egg Allergy', 'Halal', 'Kosher', 'Low Sodium', 'None',
 ];
 
-const GOAL_OPTIONS = [
-  { id: 'weight_loss', label: 'LOSE WEIGHT', desc: 'Drop body fat, get lean' },
-  { id: 'muscle_gain', label: 'BUILD MUSCLE', desc: 'Hypertrophy focus' },
-  { id: 'strength', label: 'GET STRONGER', desc: 'Increase max lifts' },
-  { id: 'endurance', label: 'ENDURANCE', desc: 'Improve cardio & stamina' },
-  { id: 'athletic', label: 'ATHLETIC PERFORMANCE', desc: 'Speed, agility, power' },
-  { id: 'general_health', label: 'GENERAL HEALTH', desc: 'Feel better, move better' },
-  { id: 'rehab', label: 'INJURY RECOVERY', desc: 'Return to full function' },
-  { id: 'sport_specific', label: 'SPORT SPECIFIC', desc: 'Football, basketball, soccer, etc.' },
+const RESTRICTION_LABEL_KEYS: Record<string, string> = {
+  'Gluten Free': 'intake.nutrition.rest.gluten_free',
+  'Dairy Free': 'intake.nutrition.rest.dairy_free',
+  'Nut Allergy': 'intake.nutrition.rest.nut_allergy',
+  'Soy Free': 'intake.nutrition.rest.soy_free',
+  'Shellfish Allergy': 'intake.nutrition.rest.shellfish',
+  'Egg Allergy': 'intake.nutrition.rest.egg_allergy',
+  'Halal': 'intake.nutrition.rest.halal',
+  'Kosher': 'intake.nutrition.rest.kosher',
+  'Low Sodium': 'intake.nutrition.rest.low_sodium',
+  'None': 'intake.nutrition.rest.none',
+};
+
+const GOAL_OPTIONS: { id: string; labelKey: string; descKey: string }[] = [
+  { id: 'weight_loss', labelKey: 'intake.goals.weight_loss.label', descKey: 'intake.goals.weight_loss.desc' },
+  { id: 'muscle_gain', labelKey: 'intake.goals.muscle_gain.label', descKey: 'intake.goals.muscle_gain.desc' },
+  { id: 'strength', labelKey: 'intake.goals.strength.label', descKey: 'intake.goals.strength.desc' },
+  { id: 'endurance', labelKey: 'intake.goals.endurance.label', descKey: 'intake.goals.endurance.desc' },
+  { id: 'athletic', labelKey: 'intake.goals.athletic.label', descKey: 'intake.goals.athletic.desc' },
+  { id: 'general_health', labelKey: 'intake.goals.general_health.label', descKey: 'intake.goals.general_health.desc' },
+  { id: 'rehab', labelKey: 'intake.goals.rehab.label', descKey: 'intake.goals.rehab.desc' },
+  { id: 'sport_specific', labelKey: 'intake.goals.sport_specific.label', descKey: 'intake.goals.sport_specific.desc' },
 ];
 
 const EQUIPMENT_OPTIONS = [
@@ -55,23 +88,55 @@ const EQUIPMENT_OPTIONS = [
   'Treadmill', 'Medicine Ball', 'Box/Platform', 'TRX/Suspension', 'None (Bodyweight Only)',
 ];
 
+const EQUIPMENT_LABEL_KEYS: Record<string, string> = {
+  'Barbell': 'intake.equipment.barbell',
+  'Dumbbell': 'intake.equipment.dumbbell',
+  'Kettlebell': 'intake.equipment.kettlebell',
+  'Pull-up Bar': 'intake.equipment.pullup_bar',
+  'Resistance Bands': 'intake.equipment.bands',
+  'Cable Machine': 'intake.equipment.cable',
+  'Squat Rack': 'intake.equipment.squat_rack',
+  'Bench': 'intake.equipment.bench',
+  'Assault Bike': 'intake.equipment.assault_bike',
+  'Rower': 'intake.equipment.rower',
+  'Treadmill': 'intake.equipment.treadmill',
+  'Medicine Ball': 'intake.equipment.med_ball',
+  'Box/Platform': 'intake.equipment.box',
+  'TRX/Suspension': 'intake.equipment.trx',
+  'None (Bodyweight Only)': 'intake.equipment.bodyweight_only',
+};
+
 const COMMON_CONDITIONS = [
   'High Blood Pressure', 'Diabetes', 'Heart Condition', 'Asthma',
   'Joint Pain', 'Back Problems', 'Knee Issues', 'Shoulder Issues',
   'Previous Surgery', 'Pregnancy/Postpartum', 'None',
 ];
 
+const CONDITION_LABEL_KEYS: Record<string, string> = {
+  'High Blood Pressure': 'intake.health.cond.high_bp',
+  'Diabetes': 'intake.health.cond.diabetes',
+  'Heart Condition': 'intake.health.cond.heart',
+  'Asthma': 'intake.health.cond.asthma',
+  'Joint Pain': 'intake.health.cond.joint_pain',
+  'Back Problems': 'intake.health.cond.back',
+  'Knee Issues': 'intake.health.cond.knee',
+  'Shoulder Issues': 'intake.health.cond.shoulder',
+  'Previous Surgery': 'intake.health.cond.surgery',
+  'Pregnancy/Postpartum': 'intake.health.cond.pregnancy',
+  'None': 'intake.health.cond.none',
+};
+
 // Training-path picker — emoji icons replaced with SVG icon components
 // from the design-system Icons set so the picker stays on-brand and
 // scales cleanly. Each path maps to the closest semantic glyph.
-const TRAINING_PATH_OPTIONS: { id: string; label: string; desc: string; icon: React.ReactNode }[] = [
-  { id: 'bodybuilding', label: 'BODYBUILDING', desc: 'Hypertrophy focus — sculpt physique, maximize muscle size, controlled tempos', icon: <Icon.Dumbbell /> },
-  { id: 'crossfit', label: 'FUNCTIONAL FITNESS', desc: 'CrossFit-style — WODs, varied movements, compete against the clock', icon: <Icon.Bolt /> },
-  { id: 'powerlifting', label: 'POWERLIFTING', desc: 'Squat, bench, deadlift — chase maximal strength numbers', icon: <Icon.Sword /> },
-  { id: 'athletic', label: 'ATHLETIC PERFORMANCE', desc: 'Speed, agility, power — train like a pro athlete', icon: <Icon.Target /> },
-  { id: 'tactical', label: 'TACTICAL / MILITARY', desc: 'Rucking, calisthenics, endurance — PFT and selection prep', icon: <Icon.Trophy /> },
-  { id: 'hybrid', label: 'HYBRID', desc: 'Best of everything — strength + conditioning + muscle', icon: <Icon.Stats /> },
-  { id: 'gunny_pick', label: 'LET GUNNY DECIDE', desc: 'Based on your goals, experience, and profile — Gunny picks the optimal path', icon: <Icon.Flame /> },
+const TRAINING_PATH_OPTIONS: { id: string; labelKey: string; descKey: string; icon: React.ReactNode }[] = [
+  { id: 'bodybuilding', labelKey: 'intake.path.bodybuilding.label', descKey: 'intake.path.bodybuilding.desc', icon: <Icon.Dumbbell /> },
+  { id: 'crossfit', labelKey: 'intake.path.crossfit.label', descKey: 'intake.path.crossfit.desc', icon: <Icon.Bolt /> },
+  { id: 'powerlifting', labelKey: 'intake.path.powerlifting.label', descKey: 'intake.path.powerlifting.desc', icon: <Icon.Sword /> },
+  { id: 'athletic', labelKey: 'intake.path.athletic.label', descKey: 'intake.path.athletic.desc', icon: <Icon.Target /> },
+  { id: 'tactical', labelKey: 'intake.path.tactical.label', descKey: 'intake.path.tactical.desc', icon: <Icon.Trophy /> },
+  { id: 'hybrid', labelKey: 'intake.path.hybrid.label', descKey: 'intake.path.hybrid.desc', icon: <Icon.Stats /> },
+  { id: 'gunny_pick', labelKey: 'intake.path.gunny_pick.label', descKey: 'intake.path.gunny_pick.desc', icon: <Icon.Flame /> },
 ];
 
 const PR_EXERCISES = [
@@ -79,7 +144,17 @@ const PR_EXERCISES = [
   'Pull-ups (max reps)', 'Mile Run (minutes)',
 ];
 
+const PR_EXERCISE_LABEL_KEYS: Record<string, string> = {
+  'Back Squat': 'intake.prs.ex.back_squat',
+  'Bench Press': 'intake.prs.ex.bench_press',
+  'Deadlift': 'intake.prs.ex.deadlift',
+  'Overhead Press': 'intake.prs.ex.overhead_press',
+  'Pull-ups (max reps)': 'intake.prs.ex.pullups_max',
+  'Mile Run (minutes)': 'intake.prs.ex.mile_run',
+};
+
 export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormProps) {
+  const { t } = useLanguage();
   const [step, setStep] = useState<IntakeStep>('welcome');
   const [intake, setIntake] = useState<Partial<IntakeAssessment>>({
     completed: false,
@@ -306,10 +381,10 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
 
   const fitnessLevelLabel = (level: FitnessLevel) => {
     const labels: Record<FitnessLevel, { name: string; color: string; desc: string }> = {
-      beginner: { name: 'RECRUIT', color: '#4ade80', desc: 'New to structured training. Focus on fundamentals, form, and gradual progression.' },
-      intermediate: { name: 'OPERATOR', color: '#00ff41', desc: 'Solid foundation. Ready for periodized programming and progressive overload.' },
-      advanced: { name: 'COMMANDER', color: '#facc15', desc: 'Experienced lifter. Advanced programming with specialized blocks.' },
-      elite: { name: 'WARFIGHTER', color: '#ff6b35', desc: 'Elite athlete. Sport-specific periodization and peak performance protocols.' },
+      beginner: { name: t('intake.level.recruit.name'), color: '#4ade80', desc: t('intake.level.recruit.desc') },
+      intermediate: { name: t('intake.level.operator.name'), color: '#00ff41', desc: t('intake.level.operator.desc') },
+      advanced: { name: t('intake.level.commander.name'), color: '#facc15', desc: t('intake.level.commander.desc') },
+      elite: { name: t('intake.level.warfighter.name'), color: '#ff6b35', desc: t('intake.level.warfighter.desc') },
     };
     return labels[level];
   };
@@ -354,8 +429,8 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
   return (
     <div style={s.container}>
       <div style={s.header}>
-        <div style={s.title}>FITNESS INTAKE ASSESSMENT</div>
-        <div style={s.subtitle}>OPERATOR: {operator.callsign}</div>
+        <div style={s.title}>{t('intake.title')}</div>
+        <div style={s.subtitle}>{t('intake.operator_label')}: {operator.callsign}</div>
       </div>
       <div style={s.progressBar}>
         <div style={{ ...s.progressFill, width: `${progress}%` }} />
@@ -363,68 +438,66 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
 
       {step === 'welcome' && (
         <div>
-          <div style={s.stepTitle}>WELCOME, {operator.callsign}</div>
+          <div style={s.stepTitle}>{t('intake.welcome.heading')}, {operator.callsign}</div>
           <p style={{ color: '#ccc', lineHeight: 1.6, fontSize: 13, marginBottom: 16 }}>
-            This assessment determines your starting fitness level and customizes your entire training experience.
-            Answer honestly — there are no wrong answers. Whether you are a first-time trainee or a professional athlete,
-            this intake calibrates everything: workout intensity, exercise selection, progression rate, and recovery protocols.
+            {t('intake.welcome.intro')}
           </p>
           <p style={{ color: '#888', fontSize: 12, marginBottom: 24 }}>
-            Estimated time: 3-5 minutes
+            {t('intake.welcome.time')}
           </p>
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={onSkip}>SKIP FOR NOW</button>
-            <button style={s.btnPrimary} onClick={nextStep}>BEGIN ASSESSMENT</button>
+            <button style={s.btnSecondary} onClick={onSkip}>{t('intake.welcome.skip')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('intake.welcome.begin')}</button>
           </div>
         </div>
       )}
 
       {step === 'basics' && (
         <div>
-          <div style={s.stepTitle}>BASIC METRICS</div>
-          <label style={s.label}>AGE</label>
-          <input type="number" style={s.input} value={age || ''} onChange={e => setAge(parseInt(e.target.value) || 0)} placeholder="30" />
-          <label style={s.label}>HEIGHT (type digits, e.g. 511 for 5&apos;11&quot;)</label>
-          <input type="text" style={s.input} value={heightRaw} onChange={e => setHeightRaw(e.target.value)} onBlur={() => setHeightRaw(formatHeightInput(heightRaw))} placeholder="511" />
-          <label style={s.label}>WEIGHT (lbs)</label>
-          <input type="number" style={s.input} value={weight || ''} onChange={e => setWeight(parseFloat(e.target.value) || 0)} placeholder="180" />
-          <label style={s.label}>BODY FAT % (estimate, or leave 0)</label>
-          <input type="number" style={s.input} value={bodyFat || ''} onChange={e => setBodyFat(parseFloat(e.target.value) || 0)} placeholder="20" />
+          <div style={s.stepTitle}>{t('intake.basics.heading')}</div>
+          <label style={s.label}>{t('intake.basics.age')}</label>
+          <input type="number" style={s.input} value={age || ''} onChange={e => setAge(parseInt(e.target.value) || 0)} placeholder={t('intake.basics.age_placeholder')} />
+          <label style={s.label}>{t('intake.basics.height')}</label>
+          <input type="text" style={s.input} value={heightRaw} onChange={e => setHeightRaw(e.target.value)} onBlur={() => setHeightRaw(formatHeightInput(heightRaw))} placeholder={t('intake.basics.height_placeholder')} />
+          <label style={s.label}>{t('intake.basics.weight')}</label>
+          <input type="number" style={s.input} value={weight || ''} onChange={e => setWeight(parseFloat(e.target.value) || 0)} placeholder={t('intake.basics.weight_placeholder')} />
+          <label style={s.label}>{t('intake.basics.body_fat')}</label>
+          <input type="number" style={s.input} value={bodyFat || ''} onChange={e => setBodyFat(parseFloat(e.target.value) || 0)} placeholder={t('intake.basics.body_fat_placeholder')} />
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'experience' && (
         <div>
-          <div style={s.stepTitle}>TRAINING EXPERIENCE</div>
-          <label style={s.label}>YEARS OF TRAINING</label>
+          <div style={s.stepTitle}>{t('intake.experience.heading')}</div>
+          <label style={s.label}>{t('intake.experience.years')}</label>
           <input type="number" style={s.input} value={intake.experienceYears || ''} onChange={e => setIntake(prev => ({ ...prev, experienceYears: parseFloat(e.target.value) || 0 }))} placeholder="0" step="0.5" />
-          <label style={s.label}>EXERCISE HISTORY</label>
+          <label style={s.label}>{t('intake.experience.history')}</label>
           <div style={{ ...s.optionGrid, gridTemplateColumns: '1fr' }}>
             {[
-              { val: 'none', label: 'NO TRAINING EXPERIENCE', desc: 'Never followed a program' },
-              { val: 'sporadic', label: 'SPORADIC', desc: 'On and off, no consistency' },
-              { val: 'consistent_beginner', label: 'CONSISTENT BEGINNER', desc: 'Regular but still learning' },
-              { val: 'consistent_intermediate', label: 'CONSISTENT INTERMEDIATE', desc: 'Solid routine, good form' },
-              { val: 'advanced_athlete', label: 'ADVANCED / ATHLETE', desc: 'Competitive or years of dedicated training' },
+              { val: 'none', labelKey: 'intake.experience.history.none.label', descKey: 'intake.experience.history.none.desc' },
+              { val: 'sporadic', labelKey: 'intake.experience.history.sporadic.label', descKey: 'intake.experience.history.sporadic.desc' },
+              { val: 'consistent_beginner', labelKey: 'intake.experience.history.consistent_beginner.label', descKey: 'intake.experience.history.consistent_beginner.desc' },
+              { val: 'consistent_intermediate', labelKey: 'intake.experience.history.consistent_intermediate.label', descKey: 'intake.experience.history.consistent_intermediate.desc' },
+              { val: 'advanced_athlete', labelKey: 'intake.experience.history.advanced_athlete.label', descKey: 'intake.experience.history.advanced_athlete.desc' },
             ].map(opt => (
               <button key={opt.val} style={{ ...s.optionBtn, textAlign: 'left', ...(intake.exerciseHistory === opt.val ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, exerciseHistory: opt.val }))}>
-                <div style={{ fontWeight: 700 }}>{opt.label}</div>
-                <div style={{ fontSize: 10, marginTop: 4, color: intake.exerciseHistory === opt.val ? '#00ff4199' : '#666' }}>{opt.desc}</div>
+                <div style={{ fontWeight: 700 }}>{t(opt.labelKey)}</div>
+                <div style={{ fontSize: 10, marginTop: 4, color: intake.exerciseHistory === opt.val ? '#00ff4199' : '#666' }}>{t(opt.descKey)}</div>
               </button>
             ))}
           </div>
-          <label style={s.label}>MOBILITY / MOVEMENT QUALITY: {intake.movementScreenScore}/10</label>
+          <label style={s.label}>{t('intake.experience.movement_quality')}: {intake.movementScreenScore}/10</label>
           <input type="range" min="1" max="10" style={s.slider} value={intake.movementScreenScore || 5}
             onChange={e => setIntake(prev => ({ ...prev, movementScreenScore: parseInt(e.target.value) }))} />
           <div style={{ fontSize: 11, color: '#666', marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Limited</span><span>Average</span><span>Excellent</span>
+            <span>{t('intake.experience.movement_limited')}</span><span>{t('intake.experience.movement_average')}</span><span>{t('intake.experience.movement_excellent')}</span>
           </div>
-          <label style={s.label}>TRAINING DAYS PER WEEK</label>
+          <label style={s.label}>{t('intake.experience.days_per_week')}</label>
           <div style={s.optionGrid}>
             {[2, 3, 4, 5, 6, 7].map(d => (
               <button key={d} style={{ ...s.optionBtn, ...(intake.daysPerWeek === d ? s.optionBtnActive : {}) }}
@@ -433,7 +506,7 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
               </button>
             ))}
           </div>
-          <label style={s.label}>SESSION DURATION (minutes)</label>
+          <label style={s.label}>{t('intake.experience.session_duration')}</label>
           <div style={s.optionGrid}>
             {[30, 45, 60, 75, 90, 120].map(m => (
               <button key={m} style={{ ...s.optionBtn, ...(intake.sessionDuration === m ? s.optionBtnActive : {}) }}
@@ -442,88 +515,87 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
               </button>
             ))}
           </div>
-          <label style={s.label}>PREFERRED TRAINING SPLIT</label>
+          <label style={s.label}>{t('intake.experience.split')}</label>
           <div style={{ ...s.optionGrid, gridTemplateColumns: '1fr' }}>
             {[
-              { val: 'Push/Pull/Legs', desc: 'Push day, pull day, legs day rotation' },
-              { val: 'Upper/Lower', desc: 'Alternate upper and lower body days' },
-              { val: 'Full Body', desc: 'Hit everything each session' },
-              { val: 'Bro Split', desc: 'One muscle group per day' },
-              { val: 'No Preference', desc: 'Let Gunny decide based on my goals' },
+              { val: 'Push/Pull/Legs', labelKey: 'intake.experience.split.ppl.label', descKey: 'intake.experience.split.ppl.desc' },
+              { val: 'Upper/Lower', labelKey: 'intake.experience.split.upper_lower.label', descKey: 'intake.experience.split.upper_lower.desc' },
+              { val: 'Full Body', labelKey: 'intake.experience.split.full_body.label', descKey: 'intake.experience.split.full_body.desc' },
+              { val: 'Bro Split', labelKey: 'intake.experience.split.bro.label', descKey: 'intake.experience.split.bro.desc' },
+              { val: 'No Preference', labelKey: 'intake.experience.split.no_pref.label', descKey: 'intake.experience.split.no_pref.desc' },
             ].map(opt => (
               <button key={opt.val} style={{ ...s.optionBtn, textAlign: 'left', ...(intake.preferredSplit === opt.val ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, preferredSplit: opt.val }))}>
-                <div style={{ fontWeight: 700 }}>{opt.val.toUpperCase()}</div>
-                <div style={{ fontSize: 10, marginTop: 4, color: intake.preferredSplit === opt.val ? '#00ff4199' : '#666' }}>{opt.desc}</div>
+                <div style={{ fontWeight: 700 }}>{t(opt.labelKey)}</div>
+                <div style={{ fontSize: 10, marginTop: 4, color: intake.preferredSplit === opt.val ? '#00ff4199' : '#666' }}>{t(opt.descKey)}</div>
               </button>
             ))}
           </div>
           <div style={{ padding: 12, background: '#0a1a0a', border: '1px solid #1a3a1a', borderRadius: 4, marginBottom: 16 }}>
-            <span style={{ fontSize: 10, color: '#888' }}>PROJECTED LEVEL: </span>
+            <span style={{ fontSize: 10, color: '#888' }}>{t('intake.experience.projected_level')}: </span>
             <span style={{ ...s.levelBadge, color: fitnessLevelLabel(previewLevel).color, border: `1px solid ${fitnessLevelLabel(previewLevel).color}` }}>
               {fitnessLevelLabel(previewLevel).name}
             </span>
           </div>
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'goals' && (
         <div>
-          <div style={s.stepTitle}>TRAINING GOALS</div>
-          <label style={s.label}>PRIMARY GOAL</label>
+          <div style={s.stepTitle}>{t('intake.goals.heading')}</div>
+          <label style={s.label}>{t('intake.goals.primary')}</label>
           <div style={s.optionGrid}>
             {GOAL_OPTIONS.map(g => (
               <button key={g.id} style={{ ...s.optionBtn, ...(intake.primaryGoal === g.id ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, primaryGoal: g.id }))}>
-                <div style={{ fontWeight: 700 }}>{g.label}</div>
-                <div style={{ fontSize: 10, marginTop: 4, color: intake.primaryGoal === g.id ? '#00ff4199' : '#666' }}>{g.desc}</div>
+                <div style={{ fontWeight: 700 }}>{t(g.labelKey)}</div>
+                <div style={{ fontSize: 10, marginTop: 4, color: intake.primaryGoal === g.id ? '#00ff4199' : '#666' }}>{t(g.descKey)}</div>
               </button>
             ))}
           </div>
-          <label style={s.label}>SECONDARY GOALS (select all that apply)</label>
+          <label style={s.label}>{t('intake.goals.secondary')}</label>
           <div style={s.optionGrid}>
             {GOAL_OPTIONS.filter(g => g.id !== intake.primaryGoal).map(g => (
               <button key={g.id} style={{ ...s.optionBtn, ...((intake.secondaryGoals || []).includes(g.id) ? s.optionBtnActive : {}) }}
                 onClick={() => toggleArrayItem('secondaryGoals', g.id)}>
-                {g.label}
+                {t(g.labelKey)}
               </button>
             ))}
           </div>
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'training_path' && (
         <div>
-          <div style={s.stepTitle}>CHOOSE YOUR PATH</div>
+          <div style={s.stepTitle}>{t('intake.path.heading')}</div>
           <p style={{ color: '#ccc', lineHeight: 1.6, fontSize: 13, marginBottom: 8 }}>
-            Every path is scalable — Gunny adapts to your level. There is no wrong choice.
-            If you are unsure, let Gunny analyze your profile and recommend the best fit.
+            {t('intake.path.intro')}
           </p>
           {/* Gunny Recommendation Banner */}
           {intake.primaryGoal && (
             <div style={{ padding: 12, background: '#0a1a0a', border: '1px solid #1a3a1a', borderRadius: 4, marginBottom: 16 }}>
-              <div style={{ fontSize: 10, color: '#00ff41', letterSpacing: 1, marginBottom: 6, fontFamily: 'Orbitron, sans-serif' }}>GUNNY RECOMMENDS</div>
+              <div style={{ fontSize: 10, color: '#00ff41', letterSpacing: 1, marginBottom: 6, fontFamily: 'Orbitron, sans-serif' }}>{t('intake.path.gunny_recommends')}</div>
               <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.5 }}>
                 {(() => {
                   const goal = intake.primaryGoal;
                   const exp = intake.exerciseHistory || 'none';
-                  if (goal === 'muscle_gain') return 'Based on your muscle-building goal — BODYBUILDING path will maximize hypertrophy with structured volume and progressive overload.';
-                  if (goal === 'weight_loss' && (exp === 'none' || exp === 'sporadic')) return 'For fat loss with your current experience — FUNCTIONAL FITNESS combines strength and conditioning for maximum calorie burn.';
-                  if (goal === 'weight_loss') return 'For fat loss — HYBRID path blends strength training to preserve muscle with conditioning for calorie expenditure.';
-                  if (goal === 'strength') return 'For raw strength — POWERLIFTING path with periodized peaking cycles on the big 3 lifts.';
-                  if (goal === 'endurance') return 'For endurance — FUNCTIONAL FITNESS or TACTICAL path with structured cardio progressions and work capacity building.';
-                  if (goal === 'athletic') return 'For athletic performance — ATHLETIC path with power development, speed work, and sport-specific conditioning.';
-                  if (goal === 'sport_specific') return 'For your sport — ATHLETIC path customized to your sport demands, or HYBRID for well-rounded athleticism.';
-                  if (goal === 'rehab') return 'For injury recovery — HYBRID path with controlled progressions. Gunny will respect all restrictions and build you back up safely.';
-                  return 'Based on your profile — HYBRID path gives you the best of all worlds. Or let Gunny pick for a fully customized recommendation.';
+                  if (goal === 'muscle_gain') return t('intake.path.rec.muscle_gain');
+                  if (goal === 'weight_loss' && (exp === 'none' || exp === 'sporadic')) return t('intake.path.rec.weight_loss_novice');
+                  if (goal === 'weight_loss') return t('intake.path.rec.weight_loss');
+                  if (goal === 'strength') return t('intake.path.rec.strength');
+                  if (goal === 'endurance') return t('intake.path.rec.endurance');
+                  if (goal === 'athletic') return t('intake.path.rec.athletic');
+                  if (goal === 'sport_specific') return t('intake.path.rec.sport_specific');
+                  if (goal === 'rehab') return t('intake.path.rec.rehab');
+                  return t('intake.path.rec.default');
                 })()}
               </div>
             </div>
@@ -544,37 +616,37 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
                   {React.cloneElement(p.icon as React.ReactElement<{ size?: number }>, { size: 20 })}
                 </span>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 12 }}>{p.label}</div>
-                  <div style={{ fontSize: 10, marginTop: 4, color: intake.trainingPath === p.id ? '#00ff4199' : '#666' }}>{p.desc}</div>
+                  <div style={{ fontWeight: 700, fontSize: 12 }}>{t(p.labelKey)}</div>
+                  <div style={{ fontSize: 10, marginTop: 4, color: intake.trainingPath === p.id ? '#00ff4199' : '#666' }}>{t(p.descKey)}</div>
                 </div>
               </button>
             ))}
           </div>
           <p style={{ fontSize: 11, color: '#666', marginBottom: 16, textAlign: 'center' as const }}>
-            Any time commitment works. Gunny scales programming for 2 days/week to 7 days/week.
+            {t('intake.path.scaling_note')}
           </p>
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'health' && (
         <div>
-          <div style={s.stepTitle}>HEALTH SCREENING</div>
-          <label style={s.label}>HEALTH CONDITIONS (select all that apply)</label>
+          <div style={s.stepTitle}>{t('intake.health.heading')}</div>
+          <label style={s.label}>{t('intake.health.conditions')}</label>
           <div style={s.optionGrid}>
             {COMMON_CONDITIONS.map(c => (
               <button key={c} style={{ ...s.optionBtn, ...((intake.healthConditions || []).includes(c) ? s.optionBtnActive : {}) }}
                 onClick={() => toggleArrayItem('healthConditions', c)}>
-                {c}
+                {t(CONDITION_LABEL_KEYS[c] || '') || c}
               </button>
             ))}
           </div>
-          <label style={s.label}>CURRENT INJURIES (one per line — include any restrictions or notes)</label>
+          <label style={s.label}>{t('intake.health.injuries_label')}</label>
           <textarea style={{ ...s.input, height: 100, resize: 'vertical' as const }}
-            placeholder={"e.g.\nRight shoulder labrum - cautious of overuse, no heavy overhead\nLower back sciatic - hex bar OK, no conventional deadlifts back to back weeks"}
+            placeholder={t('intake.health.injuries_placeholder')}
             value={intake.injuryNotes || ''}
             onChange={e => {
               const raw = e.target.value;
@@ -582,78 +654,78 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
               setIntake(prev => ({ ...prev, injuryNotes: raw, injuryHistory: injuries }));
             }} />
           <div style={{ fontSize: 9, color: '#555', marginTop: -12, marginBottom: 12, fontFamily: 'Share Tech Mono, monospace' }}>
-            Be specific — Gunny AI reads this to avoid aggravating injuries and program around restrictions.
+            {t('intake.health.injuries_note')}
           </div>
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'lifestyle' && (
         <div>
-          <div style={s.stepTitle}>LIFESTYLE & RECOVERY</div>
-          <label style={s.label}>DAILY ACTIVITY LEVEL</label>
+          <div style={s.stepTitle}>{t('intake.lifestyle.heading')}</div>
+          <label style={s.label}>{t('intake.lifestyle.activity')}</label>
           <div style={{ ...s.optionGrid, gridTemplateColumns: '1fr' }}>
             {[
-              { val: 'sedentary', label: 'SEDENTARY', desc: 'Desk job, minimal movement' },
-              { val: 'lightly_active', label: 'LIGHTLY ACTIVE', desc: 'Some walking, light daily activity' },
-              { val: 'active', label: 'ACTIVE', desc: 'Regular movement, on feet often' },
-              { val: 'very_active', label: 'VERY ACTIVE', desc: 'Physical job or daily training' },
-              { val: 'athlete', label: 'COMPETITIVE ATHLETE', desc: 'Training 5+ days, sport-specific' },
+              { val: 'sedentary', labelKey: 'intake.lifestyle.activity.sedentary.label', descKey: 'intake.lifestyle.activity.sedentary.desc' },
+              { val: 'lightly_active', labelKey: 'intake.lifestyle.activity.lightly_active.label', descKey: 'intake.lifestyle.activity.lightly_active.desc' },
+              { val: 'active', labelKey: 'intake.lifestyle.activity.active.label', descKey: 'intake.lifestyle.activity.active.desc' },
+              { val: 'very_active', labelKey: 'intake.lifestyle.activity.very_active.label', descKey: 'intake.lifestyle.activity.very_active.desc' },
+              { val: 'athlete', labelKey: 'intake.lifestyle.activity.athlete.label', descKey: 'intake.lifestyle.activity.athlete.desc' },
             ].map(opt => (
               <button key={opt.val} style={{ ...s.optionBtn, textAlign: 'left', ...(intake.currentActivity === opt.val ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, currentActivity: opt.val }))}>
-                <div style={{ fontWeight: 700 }}>{opt.label}</div>
-                <div style={{ fontSize: 10, marginTop: 4, color: intake.currentActivity === opt.val ? '#00ff4199' : '#666' }}>{opt.desc}</div>
+                <div style={{ fontWeight: 700 }}>{t(opt.labelKey)}</div>
+                <div style={{ fontSize: 10, marginTop: 4, color: intake.currentActivity === opt.val ? '#00ff4199' : '#666' }}>{t(opt.descKey)}</div>
               </button>
             ))}
           </div>
-          <label style={s.label}>SLEEP QUALITY: {intake.sleepQuality}/10</label>
+          <label style={s.label}>{t('intake.lifestyle.sleep_quality')}: {intake.sleepQuality}/10</label>
           <input type="range" min="1" max="10" style={s.slider} value={intake.sleepQuality || 7}
             onChange={e => setIntake(prev => ({ ...prev, sleepQuality: parseInt(e.target.value) }))} />
-          <label style={s.label}>STRESS LEVEL: {intake.stressLevel}/10</label>
+          <label style={s.label}>{t('intake.lifestyle.stress_level')}: {intake.stressLevel}/10</label>
           <input type="range" min="1" max="10" style={s.slider} value={intake.stressLevel || 4}
             onChange={e => setIntake(prev => ({ ...prev, stressLevel: parseInt(e.target.value) }))} />
-          <label style={s.label}>NUTRITION HABITS</label>
+          <label style={s.label}>{t('intake.lifestyle.nutrition_habits')}</label>
           <div style={s.optionGrid}>
             {['poor', 'fair', 'good', 'excellent'].map(n => (
               <button key={n} style={{ ...s.optionBtn, ...(intake.nutritionHabits === n ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, nutritionHabits: n }))}>
-                {n.toUpperCase()}
+                {t(`intake.lifestyle.nutrition.${n}`)}
               </button>
             ))}
           </div>
-          <label style={s.label}>WEARABLE DEVICE (optional)</label>
+          <label style={s.label}>{t('intake.lifestyle.wearable')}</label>
           <div style={s.optionGrid}>
             {['Apple Watch', 'WHOOP', 'Garmin', 'Fitbit', 'Oura Ring', 'None'].map(d => (
               <button key={d} style={{ ...s.optionBtn, ...(intake.wearableDevice === d ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, wearableDevice: d === 'None' ? undefined : d }))}>
-                {d}
+                {d === 'None' ? t('intake.lifestyle.wearable.none') : d}
               </button>
             ))}
           </div>
           {!intake.wearableDevice && (
             <div style={{ padding: 8, background: '#1a1a0a', border: '1px solid #333300', borderRadius: 4, marginBottom: 16 }}>
-              <span style={{ fontSize: 11, color: '#facc15' }}>HIGHLY RECOMMENDED: Connect a wearable for truly customized programming and superior Gunny AI intel.</span>
+              <span style={{ fontSize: 11, color: '#facc15' }}>{t('intake.lifestyle.wearable_recommend')}</span>
             </div>
           )}
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'nutrition' && (
         <div>
-          <div style={s.stepTitle}>NUTRITION INTEL</div>
+          <div style={s.stepTitle}>{t('intake.nutrition.heading')}</div>
           <p style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>
-            This data calibrates your macro targets and lets Gunny AI build nutrition plans around your current habits.
+            {t('intake.nutrition.intro')}
           </p>
 
-          <label style={s.label}>MEALS PER DAY</label>
+          <label style={s.label}>{t('intake.nutrition.meals_per_day')}</label>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             {[1, 2, 3, 4, 5, 6].map(n => (
               <button key={n} style={{ ...s.optionBtn, flex: 1, ...(intake.mealsPerDay === n ? s.optionBtnActive : {}) }}
@@ -663,18 +735,18 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
             ))}
           </div>
 
-          <label style={s.label}>CURRENT DIET APPROACH</label>
+          <label style={s.label}>{t('intake.nutrition.diet_approach')}</label>
           <div style={s.optionGrid}>
             {DIET_OPTIONS.map(d => (
               <button key={d.id} style={{ ...s.optionBtn, textAlign: 'left' as const, padding: '10px 12px', ...(intake.currentDiet === d.id ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, currentDiet: d.id }))}>
-                <div style={{ fontSize: 11, fontWeight: 700 }}>{d.label}</div>
-                <div style={{ fontSize: 9, color: intake.currentDiet === d.id ? '#00ff41' : '#666', marginTop: 2 }}>{d.desc}</div>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>{t(d.labelKey)}</div>
+                <div style={{ fontSize: 9, color: intake.currentDiet === d.id ? '#00ff41' : '#666', marginTop: 2 }}>{t(d.descKey)}</div>
               </button>
             ))}
           </div>
 
-          <label style={s.label}>ESTIMATED DAILY CALORIES</label>
+          <label style={s.label}>{t('intake.nutrition.calories_label')}</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
             <input type="range" min={1200} max={5000} step={100}
               value={intake.estimatedCalories || 2000}
@@ -684,9 +756,9 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
               {intake.estimatedCalories || 2000}
             </span>
           </div>
-          <p style={{ fontSize: 10, color: '#555', marginBottom: 16 }}>Rough estimate is fine — Gunny AI will refine this based on your goals and activity.</p>
+          <p style={{ fontSize: 10, color: '#555', marginBottom: 16 }}>{t('intake.nutrition.calories_note')}</p>
 
-          <label style={s.label}>DAILY WATER INTAKE (OZ)</label>
+          <label style={s.label}>{t('intake.nutrition.water_label')}</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
             <input type="range" min={16} max={200} step={8}
               value={intake.dailyWaterOz || 64}
@@ -697,39 +769,39 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
             </span>
           </div>
 
-          <label style={s.label}>PROTEIN PRIORITY</label>
-          <p style={{ fontSize: 10, color: '#555', marginBottom: 8 }}>How much protein should Gunny target? Higher = more muscle-building focus.</p>
+          <label style={s.label}>{t('intake.nutrition.protein_priority')}</label>
+          <p style={{ fontSize: 10, color: '#555', marginBottom: 8 }}>{t('intake.nutrition.protein_intro')}</p>
           <div style={s.optionGrid}>
             {[
-              { id: 'low', label: 'LOW', desc: '0.6g/lb — general health' },
-              { id: 'moderate', label: 'MODERATE', desc: '0.8g/lb — balanced' },
-              { id: 'high', label: 'HIGH', desc: '1.0g/lb — muscle growth' },
-              { id: 'very_high', label: 'VERY HIGH', desc: '1.2g/lb — max hypertrophy' },
+              { id: 'low', labelKey: 'intake.nutrition.protein.low.label', descKey: 'intake.nutrition.protein.low.desc' },
+              { id: 'moderate', labelKey: 'intake.nutrition.protein.moderate.label', descKey: 'intake.nutrition.protein.moderate.desc' },
+              { id: 'high', labelKey: 'intake.nutrition.protein.high.label', descKey: 'intake.nutrition.protein.high.desc' },
+              { id: 'very_high', labelKey: 'intake.nutrition.protein.very_high.label', descKey: 'intake.nutrition.protein.very_high.desc' },
             ].map(p => (
               <button key={p.id} style={{ ...s.optionBtn, textAlign: 'left' as const, padding: '10px 12px', ...(intake.proteinPriority === p.id ? s.optionBtnActive : {}) }}
                 onClick={() => setIntake(prev => ({ ...prev, proteinPriority: p.id }))}>
-                <div style={{ fontSize: 11, fontWeight: 700 }}>{p.label}</div>
-                <div style={{ fontSize: 9, color: intake.proteinPriority === p.id ? '#00ff41' : '#666', marginTop: 2 }}>{p.desc}</div>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>{t(p.labelKey)}</div>
+                <div style={{ fontSize: 9, color: intake.proteinPriority === p.id ? '#00ff41' : '#666', marginTop: 2 }}>{t(p.descKey)}</div>
               </button>
             ))}
           </div>
 
-          <label style={s.label}>SUPPLEMENTS (SELECT ALL THAT APPLY)</label>
+          <label style={s.label}>{t('intake.nutrition.supplements')}</label>
           <div style={s.optionGrid}>
             {SUPPLEMENT_OPTIONS.map(sup => (
               <button key={sup} style={{ ...s.optionBtn, ...(((intake.supplements || []).includes(sup)) ? s.optionBtnActive : {}) }}
                 onClick={() => toggleArrayItem('supplements', sup)}>
-                {sup.toUpperCase()}
+                {(t(SUPPLEMENT_LABEL_KEYS[sup] || '') || sup).toUpperCase()}
               </button>
             ))}
           </div>
 
-          <label style={s.label}>DIETARY RESTRICTIONS (SELECT ALL THAT APPLY)</label>
+          <label style={s.label}>{t('intake.nutrition.restrictions')}</label>
           <div style={s.optionGrid}>
             {DIETARY_RESTRICTIONS.map(r => (
               <button key={r} style={{ ...s.optionBtn, ...(((intake.dietaryRestrictions || []).includes(r)) ? s.optionBtnActive : {}) }}
                 onClick={() => toggleArrayItem('dietaryRestrictions', r)}>
-                {r.toUpperCase()}
+                {(t(RESTRICTION_LABEL_KEYS[r] || '') || r).toUpperCase()}
               </button>
             ))}
           </div>
@@ -744,23 +816,23 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
             const carbs = Math.round((cal - (prot * 4) - (fat * 9)) / 4);
             return (
               <div style={{ padding: 16, background: '#0a1a0a', border: '1px solid #00ff41', borderRadius: 8, marginBottom: 16 }}>
-                <div style={{ fontSize: 10, color: '#888', letterSpacing: 1, marginBottom: 8 }}>CALCULATED DAILY TARGETS</div>
+                <div style={{ fontSize: 10, color: '#888', letterSpacing: 1, marginBottom: 8 }}>{t('intake.nutrition.daily_targets')}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, textAlign: 'center' as const }}>
                   <div>
                     <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00ff41' }}>{cal}</div>
-                    <div style={{ fontSize: 9, color: '#666' }}>CALORIES</div>
+                    <div style={{ fontSize: 9, color: '#666' }}>{t('intel.calories').toUpperCase()}</div>
                   </div>
                   <div>
                     <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#4ade80' }}>{prot}g</div>
-                    <div style={{ fontSize: 9, color: '#666' }}>PROTEIN</div>
+                    <div style={{ fontSize: 9, color: '#666' }}>{t('intel.protein').toUpperCase()}</div>
                   </div>
                   <div>
                     <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#facc15' }}>{carbs}g</div>
-                    <div style={{ fontSize: 9, color: '#666' }}>CARBS</div>
+                    <div style={{ fontSize: 9, color: '#666' }}>{t('intel.carbs').toUpperCase()}</div>
                   </div>
                   <div>
                     <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#ff6b35' }}>{fat}g</div>
-                    <div style={{ fontSize: 9, color: '#666' }}>FAT</div>
+                    <div style={{ fontSize: 9, color: '#666' }}>{t('intel.fat').toUpperCase()}</div>
                   </div>
                 </div>
               </div>
@@ -768,58 +840,58 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
           })()}
 
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'equipment' && (
         <div>
-          <div style={s.stepTitle}>AVAILABLE EQUIPMENT</div>
-          <label style={s.label}>SELECT ALL EQUIPMENT YOU HAVE ACCESS TO</label>
+          <div style={s.stepTitle}>{t('intake.equipment.heading')}</div>
+          <label style={s.label}>{t('intake.equipment.label')}</label>
           <div style={s.optionGrid}>
             {EQUIPMENT_OPTIONS.map(eq => (
               <button key={eq} style={{ ...s.optionBtn, ...((intake.availableEquipment || []).includes(eq) ? s.optionBtnActive : {}) }}
                 onClick={() => toggleArrayItem('availableEquipment', eq)}>
-                {eq.toUpperCase()}
+                {(t(EQUIPMENT_LABEL_KEYS[eq] || '') || eq).toUpperCase()}
               </button>
             ))}
           </div>
-          <label style={s.label}>PREFERRED WORKOUT TIME</label>
+          <label style={s.label}>{t('intake.equipment.workout_time')}</label>
           <div style={s.optionGrid}>
             {[
-              { val: 'early_morning', label: '5-7 AM' },
-              { val: 'morning', label: '7-10 AM' },
-              { val: 'midday', label: '10 AM-1 PM' },
-              { val: 'afternoon', label: '1-5 PM' },
-              { val: 'evening', label: '5-8 PM' },
-              { val: 'night', label: '8 PM+' },
-            ].map(t => (
-              <button key={t.val} style={{ ...s.optionBtn, ...(intake.preferredWorkoutTime === t.val ? s.optionBtnActive : {}) }}
-                onClick={() => setIntake(prev => ({ ...prev, preferredWorkoutTime: t.val }))}>
-                {t.label}
+              { val: 'early_morning', labelKey: 'intake.equipment.time.early_morning' },
+              { val: 'morning', labelKey: 'intake.equipment.time.morning' },
+              { val: 'midday', labelKey: 'intake.equipment.time.midday' },
+              { val: 'afternoon', labelKey: 'intake.equipment.time.afternoon' },
+              { val: 'evening', labelKey: 'intake.equipment.time.evening' },
+              { val: 'night', labelKey: 'intake.equipment.time.night' },
+            ].map(tm => (
+              <button key={tm.val} style={{ ...s.optionBtn, ...(intake.preferredWorkoutTime === tm.val ? s.optionBtnActive : {}) }}
+                onClick={() => setIntake(prev => ({ ...prev, preferredWorkoutTime: tm.val }))}>
+                {t(tm.labelKey)}
               </button>
             ))}
           </div>
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>NEXT</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next')}</button>
           </div>
         </div>
       )}
 
       {step === 'prs' && (
         <div>
-          <div style={s.stepTitle}>STARTING PRs (OPTIONAL)</div>
+          <div style={s.stepTitle}>{t('intake.prs.heading')}</div>
           <p style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>
-            Enter your current best lifts. Leave blank if you don&apos;t know — Gunny AI will help establish baselines.
+            {t('intake.prs.intro')}
           </p>
           {PR_EXERCISES.map(ex => (
             <div key={ex} style={{ marginBottom: 12 }}>
-              <label style={s.label}>{ex}</label>
+              <label style={s.label}>{t(PR_EXERCISE_LABEL_KEYS[ex] || '') || ex}</label>
               <div style={{ display: 'flex', gap: 8 }}>
-                <input type="number" style={{ ...s.input, flex: 1, marginBottom: 0 }} placeholder="Weight (lbs)"
+                <input type="number" style={{ ...s.input, flex: 1, marginBottom: 0 }} placeholder={t('intake.prs.weight_placeholder')}
                   onChange={e => {
                     const w = parseFloat(e.target.value) || 0;
                     setIntake(prev => {
@@ -830,7 +902,7 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
                       return { ...prev, startingPRs: prs };
                     });
                   }} />
-                <input type="number" style={{ ...s.input, width: 80, marginBottom: 0 }} placeholder="Reps"
+                <input type="number" style={{ ...s.input, width: 80, marginBottom: 0 }} placeholder={t('intake.prs.reps_placeholder')}
                   onChange={e => {
                     const r = parseInt(e.target.value) || 1;
                     setIntake(prev => {
@@ -844,68 +916,68 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
             </div>
           ))}
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>BACK</button>
-            <button style={s.btnPrimary} onClick={nextStep}>REVIEW</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('intake.prs.review_btn')}</button>
           </div>
         </div>
       )}
 
       {step === 'review' && (
         <div>
-          <div style={s.stepTitle}>ASSESSMENT REVIEW</div>
+          <div style={s.stepTitle}>{t('intake.review.heading')}</div>
           <div style={{ textAlign: 'center', marginBottom: 20, padding: 16, background: '#0a1a0a', border: `1px solid ${fitnessLevelLabel(previewLevel).color}`, borderRadius: 8 }}>
-            <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>YOUR FITNESS CLASSIFICATION</div>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>{t('intake.review.classification')}</div>
             <div style={{ ...s.levelBadge, fontSize: 18, color: fitnessLevelLabel(previewLevel).color, border: `2px solid ${fitnessLevelLabel(previewLevel).color}`, padding: '8px 20px' }}>
               {fitnessLevelLabel(previewLevel).name}
             </div>
             <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>{fitnessLevelLabel(previewLevel).desc}</div>
           </div>
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>BASICS</div>
-            <div style={s.reviewValue}>{age}y, {formatHeightInput(heightRaw) || 'N/A'}, {weight}lbs{bodyFat > 0 ? `, ${bodyFat}% BF` : ''}</div>
+            <div style={s.reviewLabel}>{t('intake.review.basics')}</div>
+            <div style={s.reviewValue}>{age}{t('intake.review.basics_years_suffix')}, {formatHeightInput(heightRaw) || t('intake.review.basics_na')}, {weight}{t('intake.review.basics_lbs_suffix')}{bodyFat > 0 ? `, ${bodyFat}${t('intake.review.basics_bf_suffix')}` : ''}</div>
           </div>
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>EXPERIENCE</div>
-            <div style={s.reviewValue}>{intake.experienceYears} years — {(intake.exerciseHistory || 'none').replace(/_/g, ' ').toUpperCase()}</div>
+            <div style={s.reviewLabel}>{t('intake.review.experience')}</div>
+            <div style={s.reviewValue}>{intake.experienceYears} {t('intake.review.experience_years')} — {t(`intake.experience.history.${intake.exerciseHistory || 'none'}.label`)}</div>
           </div>
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>PRIMARY GOAL</div>
-            <div style={s.reviewValue}>{GOAL_OPTIONS.find(g => g.id === intake.primaryGoal)?.label || intake.primaryGoal}</div>
+            <div style={s.reviewLabel}>{t('intake.review.primary_goal')}</div>
+            <div style={s.reviewValue}>{t(GOAL_OPTIONS.find(g => g.id === intake.primaryGoal)?.labelKey || '') || intake.primaryGoal}</div>
           </div>
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>TRAINING PATH</div>
-            <div style={s.reviewValue}>{TRAINING_PATH_OPTIONS.find(p => p.id === intake.trainingPath)?.label || 'LET GUNNY DECIDE'}</div>
+            <div style={s.reviewLabel}>{t('intake.review.training_path')}</div>
+            <div style={s.reviewValue}>{t(TRAINING_PATH_OPTIONS.find(p => p.id === intake.trainingPath)?.labelKey || 'intake.path.gunny_pick.label')}</div>
           </div>
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>LIFESTYLE</div>
-            <div style={s.reviewValue}>Sleep: {intake.sleepQuality}/10, Stress: {intake.stressLevel}/10, Nutrition: {(intake.nutritionHabits || '').toUpperCase()}</div>
+            <div style={s.reviewLabel}>{t('intake.review.lifestyle')}</div>
+            <div style={s.reviewValue}>{t('intake.review.lifestyle_sleep')}: {intake.sleepQuality}/10, {t('intake.review.lifestyle_stress')}: {intake.stressLevel}/10, {t('intake.review.lifestyle_nutrition')}: {t(`intake.lifestyle.nutrition.${intake.nutritionHabits || 'fair'}`)}</div>
           </div>
           <div style={s.reviewSection}>
-            <div style={s.reviewLabel}>NUTRITION</div>
+            <div style={s.reviewLabel}>{t('intake.review.nutrition')}</div>
             <div style={s.reviewValue}>
-              {intake.mealsPerDay} meals/day, {DIET_OPTIONS.find(d => d.id === intake.currentDiet)?.label || 'No plan'}, ~{intake.estimatedCalories || 2000} cal, {intake.dailyWaterOz || 64}oz water
+              {intake.mealsPerDay} {t('intake.review.nutrition_meals_suffix')}, {t(DIET_OPTIONS.find(d => d.id === intake.currentDiet)?.labelKey || '') || t('intake.review.nutrition_no_plan')}, ~{intake.estimatedCalories || 2000} {t('intake.review.nutrition_cal_suffix')}, {intake.dailyWaterOz || 64}{t('intake.review.nutrition_water_suffix')}
             </div>
             <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-              Protein priority: {(intake.proteinPriority || 'moderate').toUpperCase()}
-              {(intake.supplements || []).length > 0 && ` | Supps: ${(intake.supplements || []).join(', ')}`}
-              {(intake.dietaryRestrictions || []).length > 0 && ` | Restrictions: ${(intake.dietaryRestrictions || []).join(', ')}`}
+              {t('intake.review.protein_priority_label')}: {t(`intake.nutrition.protein.${intake.proteinPriority || 'moderate'}.label`)}
+              {(intake.supplements || []).length > 0 && ` | ${t('intake.review.supps_label')}: ${(intake.supplements || []).map(sup => t(SUPPLEMENT_LABEL_KEYS[sup] || '') || sup).join(', ')}`}
+              {(intake.dietaryRestrictions || []).length > 0 && ` | ${t('intake.review.restrictions_label')}: ${(intake.dietaryRestrictions || []).map(r => t(RESTRICTION_LABEL_KEYS[r] || '') || r).join(', ')}`}
             </div>
           </div>
           {(intake.healthConditions || []).length > 0 && (
             <div style={s.reviewSection}>
-              <div style={s.reviewLabel}>HEALTH CONDITIONS</div>
-              <div style={s.reviewValue}>{(intake.healthConditions || []).join(', ')}</div>
+              <div style={s.reviewLabel}>{t('intake.review.health_conditions')}</div>
+              <div style={s.reviewValue}>{(intake.healthConditions || []).map(c => t(CONDITION_LABEL_KEYS[c] || '') || c).join(', ')}</div>
             </div>
           )}
           {intake.wearableDevice && (
             <div style={s.reviewSection}>
-              <div style={s.reviewLabel}>WEARABLE</div>
+              <div style={s.reviewLabel}>{t('intake.review.wearable')}</div>
               <div style={s.reviewValue}>{intake.wearableDevice}</div>
             </div>
           )}
           <div style={s.navRow}>
-            <button style={s.btnSecondary} onClick={prevStep}>EDIT</button>
-            <button style={s.btnPrimary} onClick={handleComplete}>DEPLOY PROFILE</button>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('intake.review.edit_btn')}</button>
+            <button style={s.btnPrimary} onClick={handleComplete}>{t('intake.review.deploy_btn')}</button>
           </div>
         </div>
       )}
