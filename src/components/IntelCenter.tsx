@@ -92,6 +92,23 @@ interface LocalState {
     trainingPath: string;
     preferredWorkoutTime: string;
   };
+  // ── intakeFields ───────────────────────────────────────────────────
+  // Apr 2026 follow-up to PR #88. Audit found 7 more intake fields that
+  // were captured during onboarding but had no UI surface in any tab.
+  // Same Gunny-drift mechanism: data exists, operator can't see it,
+  // any prompt that depends on it produces opaque output. Grouping them
+  // under an explicit `intakeFields` slice (rather than overloading
+  // `preferences`) so the persist path (write-to-operator.intake) is
+  // unambiguous in handleSave.
+  intakeFields: {
+    currentActivity: string;
+    exerciseHistory: string;
+    movementScreenScore: number;
+    healthConditions: string[];
+    nutritionHabits: string;
+    dietaryRestrictions: string[];
+    supplements: string[];
+  };
   newGoal: string;
   newEquipment: string;
   newWeakPoint: string;
@@ -249,6 +266,15 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       trainingPath: operator.intake?.trainingPath || operator.preferences?.trainingPath || 'gunny_pick',
       preferredWorkoutTime: operator.intake?.preferredWorkoutTime || 'morning',
     },
+    intakeFields: {
+      currentActivity: operator.intake?.currentActivity || 'sedentary',
+      exerciseHistory: operator.intake?.exerciseHistory || 'none',
+      movementScreenScore: operator.intake?.movementScreenScore || 5,
+      healthConditions: operator.intake?.healthConditions || [],
+      nutritionHabits: operator.intake?.nutritionHabits || 'fair',
+      dietaryRestrictions: operator.intake?.dietaryRestrictions || [],
+      supplements: operator.intake?.supplements || [],
+    },
     newGoal: '',
     newEquipment: '',
     newWeakPoint: '',
@@ -308,15 +334,23 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         // The intake write below is the canonical source.
         trainingPath: state.preferences.trainingPath,
       },
-      // Write trainingPath + preferredWorkoutTime into intake (the
-      // canonical read source — see buildGunnyContext.ts:424 + :265).
-      // Without this, an edit in PREFERENCES would only update the
-      // mirror copy in preferences and Gunny would keep reading the
-      // stale intake value (the exact bug surfaced in PR #82).
+      // Write trainingPath + preferredWorkoutTime + the residual 7
+      // intakeFields into operator.intake. Intake is the canonical
+      // read source for these — buildGunnyContext.ts and intakeAudit.ts
+      // both read directly from operator.intake.*. Without writing
+      // them through, edits in IntelCenter would never propagate to
+      // Gunny (the exact bug surfaced in PR #82 / #88).
       intake: {
         ...(operator.intake || {}),
         trainingPath: state.preferences.trainingPath,
         preferredWorkoutTime: state.preferences.preferredWorkoutTime,
+        currentActivity: state.intakeFields.currentActivity,
+        exerciseHistory: state.intakeFields.exerciseHistory,
+        movementScreenScore: state.intakeFields.movementScreenScore,
+        healthConditions: state.intakeFields.healthConditions,
+        nutritionHabits: state.intakeFields.nutritionHabits,
+        dietaryRestrictions: state.intakeFields.dietaryRestrictions,
+        supplements: state.intakeFields.supplements,
       } as Operator['intake'],
     };
     onUpdateOperator(updated);
@@ -510,6 +544,40 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       ...prev,
       preferences: { ...prev.preferences, [field]: value },
     }));
+  };
+
+  // intakeFields handler — mirrors handlePreferencesChange but writes
+  // into the new intakeFields slice. Save flushes the slice into
+  // operator.intake (canonical source for buildGunnyContext +
+  // intakeAudit).
+  const handleIntakeFieldChange = <K extends keyof LocalState['intakeFields']>(
+    field: K,
+    value: LocalState['intakeFields'][K],
+  ) => {
+    setState((prev) => ({
+      ...prev,
+      intakeFields: { ...prev.intakeFields, [field]: value },
+    }));
+  };
+
+  // Toggle helper for the array-typed intakeFields (healthConditions,
+  // dietaryRestrictions, supplements). Mirrors IntakeForm's
+  // toggleArrayItem behavior: clicking 'None' clears the whole list,
+  // clicking any other item toggles it in/out.
+  const toggleIntakeArrayItem = (
+    field: 'healthConditions' | 'dietaryRestrictions' | 'supplements',
+    item: string,
+  ) => {
+    setState((prev) => {
+      const arr = prev.intakeFields[field] || [];
+      let next: string[];
+      if (item === 'None') {
+        next = arr.includes('None') ? [] : ['None'];
+      } else {
+        next = arr.includes(item) ? arr.filter((x) => x !== item) : [...arr.filter((x) => x !== 'None'), item];
+      }
+      return { ...prev, intakeFields: { ...prev.intakeFields, [field]: next } };
+    });
   };
 
   const addEquipment = () => {
@@ -821,6 +889,110 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <button onClick={addGoal} className="btn btn-primary btn-sm" type="button">
             + Add
           </button>
+        </div>
+      </div>
+
+      {/* ─── INTAKE BACKGROUND ─────────────────────────────────────────
+          Captured during onboarding but no UI surface before this.
+          Surfacing them so the operator can verify/correct what Gunny
+          uses to calibrate programming + recovery + safety advice.
+          Each field writes to operator.intake.* on save (the canonical
+          source read by buildGunnyContext.ts).
+          - currentActivity: drives non-training NEAT estimate + recovery
+          - exerciseHistory: drives starting-load + program complexity
+          - movementScreenScore: drives exercise selection + mobility cues
+          - healthConditions: hard contraindication filter
+       */}
+      <div className="ds-card bracket" style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>
+          Intake Background
+        </span>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+          {/* Daily Activity Level */}
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label htmlFor="intel-activity">Daily Activity Level</label>
+            <select
+              id="intel-activity"
+              value={state.intakeFields.currentActivity}
+              onChange={(e) => handleIntakeFieldChange('currentActivity', e.target.value)}
+              className="ds-input"
+            >
+              <option value="sedentary">Sedentary — desk job, minimal movement</option>
+              <option value="lightly_active">Lightly Active — some daily walking</option>
+              <option value="active">Active — regular movement, on feet often</option>
+              <option value="very_active">Very Active — physical job or daily training</option>
+              <option value="athlete">Competitive Athlete — 5+ days, sport-specific</option>
+            </select>
+          </div>
+
+          {/* Exercise History */}
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label htmlFor="intel-exercise-history">Exercise History</label>
+            <select
+              id="intel-exercise-history"
+              value={state.intakeFields.exerciseHistory}
+              onChange={(e) => handleIntakeFieldChange('exerciseHistory', e.target.value)}
+              className="ds-input"
+            >
+              <option value="none">No Training Experience</option>
+              <option value="sporadic">Sporadic — on and off, no consistency</option>
+              <option value="consistent_beginner">Consistent Beginner — regular but learning</option>
+              <option value="consistent_intermediate">Consistent Intermediate — solid routine</option>
+              <option value="advanced_athlete">Advanced / Athlete — competitive or years of dedicated training</option>
+            </select>
+          </div>
+
+          {/* Movement Screen Score (1-10) */}
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label htmlFor="intel-mobility">Mobility / Movement Quality (1-10)</label>
+            <input
+              id="intel-mobility"
+              type="number"
+              min={1}
+              max={10}
+              value={state.intakeFields.movementScreenScore}
+              onChange={(e) => handleIntakeFieldChange('movementScreenScore', parseInt(e.target.value) || 5)}
+              className="ds-input"
+            />
+          </div>
+        </div>
+
+        {/* Health Conditions — chip toggle. Same UX as the Equipment
+            Arsenal grid in PREFERENCES so operators get a consistent
+            multi-select pattern. 'None' clears the list. */}
+        <div className="field" style={{ marginTop: 16, marginBottom: 0 }}>
+          <label>Health Conditions (select all that apply)</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {[
+              'High Blood Pressure', 'Diabetes', 'Heart Condition', 'Asthma',
+              'Joint Pain', 'Back Problems', 'Knee Issues', 'Shoulder Issues',
+              'Previous Surgery', 'Pregnancy/Postpartum', 'None',
+            ].map((c) => {
+              const active = (state.intakeFields.healthConditions || []).includes(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => toggleIntakeArrayItem('healthConditions', c)}
+                  style={{
+                    padding: '6px 10px',
+                    fontFamily: 'Chakra Petch, sans-serif',
+                    fontSize: 12,
+                    background: active ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.02)',
+                    border: `1px solid ${active ? 'rgba(0,255,65,0.55)' : 'rgba(0,255,65,0.15)'}`,
+                    color: active ? '#00ff41' : '#888',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -1974,6 +2146,104 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           onUpdateOperator={onUpdateOperator}
           onOpenBilling={() => setActiveTab('PROFILE')}
         />
+      </div>
+
+      {/* ─── DIETARY PROFILE ────────────────────────────────────────
+          Three intake fields surfaced together: nutritionHabits,
+          dietaryRestrictions, supplements. Captured during onboarding
+          but had no UI surface — Gunny was making meal recommendations
+          and macro advice without the operator being able to verify
+          the assumptions baked in. Each field saves to operator.intake
+          (canonical read source for buildGunnyContext). */}
+      <div className="ds-card bracket" style={{ marginTop: 20, padding: 16 }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>
+          Dietary Profile
+        </span>
+
+        {/* Nutrition Habits — 4-tier dropdown matching IntakeForm. */}
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label htmlFor="intel-nutrition-habits">Nutrition Habits</label>
+          <select
+            id="intel-nutrition-habits"
+            value={state.intakeFields.nutritionHabits}
+            onChange={(e) => handleIntakeFieldChange('nutritionHabits', e.target.value)}
+            className="ds-input"
+          >
+            <option value="poor">Poor — fast food, irregular meals</option>
+            <option value="fair">Fair — some structure, room to improve</option>
+            <option value="good">Good — mostly whole foods, consistent</option>
+            <option value="excellent">Excellent — tracked macros, dialed in</option>
+          </select>
+        </div>
+
+        {/* Dietary Restrictions — chip toggle from the canonical
+            DIETARY_RESTRICTIONS list in IntakeForm. 'None' clears. */}
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label>Dietary Restrictions (select all that apply)</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {[
+              'Gluten Free', 'Dairy Free', 'Nut Allergy', 'Soy Free', 'Shellfish Allergy',
+              'Egg Allergy', 'Halal', 'Kosher', 'Low Sodium', 'None',
+            ].map((r) => {
+              const active = (state.intakeFields.dietaryRestrictions || []).includes(r);
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => toggleIntakeArrayItem('dietaryRestrictions', r)}
+                  style={{
+                    padding: '6px 10px',
+                    fontFamily: 'Chakra Petch, sans-serif',
+                    fontSize: 12,
+                    background: active ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.02)',
+                    border: `1px solid ${active ? 'rgba(0,255,65,0.55)' : 'rgba(0,255,65,0.15)'}`,
+                    color: active ? '#00ff41' : '#888',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {r}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Supplements — chip toggle from the canonical
+            SUPPLEMENT_OPTIONS list in IntakeForm. 'None' clears. */}
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label>Supplements (select all that apply)</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {[
+              'Protein Powder', 'Creatine', 'Pre-Workout', 'BCAAs', 'Fish Oil / Omega-3',
+              'Multivitamin', 'Vitamin D', 'Magnesium', 'Caffeine', 'Collagen', 'None',
+            ].map((s) => {
+              const active = (state.intakeFields.supplements || []).includes(s);
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => toggleIntakeArrayItem('supplements', s)}
+                  style={{
+                    padding: '6px 10px',
+                    fontFamily: 'Chakra Petch, sans-serif',
+                    fontSize: 12,
+                    background: active ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.02)',
+                    border: `1px solid ${active ? 'rgba(0,255,65,0.55)' : 'rgba(0,255,65,0.15)'}`,
+                    color: active ? '#00ff41' : '#888',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
