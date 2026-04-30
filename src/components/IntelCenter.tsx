@@ -20,6 +20,7 @@ import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import { getAuthToken } from '@/lib/authClient';
+import { compressImageForVision } from '@/lib/imageCompress';
 
 /** Format a meal.time for display — handles ISO, legacy locale strings, and bare times. */
 const formatMealTime = (raw: string | undefined): string => {
@@ -1155,33 +1156,43 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Hard cap at 25 MB raw — beyond that, decoding into a canvas can
+    // OOM mobile Safari. Otherwise compressImageForVision resizes +
+    // recompresses to fit Anthropic's 5 MB base64-payload limit.
+    if (file.size > 25 * 1024 * 1024) {
+      alert('Image is too large (max 25 MB raw). Try a smaller photo.');
+      e.target.value = '';
+      return;
+    }
+
     setPhotoAnalyzing(true);
     setPhotoResult(null);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        const mimeType = file.type || 'image/jpeg';
+      const compressed = await compressImageForVision(file);
+      // compressImageForVision always returns a JPEG data URL when it
+      // re-encodes; for tiny / SVG passthroughs it preserves the
+      // original mime. Either way, parse the data URL to feed the
+      // analyze-photo endpoint with a matching mimeType.
+      const dataUrlMatch = compressed.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+      const base64 = dataUrlMatch ? dataUrlMatch[2] : compressed.split(',')[1];
+      const mimeType = dataUrlMatch ? dataUrlMatch[1] : (file.type || 'image/jpeg');
+      const res = await fetch('/api/nutrition/analyze-photo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ image: base64, mimeType }),
+      });
 
-        const res = await fetch('/api/nutrition/analyze-photo', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`,
-          },
-          body: JSON.stringify({ image: base64, mimeType }),
-        });
-
-        const data = await res.json();
-        if (data.success && data.data) {
-          setPhotoResult(data.data);
-        } else {
-          alert('Could not analyze photo. Try a clearer image.');
-        }
-        setPhotoAnalyzing(false);
-      };
-      reader.readAsDataURL(file);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setPhotoResult(data.data);
+      } else {
+        alert('Could not analyze photo. Try a clearer image.');
+      }
+      setPhotoAnalyzing(false);
     } catch (err) {
       console.error('[IntelCenter:analyzePhoto] Failed:', err);
       setPhotoAnalyzing(false);
