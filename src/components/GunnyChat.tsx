@@ -1205,7 +1205,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string } } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }> } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1372,6 +1372,7 @@ ${mealSuggestion}`;
         profileData: data.profileData,
         mealData: data.mealData,
         prData: data.prData,
+        mealDeletes: data.mealDeletes,
       };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
@@ -1412,6 +1413,13 @@ ${mealSuggestion}`;
     /** Apr 2026: Gunny <pr_json> fallback channel — see /api/gunny PR LOGGING PROTOCOL.
      *  Primary path is the auto-detect in Planner workout-mode debrief. */
     prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string };
+    /**
+     * <meal_delete> — descriptors of meals that the server actually removed
+     * from operator.nutrition.meals[date]. Mirror of <workout_delete>.
+     * Apr 2026: added because Gunny was acknowledging duplicate-meal cleanup
+     * in plain text but had no channel to actually delete.
+     */
+    mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>;
     voiceControl?: { action?: string };
   } | null> => {
     try {
@@ -1424,9 +1432,11 @@ ${mealSuggestion}`;
         // double-logging the same meal — see beta hotfix bundle (Apr 2026).
         text: (m.text || '')
           .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+          .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
           .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
           .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
           .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+          .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
           .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
           .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, ''),
         ...(m.image ? { image: m.image } : {}),
@@ -1488,6 +1498,7 @@ ${mealSuggestion}`;
           profileData: data.profileData,
           mealData: data.mealData,
           prData: data.prData,
+          mealDeletes: Array.isArray(data.mealDeletes) ? data.mealDeletes : [],
           voiceControl: data.voiceControl,
         };
       }
@@ -1530,10 +1541,14 @@ ${mealSuggestion}`;
                 .replace(/<workout_json>[\s\S]*$/, '')
                 .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
                 .replace(/<workout_modification>[\s\S]*$/, '')
+                .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
+                .replace(/<workout_delete>[\s\S]*$/, '')
                 .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
                 .replace(/<meal_json>[\s\S]*$/, '')
+                .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
+                .replace(/<meal_delete>[\s\S]*$/, '')
                 .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
                 .replace(/<pr_json>[\s\S]*$/, '')
                 .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
@@ -1569,6 +1584,7 @@ ${mealSuggestion}`;
           profileData: finalPayload.profileData,
           mealData: finalPayload.mealData,
           prData: finalPayload.prData,
+          mealDeletes: Array.isArray(finalPayload.mealDeletes) ? finalPayload.mealDeletes : [],
           voiceControl: finalPayload.voiceControl,
         };
       }
@@ -1796,6 +1812,57 @@ ${mealSuggestion}`;
         if (touched) onUpdateOperator(workingOp);
       }
 
+      // MEAL DELETE — server already mutated nutrition.meals[date] when it
+      // saw <meal_delete>. We mirror that mutation in the local operator
+      // snapshot so the Nutrition tab reflects the cleanup without waiting
+      // for a /me refetch. Server returns ONLY the entries it actually
+      // matched, so we apply the same precedence here against the latest
+      // in-memory bucket. See applyMealDeletes in /api/gunny/route.ts.
+      const mealDeletesList = (apiResult?.mealDeletes || []) as Array<{ id?: string; name?: string; calories?: number; date?: string }>;
+      let mealsDeletedCount = 0;
+      if (mealDeletesList.length > 0 && onUpdateOperator) {
+        const today = getLocalDateStr();
+        let workingOp = operator;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (workingOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const meals = { ...(nutri.meals || {}) } as Record<string, Meal[]>;
+        let touched = false;
+        for (const del of mealDeletesList) {
+          const targetDate = del.date && isValidDateStr(del.date) ? del.date : today;
+          const bucket = meals[targetDate];
+          if (!Array.isArray(bucket) || bucket.length === 0) continue;
+          let removeIdx = -1;
+          if (del.id) removeIdx = bucket.findIndex((m: Meal) => m.id === del.id);
+          if (removeIdx < 0 && del.name && Number.isFinite(del.calories)) {
+            const wantName = del.name.toLowerCase().trim();
+            const wantCal = del.calories as number;
+            removeIdx = bucket.findIndex((m: Meal) =>
+              (m.name || '').toLowerCase().trim() === wantName &&
+              Math.abs((m.calories || 0) - wantCal) <= 5,
+            );
+          }
+          if (removeIdx < 0 && del.name) {
+            const wantName = del.name.toLowerCase().trim();
+            for (let i = bucket.length - 1; i >= 0; i--) {
+              if ((bucket[i].name || '').toLowerCase().trim() === wantName) {
+                removeIdx = i;
+                break;
+              }
+            }
+          }
+          if (removeIdx < 0) continue;
+          const next = [...bucket];
+          next.splice(removeIdx, 1);
+          meals[targetDate] = next;
+          touched = true;
+          mealsDeletedCount++;
+        }
+        if (touched) {
+          workingOp = { ...workingOp, nutrition: { ...nutri, meals } };
+          onUpdateOperator(workingOp);
+        }
+      }
+
       // SURGICAL MODIFICATION — apply each targeted change Gunny emitted. Gunny
       // can emit multiple <workout_modification> blocks (e.g. prefill_weights
       // for every exercise on today's workout); we iterate and apply them in
@@ -1957,7 +2024,7 @@ ${mealSuggestion}`;
 
       // Final pass — stamp the workout suffix if a workout was generated
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      if (hasWorkout || wasModification || mealLogged || prLogged) {
+      if (hasWorkout || wasModification || mealLogged || prLogged || mealsDeletedCount > 0) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -1967,7 +2034,8 @@ ${mealSuggestion}`;
                     + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
                     + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
                     + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : '')
-                    + (prLogged ? '\n\n[PR LOGGED TO PR BOARD]' : ''),
+                    + (prLogged ? '\n\n[PR LOGGED TO PR BOARD]' : '')
+                    + (mealsDeletedCount > 0 ? `\n\n[${mealsDeletedCount === 1 ? 'MEAL REMOVED' : `${mealsDeletedCount} MEALS REMOVED`}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
@@ -2056,6 +2124,52 @@ ${mealSuggestion}`;
         if (touched) onUpdateOperator(workingOp);
       }
 
+      // QA-path meal-delete mirror — see normal-mode handler for rationale.
+      const qaMealDeletes = (apiResult?.mealDeletes || []) as Array<{ id?: string; name?: string; calories?: number; date?: string }>;
+      let qaMealsDeletedCount = 0;
+      if (qaMealDeletes.length > 0 && onUpdateOperator) {
+        const today = getLocalDateStr();
+        let workingOp = operator;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (workingOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const meals = { ...(nutri.meals || {}) } as Record<string, Meal[]>;
+        let touched = false;
+        for (const del of qaMealDeletes) {
+          const targetDate = del.date && isValidDateStr(del.date) ? del.date : today;
+          const bucket = meals[targetDate];
+          if (!Array.isArray(bucket) || bucket.length === 0) continue;
+          let removeIdx = -1;
+          if (del.id) removeIdx = bucket.findIndex((m: Meal) => m.id === del.id);
+          if (removeIdx < 0 && del.name && Number.isFinite(del.calories)) {
+            const wantName = del.name.toLowerCase().trim();
+            const wantCal = del.calories as number;
+            removeIdx = bucket.findIndex((m: Meal) =>
+              (m.name || '').toLowerCase().trim() === wantName &&
+              Math.abs((m.calories || 0) - wantCal) <= 5,
+            );
+          }
+          if (removeIdx < 0 && del.name) {
+            const wantName = del.name.toLowerCase().trim();
+            for (let i = bucket.length - 1; i >= 0; i--) {
+              if ((bucket[i].name || '').toLowerCase().trim() === wantName) {
+                removeIdx = i;
+                break;
+              }
+            }
+          }
+          if (removeIdx < 0) continue;
+          const next = [...bucket];
+          next.splice(removeIdx, 1);
+          meals[targetDate] = next;
+          touched = true;
+          qaMealsDeletedCount++;
+        }
+        if (touched) {
+          workingOp = { ...workingOp, nutrition: { ...nutri, meals } };
+          onUpdateOperator(workingOp);
+        }
+      }
+
       // Same loop pattern as the normal-mode path above — apply every
       // workout_modification Gunny emitted, prefills via event bus, block
       // mods folded into a single operator update.
@@ -2090,7 +2204,7 @@ ${mealSuggestion}`;
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      if (hasWorkout || wasModification) {
+      if (hasWorkout || wasModification || qaMealsDeletedCount > 0) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -2098,7 +2212,8 @@ ${mealSuggestion}`;
                   ...m,
                   text: (apiResult?.response || m.text)
                     + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
-                    + (wasModification ? '\n\n[WORKOUT UPDATED]' : ''),
+                    + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
+                    + (qaMealsDeletedCount > 0 ? `\n\n[${qaMealsDeletedCount === 1 ? 'MEAL REMOVED' : `${qaMealsDeletedCount} MEALS REMOVED`}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m

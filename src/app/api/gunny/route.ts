@@ -505,6 +505,43 @@ Lying about state changes is the worst kind of UX trust violation —
 the operator will check the planner, see the workout still there, and
 lose trust in everything else you say.
 
+DELETE A MEAL FROM THE NUTRITION LOG — <meal_delete>:
+When the operator asks to delete, remove, or undo a logged meal —
+including duplicates — emit a <meal_delete> block. <meal_json> is for
+ADDING meals; <meal_delete> is the inverse channel for REMOVING them.
+Without this signal you can talk about the deletion in chat but the
+nutrition log row stays — operators have hit this confused state on
+duplicate cleanups.
+
+Triggers for <meal_delete>:
+- "delete that meal" / "remove that entry" / "scrub the duplicate"
+- "the first one is wrong, only keep the second" (emit delete on the
+  first, no <meal_json> needed since the second already exists)
+- "I logged that twice — clean it up"
+
+Match shape (use whichever fields you have — server tries each in order):
+1. id (exact match — strongest, but the operator usually doesn't know it)
+2. name + calories + date (name case-insensitive, calories ±5)
+3. name + date (deletes the most recent matching name on that date)
+
+Format:
+<meal_delete>
+{
+  "name": "Cheesy Egg Hash Brown Scramble + Mixed Berries",
+  "calories": 600,
+  "date": "2026-04-27"
+}
+</meal_delete>
+
+Multiple <meal_delete> blocks per response are allowed (e.g. "wipe
+all of yesterday's mistakes"). Pull date from clientDate / today in
+context — never guess.
+
+After emitting <meal_delete>, confirm in plain text what was removed
+("Cheesy Egg Hash Brown Scramble + Mixed Berries scrubbed. Today's
+total recalculated."). Same trust rule as workout_delete: NEVER claim
+a meal was deleted in plain text without emitting <meal_delete>.
+
 VOICE OUTPUT — YOU HAVE IT (HANDS-FREE TTS):
 The GUNS UP app renders your responses as text AND can speak them aloud via
 OpenAI TTS (with a browser-speech fallback). This is a real feature, not
@@ -1381,6 +1418,111 @@ async function applyServerSideDedup(
   return { mealData: nextMeal, prData: nextPr, dedupNote };
 }
 
+// ─── Server-side <meal_delete> application ────────────────────────────────
+//
+// When Gunny emits one or more <meal_delete> blocks, mutate the operator's
+// nutrition.meals[date] in Postgres to drop matching rows. Match precedence
+// (most specific first):
+//   1. id (exact)
+//   2. name (case-insensitive trim) + calories within ±5 + date
+//   3. name + date — deletes the most-recent matching name on that date
+//
+// Returns the deletion descriptors that ACTUALLY matched something so the
+// client can render a confirmation row + apply the same removal to its
+// in-memory state without a round-trip.
+
+interface MealDeleteRequest {
+  id?: string;
+  name?: string;
+  calories?: number;
+  date?: string;
+}
+
+async function applyMealDeletes(
+  operatorId: string,
+  deletes: MealDeleteRequest[],
+  clientDate: string | undefined,
+): Promise<MealDeleteRequest[]> {
+  if (!deletes || deletes.length === 0) return [];
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({
+      where: { id: operatorId },
+      select: { nutrition: true },
+    });
+  } catch (err) {
+    console.error('[gunny/applyMealDeletes] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+
+  const nutrition = (operator.nutrition || {}) as { meals?: Record<string, Array<{ id?: string; name?: string; calories?: number }>>; targets?: unknown };
+  const meals = { ...(nutrition.meals || {}) };
+  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const applied: MealDeleteRequest[] = [];
+  let mutated = false;
+
+  for (const del of deletes) {
+    const targetDate = del.date && /^\d{4}-\d{2}-\d{2}$/.test(del.date) ? del.date : today;
+    const bucket = meals[targetDate];
+    if (!Array.isArray(bucket) || bucket.length === 0) continue;
+
+    let removeIdx = -1;
+
+    // 1. Exact id match — strongest.
+    if (del.id) {
+      removeIdx = bucket.findIndex(m => m.id === del.id);
+    }
+
+    // 2. name + calories ± 5
+    if (removeIdx < 0 && del.name && Number.isFinite(del.calories)) {
+      const wantName = del.name.toLowerCase().trim();
+      const wantCal = del.calories as number;
+      removeIdx = bucket.findIndex(m =>
+        (m.name || '').toLowerCase().trim() === wantName &&
+        Math.abs((m.calories || 0) - wantCal) <= 5,
+      );
+    }
+
+    // 3. name only (most-recent matching) — iterate from the end so we
+    //    pick the freshest entry; that's almost always what the operator
+    //    means when they say "delete the duplicate."
+    if (removeIdx < 0 && del.name) {
+      const wantName = del.name.toLowerCase().trim();
+      for (let i = bucket.length - 1; i >= 0; i--) {
+        if ((bucket[i].name || '').toLowerCase().trim() === wantName) {
+          removeIdx = i;
+          break;
+        }
+      }
+    }
+
+    if (removeIdx < 0) continue;
+
+    const next = [...bucket];
+    next.splice(removeIdx, 1);
+    meals[targetDate] = next;
+    mutated = true;
+    applied.push({ ...del, date: targetDate });
+  }
+
+  if (!mutated) return [];
+
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: {
+        nutrition: { ...nutrition, meals } as object,
+      },
+    });
+  } catch (err) {
+    console.error('[gunny/applyMealDeletes] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireAuth(req);
   if (auth instanceof NextResponse) return auth;
@@ -1863,7 +2005,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // the real conversation.
     type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
     let mergedMessages: IncomingMsg[] = messages;
-    const STRUCTURED_TAG_RE = /<(?:meal_json|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>[\s\S]*?<\/(?:meal_json|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>/g;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>/g;
     const historyChatType: string | null =
       typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
         ? chatTypeFromBody
@@ -2138,6 +2280,28 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       }
       const workoutDelete = workoutDeletes[0] || null;
 
+      // <meal_delete> — Gunny removes a logged meal from the nutrition log.
+      // Apr 2026: parallel to <workout_delete>. Triggered when an operator
+      // asks to scrub a duplicate or undo a wrong entry. Server applies
+      // the delete via prisma; the client also re-renders state-side via
+      // the same array in the response payload.
+      // Match precedence: id > (name+calories+date) > (name+date).
+      // Multiple <meal_delete> blocks per response are supported.
+      const mealDeletes: Array<{ id?: string; name?: string; calories?: number; date?: string }> = [];
+      for (const m of responseText.matchAll(/<meal_delete>([\s\S]*?)<\/meal_delete>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') {
+            mealDeletes.push({
+              id: typeof parsed.id === 'string' ? parsed.id : undefined,
+              name: typeof parsed.name === 'string' ? parsed.name : undefined,
+              calories: Number.isFinite(parsed.calories) ? Number(parsed.calories) : undefined,
+              date: typeof parsed.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : undefined,
+            });
+          }
+        } catch { /* ignore malformed block */ }
+      }
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -2148,6 +2312,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
         .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
         .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+        .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
         .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
         .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
         .trim();
@@ -2164,6 +2329,17 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const finalMealData = dedupResult.mealData;
       const finalPrData = dedupResult.prData;
 
+      // Apply <meal_delete> blocks server-side. We mutate the canonical
+      // operator.nutrition.meals[date] in Postgres so the next /me or
+      // /api/operators read returns the cleaned state. Client also
+      // applies the same deletes from the response payload to keep
+      // its in-memory operator in sync without round-tripping.
+      const appliedMealDeletes = await applyMealDeletes(
+        auth.operatorId,
+        mealDeletes,
+        clientDate,
+      );
+
       return NextResponse.json({
         response: dedupResult.dedupNote ? `${cleanResponse}\n\n[${dedupResult.dedupNote}]` : cleanResponse,
         workoutData,
@@ -2174,6 +2350,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         profileData,
         mealData: finalMealData,
         prData: finalPrData,
+        mealDeletes: appliedMealDeletes,
         dedupNote: dedupResult.dedupNote,
         voiceControl,
         // Junior safety events (empty array for adults / flag-disabled juniors).
@@ -2291,6 +2468,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           }
           const workoutDelete = workoutDeletes[0] || null;
 
+          // <meal_delete> — mirror of the non-streaming parser. See the
+          // companion block above for rationale.
+          const mealDeletes: Array<{ id?: string; name?: string; calories?: number; date?: string }> = [];
+          for (const m of fullText.matchAll(/<meal_delete>([\s\S]*?)<\/meal_delete>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') {
+                mealDeletes.push({
+                  id: typeof parsed.id === 'string' ? parsed.id : undefined,
+                  name: typeof parsed.name === 'string' ? parsed.name : undefined,
+                  calories: Number.isFinite(parsed.calories) ? Number(parsed.calories) : undefined,
+                  date: typeof parsed.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : undefined,
+                });
+              }
+            } catch { /* ignore malformed block */ }
+          }
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
@@ -2299,6 +2493,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
             .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
             .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+            .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
             .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
             .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
             .trim();
@@ -2321,6 +2516,14 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             ? `${cleanText}\n\n[${dedupResult.dedupNote}]`
             : cleanText;
 
+          // Apply <meal_delete> blocks server-side. Mirrors non-streaming
+          // path — see applyMealDeletes for match-precedence details.
+          const appliedMealDeletes = await applyMealDeletes(
+            auth.operatorId,
+            mealDeletes,
+            clientDate,
+          );
+
           controller.enqueue(
             encoder.encode(
               `event: final\ndata: ${JSON.stringify({
@@ -2333,6 +2536,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 profileData,
                 mealData: finalMealData,
                 prData: finalPrData,
+                mealDeletes: appliedMealDeletes,
                 dedupNote: dedupResult.dedupNote,
                 voiceControl,
                 // Junior safety events captured pre-LLM (see non-streaming
