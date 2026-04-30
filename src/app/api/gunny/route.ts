@@ -9,6 +9,8 @@ import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
 import { prisma } from '@/lib/db';
+import { buildMacroCycle, recomputeOnGoalDateChange } from '@/lib/macrocycle';
+import type { MacroGoal, MacroGoalType, MacroCycle, PRRecord } from '@/lib/types';
 import type { JuniorSafetyEvent } from '@/lib/types';
 import { loadGunnyCorpus } from '@/lib/gunnyCorpus';
 import type { TrainingPath, CorpusSelectionInput } from '@/data/gunny-corpus';
@@ -683,6 +685,141 @@ new full target in plain text ("New targets: 2400 cal, 220P / 240C /
 70F. Same workouts will hit harder on this fuel."). Don't suggest goal-
 shape changes (cut/bulk/recomp) here — that's a sitrep-level call. This
 channel is the dial-the-numbers channel.
+
+MANAGE GOALS — <goal_json>:
+operator.profile.goals is a flat list of free-text mission statements
+("hit 405 squat by July", "stop skipping sundays"). Channel ops:
+- "add" — append a new goal string.
+- "remove" — drop a goal that case-insensitively matches `match`.
+- "replace" — swap `match` with a new string in `value`.
+
+Triggers:
+- "add a goal: [goal]" / "new goal — [goal]"
+- "drop the [goal] goal" / "remove that 405 squat goal — recovery first"
+- "rephrase my squat goal as 425 by August"
+
+Format:
+<goal_json>
+{
+  "action": "add",
+  "value": "Hit 425 lb squat by Aug 15"
+}
+</goal_json>
+
+For "replace" include both `match` (existing string, case-insensitive
+substring is fine) and `value` (new string). For "remove" include only
+`match`. Multiple <goal_json> blocks per turn allowed (e.g. "scrap two
+old goals and add this one"). After emitting, confirm in plain text.
+Trust rule applies — don't claim a goal change without emitting.
+
+UPDATE DIETARY RESTRICTIONS / SUPPLEMENTS — <dietary_json>:
+operator.intake.dietaryRestrictions and operator.intake.supplements
+are flat string arrays. Both editable via this channel.
+
+Triggers:
+- "I'm cutting dairy" / "no more gluten" → add to dietaryRestrictions
+- "I'm not actually allergic to nuts" → remove from dietaryRestrictions
+- "started creatine" / "added 5g creatine, 3g L-citrulline" → add to supplements
+- "stopped pre-workout" → remove from supplements
+
+Format:
+<dietary_json>
+{
+  "field": "dietaryRestrictions",
+  "action": "add",
+  "values": ["dairy"]
+}
+</dietary_json>
+
+field: "dietaryRestrictions" | "supplements".
+action: "add" | "remove" | "replace_all".
+values: array of strings. For "replace_all" the array becomes the new
+list; for "add"/"remove" the array is merged/filtered (case-insensitive
+dedupe so "Dairy" and "dairy" don't both stick). Multiple blocks per
+turn allowed (e.g. one for restrictions + one for supplements).
+
+After emitting, confirm in plain text and call out any programming
+implications ("Cutting dairy noted — I'll swap whey out for plant
+protein in macro guidance.").
+
+MANAGE A MACROCYCLE — <macrocycle_json>:
+The macrocycle engine plans 6-12 month periodized blocks toward a major
+goal (powerlifting meet, hypertrophy phase, season prep, fat loss). It
+lives in operator.macroCycles[]. This channel handles the lifecycle.
+
+Actions:
+- "start" — Gunny supplies the goal shape, server runs buildMacroCycle
+  to lay out the blocks. Use when the operator commits to a long-horizon
+  target ("I want to peak for the Nov 15 meet at 1500 total"). Required
+  fields: type, name, targetDate, priority. Optional: targetMetrics.
+- "update_date" — operator moved the target date. Server re-runs the
+  block math via recomputeOnGoalDateChange.
+- "complete" — operator hit the target / event passed.
+- "cancel" — operator dropped the goal.
+- "clear" — REMOVES the cycle from the list (use sparingly — usually
+  prefer "cancel" so the historical record stays).
+
+Format (start):
+<macrocycle_json>
+{
+  "action": "start",
+  "goal": {
+    "type": "powerlifting_meet",
+    "name": "Springfield PL Open",
+    "targetDate": "2026-11-15",
+    "priority": 1,
+    "targetMetrics": { "squat": 425, "bench": 285, "deadlift": 525 }
+  }
+}
+</macrocycle_json>
+
+Format (update_date / complete / cancel / clear):
+<macrocycle_json>
+{
+  "action": "update_date",
+  "goalId": "macro-goal-abc",
+  "newDate": "2026-12-06"
+}
+</macrocycle_json>
+
+For non-start actions you can match by goalId OR by name (case-
+insensitive). type must be one of: powerlifting_meet | hypertrophy_phase
+| season_prep | fat_loss. priority must be 1 or 2.
+
+After emitting, summarize the resulting block sequence in plain text.
+
+EDIT / REMOVE A PR — <pr_modification> and <pr_delete>:
+<pr_json> ADDS a new PR. These are the inverse channels.
+
+<pr_modification> — edit fields on an existing PR.
+<pr_modification>
+{
+  "match": { "id": "pr-1234" },
+  "patch": { "weight": 410, "reps": 3, "notes": "lift video reviewed — RPE 9" }
+}
+</pr_modification>
+
+match shape:
+- id (preferred) OR
+- exercise (case-insensitive) + date (YYYY-MM-DD)
+patch fields: any of exercise, weight, reps, date, notes, type.
+
+<pr_delete> — remove a PR.
+<pr_delete>
+{
+  "match": { "exercise": "Back Squat", "date": "2026-04-12" }
+}
+</pr_delete>
+
+Use match: id when you have it. Use match: { exercise, date } when the
+operator says "scrub yesterday's bench PR — wrong number." If neither
+fits ("delete my squat PR"), refuse — too ambiguous (could be any of
+several entries). Multiple <pr_modification> / <pr_delete> blocks per
+turn allowed.
+
+Trust rule: never claim a PR was edited or deleted in plain text without
+emitting the appropriate block. Confirm with the new value after emit
+("Bench PR corrected — 285 × 3 logged.").
 
 VOICE OUTPUT — YOU HAVE IT (HANDS-FREE TTS):
 The GUNS UP app renders your responses as text AND can speak them aloud via
@@ -1986,6 +2123,356 @@ async function applyNutritionTargets(
   return targets;
 }
 
+// ─── Tier-2 chat-driven channels (Apr 2026) ──────────────────────────────
+// Same read-first/write-second pattern as Tier 1. Five appliers that fan
+// out across operator.profile.goals, operator.intake (dietary +
+// supplements), operator.macroCycles, and operator.prs.
+
+interface GoalRequest { action?: 'add' | 'remove' | 'replace'; value?: string; match?: string }
+
+async function applyGoalChanges(
+  operatorId: string,
+  reqs: GoalRequest[],
+): Promise<GoalRequest[]> {
+  if (!reqs || reqs.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { profile: true } });
+  } catch (err) {
+    console.error('[gunny/applyGoalChanges] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  const profile = (operator.profile || {}) as { goals?: string[] };
+  let goals = Array.isArray(profile.goals) ? [...profile.goals] : [];
+  const applied: GoalRequest[] = [];
+  let mutated = false;
+
+  for (const req of reqs) {
+    const action = req.action || 'add';
+    if (action === 'add') {
+      const v = (req.value || '').trim();
+      if (!v) continue;
+      // Case-insensitive dedupe so "Hit 405" and "hit 405" don't both stack.
+      if (goals.some((g) => g.toLowerCase().trim() === v.toLowerCase())) continue;
+      goals.push(v);
+      mutated = true;
+      applied.push({ action: 'add', value: v });
+      continue;
+    }
+    if (action === 'remove') {
+      const m = (req.match || '').toLowerCase().trim();
+      if (!m) continue;
+      const before = goals.length;
+      goals = goals.filter((g) => !g.toLowerCase().includes(m));
+      if (goals.length !== before) {
+        mutated = true;
+        applied.push({ action: 'remove', match: req.match });
+      }
+      continue;
+    }
+    if (action === 'replace') {
+      const m = (req.match || '').toLowerCase().trim();
+      const v = (req.value || '').trim();
+      if (!m || !v) continue;
+      const idx = goals.findIndex((g) => g.toLowerCase().includes(m));
+      if (idx < 0) continue;
+      goals[idx] = v;
+      mutated = true;
+      applied.push({ action: 'replace', match: req.match, value: v });
+    }
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { profile: { ...profile, goals } as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyGoalChanges] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface DietaryRequest {
+  field?: 'dietaryRestrictions' | 'supplements';
+  action?: 'add' | 'remove' | 'replace_all';
+  values?: string[];
+}
+
+async function applyDietaryChanges(
+  operatorId: string,
+  reqs: DietaryRequest[],
+): Promise<DietaryRequest[]> {
+  if (!reqs || reqs.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { intake: true } });
+  } catch (err) {
+    console.error('[gunny/applyDietaryChanges] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  const intake = (operator.intake || {}) as { dietaryRestrictions?: string[]; supplements?: string[] };
+  const applied: DietaryRequest[] = [];
+  let mutated = false;
+  let nextRestrictions = Array.isArray(intake.dietaryRestrictions) ? [...intake.dietaryRestrictions] : [];
+  let nextSupplements = Array.isArray(intake.supplements) ? [...intake.supplements] : [];
+
+  for (const req of reqs) {
+    const field = req.field === 'supplements' ? 'supplements' : 'dietaryRestrictions';
+    const action = req.action || 'add';
+    const values = Array.isArray(req.values)
+      ? req.values.map((v) => String(v).trim()).filter((v) => v.length > 0)
+      : [];
+    if (values.length === 0 && action !== 'replace_all') continue;
+
+    const target = field === 'supplements' ? nextSupplements : nextRestrictions;
+    let changed = false;
+    if (action === 'replace_all') {
+      const lowered = new Set<string>();
+      const deduped: string[] = [];
+      for (const v of values) {
+        const k = v.toLowerCase();
+        if (!lowered.has(k)) { lowered.add(k); deduped.push(v); }
+      }
+      if (field === 'supplements') nextSupplements = deduped; else nextRestrictions = deduped;
+      changed = true;
+    } else if (action === 'add') {
+      const lowered = new Set(target.map((v) => v.toLowerCase()));
+      for (const v of values) {
+        if (!lowered.has(v.toLowerCase())) { target.push(v); lowered.add(v.toLowerCase()); changed = true; }
+      }
+    } else if (action === 'remove') {
+      const dropSet = new Set(values.map((v) => v.toLowerCase()));
+      const filtered = target.filter((v) => !dropSet.has(v.toLowerCase()));
+      if (filtered.length !== target.length) {
+        if (field === 'supplements') nextSupplements = filtered; else nextRestrictions = filtered;
+        changed = true;
+      }
+    }
+    if (changed) { mutated = true; applied.push({ field, action, values }); }
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: {
+        intake: {
+          ...intake,
+          dietaryRestrictions: nextRestrictions,
+          supplements: nextSupplements,
+        } as object,
+      },
+    });
+  } catch (err) {
+    console.error('[gunny/applyDietaryChanges] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface MacrocycleRequest {
+  action?: 'start' | 'update_date' | 'complete' | 'cancel' | 'clear';
+  goal?: {
+    type?: MacroGoalType;
+    name?: string;
+    targetDate?: string;
+    priority?: 1 | 2;
+    targetMetrics?: Record<string, number>;
+  };
+  goalId?: string;
+  goalName?: string;
+  newDate?: string;
+}
+
+interface MacrocycleApplied {
+  action: string;
+  cycleId?: string;
+  goalName?: string;
+  blockCount?: number;
+  status?: string;
+}
+
+const VALID_MACRO_TYPES: MacroGoalType[] = ['powerlifting_meet', 'hypertrophy_phase', 'season_prep', 'fat_loss'];
+
+async function applyMacrocycleChanges(
+  operatorId: string,
+  reqs: MacrocycleRequest[],
+  clientDate: string | undefined,
+): Promise<MacrocycleApplied[]> {
+  if (!reqs || reqs.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { macroCycles: true } });
+  } catch (err) {
+    console.error('[gunny/applyMacrocycleChanges] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  let cycles = Array.isArray(operator.macroCycles) ? [...(operator.macroCycles as unknown as MacroCycle[])] : [];
+  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const applied: MacrocycleApplied[] = [];
+  let mutated = false;
+
+  const findCycleIdx = (req: MacrocycleRequest): number => {
+    if (req.goalId) {
+      const i = cycles.findIndex((c) => c.goal?.id === req.goalId);
+      if (i >= 0) return i;
+    }
+    const name = (req.goalName || req.goal?.name || '').toLowerCase().trim();
+    if (!name) return -1;
+    return cycles.findIndex((c) => (c.goal?.name || '').toLowerCase().trim() === name);
+  };
+
+  for (const req of reqs) {
+    const action = req.action || 'start';
+
+    if (action === 'start') {
+      const g = req.goal;
+      if (!g?.name?.trim() || !g?.type || !g?.targetDate) continue;
+      if (!VALID_MACRO_TYPES.includes(g.type)) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(g.targetDate)) continue;
+      const goal: MacroGoal = {
+        id: `macro-goal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        type: g.type,
+        name: g.name.trim(),
+        targetDate: g.targetDate,
+        priority: g.priority === 2 ? 2 : 1,
+        targetMetrics: g.targetMetrics && typeof g.targetMetrics === 'object' ? g.targetMetrics : undefined,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      };
+      const cycle = buildMacroCycle(goal, today);
+      cycles.push(cycle);
+      mutated = true;
+      applied.push({ action: 'start', cycleId: cycle.id, goalName: goal.name, blockCount: cycle.blocks.length });
+      continue;
+    }
+
+    const idx = findCycleIdx(req);
+    if (idx < 0) continue;
+
+    if (action === 'update_date') {
+      if (!req.newDate || !/^\d{4}-\d{2}-\d{2}$/.test(req.newDate)) continue;
+      const updatedGoal: MacroGoal = { ...cycles[idx].goal, targetDate: req.newDate };
+      cycles[idx] = recomputeOnGoalDateChange(cycles[idx], updatedGoal, today);
+      mutated = true;
+      applied.push({ action: 'update_date', cycleId: cycles[idx].id, goalName: cycles[idx].goal.name });
+      continue;
+    }
+
+    if (action === 'complete' || action === 'cancel') {
+      const status = action === 'complete' ? 'completed' : 'cancelled';
+      cycles[idx] = { ...cycles[idx], goal: { ...cycles[idx].goal, status } };
+      mutated = true;
+      applied.push({ action, cycleId: cycles[idx].id, goalName: cycles[idx].goal.name, status });
+      continue;
+    }
+
+    if (action === 'clear') {
+      const removed = cycles[idx];
+      cycles.splice(idx, 1);
+      mutated = true;
+      applied.push({ action: 'clear', cycleId: removed.id, goalName: removed.goal.name });
+    }
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { macroCycles: cycles as unknown as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyMacrocycleChanges] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface PRMatch { id?: string; exercise?: string; date?: string }
+interface PRPatch {
+  exercise?: string;
+  weight?: number;
+  reps?: number;
+  date?: string;
+  notes?: string;
+  type?: 'strength' | 'consistency' | 'endurance' | 'milestone';
+}
+interface PRModificationRequest { match?: PRMatch; patch?: PRPatch }
+interface PRDeleteRequest { match?: PRMatch }
+
+function findPRIndex(prs: PRRecord[], match: PRMatch | undefined): number {
+  if (!match) return -1;
+  if (match.id) {
+    const i = prs.findIndex((p) => p.id === match.id);
+    if (i >= 0) return i;
+  }
+  const ex = (match.exercise || '').toLowerCase().trim();
+  const date = (match.date || '').trim();
+  if (!ex || !date) return -1;
+  return prs.findIndex((p) => (p.exercise || '').toLowerCase().trim() === ex && p.date === date);
+}
+
+async function applyPRChanges(
+  operatorId: string,
+  mods: PRModificationRequest[],
+  deletes: PRDeleteRequest[],
+): Promise<{ modifications: PRModificationRequest[]; deletes: PRDeleteRequest[] }> {
+  const out = { modifications: [] as PRModificationRequest[], deletes: [] as PRDeleteRequest[] };
+  if ((!mods || mods.length === 0) && (!deletes || deletes.length === 0)) return out;
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { prs: true } });
+  } catch (err) {
+    console.error('[gunny/applyPRChanges] DB read failed:', err);
+    return out;
+  }
+  if (!operator) return out;
+  let prs = Array.isArray(operator.prs) ? [...(operator.prs as unknown as PRRecord[])] : [];
+  let mutated = false;
+
+  for (const mod of mods || []) {
+    const idx = findPRIndex(prs, mod.match);
+    if (idx < 0) continue;
+    const patch: Partial<PRRecord> = {};
+    if (typeof mod.patch?.exercise === 'string' && mod.patch.exercise.trim()) patch.exercise = mod.patch.exercise.trim();
+    if (Number.isFinite(mod.patch?.weight) && (mod.patch!.weight as number) > 0) patch.weight = Math.round(mod.patch!.weight as number);
+    if (Number.isFinite(mod.patch?.reps) && (mod.patch!.reps as number) > 0) patch.reps = Math.max(1, Math.floor(mod.patch!.reps as number));
+    if (typeof mod.patch?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(mod.patch.date)) patch.date = mod.patch.date;
+    if (typeof mod.patch?.notes === 'string') patch.notes = mod.patch.notes;
+    if (mod.patch?.type && ['strength', 'consistency', 'endurance', 'milestone'].includes(mod.patch.type)) patch.type = mod.patch.type;
+    if (Object.keys(patch).length === 0) continue;
+    prs[idx] = { ...prs[idx], ...patch };
+    mutated = true;
+    out.modifications.push(mod);
+  }
+
+  for (const del of deletes || []) {
+    const idx = findPRIndex(prs, del.match);
+    if (idx < 0) continue;
+    prs.splice(idx, 1);
+    mutated = true;
+    out.deletes.push(del);
+  }
+
+  if (!mutated) return out;
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { prs: prs as unknown as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyPRChanges] DB update failed:', err);
+    return { modifications: [], deletes: [] };
+  }
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireAuth(req);
   if (auth instanceof NextResponse) return auth;
@@ -2468,7 +2955,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // the real conversation.
     type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
     let mergedMessages: IncomingMsg[] = messages;
-    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json)>/g;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete)>/g;
     const historyChatType: string | null =
       typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
         ? chatTypeFromBody
@@ -2804,6 +3291,43 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         try { targetsReq = JSON.parse(ntM[1].trim()) as NutritionTargetsRequest; } catch { /* invalid */ }
       }
 
+      // Tier-2 channel parsers (Apr 2026).
+      const goalReqs: GoalRequest[] = [];
+      for (const m of responseText.matchAll(/<goal_json>([\s\S]*?)<\/goal_json>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') goalReqs.push(parsed as GoalRequest);
+        } catch { /* invalid */ }
+      }
+      const dietaryReqs: DietaryRequest[] = [];
+      for (const m of responseText.matchAll(/<dietary_json>([\s\S]*?)<\/dietary_json>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') dietaryReqs.push(parsed as DietaryRequest);
+        } catch { /* invalid */ }
+      }
+      const macrocycleReqs: MacrocycleRequest[] = [];
+      for (const m of responseText.matchAll(/<macrocycle_json>([\s\S]*?)<\/macrocycle_json>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') macrocycleReqs.push(parsed as MacrocycleRequest);
+        } catch { /* invalid */ }
+      }
+      const prMods: PRModificationRequest[] = [];
+      for (const m of responseText.matchAll(/<pr_modification>([\s\S]*?)<\/pr_modification>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') prMods.push(parsed as PRModificationRequest);
+        } catch { /* invalid */ }
+      }
+      const prDeletes: PRDeleteRequest[] = [];
+      for (const m of responseText.matchAll(/<pr_delete>([\s\S]*?)<\/pr_delete>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') prDeletes.push(parsed as PRDeleteRequest);
+        } catch { /* invalid */ }
+      }
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -2822,6 +3346,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
         .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
         .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+        .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+        .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+        .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+        .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+        .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
         .trim();
 
       // Read-first-then-write dedup. Looks at the operator's CURRENT
@@ -2847,7 +3376,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         clientDate,
       );
 
-      // Tier-1 appliers — fired in parallel since each touches a disjoint
+      // Tier-1/2 appliers — fired in parallel since each touches a disjoint
       // JSON column and there's no ordering dependency between them.
       const [
         hydrationApplied,
@@ -2855,12 +3384,20 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         injuryModsApplied,
         dayTagsApplied,
         nutritionTargetsApplied,
+        goalsApplied,
+        dietaryApplied,
+        macrocycleApplied,
+        prChangesApplied,
       ] = await Promise.all([
         applyHydration(auth.operatorId, hydrationReq, clientDate),
         applyReadinessEntry(auth.operatorId, readinessReq, clientDate),
         applyInjuryModifications(auth.operatorId, injuryMods),
         applyDayTags(auth.operatorId, dayTagReqs, clientDate),
         applyNutritionTargets(auth.operatorId, targetsReq),
+        applyGoalChanges(auth.operatorId, goalReqs),
+        applyDietaryChanges(auth.operatorId, dietaryReqs),
+        applyMacrocycleChanges(auth.operatorId, macrocycleReqs, clientDate),
+        applyPRChanges(auth.operatorId, prMods, prDeletes),
       ]);
 
       return NextResponse.json({
@@ -2879,6 +3416,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         injuryModifications: injuryModsApplied,
         dayTags: dayTagsApplied,
         nutritionTargets: nutritionTargetsApplied,
+        goals: goalsApplied,
+        dietary: dietaryApplied,
+        macrocycles: macrocycleApplied,
+        prModifications: prChangesApplied.modifications,
+        prDeletes: prChangesApplied.deletes,
         dedupNote: dedupResult.dedupNote,
         voiceControl,
         // Junior safety events (empty array for adults / flag-disabled juniors).
@@ -3044,6 +3586,43 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             try { targetsReq = JSON.parse(ntM[1].trim()) as NutritionTargetsRequest; } catch { /* invalid */ }
           }
 
+          // Tier-2 channel parsers — mirror of the non-streaming path.
+          const goalReqs: GoalRequest[] = [];
+          for (const m of fullText.matchAll(/<goal_json>([\s\S]*?)<\/goal_json>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') goalReqs.push(parsed as GoalRequest);
+            } catch { /* invalid */ }
+          }
+          const dietaryReqs: DietaryRequest[] = [];
+          for (const m of fullText.matchAll(/<dietary_json>([\s\S]*?)<\/dietary_json>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') dietaryReqs.push(parsed as DietaryRequest);
+            } catch { /* invalid */ }
+          }
+          const macrocycleReqs: MacrocycleRequest[] = [];
+          for (const m of fullText.matchAll(/<macrocycle_json>([\s\S]*?)<\/macrocycle_json>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') macrocycleReqs.push(parsed as MacrocycleRequest);
+            } catch { /* invalid */ }
+          }
+          const prMods: PRModificationRequest[] = [];
+          for (const m of fullText.matchAll(/<pr_modification>([\s\S]*?)<\/pr_modification>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') prMods.push(parsed as PRModificationRequest);
+            } catch { /* invalid */ }
+          }
+          const prDeletes: PRDeleteRequest[] = [];
+          for (const m of fullText.matchAll(/<pr_delete>([\s\S]*?)<\/pr_delete>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') prDeletes.push(parsed as PRDeleteRequest);
+            } catch { /* invalid */ }
+          }
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
@@ -3060,6 +3639,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
             .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
             .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+            .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+            .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+            .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+            .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+            .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
             .trim();
 
           // Read-first-then-write dedup. Mirrors the non-streaming path —
@@ -3088,19 +3672,27 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             clientDate,
           );
 
-          // Tier-1 appliers in parallel. See non-streaming path for rationale.
+          // Tier-1/2 appliers in parallel. See non-streaming path for rationale.
           const [
             hydrationApplied,
             readinessApplied,
             injuryModsApplied,
             dayTagsApplied,
             nutritionTargetsApplied,
+            goalsApplied,
+            dietaryApplied,
+            macrocycleApplied,
+            prChangesApplied,
           ] = await Promise.all([
             applyHydration(auth.operatorId, hydrationReq, clientDate),
             applyReadinessEntry(auth.operatorId, readinessReq, clientDate),
             applyInjuryModifications(auth.operatorId, injuryMods),
             applyDayTags(auth.operatorId, dayTagReqs, clientDate),
             applyNutritionTargets(auth.operatorId, targetsReq),
+            applyGoalChanges(auth.operatorId, goalReqs),
+            applyDietaryChanges(auth.operatorId, dietaryReqs),
+            applyMacrocycleChanges(auth.operatorId, macrocycleReqs, clientDate),
+            applyPRChanges(auth.operatorId, prMods, prDeletes),
           ]);
 
           controller.enqueue(
@@ -3121,6 +3713,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 injuryModifications: injuryModsApplied,
                 dayTags: dayTagsApplied,
                 nutritionTargets: nutritionTargetsApplied,
+                goals: goalsApplied,
+                dietary: dietaryApplied,
+                macrocycles: macrocycleApplied,
+                prModifications: prChangesApplied.modifications,
+                prDeletes: prChangesApplied.deletes,
                 dedupNote: dedupResult.dedupNote,
                 voiceControl,
                 // Junior safety events captured pre-LLM (see non-streaming

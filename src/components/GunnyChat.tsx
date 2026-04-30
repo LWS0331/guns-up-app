@@ -1205,7 +1205,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>; hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null; readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null; injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>; dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>; nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>; hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null; readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null; injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>; dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>; nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null; goals?: Array<{ action?: string; value?: string; match?: string }>; dietary?: Array<{ field?: string; action?: string; values?: string[] }>; macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>; prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>; prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }> } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1378,6 +1378,11 @@ ${mealSuggestion}`;
         injuryModifications: Array.isArray(data.injuryModifications) ? data.injuryModifications : [],
         dayTags: Array.isArray(data.dayTags) ? data.dayTags : [],
         nutritionTargets: data.nutritionTargets || null,
+        goals: Array.isArray(data.goals) ? data.goals : [],
+        dietary: Array.isArray(data.dietary) ? data.dietary : [],
+        macrocycles: Array.isArray(data.macrocycles) ? data.macrocycles : [],
+        prModifications: Array.isArray(data.prModifications) ? data.prModifications : [],
+        prDeletes: Array.isArray(data.prDeletes) ? data.prDeletes : [],
       };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
@@ -1432,6 +1437,12 @@ ${mealSuggestion}`;
     injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>;
     dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>;
     nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null;
+    /** Tier-2 chat-driven channels (Apr 2026). */
+    goals?: Array<{ action?: string; value?: string; match?: string }>;
+    dietary?: Array<{ field?: string; action?: string; values?: string[] }>;
+    macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>;
+    prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>;
+    prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>;
     voiceControl?: { action?: string };
   } | null> => {
     try {
@@ -1455,6 +1466,11 @@ ${mealSuggestion}`;
           .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
           .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
           .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+          .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+          .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+          .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+          .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+          .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
           .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, ''),
         ...(m.image ? { image: m.image } : {}),
       }));
@@ -1521,6 +1537,11 @@ ${mealSuggestion}`;
           injuryModifications: Array.isArray(data.injuryModifications) ? data.injuryModifications : [],
           dayTags: Array.isArray(data.dayTags) ? data.dayTags : [],
           nutritionTargets: data.nutritionTargets || null,
+          goals: Array.isArray(data.goals) ? data.goals : [],
+          dietary: Array.isArray(data.dietary) ? data.dietary : [],
+          macrocycles: Array.isArray(data.macrocycles) ? data.macrocycles : [],
+          prModifications: Array.isArray(data.prModifications) ? data.prModifications : [],
+          prDeletes: Array.isArray(data.prDeletes) ? data.prDeletes : [],
           voiceControl: data.voiceControl,
         };
       }
@@ -1583,6 +1604,16 @@ ${mealSuggestion}`;
                 .replace(/<day_tag_json>[\s\S]*$/, '')
                 .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
                 .replace(/<nutrition_targets_json>[\s\S]*$/, '')
+                .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+                .replace(/<goal_json>[\s\S]*$/, '')
+                .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+                .replace(/<dietary_json>[\s\S]*$/, '')
+                .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+                .replace(/<macrocycle_json>[\s\S]*$/, '')
+                .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+                .replace(/<pr_modification>[\s\S]*$/, '')
+                .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+                .replace(/<pr_delete>[\s\S]*$/, '')
                 .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
                 .replace(/<voice_control>[\s\S]*$/, '')
                 // Strip trailing half-streamed markdown table row (pipe-led line missing its closing pipe)
@@ -1622,6 +1653,11 @@ ${mealSuggestion}`;
           injuryModifications: Array.isArray(finalPayload.injuryModifications) ? finalPayload.injuryModifications : [],
           dayTags: Array.isArray(finalPayload.dayTags) ? finalPayload.dayTags : [],
           nutritionTargets: finalPayload.nutritionTargets || null,
+          goals: Array.isArray(finalPayload.goals) ? finalPayload.goals : [],
+          dietary: Array.isArray(finalPayload.dietary) ? finalPayload.dietary : [],
+          macrocycles: Array.isArray(finalPayload.macrocycles) ? finalPayload.macrocycles : [],
+          prModifications: Array.isArray(finalPayload.prModifications) ? finalPayload.prModifications : [],
+          prDeletes: Array.isArray(finalPayload.prDeletes) ? finalPayload.prDeletes : [],
           voiceControl: finalPayload.voiceControl,
         };
       }
@@ -2007,6 +2043,109 @@ ${mealSuggestion}`;
         targetsChanged = true;
       }
 
+      // ─── Tier-2 mirrors (Apr 2026) ──────────────────────────────────────
+      let goalsChangedCount = 0;
+      const goalDiffs = apiResult?.goals || [];
+      if (goalDiffs.length > 0 && onUpdateOperator) {
+        let goals = [...(operator.profile?.goals || [])];
+        for (const d of goalDiffs) {
+          if (d.action === 'add' && d.value) {
+            if (!goals.some((g) => g.toLowerCase() === d.value!.toLowerCase())) {
+              goals.push(d.value);
+              goalsChangedCount++;
+            }
+          } else if (d.action === 'remove' && d.match) {
+            const m = d.match.toLowerCase();
+            const before = goals.length;
+            goals = goals.filter((g) => !g.toLowerCase().includes(m));
+            if (goals.length !== before) goalsChangedCount++;
+          } else if (d.action === 'replace' && d.match && d.value) {
+            const m = d.match.toLowerCase();
+            const idx = goals.findIndex((g) => g.toLowerCase().includes(m));
+            if (idx >= 0) { goals[idx] = d.value; goalsChangedCount++; }
+          }
+        }
+        if (goalsChangedCount > 0) onUpdateOperator({ ...operator, profile: { ...operator.profile, goals } });
+      }
+
+      let dietaryChangedCount = 0;
+      const dietaryDiffs = apiResult?.dietary || [];
+      if (dietaryDiffs.length > 0 && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const intake = ({ ...(operator.intake || {}) }) as any;
+        let restrictions = Array.isArray(intake.dietaryRestrictions) ? [...intake.dietaryRestrictions] : [];
+        let supplements = Array.isArray(intake.supplements) ? [...intake.supplements] : [];
+        for (const d of dietaryDiffs) {
+          const target = d.field === 'supplements' ? supplements : restrictions;
+          const values = (d.values || []).map((v) => String(v).trim()).filter(Boolean);
+          if (d.action === 'replace_all') {
+            const seen = new Set<string>();
+            const dedup: string[] = [];
+            for (const v of values) { const k = v.toLowerCase(); if (!seen.has(k)) { seen.add(k); dedup.push(v); } }
+            if (d.field === 'supplements') supplements = dedup; else restrictions = dedup;
+            dietaryChangedCount++;
+          } else if (d.action === 'add') {
+            const seen = new Set(target.map((v) => v.toLowerCase()));
+            for (const v of values) {
+              if (!seen.has(v.toLowerCase())) { target.push(v); seen.add(v.toLowerCase()); }
+            }
+            dietaryChangedCount++;
+          } else if (d.action === 'remove') {
+            const drop = new Set(values.map((v) => v.toLowerCase()));
+            const filtered = target.filter((v) => !drop.has(v.toLowerCase()));
+            if (filtered.length !== target.length) {
+              if (d.field === 'supplements') supplements = filtered; else restrictions = filtered;
+              dietaryChangedCount++;
+            }
+          }
+        }
+        if (dietaryChangedCount > 0) {
+          onUpdateOperator({ ...operator, intake: { ...intake, dietaryRestrictions: restrictions, supplements } });
+        }
+      }
+
+      // For macrocycles + PR mods/deletes, server-side mutation is the
+      // source of truth — we don't have the full Postgres-resolved
+      // operator on the client at this point (the server returned only
+      // applied diff descriptors). The next /me refetch (or a manual
+      // refresh on the relevant tab) reflects the change. We only stamp
+      // a confirmation suffix here so the operator gets visible feedback.
+      const macrocyclesChanged = (apiResult?.macrocycles || []).length;
+      const prMods = apiResult?.prModifications || [];
+      const prDels = apiResult?.prDeletes || [];
+
+      // PR mods + deletes — apply locally for snappier feedback. Server
+      // already wrote canonical state; we just sync our in-memory copy.
+      let prsChangedCount = 0;
+      if ((prMods.length > 0 || prDels.length > 0) && onUpdateOperator) {
+        let prs = [...(operator.prs || [])];
+        const findIdx = (match: { id?: string; exercise?: string; date?: string } | undefined) => {
+          if (!match) return -1;
+          if (match.id) {
+            const i = prs.findIndex((p) => p.id === match.id);
+            if (i >= 0) return i;
+          }
+          const ex = (match.exercise || '').toLowerCase().trim();
+          const date = (match.date || '').trim();
+          if (!ex || !date) return -1;
+          return prs.findIndex((p) => (p.exercise || '').toLowerCase().trim() === ex && p.date === date);
+        };
+        for (const m of prMods) {
+          const idx = findIdx(m.match);
+          if (idx < 0) continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          prs[idx] = { ...prs[idx], ...(m.patch as any) };
+          prsChangedCount++;
+        }
+        for (const d of prDels) {
+          const idx = findIdx(d.match);
+          if (idx < 0) continue;
+          prs.splice(idx, 1);
+          prsChangedCount++;
+        }
+        if (prsChangedCount > 0) onUpdateOperator({ ...operator, prs });
+      }
+
       // SURGICAL MODIFICATION — apply each targeted change Gunny emitted. Gunny
       // can emit multiple <workout_modification> blocks (e.g. prefill_weights
       // for every exercise on today's workout); we iterate and apply them in
@@ -2170,7 +2309,9 @@ ${mealSuggestion}`;
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
       const tier1Touched = hydrationLogged || readinessLogged
         || injuriesChangedCount > 0 || dayTagsChangedCount > 0 || targetsChanged;
-      if (hasWorkout || wasModification || mealLogged || prLogged || mealsDeletedCount > 0 || tier1Touched) {
+      const tier2Touched = goalsChangedCount > 0 || dietaryChangedCount > 0
+        || macrocyclesChanged > 0 || prsChangedCount > 0;
+      if (hasWorkout || wasModification || mealLogged || prLogged || mealsDeletedCount > 0 || tier1Touched || tier2Touched) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -2186,7 +2327,11 @@ ${mealSuggestion}`;
                     + (readinessLogged ? '\n\n[READINESS CHECK-IN LOGGED]' : '')
                     + (injuriesChangedCount > 0 ? `\n\n[${injuriesChangedCount === 1 ? 'INJURY UPDATED' : `${injuriesChangedCount} INJURIES UPDATED`}]` : '')
                     + (dayTagsChangedCount > 0 ? `\n\n[${dayTagsChangedCount === 1 ? 'DAY TAGGED' : `${dayTagsChangedCount} DAYS TAGGED`}]` : '')
-                    + (targetsChanged ? '\n\n[MACRO TARGETS UPDATED]' : ''),
+                    + (targetsChanged ? '\n\n[MACRO TARGETS UPDATED]' : '')
+                    + (goalsChangedCount > 0 ? `\n\n[${goalsChangedCount === 1 ? 'GOAL UPDATED' : `${goalsChangedCount} GOALS UPDATED`}]` : '')
+                    + (dietaryChangedCount > 0 ? '\n\n[DIETARY PROFILE UPDATED]' : '')
+                    + (macrocyclesChanged > 0 ? `\n\n[${macrocyclesChanged === 1 ? 'MACROCYCLE UPDATED' : `${macrocyclesChanged} MACROCYCLES UPDATED`}]` : '')
+                    + (prsChangedCount > 0 ? `\n\n[${prsChangedCount === 1 ? 'PR UPDATED' : `${prsChangedCount} PRS UPDATED`}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
@@ -2423,6 +2568,100 @@ ${mealSuggestion}`;
         qaTargetsChanged = true;
       }
 
+      // Tier-2 mirrors (QA path).
+      let qaGoalsChangedCount = 0;
+      const qaGoalDiffs = apiResult?.goals || [];
+      if (qaGoalDiffs.length > 0 && onUpdateOperator) {
+        let goals = [...(operator.profile?.goals || [])];
+        for (const d of qaGoalDiffs) {
+          if (d.action === 'add' && d.value) {
+            if (!goals.some((g) => g.toLowerCase() === d.value!.toLowerCase())) {
+              goals.push(d.value);
+              qaGoalsChangedCount++;
+            }
+          } else if (d.action === 'remove' && d.match) {
+            const m = d.match.toLowerCase();
+            const before = goals.length;
+            goals = goals.filter((g) => !g.toLowerCase().includes(m));
+            if (goals.length !== before) qaGoalsChangedCount++;
+          } else if (d.action === 'replace' && d.match && d.value) {
+            const m = d.match.toLowerCase();
+            const idx = goals.findIndex((g) => g.toLowerCase().includes(m));
+            if (idx >= 0) { goals[idx] = d.value; qaGoalsChangedCount++; }
+          }
+        }
+        if (qaGoalsChangedCount > 0) onUpdateOperator({ ...operator, profile: { ...operator.profile, goals } });
+      }
+
+      let qaDietaryChangedCount = 0;
+      const qaDietaryDiffs = apiResult?.dietary || [];
+      if (qaDietaryDiffs.length > 0 && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const intake = ({ ...(operator.intake || {}) }) as any;
+        let restrictions = Array.isArray(intake.dietaryRestrictions) ? [...intake.dietaryRestrictions] : [];
+        let supplements = Array.isArray(intake.supplements) ? [...intake.supplements] : [];
+        for (const d of qaDietaryDiffs) {
+          const target = d.field === 'supplements' ? supplements : restrictions;
+          const values = (d.values || []).map((v) => String(v).trim()).filter(Boolean);
+          if (d.action === 'replace_all') {
+            const seen = new Set<string>();
+            const dedup: string[] = [];
+            for (const v of values) { const k = v.toLowerCase(); if (!seen.has(k)) { seen.add(k); dedup.push(v); } }
+            if (d.field === 'supplements') supplements = dedup; else restrictions = dedup;
+            qaDietaryChangedCount++;
+          } else if (d.action === 'add') {
+            const seen = new Set(target.map((v) => v.toLowerCase()));
+            for (const v of values) {
+              if (!seen.has(v.toLowerCase())) { target.push(v); seen.add(v.toLowerCase()); }
+            }
+            qaDietaryChangedCount++;
+          } else if (d.action === 'remove') {
+            const drop = new Set(values.map((v) => v.toLowerCase()));
+            const filtered = target.filter((v) => !drop.has(v.toLowerCase()));
+            if (filtered.length !== target.length) {
+              if (d.field === 'supplements') supplements = filtered; else restrictions = filtered;
+              qaDietaryChangedCount++;
+            }
+          }
+        }
+        if (qaDietaryChangedCount > 0) {
+          onUpdateOperator({ ...operator, intake: { ...intake, dietaryRestrictions: restrictions, supplements } });
+        }
+      }
+
+      const qaMacrocyclesChanged = (apiResult?.macrocycles || []).length;
+      const qaPrMods = apiResult?.prModifications || [];
+      const qaPrDels = apiResult?.prDeletes || [];
+      let qaPrsChangedCount = 0;
+      if ((qaPrMods.length > 0 || qaPrDels.length > 0) && onUpdateOperator) {
+        let prs = [...(operator.prs || [])];
+        const findIdx = (match: { id?: string; exercise?: string; date?: string } | undefined) => {
+          if (!match) return -1;
+          if (match.id) {
+            const i = prs.findIndex((p) => p.id === match.id);
+            if (i >= 0) return i;
+          }
+          const ex = (match.exercise || '').toLowerCase().trim();
+          const date = (match.date || '').trim();
+          if (!ex || !date) return -1;
+          return prs.findIndex((p) => (p.exercise || '').toLowerCase().trim() === ex && p.date === date);
+        };
+        for (const m of qaPrMods) {
+          const idx = findIdx(m.match);
+          if (idx < 0) continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          prs[idx] = { ...prs[idx], ...(m.patch as any) };
+          qaPrsChangedCount++;
+        }
+        for (const d of qaPrDels) {
+          const idx = findIdx(d.match);
+          if (idx < 0) continue;
+          prs.splice(idx, 1);
+          qaPrsChangedCount++;
+        }
+        if (qaPrsChangedCount > 0) onUpdateOperator({ ...operator, prs });
+      }
+
       // Same loop pattern as the normal-mode path above — apply every
       // workout_modification Gunny emitted, prefills via event bus, block
       // mods folded into a single operator update.
@@ -2459,7 +2698,9 @@ ${mealSuggestion}`;
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
       const qaTier1Touched = qaHydrationLogged || qaReadinessLogged
         || qaInjuriesChangedCount > 0 || qaDayTagsChangedCount > 0 || qaTargetsChanged;
-      if (hasWorkout || wasModification || qaMealsDeletedCount > 0 || qaTier1Touched) {
+      const qaTier2Touched = qaGoalsChangedCount > 0 || qaDietaryChangedCount > 0
+        || qaMacrocyclesChanged > 0 || qaPrsChangedCount > 0;
+      if (hasWorkout || wasModification || qaMealsDeletedCount > 0 || qaTier1Touched || qaTier2Touched) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -2473,7 +2714,11 @@ ${mealSuggestion}`;
                     + (qaReadinessLogged ? '\n\n[READINESS CHECK-IN LOGGED]' : '')
                     + (qaInjuriesChangedCount > 0 ? `\n\n[${qaInjuriesChangedCount === 1 ? 'INJURY UPDATED' : `${qaInjuriesChangedCount} INJURIES UPDATED`}]` : '')
                     + (qaDayTagsChangedCount > 0 ? `\n\n[${qaDayTagsChangedCount === 1 ? 'DAY TAGGED' : `${qaDayTagsChangedCount} DAYS TAGGED`}]` : '')
-                    + (qaTargetsChanged ? '\n\n[MACRO TARGETS UPDATED]' : ''),
+                    + (qaTargetsChanged ? '\n\n[MACRO TARGETS UPDATED]' : '')
+                    + (qaGoalsChangedCount > 0 ? `\n\n[${qaGoalsChangedCount === 1 ? 'GOAL UPDATED' : `${qaGoalsChangedCount} GOALS UPDATED`}]` : '')
+                    + (qaDietaryChangedCount > 0 ? '\n\n[DIETARY PROFILE UPDATED]' : '')
+                    + (qaMacrocyclesChanged > 0 ? `\n\n[${qaMacrocyclesChanged === 1 ? 'MACROCYCLE UPDATED' : `${qaMacrocyclesChanged} MACROCYCLES UPDATED`}]` : '')
+                    + (qaPrsChangedCount > 0 ? `\n\n[${qaPrsChangedCount === 1 ? 'PR UPDATED' : `${qaPrsChangedCount} PRS UPDATED`}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
