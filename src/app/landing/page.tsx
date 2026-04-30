@@ -15,6 +15,9 @@
 //   Claude Design viewer and would ship dead code.
 // - CTAs point at "/" (the app's existing login screen) until a dedicated
 //   /signup flow exists.
+//
+// i18n (Phase 5): all marketing copy now goes through `useLanguage().t()`.
+// Spanish translations live in src/lib/i18n.tsx under `// ─── Landing ───`.
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -22,6 +25,7 @@ import Image from 'next/image';
 import styles from './landing.module.css';
 import FounderRotator, { RUBEN_SLIDES, BRITNEY_SLIDES } from './FounderRotator';
 import { trackEvent } from '@/lib/analytics';
+import { useLanguage } from '@/lib/i18n';
 
 // Per-client monthly commission for the Commander tier (drives the
 // landing-page revenue calculator). Pricing v1.0 (Apr 2026) lowered
@@ -42,8 +46,101 @@ function trackLandingCta(cta: string, extra?: Record<string, unknown>) {
 }
 
 export default function LandingPage() {
+  const { t } = useLanguage();
   const [clients, setClients] = useState(50);
   const mrr = useMemo(() => (clients * COMMANDER_PER_CLIENT).toFixed(2), [clients]);
+
+  // Pillars — `key` references resolve via t(). Stats are split (number + label)
+  // so Gunny's accent color hits just the number, not the whole line.
+  const pillars: Array<{ num: string; key: 'p1' | 'p2' | 'p3' | 'p4' }> = [
+    { num: '01', key: 'p1' },
+    { num: '02', key: 'p2' },
+    { num: '03', key: 'p3' },
+    { num: '04', key: 'p4' },
+  ];
+
+  // Arsenal feature grid — `wide` controls .featWide layout.
+  const features: Array<{ code: string; key: string; wide: boolean }> = [
+    { code: 'F-01', key: 'f01', wide: false },
+    { code: 'F-02', key: 'f02', wide: false },
+    { code: 'F-03', key: 'f03', wide: false },
+    { code: 'F-04', key: 'f04', wide: true },
+    { code: 'F-05', key: 'f05', wide: true },
+    { code: 'F-06', key: 'f06', wide: false },
+    { code: 'F-07', key: 'f07', wide: false },
+    { code: 'F-08', key: 'f08', wide: false },
+    { code: 'F-09', key: 'f09', wide: false },
+    { code: 'F-10', key: 'f10', wide: false },
+    { code: 'F-11', key: 'f11', wide: false },
+    { code: 'F-12', key: 'f12', wide: true },
+    { code: 'F-13', key: 'f13', wide: true },
+  ];
+
+  // Tier ordnance — `key` matches operator.tier + lib/stripe.ts::TIER_PRICES so the
+  // CTA can hand it straight to /api/stripe/checkout. Pricing v2.0 (Apr 2026):
+  // RECON now FREE with hard caps (30 chats/24h, 5 workout gens/7d). Apple IAP
+  // path for OPERATOR; COMMANDER + WARFIGHTER are Stripe web-only to protect
+  // trainer revenue share. Don't drift these without updating
+  // lib/stripe.ts::TIER_PRICES first.
+  const tiers: Array<{
+    key: string;
+    nsKey: 'recon' | 'operator' | 'commander' | 'warfighter';
+    price: string;
+    showMo: boolean;
+    featCount: number;
+    featured: boolean;
+  }> = [
+    { key: 'haiku',       nsKey: 'recon',      price: 'FREE', showMo: false, featCount: 6, featured: false },
+    { key: 'sonnet',      nsKey: 'operator',   price: '$9',   showMo: true,  featCount: 6, featured: false },
+    { key: 'opus',        nsKey: 'commander',  price: '$14',  showMo: true,  featCount: 7, featured: true },
+    { key: 'white_glove', nsKey: 'warfighter', price: '$49',  showMo: true,  featCount: 7, featured: false },
+  ];
+  // FREE label is i18n-driven for RECON
+  const reconPriceLabel = t('landing.tiers.recon.price');
+
+  // Revenue table — same layout in both languages, content from t().
+  const revRows = [
+    { tn: t('landing.trainers.rev.recon_name'),      pays: t('landing.trainers.rev.recon_pays'),      cut: t('landing.trainers.rev.dash'),               earn: t('landing.trainers.rev.dash') },
+    { tn: t('landing.trainers.rev.operator_name'),   pays: t('landing.trainers.rev.operator_pays'),   cut: t('landing.trainers.rev.dash'),               earn: t('landing.trainers.rev.operator_earn') },
+    { tn: t('landing.trainers.rev.commander_name'),  pays: t('landing.trainers.rev.commander_pays'),  cut: t('landing.trainers.rev.commander_cut'),      earn: t('landing.trainers.rev.commander_earn') },
+    { tn: t('landing.trainers.rev.warfighter_name'), pays: t('landing.trainers.rev.warfighter_pays'), cut: t('landing.trainers.rev.warfighter_cut'),     earn: t('landing.trainers.rev.warfighter_earn') },
+  ];
+
+  // Rank bonuses
+  const ranks = [
+    { tier: t('landing.trainers.rank10_tier'), desc: t('landing.trainers.rank10_desc'), bonus: t('landing.trainers.rank10_bonus') },
+    { tier: t('landing.trainers.rank25_tier'), desc: t('landing.trainers.rank25_desc'), bonus: t('landing.trainers.rank25_bonus') },
+    { tier: t('landing.trainers.rank50_tier'), desc: t('landing.trainers.rank50_desc'), bonus: t('landing.trainers.rank50_bonus') },
+  ];
+
+  // FAQ list
+  const faqs = [
+    { q: t('landing.faq.q1'), a: t('landing.faq.a1') },
+    { q: t('landing.faq.q2'), a: t('landing.faq.a2') },
+    { q: t('landing.faq.q3'), a: t('landing.faq.a3') },
+    { q: t('landing.faq.q4'), a: t('landing.faq.a4') },
+    { q: t('landing.faq.q5'), a: t('landing.faq.a5') },
+    { q: t('landing.faq.q6'), a: t('landing.faq.a6') },
+  ];
+
+  // Operator context block (Gunny demo) — keys + values pulled from t().
+  // Some values stay locale-independent (callsign, dates, raw weights);
+  // others (e.g. "Active"/"Activo", "Loaded"/"Cargados") flip with the
+  // language toggle.
+  const ctx: Array<{ k: string; v: string; tone?: 'green' | 'amber' }> = [
+    { k: t('landing.gunny.ctx.callsign'),   v: 'RAMPAGE' },
+    { k: t('landing.gunny.ctx.age_wt'),     v: '34 · 192lb' },
+    { k: t('landing.gunny.ctx.split'),      v: 'UL 4-day' },
+    { k: t('landing.gunny.ctx.sitrep'),     v: t('landing.gunny.ctx.sitrep_v'),     tone: 'green' },
+    { k: t('landing.gunny.ctx.streak'),     v: t('landing.gunny.ctx.streak_v'),     tone: 'green' },
+    { k: t('landing.gunny.ctx.last7'),      v: t('landing.gunny.ctx.last7_v') },
+    { k: t('landing.gunny.ctx.meals'),      v: t('landing.gunny.ctx.meals_v') },
+    { k: t('landing.gunny.ctx.prs'),        v: t('landing.gunny.ctx.prs_v') },
+    { k: t('landing.gunny.ctx.injury'),     v: t('landing.gunny.ctx.injury_v'),     tone: 'amber' },
+    { k: t('landing.gunny.ctx.macro_hit'),  v: t('landing.gunny.ctx.macro_hit_v') },
+    { k: t('landing.gunny.ctx.milestones'), v: t('landing.gunny.ctx.milestones_v') },
+    { k: t('landing.gunny.ctx.trainer'),    v: t('landing.gunny.ctx.trainer_v') },
+  ];
 
   return (
     <div className={styles.root}>
@@ -69,22 +166,22 @@ export default function LandingPage() {
           </div>
           <div className={styles.navStatus}>
             <span className="dot" />
-            <span>SYS ONLINE · v4.2</span>
+            <span>{t('landing.nav.sys_online')}</span>
           </div>
           <div className={styles.navLinks}>
-            <a href="#arsenal">Arsenal</a>
-            <a href="#gunny">Gunny AI</a>
-            <a href="#tiers">Tiers</a>
-            <a href="#trainers">Trainers</a>
-            <a href="#founder">Founders</a>
+            <a href="#arsenal">{t('landing.nav.arsenal')}</a>
+            <a href="#gunny">{t('landing.nav.gunny')}</a>
+            <a href="#tiers">{t('landing.nav.tiers')}</a>
+            <a href="#trainers">{t('landing.nav.trainers')}</a>
+            <a href="#founder">{t('landing.nav.founders')}</a>
             {/* MEMBER LOGIN — distinct from the primary "Deploy" CTA. Members
                 returning to the site click here; the Deploy CTA is for new
                 signups (currently routes to the same /login page until a
                 separate /signup flow exists, but kept visually distinct so
                 the pattern is in place when it does). */}
-            <Link href="/login" className={styles.navLoginLink}>Member Login</Link>
+            <Link href="/login" className={styles.navLoginLink}>{t('landing.nav.member_login')}</Link>
           </div>
-          <Link className={styles.navCta} href="/login">Deploy →</Link>
+          <Link className={styles.navCta} href="/login">{t('landing.nav.deploy')}</Link>
         </div>
       </nav>
 
@@ -93,20 +190,20 @@ export default function LandingPage() {
         <div className={styles.heroInner}>
           <div>
             <div className={styles.heroMeta}>
-              <span><b>//</b> CLASSIFIED · OPERATOR BRIEF 001</span>
-              <span><b>//</b> v4.2 — APR 2026</span>
-              <span><b>//</b> 200+ TRAINERS DEPLOYED</span>
+              <span><b>//</b> {t('landing.hero.meta_classified').replace(/^\/\/\s*/, '')}</span>
+              <span><b>//</b> {t('landing.hero.meta_version').replace(/^\/\/\s*/, '')}</span>
+              <span><b>//</b> {t('landing.hero.meta_trainers').replace(/^\/\/\s*/, '')}</span>
             </div>
 
             <h1>
-              <span>DISCIPLINE</span><br />
-              <span className={styles.heroSlash}>/</span> <span>DEPLOYED.</span>
+              <span>{t('landing.hero.title_1')}</span><br />
+              <span className={styles.heroSlash}>/</span> <span>{t('landing.hero.title_2')}</span>
             </h1>
 
             <p className={styles.heroLede}>
-              Military-precision fitness. AI-powered training. Your personal operator —
-              {' '}<b>Gunny</b> — knows every rep, every meal, every PR, every injury.
-              {' '}<b>No generic fitness chatbot.</b> A trained AI built from USMC discipline and 16 expert sources.
+              {t('landing.hero.lede')}
+              {' '}<b>{t('landing.hero.lede_gunny')}</b> {t('landing.hero.lede_knows')}
+              {' '}<b>{t('landing.hero.lede_no_chatbot')}</b> {t('landing.hero.lede_trained')}
             </p>
 
             <div className={styles.heroCtas}>
@@ -115,7 +212,7 @@ export default function LandingPage() {
                 href="/login"
                 onClick={() => trackLandingCta('hero_deploy')}
               >
-                DEPLOY OPERATOR <span className={styles.arrow}>→</span>
+                {t('landing.hero.cta_deploy')} <span className={styles.arrow}>→</span>
               </Link>
               {/* SEE TIERS — drives the secondary hero CTA into the tier
                   grid in the same page instead of a contact form. The point
@@ -127,7 +224,7 @@ export default function LandingPage() {
                 href="#tiers"
                 onClick={() => trackLandingCta('hero_see_tiers')}
               >
-                SEE TIERS
+                {t('landing.hero.cta_see_tiers')}
               </Link>
             </div>
 
@@ -135,17 +232,17 @@ export default function LandingPage() {
               <span className="bl" /><span className="br" />
               <div>
                 <div className={styles.credNum}>16</div>
-                <div className={styles.credLbl}>Expert sources</div>
+                <div className={styles.credLbl}>{t('landing.hero.cred_sources')}</div>
               </div>
               <div>
                 <div className={styles.credNum}>24/7</div>
-                <div className={styles.credLbl}>AI coverage</div>
+                <div className={styles.credLbl}>{t('landing.hero.cred_coverage')}</div>
               </div>
               <div>
                 <div className={styles.credNum}>
                   8<span style={{ fontSize: 16, color: 'var(--text-tertiary)' }}>lbs</span>
                 </div>
-                <div className={styles.credLbl}>Avg lean gain · 12wk</div>
+                <div className={styles.credLbl}>{t('landing.hero.cred_lean_gain')}</div>
               </div>
             </div>
           </div>
@@ -154,25 +251,25 @@ export default function LandingPage() {
           <div className={`${styles.hud} ${styles.bracket}`}>
             <span className="bl" /><span className="br" />
             <div className={styles.hudHead}>
-              <span>OPERATOR PROFILE // RAMPAGE-07</span>
-              <span className="live">LIVE</span>
+              <span>{t('landing.hud.profile_header')}</span>
+              <span className="live">{t('landing.hud.live')}</span>
             </div>
-            <div className={styles.hudRow}><span className="k">Callsign</span><span className="v">RAMPAGE</span></div>
-            <div className={styles.hudRow}><span className="k">Role</span><span className="v">Operator · Tier COMMANDER</span></div>
-            <div className={styles.hudRow}><span className="k">Readiness</span><span className="v green">94% · HIGH</span></div>
-            <div className={styles.hudRow}><span className="k">Streak</span><span className="v green">14 days</span></div>
-            <div className={styles.hudRow}><span className="k">Injury Flag</span><span className="v amber">R. shoulder — no OHP</span></div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.callsign')}</span><span className="v">{t('landing.hud.callsign_val')}</span></div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.role')}</span><span className="v">{t('landing.hud.role_val')}</span></div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.readiness')}</span><span className="v green">{t('landing.hud.readiness_val')}</span></div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.streak')}</span><span className="v green">{t('landing.hud.streak_val')}</span></div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.injury')}</span><span className="v amber">{t('landing.hud.injury_val')}</span></div>
 
-            <div className={styles.hudSectionTitle}>Today&apos;s Directive</div>
-            <div className={styles.hudRow}><span className="k">Split</span><span className="v">Upper A · Push focus</span></div>
-            <div className={styles.hudRow}><span className="k">Target</span><span className="v green">Bench 230 × 4</span></div>
-            <div className={styles.hudRow}><span className="k">Sub</span><span className="v">Landmine press / OHP</span></div>
-            <div className={styles.hudRow}><span className="k">Macros</span><span className="v">2,840 / 220P / 290C / 75F</span></div>
+            <div className={styles.hudSectionTitle}>{t('landing.hud.directive')}</div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.split')}</span><span className="v">{t('landing.hud.split_val')}</span></div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.target')}</span><span className="v green">{t('landing.hud.target_val')}</span></div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.sub')}</span><span className="v">{t('landing.hud.sub_val')}</span></div>
+            <div className={styles.hudRow}><span className="k">{t('landing.hud.macros')}</span><span className="v">{t('landing.hud.macros_val')}</span></div>
 
             <div className={styles.hudChat}>
-              <div className="from">GUNNY // INBOUND</div>
+              <div className="from">{t('landing.hud.chat_from')}</div>
               <div className="msg">
-                Morning, RAMPAGE. Last session you hit <b>225 × 5</b>. Plan calls for push today — let&apos;s take <b>230 × 4</b>. Landmine press in for OHP (shoulder). You&apos;re on a <b>6-day streak</b>. Don&apos;t break it.
+                {t('landing.hud.chat_msg_pre')} <b>{t('landing.hud.chat_msg_set1')}</b>{t('landing.hud.chat_msg_mid')} <b>{t('landing.hud.chat_msg_set2')}</b>{t('landing.hud.chat_msg_after')} <b>{t('landing.hud.chat_msg_streak')}</b>{t('landing.hud.chat_msg_end')}
                 <span className={styles.caret} />
               </div>
             </div>
@@ -188,13 +285,13 @@ export default function LandingPage() {
               as the first leaves. */}
           {Array.from({ length: 2 }).map((_, copy) => (
             <div key={copy} style={{ display: 'contents' }}>
-              <span><b>[SITREP]</b> 12,482 workouts logged this week</span><span className="tickerDot">·</span>
-              <span><b>[PR]</b> Deadlift 405 × 3 — OP. GHOST-11</span><span className="tickerDot">·</span>
-              <span><b>[COMPLIANCE]</b> 87% protocol adherence · 30-day</span><span className="tickerDot">·</span>
-              <span><b>[NUTRITION]</b> 4,918 meals logged · 24hr</span><span className="tickerDot">·</span>
-              <span><b>[FIELD]</b> 16 expert sources · cited on every response</span><span className="tickerDot">·</span>
-              <span><b>[GUNNY]</b> Avg response 1.4s · Claude Sonnet</span><span className="tickerDot">·</span>
-              <span><b>[TRAINERS]</b> 218 active · 40% commission tier</span><span className="tickerDot">·</span>
+              <span><b>[SITREP]</b> {t('landing.ticker.sitrep').replace(/^\[SITREP\]\s*/, '')}</span><span className="tickerDot">·</span>
+              <span><b>[PR]</b> {t('landing.ticker.pr').replace(/^\[PR\]\s*/, '')}</span><span className="tickerDot">·</span>
+              <span><b>[COMPLIANCE]</b> {t('landing.ticker.compliance').replace(/^\[(COMPLIANCE|CUMPLIMIENTO)\]\s*/, '')}</span><span className="tickerDot">·</span>
+              <span><b>[NUTRITION]</b> {t('landing.ticker.nutrition').replace(/^\[(NUTRITION|NUTRICIÓN)\]\s*/, '')}</span><span className="tickerDot">·</span>
+              <span><b>[FIELD]</b> {t('landing.ticker.field').replace(/^\[(FIELD|CAMPO)\]\s*/, '')}</span><span className="tickerDot">·</span>
+              <span><b>[GUNNY]</b> {t('landing.ticker.gunny').replace(/^\[GUNNY\]\s*/, '')}</span><span className="tickerDot">·</span>
+              <span><b>[TRAINERS]</b> {t('landing.ticker.trainers').replace(/^\[(TRAINERS|ENTRENADORES)\]\s*/, '')}</span><span className="tickerDot">·</span>
             </div>
           ))}
         </div>
@@ -203,33 +300,28 @@ export default function LandingPage() {
       {/* ========== PILLARS ========== */}
       <section id="arsenal" className={styles.section}>
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>01 · Command Stack</span>
-          <h2>Four modules.<br />One <em>operator</em> system.</h2>
-          <p>Gunny AI doesn&apos;t stand alone. It operates on top of a complete tactical command center — intake, battle plan, planner, nutrition. Every module feeds the next.</p>
+          <span className={styles.eyebrow}>{t('landing.pillars.eyebrow')}</span>
+          <h2>{t('landing.pillars.title_1')}<br />{t('landing.pillars.title_2')} <em>{t('landing.pillars.title_em')}</em> {t('landing.pillars.title_3')}</h2>
+          <p>{t('landing.pillars.lede')}</p>
         </div>
         <div className={styles.sectionWrap}>
           <div className={styles.pillars}>
-            {[
-              { num: '01', name: 'Gunny AI', sub: 'Your personal operator', desc: 'Claude Sonnet / Opus deployed with your full profile as context. Knows your SITREP, PRs, injuries, last 7 workouts, last 3 days of meals. Never generic.', left: '24/7 uptime', right: '1.4s avg reply' },
-              { num: '02', name: 'Planner', sub: 'Daily Brief · adaptive workouts', desc: "Today's workout, scheduled per your battle plan. Injury-aware substitutions. RPE progression. PRs auto-detected. Voice-logged via push-to-talk.", left: 'Voice logging', right: 'Auto PR detect' },
-              { num: '03', name: 'Nutrition', sub: 'Macros · meals · hydration', desc: "Macro targets pulled from SITREP. Meal log, hydration, supplements. Gunny compares today's intake to target in real time. Adjusts on the fly.", left: '4 macros', right: 'Sub tracking' },
-              { num: '04', name: 'Intel Center', sub: 'Progress · analytics · charts', desc: 'Strength progression, compliance scores, HR zone gauges, streaks, leaderboards. Every PR, every meal, every day tag — auditable by you or your trainer.', left: '12 charts', right: 'COC access' },
-            ].map((p) => {
+            {pillars.map((p) => {
               // Split each stat like "24/7 uptime" into number + label so Gunny's
               // accent color hits just the number, not the whole line.
               const splitStat = (s: string) => {
                 const idx = s.indexOf(' ');
                 return idx === -1 ? { num: s, rest: '' } : { num: s.slice(0, idx), rest: s.slice(idx) };
               };
-              const l = splitStat(p.left);
-              const r = splitStat(p.right);
+              const l = splitStat(t(`landing.pillars.${p.key}.left`));
+              const r = splitStat(t(`landing.pillars.${p.key}.right`));
               return (
                 <article key={p.num} className={`${styles.pillar} ${styles.bracket}`}>
                   <span className="bl" /><span className="br" />
                   <div className={styles.pillarNum}>// {p.num}</div>
-                  <div className={styles.pillarName}>{p.name}</div>
-                  <div className={styles.pillarSub}>{p.sub}</div>
-                  <p className={styles.pillarDesc}>{p.desc}</p>
+                  <div className={styles.pillarName}>{t(`landing.pillars.${p.key}.name`)}</div>
+                  <div className={styles.pillarSub}>{t(`landing.pillars.${p.key}.sub`)}</div>
+                  <p className={styles.pillarDesc}>{t(`landing.pillars.${p.key}.desc`)}</p>
                   <div className={styles.pillarStats}>
                     <span><b>{l.num}</b>{l.rest}</span>
                     <span><b>{r.num}</b>{r.rest}</span>
@@ -248,33 +340,20 @@ export default function LandingPage() {
         style={{ background: 'linear-gradient(180deg, transparent, rgba(0,255,65,0.015), transparent)' }}
       >
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>02 · Gunny AI</span>
-          <h2>Not a chatbot.<br />A <em>trained</em> operator.</h2>
-          <p>Every message Gunny sends pulls from your complete operator context. Battle plan, workout history, meal log, PRs, injuries, milestones — all in the system prompt. Every response is yours, specific, earned.</p>
+          <span className={styles.eyebrow}>{t('landing.gunny.eyebrow')}</span>
+          <h2>{t('landing.gunny.title_1')}<br />{t('landing.gunny.title_2')} <em>{t('landing.gunny.title_em')}</em> {t('landing.gunny.title_3')}</h2>
+          <p>{t('landing.gunny.lede')}</p>
         </div>
         <div className={styles.sectionWrap}>
           <div className={styles.gunnyDemo}>
             <div className={styles.gunnySide}>
-              <h3>Context Gunny sees every message:</h3>
-              <p>When you ask Gunny anything, the API route injects a structured context block built from your live Postgres data. This is a redacted view.</p>
+              <h3>{t('landing.gunny.context_h3')}</h3>
+              <p>{t('landing.gunny.context_p')}</p>
 
               <div className={styles.gunnyContext}>
-                <div className={styles.ctxTitle}>// OPERATOR_CONTEXT_BLOCK</div>
+                <div className={styles.ctxTitle}>{t('landing.gunny.ctx_title')}</div>
                 <div className={styles.ctxGrid}>
-                  {[
-                    { k: 'Callsign', v: 'RAMPAGE' },
-                    { k: 'Age / Wt', v: '34 · 192lb' },
-                    { k: 'Split', v: 'UL 4-day' },
-                    { k: 'SITREP', v: 'Active', tone: 'green' as const },
-                    { k: 'Streak', v: '14 days', tone: 'green' as const },
-                    { k: 'Last 7 wkts', v: 'Loaded' },
-                    { k: 'Meals · 72h', v: '18 logged' },
-                    { k: 'PRs', v: '12 total' },
-                    { k: 'Injury', v: 'R. shoulder', tone: 'amber' as const },
-                    { k: 'Macro hit', v: '88% / tgt' },
-                    { k: 'Milestones', v: '2 / 5' },
-                    { k: 'Trainer', v: 'Assigned' },
-                  ].map((c) => (
+                  {ctx.map((c) => (
                     <div key={c.k} className={styles.ctxItem}>
                       <div className="k">{c.k}</div>
                       <div className={`v ${c.tone || ''}`}>{c.v}</div>
@@ -284,43 +363,43 @@ export default function LandingPage() {
               </div>
 
               <div className={styles.label} style={{ marginTop: 20, marginBottom: 10 }}>
-                // WHAT THIS UNLOCKS
+                {t('landing.gunny.unlocks_label')}
               </div>
               <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-                &quot;What should I squat today?&quot; → Gunny references your PR, your progression, your restrictions. No guessing. No &quot;start with a weight you can handle.&quot;
+                {t('landing.gunny.unlocks_p')}
               </p>
             </div>
 
             <div className={`${styles.chatWin} ${styles.bracket}`}>
               <span className="bl" /><span className="br" />
               <div className={styles.chatHead}>
-                <span className="title">GUNNY // SIDE PANEL</span>
-                <span>CLAUDE SONNET · 1.4s</span>
+                <span className="title">{t('landing.gunny.chat_title')}</span>
+                <span>{t('landing.gunny.chat_meta')}</span>
               </div>
               <div className={styles.chatBody}>
                 <div className={`${styles.chatMsg} ${styles.chatMsgUser}`}>
-                  Shoulder&apos;s still bugging me. Build me a push session for today.
+                  {t('landing.gunny.chat_user1')}
                 </div>
                 <div className={`${styles.chatMsg} ${styles.chatMsgGunny}`}>
-                  Read you. Pulling your <span className={styles.inlineRef}>SITREP</span> · <span className={styles.inlineRef}>injuries[]</span> · <span className={styles.inlineRef}>workouts[-7]</span>.<br /><br />
-                  Last push was <b>Mon · 04/20</b> — bench <b>225 × 5</b>, incline DB <b>70 × 8</b>, tri rope <b>50 × 12</b>. Plan calls for progressive overload, so:
+                  {t('landing.gunny.chat_reply1.lead')} <span className={styles.inlineRef}>SITREP</span> · <span className={styles.inlineRef}>injuries[]</span> · <span className={styles.inlineRef}>workouts[-7]</span>.<br /><br />
+                  {t('landing.gunny.chat_reply1.last_push_pre')} <b>{t('landing.gunny.chat_reply1.last_push_date')}</b> {t('landing.gunny.chat_reply1.last_push_post')} <b>{t('landing.gunny.chat_reply1.bench_set')}</b>{t('landing.gunny.chat_reply1.incline_pre')} <b>{t('landing.gunny.chat_reply1.incline_set')}</b>{t('landing.gunny.chat_reply1.tri_pre')} <b>{t('landing.gunny.chat_reply1.tri_set')}</b>{t('landing.gunny.chat_reply1.tri_post')}
                   <br /><br />
-                  <b>DIRECTIVE · PUSH A (45 min)</b><br />
-                  A1. Landmine Press — 4 × 6 @ RPE 7 <span className={styles.inlineRef}>OHP sub</span><br />
-                  A2. Incline DB Press — 4 × 8 @ 72.5lb<br />
-                  B1. Flat DB Fly — 3 × 12 @ RPE 6 <span className={styles.inlineRef}>avoid end-range</span><br />
-                  B2. Cable Tri Rope — 3 × 12 @ 52.5lb <span className={styles.inlineRef}>+2.5</span><br />
-                  C. Lateral Raises — 2 × 15 light · pain-free only
+                  <b>{t('landing.gunny.chat_reply1.directive')}</b><br />
+                  {t('landing.gunny.chat_reply1.a1')} <span className={styles.inlineRef}>{t('landing.gunny.chat_reply1.a1_ref')}</span><br />
+                  {t('landing.gunny.chat_reply1.a2')}<br />
+                  {t('landing.gunny.chat_reply1.b1')} <span className={styles.inlineRef}>{t('landing.gunny.chat_reply1.b1_ref')}</span><br />
+                  {t('landing.gunny.chat_reply1.b2')} <span className={styles.inlineRef}>{t('landing.gunny.chat_reply1.b2_ref')}</span><br />
+                  {t('landing.gunny.chat_reply1.c')}
                 </div>
-                <div className={`${styles.chatMsg} ${styles.chatMsgUser}`}>Macros?</div>
+                <div className={`${styles.chatMsg} ${styles.chatMsgUser}`}>{t('landing.gunny.chat_macros')}</div>
                 <div className={`${styles.chatMsg} ${styles.chatMsgGunny}`}>
-                  Target <b>2,840 cal / 220P / 290C / 75F</b>. You&apos;re at <b>1,620 cal · 142P</b> through lunch. Need <b>78g protein</b> + ~1,220 cal. 8oz sirloin + 1.5c jasmine rice + greens hits it clean. You&apos;re at 88% compliance this week — don&apos;t slip.
+                  {t('landing.gunny.chat_reply2.target_pre')} <b>{t('landing.gunny.chat_reply2.target_val')}</b>{t('landing.gunny.chat_reply2.youre_at_pre')} <b>{t('landing.gunny.chat_reply2.youre_at_val')}</b> {t('landing.gunny.chat_reply2.youre_at_post')} <b>{t('landing.gunny.chat_reply2.need_val')}</b> {t('landing.gunny.chat_reply2.need_post')}
                   <span className={styles.caret} />
                 </div>
               </div>
               <div className={styles.chatFoot}>
-                <span className="prompt">» type message · or hold space to talk</span>
-                <span>EN · SONNET</span>
+                <span className="prompt">{t('landing.gunny.chat_foot_prompt')}</span>
+                <span>{t('landing.gunny.chat_foot_meta')}</span>
               </div>
             </div>
           </div>
@@ -330,31 +409,17 @@ export default function LandingPage() {
       {/* ========== ARSENAL / FEATURE GRID ========== */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>03 · Arsenal</span>
-          <h2>Every module. <em>Field-tested.</em></h2>
-          <p>The full load-out. Built for operators who&apos;ve tried the apps that don&apos;t work. Every feature earned its place.</p>
+          <span className={styles.eyebrow}>{t('landing.arsenal.eyebrow')}</span>
+          <h2>{t('landing.arsenal.title_1')} <em>{t('landing.arsenal.title_em')}</em></h2>
+          <p>{t('landing.arsenal.lede')}</p>
         </div>
         <div className={styles.sectionWrap}>
           <div className={styles.featureGrid}>
-            {[
-              { code: 'F-01', title: 'Intake Assessment', desc: '48K lines of intake logic. One pass, then Gunny has everything — goals, equipment, fitness level, injuries, sleep, stress, diet, wearables.', wide: false },
-              { code: 'F-02', title: 'SITREP / Battle Plan', desc: 'Your approved training program — split, progression strategy, deload protocol, nutrition plan, 30-day milestones. Referenced on every Gunny decision.', wide: false },
-              { code: 'F-03', title: 'Daily Brief', desc: "Today's adaptive workout + compliance score + Gunny's note. Adjusts to readiness, injury status, yesterday's load. No blind program-following.", wide: false },
-              { code: 'F-04', title: 'Voice Push-to-Talk Logging', desc: 'Hold space. Call the set. "Bench 225 times 5, RPE 8." Gunny parses, logs, writes back confirmation. Built for the gym floor, not the couch.', wide: true },
-              { code: 'F-05', title: 'Injury-Aware Programming', desc: 'Injury restrictions flow into every workout build. OHP on a bad shoulder? Landmine press, auto-subbed, with a note on why. Never programs past a documented restriction.', wide: true },
-              { code: 'F-06', title: 'Auto PR Detection', desc: 'Hit a new best? System flags it, tags the lift type (strength / consistency / endurance / milestone), logs the date. Gunny references PRs when prescribing weight.', wide: false },
-              { code: 'F-07', title: 'Macro + Meal Log', desc: 'Targets pulled from SITREP. Log meals fast. See today vs. target. Gunny pulls the last 3 days when you ask for food guidance.', wide: false },
-              { code: 'F-08', title: 'Wearable Sync', desc: 'Connect Apple Watch, Garmin, Whoop, Oura. HR zone gauge live during sessions. Recovery + sleep metrics feed the Daily Brief.', wide: false },
-              { code: 'F-09', title: 'Intel Center', desc: 'Progress charts, strength curves, compliance over time, streak history, day tags. Audit your own work. Your trainer sees it too.', wide: false },
-              { code: 'F-10', title: 'Chain of Command', desc: 'Trainer Dashboard + COC view. Coach your roster. See every operator\u2019s compliance, PRs, injuries, daily briefs. Leave trainer notes Gunny reads.', wide: false },
-              { code: 'F-11', title: 'Leaderboards + Tags', desc: 'Compete across your unit. Day tags flag hard days, missed days, wins. A paper trail of discipline, or the lack of it.', wide: false },
-              { code: 'F-12', title: 'PWA + Offline Capable', desc: 'Install to home screen. Service worker auto-updates. Works on gym Wi-Fi or cellular dead zones. Multi-language (EN / ES). Next.js + Postgres + Claude API.', wide: true },
-              { code: 'F-13', title: 'Tactical Radio + Social Feed', desc: 'Unit comms. Drop a clip, a lift, a win. Coach replies. Squad reacts. Accountability without the ad-driven feed.', wide: true },
-            ].map((f) => (
+            {features.map((f) => (
               <div key={f.code} className={`${styles.feat} ${f.wide ? styles.featWide : ''}`}>
                 <div className={styles.featCode}>{f.code}</div>
-                <div className={styles.featTitle}>{f.title}</div>
-                <div className={styles.featDesc}>{f.desc}</div>
+                <div className={styles.featTitle}>{t(`landing.arsenal.${f.key}.title`)}</div>
+                <div className={styles.featDesc}>{t(`landing.arsenal.${f.key}.desc`)}</div>
               </div>
             ))}
           </div>
@@ -364,55 +429,49 @@ export default function LandingPage() {
       {/* ========== TIERS ========== */}
       <section id="tiers" className={styles.section}>
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>04 · Deployment Tiers</span>
-          <h2>Pick your <em>ordnance</em>.</h2>
-          <p>Four tiers. Same app. Different AI depth. Pay monthly or lock in annual and save 17%. Every tier unlocks Gunny — heavier tiers unlock deeper context + more powerful models.</p>
+          <span className={styles.eyebrow}>{t('landing.tiers.eyebrow')}</span>
+          <h2>{t('landing.tiers.title_1')} <em>{t('landing.tiers.title_em')}</em>{t('landing.tiers.title_2')}</h2>
+          <p>{t('landing.tiers.lede')}</p>
         </div>
         <div className={styles.sectionWrap}>
           <div className={styles.tiers}>
-            {[
-              // `key` matches operator.tier + lib/stripe.ts::TIER_PRICES so the
-              // CTA can hand it straight to /api/stripe/checkout. See the
-              // tier-CTA Link href below for the routing contract.
-              // Pricing v2.0 (Apr 2026 strategy doc) — RECON now FREE
-              // with hard caps (30 chats/24h, 5 workout gens/7d). Apple
-              // IAP path for OPERATOR; COMMANDER + WARFIGHTER are Stripe
-              // web-only to protect trainer revenue share. Don't drift
-              // these without updating lib/stripe.ts::TIER_PRICES first.
-              { key: 'haiku',       name: 'RECON',      model: '// CLAUDE HAIKU 4.5',  price: 'FREE', mo: '',         annual: '30 chats/24h · 5 workout gens/7d',   feats: ['Core Gunny AI (Haiku 4.5)', 'Full Planner + logging', 'Macro tracking', 'Capped: 30 chats/24h', 'Capped: 5 sitrep gens/7d', 'Community feed'], cta: 'Start Free',  featured: false },
-              { key: 'sonnet',      name: 'OPERATOR',   model: '// CLAUDE SONNET 4.6', price: '$9',  mo: '.99/mo', annual: '$99.50 annual · save $20',  feats: ['Everything in RECON', 'Gunny with Sonnet 4.6 brain', 'Unlimited chat + workout gens', 'SITREP battle plan', 'Workout history context', 'Injury-aware sub engine'], cta: 'Deploy',  featured: false },
-              { key: 'opus',        name: 'COMMANDER',  model: '// CLAUDE OPUS 4.6',   price: '$14', mo: '.99/mo', annual: '$149.40 annual · save $30 · web only', feats: ['Everything in OPERATOR', 'Gunny with Opus 4.6 brain', 'Full nutrition context (72h)', 'Voice PTT + transcription', 'Wearable sync + HR zones', 'Recovery readout + supplement stack', 'Priority Gunny response'], cta: 'Command', featured: true, badge: 'Most Deployed' },
-              { key: 'white_glove', name: 'WARFIGHTER', model: '// OPUS · WHITE GLOVE', price: '$49', mo: '.99/mo', annual: '$497.90 annual · save $102 · web only', feats: ['Everything in COMMANDER', 'Human trainer assignment', 'AI Form Analysis (video)', 'Weekly custom brief', 'Trainer note pipeline → Gunny', 'Beta feature access', 'Priority onboarding'], cta: 'Suit Up', featured: false },
-            ].map((t) => (
-              <article
-                key={t.name}
-                className={`${styles.tier} ${styles.bracket} ${t.featured ? styles.tierFeatured : ''}`}
-              >
-                <span className="bl" /><span className="br" />
-                {t.featured && t.badge && <div className={styles.tierBadge}>{t.badge}</div>}
-                <div className={styles.tierName}>{t.name}</div>
-                <div className={styles.tierModel}>{t.model}</div>
-                <div className={styles.tierPrice}>
-                  {t.price}<span className="mo">{t.mo}</span>
-                </div>
-                <div className={styles.tierAnnual}>{t.annual}</div>
-                <ul className={styles.tierFeats}>
-                  {t.feats.map((f) => <li key={f}>{f}</li>)}
-                </ul>
-                <Link
-                  className={styles.tierCta}
-                  // Tier CTA → /login carrying tier + cycle. After the user
-                  // authenticates, /login posts to /api/stripe/checkout with
-                  // these params and redirects to the Stripe-hosted checkout
-                  // session. If they're already logged in, /login auto-bounces
-                  // to / which honors the same params.
-                  href={`/login?tier=${t.key}&cycle=monthly`}
-                  onClick={() => trackLandingCta('tier_select', { tier: t.key })}
+            {tiers.map((tier) => {
+              const feats: string[] = [];
+              for (let i = 1; i <= tier.featCount; i++) {
+                feats.push(t(`landing.tiers.${tier.nsKey}.feat${i}`));
+              }
+              const price = tier.nsKey === 'recon' ? reconPriceLabel : tier.price;
+              return (
+                <article
+                  key={tier.key}
+                  className={`${styles.tier} ${styles.bracket} ${tier.featured ? styles.tierFeatured : ''}`}
                 >
-                  {t.cta}
-                </Link>
-              </article>
-            ))}
+                  <span className="bl" /><span className="br" />
+                  {tier.featured && <div className={styles.tierBadge}>{t('landing.tiers.commander.badge')}</div>}
+                  <div className={styles.tierName}>{t(`landing.tiers.${tier.nsKey}.name`)}</div>
+                  <div className={styles.tierModel}>{t(`landing.tiers.${tier.nsKey}.model`)}</div>
+                  <div className={styles.tierPrice}>
+                    {price}<span className="mo">{tier.showMo ? t('landing.tiers.mo_suffix') : ''}</span>
+                  </div>
+                  <div className={styles.tierAnnual}>{t(`landing.tiers.${tier.nsKey}.annual`)}</div>
+                  <ul className={styles.tierFeats}>
+                    {feats.map((f) => <li key={f}>{f}</li>)}
+                  </ul>
+                  <Link
+                    className={styles.tierCta}
+                    // Tier CTA → /login carrying tier + cycle. After the user
+                    // authenticates, /login posts to /api/stripe/checkout with
+                    // these params and redirects to the Stripe-hosted checkout
+                    // session. If they're already logged in, /login auto-bounces
+                    // to / which honors the same params.
+                    href={`/login?tier=${tier.key}&cycle=monthly`}
+                    onClick={() => trackLandingCta('tier_select', { tier: tier.key })}
+                  >
+                    {t(`landing.tiers.${tier.nsKey}.cta`)}
+                  </Link>
+                </article>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -424,25 +483,21 @@ export default function LandingPage() {
         style={{ background: 'linear-gradient(180deg, transparent, rgba(0,255,65,0.02))' }}
       >
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>05 · For Trainers</span>
-          <h2>Your clients deserve Gunny.<br />You deserve to <em>get paid</em>.</h2>
-          <p>Onboard your roster in 10 minutes. Every client pays their own subscription. You take a cut — every month, forever. No exclusivity. No lock-in.</p>
+          <span className={styles.eyebrow}>{t('landing.trainers.eyebrow')}</span>
+          <h2>{t('landing.trainers.title_1')}<br />{t('landing.trainers.title_2')} <em>{t('landing.trainers.title_em')}</em>{t('landing.trainers.title_3')}</h2>
+          <p>{t('landing.trainers.lede')}</p>
         </div>
         <div className={styles.sectionWrap}>
           <div className={styles.trainerWrap}>
             <div className={styles.trainerCopy}>
-              <h3>Transparent math.<br />Direct deposit.</h3>
-              <p>Commission pays on the full subscription — monthly or annual, pro-rated. Rank up as your roster grows and your cut grows with you.</p>
+              <h3>{t('landing.trainers.copy_h3_1')}<br />{t('landing.trainers.copy_h3_2')}</h3>
+              <p>{t('landing.trainers.copy_p')}</p>
 
               <div className={`${styles.rankBonuses} ${styles.bracket}`}>
                 <span className="bl" /><span className="br" />
-                <span className={styles.label}>// Rank Bonus Program</span>
+                <span className={styles.label}>{t('landing.trainers.rank_label')}</span>
                 <div className={styles.rankList}>
-                  {[
-                    { tier: '10 CLIENTS', desc: 'First milestone · cumulative with tier rate', bonus: '+2%' },
-                    { tier: '25 CLIENTS', desc: 'Sustained rate bump', bonus: '+4%' },
-                    { tier: '50 CLIENTS', desc: 'Partner status · exclusive drops', bonus: '+5%' },
-                  ].map((r) => (
+                  {ranks.map((r) => (
                     <div key={r.tier} className={styles.rankRow}>
                       <span className="tierLbl">{r.tier}</span>
                       <span className="desc">{r.desc}</span>
@@ -456,19 +511,12 @@ export default function LandingPage() {
             <div className={`${styles.revTable} ${styles.bracket}`}>
               <span className="bl" /><span className="br" />
               <div className={styles.revHead}>
-                <span>Tier</span><span>Client Pays</span><span>Your Cut</span><span>Per Client</span>
+                <span>{t('landing.trainers.rev.col_tier')}</span>
+                <span>{t('landing.trainers.rev.col_pays')}</span>
+                <span>{t('landing.trainers.rev.col_cut')}</span>
+                <span>{t('landing.trainers.rev.col_per_client')}</span>
               </div>
-              {[
-                // Pricing v2.0 (Apr 2026): RECON is FREE — no trainer
-                // share possible since the platform takes a per-user
-                // loss on free tier. OPERATOR moved to web-only Apple-
-                // IAP-or-Stripe path; trainer share kicks in only on
-                // COMMANDER + WARFIGHTER which are Stripe web-only.
-                { tn: 'Recon',      pays: 'FREE',        cut: '—',   earn: '—' },
-                { tn: 'Operator',   pays: '$9.99 / mo',  cut: '—',   earn: '— (web only · trainers earn on Cmdr+)' },
-                { tn: 'Commander',  pays: '$14.99 / mo', cut: '20%', earn: '$3.00' },
-                { tn: 'Warfighter', pays: '$49.99 / mo', cut: '40%', earn: '$19.99' },
-              ].map((r) => (
+              {revRows.map((r) => (
                 <div key={r.tn} className={styles.revRow}>
                   <span className="tn">{r.tn}</span>
                   <span>{r.pays}</span>
@@ -479,17 +527,17 @@ export default function LandingPage() {
 
               <div className={styles.revCalc}>
                 <div>
-                  <div className="unit">Clients</div>
+                  <div className="unit">{t('landing.trainers.calc.clients')}</div>
                   <div className="num">{clients}</div>
                 </div>
                 <div className="op">×</div>
                 <div>
-                  <div className="unit">Commander cut</div>
+                  <div className="unit">{t('landing.trainers.calc.commander_cut')}</div>
                   <div className="num">${COMMANDER_PER_CLIENT.toFixed(2)}</div>
                 </div>
                 <div className="op">=</div>
                 <div className="res">
-                  <div className="unit">MRR</div>
+                  <div className="unit">{t('landing.trainers.calc.mrr')}</div>
                   <div className="num">${mrr}</div>
                 </div>
               </div>
@@ -500,9 +548,9 @@ export default function LandingPage() {
                   max={200}
                   value={clients}
                   onChange={(e) => setClients(parseInt(e.target.value, 10))}
-                  aria-label="Number of clients"
+                  aria-label={t('landing.trainers.calc.slider_label')}
                 />
-                <span>// drag to scale · 10 → 200 clients</span>
+                <span>{t('landing.trainers.calc.slider_helper')}</span>
               </div>
             </div>
           </div>
@@ -520,7 +568,7 @@ export default function LandingPage() {
               href="/trainer-apply"
               onClick={() => trackLandingCta('trainer_apply')}
             >
-              APPLY AS TRAINER <span className={styles.arrow}>→</span>
+              {t('landing.trainers.cta_apply')} <span className={styles.arrow}>→</span>
             </Link>
             <Link
               className={`${styles.btn} ${styles.btnSecondary}`}
@@ -528,7 +576,7 @@ export default function LandingPage() {
               style={{ marginLeft: 10 }}
               onClick={() => trackLandingCta('trainer_one_pager')}
             >
-              DOWNLOAD ONE-PAGER
+              {t('landing.trainers.cta_one_pager')}
             </Link>
           </div>
         </div>
@@ -544,25 +592,25 @@ export default function LandingPage() {
            parameterized via the `slides` prop. */}
       <section id="founder" className={styles.section}>
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>06 · Founders</span>
-          <h2>Two operators.<br />One <em>mission</em>.</h2>
-          <p>Guns Up wasn&apos;t built in a boardroom. It was built by two people who lived on the wrong side of generic programming — and decided to engineer the system they wished they&apos;d had.</p>
+          <span className={styles.eyebrow}>{t('landing.founders.eyebrow')}</span>
+          <h2>{t('landing.founders.title_1')}<br />{t('landing.founders.title_2')} <em>{t('landing.founders.title_em')}</em>{t('landing.founders.title_3')}</h2>
+          <p>{t('landing.founders.lede')}</p>
         </div>
         <div className={styles.sectionWrap}>
           {/* ── Founder #1 · Ruben ── */}
           <div className={styles.founder}>
-            <FounderRotator slides={RUBEN_SLIDES} ariaLabel="Ruben — career eras" />
+            <FounderRotator slides={RUBEN_SLIDES} ariaLabel={t('landing.founders.aria_ruben')} />
             <div className={styles.founderContent}>
-              <span className={styles.label}>// 01 · Founder&apos;s brief</span>
+              <span className={styles.label}>{t('landing.founders.r1_label')}</span>
               <div className={styles.founderQuote}>
-                &quot;Every fitness app I tried was built by marketers. <span className="green">This one</span> was built by an operator.&quot;
+                {t('landing.founders.r1_quote_pre')} <span className="green">{t('landing.founders.r1_quote_em')}</span> {t('landing.founders.r1_quote_post')}
               </div>
               <p className={styles.founderBio}>
-                Guns Up was built by a former USMC non-commissioned officer and a roster of certified trainers tired of generic programming. Every claim we make is cited. Every protocol is field-tested. Every decision Gunny makes is grounded in your specific profile — not the average user. That&apos;s the whole difference. Built alongside my wife and co-founder, Britney, between gym sessions and bedtime stories — this is a family operation, raising three kids while we ship.
+                {t('landing.founders.r1_bio')}
               </p>
               <div className={styles.founderSig}>
-                <b>// RUBEN</b> · Co-Founder · USMC NCO · CPT<br />
-                <b>// GUNS UP FITNESS</b> · Engineering · Claude API integration · 2026
+                <b>{t('landing.founders.r1_sig_l1')}</b><br />
+                <b>{t('landing.founders.r1_sig_l2')}</b>
               </div>
             </div>
           </div>
@@ -572,25 +620,25 @@ export default function LandingPage() {
               at the center. */}
           <div className={styles.foundersDivider}>
             <span className={styles.dot}>◆</span>
-            <span>// 02 · Co-Founder · Brief</span>
+            <span>{t('landing.founders.divider_label')}</span>
             <span className={styles.dot}>◆</span>
           </div>
 
           {/* ── Co-Founder #2 · Britney ── (.founderReverse swaps the
               column order so the rotator is on the right) */}
           <div className={`${styles.founder} ${styles.founderReverse}`}>
-            <FounderRotator slides={BRITNEY_SLIDES} ariaLabel="Britney — career eras" />
+            <FounderRotator slides={BRITNEY_SLIDES} ariaLabel={t('landing.founders.aria_britney')} />
             <div className={styles.founderContent}>
-              <span className={styles.label}>// 02 · Co-Founder&apos;s brief</span>
+              <span className={styles.label}>{t('landing.founders.r2_label')}</span>
               <div className={styles.founderQuote}>
-                &quot;Strong women build <span className="green">stronger systems</span>. We engineered Gunny to meet every athlete where she trains — and take her where she&apos;s going.&quot;
+                {t('landing.founders.r2_quote_pre')} <span className="green">{t('landing.founders.r2_quote_em')}</span>{t('landing.founders.r2_quote_post')}
               </div>
               <p className={styles.founderBio}>
-                Britney is a lifelong competitor — WPSL athlete, Spartan Race World Championship qualifier, NPC Figure competitor. She&apos;s spent two decades in real prep cycles: cutting for stage, peaking for races, rehabbing injuries between seasons. Every protocol Gunny runs for hypertrophy, conditioning, and contest prep was pressure-tested against her training log first. If it doesn&apos;t work for an athlete in week-9 of prep, it doesn&apos;t ship. She&apos;s also raising three kids with her husband and co-founder, Ruben — Guns Up is the family business, built in the margins between school runs and PR attempts.
+                {t('landing.founders.r2_bio')}
               </p>
               <div className={styles.founderSig}>
-                <b>// BRITNEY</b> · Co-Founder · NPC Women&apos;s Figure · Spartan Elite<br />
-                <b>// GUNS UP FITNESS</b> · Programming · Athlete operations · 2026
+                <b>{t('landing.founders.r2_sig_l1')}</b><br />
+                <b>{t('landing.founders.r2_sig_l2')}</b>
               </div>
             </div>
           </div>
@@ -600,19 +648,12 @@ export default function LandingPage() {
       {/* ========== FAQ ========== */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>07 · Intel</span>
-          <h2>Common <em>queries</em>.</h2>
+          <span className={styles.eyebrow}>{t('landing.faq.eyebrow')}</span>
+          <h2>{t('landing.faq.title_1')} <em>{t('landing.faq.title_em')}</em>{t('landing.faq.title_2')}</h2>
         </div>
         <div className={styles.sectionWrap}>
           <div className={styles.faq}>
-            {[
-              { q: 'Is my data private?', a: 'Yes. Your operator profile lives in encrypted Postgres. Context sent to Claude is scoped per-call and never retained for model training. You own your data — export or delete at any time.' },
-              { q: 'Do I need a trainer?', a: 'No. Every tier stands alone. If you want a human in the loop, WARFIGHTER includes one. RECON through COMMANDER run you solo with Gunny.' },
-              { q: 'What equipment do I need?', a: "Whatever you've got. Intake captures your full equipment list — full gym, home rack, hotel room, bodyweight only. Gunny programs to what you have." },
-              { q: 'How is this different from ChatGPT?', a: 'ChatGPT has no memory of your PRs, injuries, or plan. Gunny injects your complete operator context on every call. Ask the same question to both — watch what happens.' },
-              { q: 'Can I cancel anytime?', a: 'Yes. Monthly plans are month-to-month. Annual plans are annual. Your data exports on request, your login stays, your logs are yours.' },
-              { q: 'Which wearables work?', a: 'Apple Watch, Garmin, Whoop, Oura, Polar. HR zones feed live into the Daily Brief. Manual logging works without a device too.' },
-            ].map((f) => (
+            {faqs.map((f) => (
               <div key={f.q} className={styles.faqItem}>
                 <div className={styles.faqQ}>{f.q}</div>
                 <div className={styles.faqA}>{f.a}</div>
@@ -627,23 +668,23 @@ export default function LandingPage() {
         <div className={styles.sectionWrap} style={{ paddingBottom: 80, paddingTop: 40 }}>
           <div className={`${styles.ctaBlock} ${styles.bracket}`}>
             <span className="bl" /><span className="br" />
-            <span className={styles.eyebrow}>// Final orders</span>
-            <h2>You&apos;ve read the brief.<br /><em>Deploy, operator.</em></h2>
-            <p>Start free on RECON. Gunny goes live the moment your intake is complete. 30-day milestones tracked from day one.</p>
+            <span className={styles.eyebrow}>{t('landing.cta.eyebrow')}</span>
+            <h2>{t('landing.cta.title_1')}<br /><em>{t('landing.cta.title_em')}</em></h2>
+            <p>{t('landing.cta.lede')}</p>
             <div className="btns">
               <Link
                 className={`${styles.btn} ${styles.btnPrimary}`}
                 href="/login"
                 onClick={() => trackLandingCta('final_deploy')}
               >
-                DEPLOY NOW <span className={styles.arrow}>→</span>
+                {t('landing.cta.deploy_now')} <span className={styles.arrow}>→</span>
               </Link>
               <a
                 className={`${styles.btn} ${styles.btnSecondary}`}
                 href="#gunny"
                 onClick={() => trackLandingCta('final_see_gunny')}
               >
-                SEE GUNNY IN ACTION
+                {t('landing.cta.see_gunny')}
               </a>
             </div>
           </div>
@@ -659,34 +700,34 @@ export default function LandingPage() {
               <span>GUNS UP</span>
             </div>
             <p className={styles.footDesc}>
-              Military-precision fitness. AI-powered training. Built on Claude · Next.js · Postgres. Deployed on Railway.
+              {t('landing.footer.desc')}
             </p>
           </div>
           <div className={styles.footCol}>
-            <h5>Command</h5>
-            <a href="#arsenal">Arsenal</a>
-            <a href="#gunny">Gunny AI</a>
-            <a href="#tiers">Tiers</a>
-            <a href="#founder">Founders</a>
+            <h5>{t('landing.footer.command')}</h5>
+            <a href="#arsenal">{t('landing.nav.arsenal')}</a>
+            <a href="#gunny">{t('landing.nav.gunny')}</a>
+            <a href="#tiers">{t('landing.nav.tiers')}</a>
+            <a href="#founder">{t('landing.nav.founders')}</a>
           </div>
           <div className={styles.footCol}>
-            <h5>For Trainers</h5>
-            <a href="#trainers">Revenue Share</a>
-            <a href="#trainers">Rank Bonuses</a>
-            <Link href="/trainer-apply">Apply</Link>
-            <Link href="/contact?subject=trainer">Marketing Playbook</Link>
+            <h5>{t('landing.footer.for_trainers')}</h5>
+            <a href="#trainers">{t('landing.footer.revenue_share')}</a>
+            <a href="#trainers">{t('landing.footer.rank_bonuses')}</a>
+            <Link href="/trainer-apply">{t('landing.footer.apply')}</Link>
+            <Link href="/contact?subject=trainer">{t('landing.footer.marketing_playbook')}</Link>
           </div>
           <div className={styles.footCol}>
-            <h5>Intel</h5>
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/terms">Terms</Link>
-            <Link href="/contact?subject=beta">Beta Program</Link>
-            <Link href="/contact">Contact</Link>
+            <h5>{t('landing.footer.intel')}</h5>
+            <Link href="/privacy">{t('landing.footer.privacy')}</Link>
+            <Link href="/terms">{t('landing.footer.terms')}</Link>
+            <Link href="/contact?subject=beta">{t('landing.footer.beta_program')}</Link>
+            <Link href="/contact">{t('landing.footer.contact')}</Link>
           </div>
         </div>
         <div className={styles.footBottom}>
-          <span>© 2026 GUNS UP FITNESS · All rights earned.</span>
-          <span className="status">// SYS ONLINE · v4.2 · RAILWAY · APR 2026</span>
+          <span>{t('landing.footer.copyright')}</span>
+          <span className="status">{t('landing.footer.status')}</span>
         </div>
       </footer>
     </div>

@@ -5,6 +5,13 @@
 // added a second co-founder (Britney) with her own three-era rotator,
 // so the slide list moved from a hardcoded const to a `slides` prop.
 //
+// i18n (Phase 5): the slide text (era / year / caption / alt) is now
+// pulled from the translation table via `useLanguage().t()`. Slides
+// are described by a stable `key` plus the language-independent
+// pieces (image src, geo coord). The lookup keys themselves stay
+// English (matches the rest of the table) — the resolved strings
+// flip with the active language toggle.
+//
 // Spec (from design-handoff README §9):
 // - 4:5 portrait slot, 3 background-image slides, all rendered in B&W
 //   (grayscale + low saturation).
@@ -24,14 +31,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import styles from './landing.module.css';
+import { useLanguage } from '@/lib/i18n';
 
 export interface RotatorSlide {
-  era: string;       // big label, e.g. "MILITARY"
-  year: string;      // "2008 · USMC"
-  caption: string;   // "DEPLOYED · OEF"
-  coord: string;     // "34.5°N / 69.1°E"
-  src: string;       // public path
-  alt: string;
+  /** Stable key — used to look up era/year/caption/alt in the i18n table.
+   *  Format: `<founder>.s<n>` (e.g. "ruben.s1", "britney.s3"). */
+  key: string;
+  /** Coords overlaid on the HUD top bar. Numeric/locale-independent so
+   *  they don't need translation. */
+  coord: string;
+  /** Public path to the photo. Locale-independent. */
+  src: string;
 }
 
 export interface FounderRotatorProps {
@@ -52,30 +62,9 @@ export interface FounderRotatorProps {
 // re-declaring; also lets the component render a sensible default when
 // used without props (e.g. in Storybook / smoke tests).
 export const RUBEN_SLIDES: RotatorSlide[] = [
-  {
-    era: 'MILITARY',
-    year: '2008 · USMC',
-    caption: 'DEPLOYED · OEF',
-    coord: '34.5°N / 69.1°E',
-    src: '/founder-military.jpg',
-    alt: 'Ruben on deployment, USMC, 2008',
-  },
-  {
-    era: 'CROSSFIT',
-    year: '2015 · COMPETITOR',
-    caption: 'REGIONALS · RX',
-    coord: '39.7°N / 104.9°W',
-    src: '/founder-crossfit.jpg',
-    alt: 'Ruben competing in CrossFit, 2015',
-  },
-  {
-    era: 'BODYBUILDING',
-    year: '2022 · NPC',
-    caption: 'STAGE · CLASSIC PHYSIQUE',
-    coord: '33.4°N / 112.0°W',
-    src: '/founder-bodybuilding.jpg',
-    alt: 'Ruben competing in NPC bodybuilding, 2022',
-  },
+  { key: 'ruben.s1', coord: '34.5°N / 69.1°E', src: '/founder-military.jpg' },
+  { key: 'ruben.s2', coord: '39.7°N / 104.9°W', src: '/founder-crossfit.jpg' },
+  { key: 'ruben.s3', coord: '33.4°N / 112.0°W', src: '/founder-bodybuilding.jpg' },
 ];
 
 // ─── Co-founder slide set: Britney (founder #2) ────────────────────
@@ -83,30 +72,9 @@ export const RUBEN_SLIDES: RotatorSlide[] = [
 // Coordinates picked from the canonical handoff: Fresno-area for
 // WPSL, Lake Tahoe for the 2018 Spartan Worlds, Phoenix for NPC.
 export const BRITNEY_SLIDES: RotatorSlide[] = [
-  {
-    era: 'SOCCER',
-    year: '2014 · WPSL',
-    caption: 'MIDFIELD · PRO-AM',
-    coord: '36.7°N / 119.7°W',
-    src: '/cofounder-soccer.jpg',
-    alt: "Britney playing WPSL midfield, 2014",
-  },
-  {
-    era: 'SPARTAN',
-    year: '2018 · WORLD CHAMPIONSHIP',
-    caption: 'LAKE TAHOE · ELITE',
-    coord: '39.0°N / 120.0°W',
-    src: '/cofounder-spartan.jpg',
-    alt: "Britney at the 2018 Spartan World Championship, Lake Tahoe",
-  },
-  {
-    era: 'FIGURE',
-    year: '2024 · NPC',
-    caption: "STAGE · WOMEN'S FIGURE",
-    coord: '33.4°N / 112.0°W',
-    src: '/cofounder-bodybuilding.jpg',
-    alt: "Britney competing in NPC Women's Figure, 2024",
-  },
+  { key: 'britney.s1', coord: '36.7°N / 119.7°W', src: '/cofounder-soccer.jpg' },
+  { key: 'britney.s2', coord: '39.0°N / 120.0°W', src: '/cofounder-spartan.jpg' },
+  { key: 'britney.s3', coord: '33.4°N / 112.0°W', src: '/cofounder-bodybuilding.jpg' },
 ];
 
 const ROTATE_MS = 5000;
@@ -123,8 +91,10 @@ function formatUtc(d: Date): string {
 
 export default function FounderRotator({
   slides = RUBEN_SLIDES,
-  ariaLabel = 'Founder photo rotator',
+  ariaLabel,
 }: FounderRotatorProps = { slides: RUBEN_SLIDES }) {
+  const { t } = useLanguage();
+  const resolvedAria = ariaLabel || t('landing.rotator.aria_default');
   const [index, setIndex] = useState(0);
   const [glitchKey, setGlitchKey] = useState(0); // bumped each transition to retrigger keyframes
   const [now, setNow] = useState<Date | null>(null);
@@ -158,9 +128,12 @@ export default function FounderRotator({
   };
 
   const slide = slides[index];
+  const era = t(`landing.rotator.${slide.key}.era`);
+  const year = t(`landing.rotator.${slide.key}.year`);
+  const caption = t(`landing.rotator.${slide.key}.caption`);
 
   return (
-    <div className={`${styles.founderRotator} ${styles.bracket}`} aria-label={ariaLabel}>
+    <div className={`${styles.founderRotator} ${styles.bracket}`} aria-label={resolvedAria}>
       <span className="bl" /><span className="br" />
 
       {/* Slides — all three are mounted at once; .active controls visibility
@@ -171,10 +144,15 @@ export default function FounderRotator({
         <div
           key={s.src}
           className={`${styles.frSlide} ${i === index ? styles.frSlideActive : ''}`}
-          data-era={s.era}
+          data-era={t(`landing.rotator.${s.key}.era`)}
           aria-hidden={i !== index}
         >
-          <img src={s.src} alt={s.alt} className={styles.frSlideImg} draggable={false} />
+          <img
+            src={s.src}
+            alt={t(`landing.rotator.${s.key}.alt`)}
+            className={styles.frSlideImg}
+            draggable={false}
+          />
         </div>
       ))}
 
@@ -193,7 +171,7 @@ export default function FounderRotator({
       {/* HUD top: red blinking REC dot, geo coords, live UTC clock. */}
       <div className={styles.frHudTop}>
         <span className={styles.frRec}>
-          <span className={styles.frRecDot} /> REC
+          <span className={styles.frRecDot} /> {t('landing.rotator.rec')}
         </span>
         <span className={styles.frCoord}>{slide.coord}</span>
         {/* Suppress hydration warning because the clock differs by render
@@ -207,26 +185,30 @@ export default function FounderRotator({
       {/* HUD bottom: ERA label + year + caption + 3-segment progress bar. */}
       <div className={styles.frHudBottom}>
         <div className={styles.frEraLine}>
-          <span className={styles.frEraLabel}>ERA :: {slide.era}</span>
-          <span className={styles.frYear}>{slide.year}</span>
+          <span className={styles.frEraLabel}>{t('landing.rotator.era_prefix')} {era}</span>
+          <span className={styles.frYear}>{year}</span>
         </div>
-        <div className={styles.frCaption}>{slide.caption}</div>
-        <div className={styles.frProgress} role="tablist" aria-label="Founder eras">
-          {slides.map((s, i) => (
-            <button
-              type="button"
-              key={s.era}
-              role="tab"
-              aria-selected={i === index}
-              aria-label={`${s.era} ${s.year}`}
-              onClick={() => jumpTo(i)}
-              className={`${styles.frSegment} ${i === index ? styles.frSegmentActive : ''} ${i < index ? styles.frSegmentDone : ''}`}
-            >
-              {/* The fill bar inside is keyed off the glitchKey so the
-                  CSS animation restarts in lockstep with the auto-cycle. */}
-              {i === index && <span key={glitchKey} className={styles.frSegmentFill} />}
-            </button>
-          ))}
+        <div className={styles.frCaption}>{caption}</div>
+        <div className={styles.frProgress} role="tablist" aria-label={t('landing.rotator.aria_progress')}>
+          {slides.map((s, i) => {
+            const sEra = t(`landing.rotator.${s.key}.era`);
+            const sYear = t(`landing.rotator.${s.key}.year`);
+            return (
+              <button
+                type="button"
+                key={s.key}
+                role="tab"
+                aria-selected={i === index}
+                aria-label={`${sEra} ${sYear}`}
+                onClick={() => jumpTo(i)}
+                className={`${styles.frSegment} ${i === index ? styles.frSegmentActive : ''} ${i < index ? styles.frSegmentDone : ''}`}
+              >
+                {/* The fill bar inside is keyed off the glitchKey so the
+                    CSS animation restarts in lockstep with the auto-cycle. */}
+                {i === index && <span key={glitchKey} className={styles.frSegmentFill} />}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
