@@ -2874,12 +2874,32 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                       no idea which exercise they're doing. */}
                   {block.exerciseName?.trim() || `Exercise ${idx + 1}`}
                 </div>
-                {/* Notes / Form Demo / Form Check icon — single tap
-                    opens the NotesFormPopover holding the legacy
-                    inline notes field, the demo-video trigger, and
-                    the new "upload form check photo to Gunny" path.
-                    Putting these behind one icon keeps the active
-                    set card focused on WEIGHT / REPS / RPE / LOG. */}
+                {/* Form Demo button — surfaced in the card header next
+                    to the exercise name so beginners see it at first
+                    glance instead of hunting inside the Notes popover.
+                    Beta feedback Apr 2026 (VALKYRIE): "should be more
+                    visible on the name of the movement rather than
+                    under Notes section. Should be first look." Kept
+                    conditional on an actual demo URL existing so cards
+                    without a video don't render an inert button. The
+                    popover still has its own demo trigger as a backup
+                    for users who already learned the Notes path. */}
+                {isActive && (block.videoUrl || getVideoUrl(block.exerciseName)) && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
+                    className="btn btn-amber btn-sm"
+                    aria-label={`Watch form demo for ${block.exerciseName}`}
+                    style={{ padding: '6px 10px', flexShrink: 0 }}
+                  >
+                    <Icon.Play size={11} /> Form Demo
+                  </button>
+                )}
+                {/* Notes / Form Check icon — single tap opens the
+                    NotesFormPopover holding the legacy inline notes
+                    field and the "upload form check photo to Gunny"
+                    path. Form Demo is now in the header above (was
+                    also in this popover; kept there as a backup). */}
                 {isActive && (
                   <button
                     type="button"
