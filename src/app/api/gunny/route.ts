@@ -542,6 +542,148 @@ After emitting <meal_delete>, confirm in plain text what was removed
 total recalculated."). Same trust rule as workout_delete: NEVER claim
 a meal was deleted in plain text without emitting <meal_delete>.
 
+LOG HYDRATION — <hydration_json>:
+When the operator says they drank water — "log 16oz", "had a bottle",
+"finished my hydroflask", "drank 32oz so far today", "add 24oz" — emit
+a <hydration_json> block. The server stores the day's running total in
+operator.nutrition.hydration[date] (oz). Same DRY rule as <meal_json>:
+ONE block per turn. If they say "add 16oz", emit "add"; if they tell
+you a new total ("I'm at 64oz so far"), emit "set".
+
+Format:
+<hydration_json>
+{
+  "date": "2026-04-30",
+  "oz": 16,
+  "op": "add"
+}
+</hydration_json>
+
+Fields:
+- date — YYYY-MM-DD, defaults to clientDate.
+- oz — positive integer ounces.
+- op — "add" (default, increments today's total) | "set" (overrides
+  today's total, e.g. wearable resync).
+
+Then confirm in plain text with the new total ("Logged 16oz. You're at
+48oz today — 16oz to your 64oz target."). NEVER claim hydration was
+logged in plain text without emitting <hydration_json>.
+
+LOG DAILY READINESS / MOOD / SLEEP — <readiness_json>:
+Daily check-ins. When the operator volunteers any of:
+- sleep ("slept 7/10", "got 5 hours", "slept like trash")
+- stress ("work is stressing me out — 8/10", "stress is low today")
+- mood ("feeling crushed", "lit today", "decent")
+- readiness / energy ("readiness is 6", "energy's tanking")
+
+…emit ONE <readiness_json> with whatever fields they touched. Sleep /
+stress / energy / readiness are 1-10 integers. Mood is a short string
+(one or two words is enough — "crushed", "wired", "fine"). The server
+writes the entry to operator.dailyReadiness[date] AND mirrors readiness/
+sleep/stress to operator.profile so the readiness engine sees fresh
+values.
+
+Format:
+<readiness_json>
+{
+  "date": "2026-04-30",
+  "readiness": 7,
+  "sleep": 8,
+  "stress": 4,
+  "energy": 7,
+  "mood": "locked in",
+  "notes": "back pain gone after stretching"
+}
+</readiness_json>
+
+All fields except date are optional — only emit ones the operator
+actually told you. Don't fill in numbers from prior context as if they
+just said them. After emitting, confirm in plain text with one line of
+context ("Sleep 8, stress 4 — green-light for the heavy session.").
+
+UPDATE / CLEAR INJURIES — <injury_modification>:
+<profile_json> can ADD a new injury but can't update or clear one.
+This is the inverse channel for changes to existing injuries OR for
+explicit single-injury adds outside onboarding.
+
+Triggers:
+- "my shoulder feels better — clear it" → action: "clear"
+- "knee is recovering, downgrade the status" → action: "update"
+- "logged the wrong restriction on my low back" → action: "update"
+- "add a new injury — left ankle sprain" (mid-session) → action: "add"
+
+Format:
+<injury_modification>
+{
+  "action": "update",
+  "match": { "name": "left shoulder" },
+  "patch": { "status": "recovering", "notes": "RICE + light press tolerant" }
+}
+</injury_modification>
+
+Actions:
+- "add" — patch becomes a new Injury (id auto-assigned). Server treats
+  patch.name as required.
+- "update" — match locates the injury (by id OR case-insensitive name);
+  patch fields overwrite. status must be one of active|recovering|cleared.
+- "clear" — match locates the injury; status flipped to "cleared". (No
+  destructive removal — the historical record stays so future workouts
+  still see "previously injured shoulder.")
+- "remove" — for true mistake entries; permanently deletes the row.
+
+Multiple blocks per response allowed (e.g. clearing two old injuries at
+once). After emitting, confirm in plain text. Trust rule still applies.
+
+TAG / UNTAG A DAY — <day_tag_json>:
+The Planner has a per-day status badge ("rest day", "deload", "travel",
+"missed — life happened"). When the operator says any of:
+- "tomorrow's a rest day"
+- "tag Friday as deload"
+- "I'm sick today, mark it"
+- "untag yesterday — I actually trained"
+
+…emit a <day_tag_json>. The server writes to operator.dayTags[date].
+Color is the visual chip — green (good signal), amber (caution), red
+(missed/sick), cyan (informational).
+
+Format:
+<day_tag_json>
+{
+  "date": "2026-05-01",
+  "color": "amber",
+  "note": "Rest day — sleep was 5/10",
+  "op": "set"
+}
+</day_tag_json>
+
+op: "set" (default, creates or replaces) | "clear" (removes the tag).
+Color must be one of green|amber|red|cyan. Note is the operator's
+own short phrase — don't ad-lib if they didn't supply one.
+
+UPDATE MACRO TARGETS — <nutrition_targets_json>:
+When the operator asks to change daily macro targets — "bump protein to
+220", "drop calories to 2200", "set my macros to 2400/200/250/70" —
+emit a <nutrition_targets_json>. Server overwrites the matching fields
+of operator.nutrition.targets and leaves the rest alone (so a single
+"bump protein" doesn't reset calories/carbs/fat).
+
+Format:
+<nutrition_targets_json>
+{
+  "calories": 2400,
+  "protein": 220,
+  "carbs": 240,
+  "fat": 70
+}
+</nutrition_targets_json>
+
+All four fields optional — only include the ones the operator told you
+to change. Numbers must be positive integers. After emitting, recap the
+new full target in plain text ("New targets: 2400 cal, 220P / 240C /
+70F. Same workouts will hit harder on this fuel."). Don't suggest goal-
+shape changes (cut/bulk/recomp) here — that's a sitrep-level call. This
+channel is the dial-the-numbers channel.
+
 VOICE OUTPUT — YOU HAVE IT (HANDS-FREE TTS):
 The GUNS UP app renders your responses as text AND can speak them aloud via
 OpenAI TTS (with a browser-speech fallback). This is a real feature, not
@@ -1523,6 +1665,327 @@ async function applyMealDeletes(
   return applied;
 }
 
+// ─── Tier-1 chat-driven channels (Apr 2026) ──────────────────────────────
+//
+// Five applier helpers that mutate the operator's JSON columns based on
+// structured blocks Gunny emits. Each returns the descriptor of what
+// actually changed (so the client can mirror the update without a /me
+// refetch). All five follow the same "read first, write second" pattern
+// as applyMealDeletes / applyServerSideDedup — the operator's current
+// Postgres row is fetched and the mutation diffs against fresh state, not
+// the client's possibly-stale snapshot.
+
+interface HydrationRequest { date?: string; oz?: number; op?: 'add' | 'set' }
+interface HydrationApplied { date: string; oz: number; total: number; op: 'add' | 'set' }
+
+async function applyHydration(
+  operatorId: string,
+  req: HydrationRequest | null,
+  clientDate: string | undefined,
+): Promise<HydrationApplied | null> {
+  if (!req) return null;
+  const oz = Math.max(0, Math.round(Number(req.oz)));
+  if (!Number.isFinite(oz) || oz === 0) return null;
+  const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
+    ? req.date
+    : (clientDate || new Date().toISOString().slice(0, 10));
+  const op: 'add' | 'set' = req.op === 'set' ? 'set' : 'add';
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { nutrition: true } });
+  } catch (err) {
+    console.error('[gunny/applyHydration] DB read failed:', err);
+    return null;
+  }
+  if (!operator) return null;
+  const nutrition = (operator.nutrition || {}) as { hydration?: Record<string, number> };
+  const hydration = { ...(nutrition.hydration || {}) };
+  const prior = Number(hydration[date]) || 0;
+  const total = op === 'set' ? oz : prior + oz;
+  hydration[date] = total;
+
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { nutrition: { ...nutrition, hydration } as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyHydration] DB update failed:', err);
+    return null;
+  }
+  return { date, oz, total, op };
+}
+
+interface ReadinessRequest {
+  date?: string;
+  readiness?: number;
+  sleep?: number;
+  stress?: number;
+  energy?: number;
+  mood?: string;
+  notes?: string;
+}
+
+async function applyReadinessEntry(
+  operatorId: string,
+  req: ReadinessRequest | null,
+  clientDate: string | undefined,
+): Promise<(ReadinessRequest & { date: string; recordedAt: string }) | null> {
+  if (!req) return null;
+  const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
+    ? req.date
+    : (clientDate || new Date().toISOString().slice(0, 10));
+
+  // Coerce + validate. Numeric fields clamped to 1-10. Skip silently if
+  // the operator gave us a value outside that range — better to drop a
+  // single field than to refuse the whole entry.
+  const clamp = (v: unknown): number | undefined => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return undefined;
+    return Math.max(1, Math.min(10, Math.round(n)));
+  };
+  const entry: ReadinessRequest & { date: string; recordedAt: string } = {
+    date,
+    recordedAt: new Date().toISOString(),
+  };
+  const r = clamp(req.readiness); if (r !== undefined) entry.readiness = r;
+  const s = clamp(req.sleep); if (s !== undefined) entry.sleep = s;
+  const st = clamp(req.stress); if (st !== undefined) entry.stress = st;
+  const e = clamp(req.energy); if (e !== undefined) entry.energy = e;
+  if (typeof req.mood === 'string' && req.mood.trim().length > 0) entry.mood = req.mood.trim().slice(0, 80);
+  if (typeof req.notes === 'string' && req.notes.trim().length > 0) entry.notes = req.notes.trim().slice(0, 500);
+
+  // Need at least one field besides date/recordedAt to be meaningful.
+  const hasContent = entry.readiness !== undefined || entry.sleep !== undefined
+    || entry.stress !== undefined || entry.energy !== undefined
+    || entry.mood !== undefined || entry.notes !== undefined;
+  if (!hasContent) return null;
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({
+      where: { id: operatorId },
+      select: { dailyReadiness: true, profile: true },
+    });
+  } catch (err) {
+    console.error('[gunny/applyReadinessEntry] DB read failed:', err);
+    return null;
+  }
+  if (!operator) return null;
+  const dailyReadiness = { ...((operator.dailyReadiness || {}) as Record<string, unknown>) };
+  dailyReadiness[date] = entry;
+
+  // Mirror today's numerics to profile so existing readers (readiness
+  // engine, BattlePlanRef, etc.) see fresh values without a schema migration.
+  // Skip the mirror when the entry is for a past date.
+  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const profile = { ...((operator.profile || {}) as Record<string, unknown>) };
+  if (date === today) {
+    if (entry.readiness !== undefined) profile.readiness = entry.readiness;
+    if (entry.sleep !== undefined) profile.sleep = entry.sleep;
+    if (entry.stress !== undefined) profile.stress = entry.stress;
+  }
+
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: {
+        dailyReadiness: dailyReadiness as object,
+        profile: profile as object,
+      },
+    });
+  } catch (err) {
+    console.error('[gunny/applyReadinessEntry] DB update failed:', err);
+    return null;
+  }
+  return entry;
+}
+
+interface InjuryModification {
+  action?: 'add' | 'update' | 'clear' | 'remove';
+  match?: { id?: string; name?: string };
+  patch?: { name?: string; status?: 'active' | 'recovering' | 'cleared'; notes?: string; restrictions?: string[] };
+}
+
+async function applyInjuryModifications(
+  operatorId: string,
+  mods: InjuryModification[],
+): Promise<InjuryModification[]> {
+  if (!mods || mods.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { injuries: true } });
+  } catch (err) {
+    console.error('[gunny/applyInjuryModifications] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let injuries = [...((operator.injuries || []) as any[])];
+  const applied: InjuryModification[] = [];
+  let mutated = false;
+
+  for (const mod of mods) {
+    if (!mod || typeof mod !== 'object') continue;
+    const action = mod.action || 'update';
+
+    if (action === 'add') {
+      const name = mod.patch?.name?.trim();
+      if (!name) continue;
+      const status = (['active', 'recovering', 'cleared'].includes(mod.patch?.status || '')
+        ? mod.patch?.status
+        : 'active') as 'active' | 'recovering' | 'cleared';
+      injuries.push({
+        id: `inj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name,
+        status,
+        notes: mod.patch?.notes || '',
+        restrictions: Array.isArray(mod.patch?.restrictions) ? mod.patch.restrictions : [],
+      });
+      mutated = true;
+      applied.push(mod);
+      continue;
+    }
+
+    // For update / clear / remove we need a match.
+    const matchId = mod.match?.id;
+    const matchName = (mod.match?.name || '').toLowerCase().trim();
+    const idx = injuries.findIndex((inj) => {
+      if (matchId && inj.id === matchId) return true;
+      if (matchName && (inj.name || '').toLowerCase().trim() === matchName) return true;
+      return false;
+    });
+    if (idx < 0) continue;
+
+    if (action === 'remove') {
+      injuries.splice(idx, 1);
+      mutated = true;
+      applied.push(mod);
+      continue;
+    }
+    if (action === 'clear') {
+      injuries[idx] = { ...injuries[idx], status: 'cleared' };
+      mutated = true;
+      applied.push(mod);
+      continue;
+    }
+    // update
+    const patch: Record<string, unknown> = {};
+    if (mod.patch?.name && typeof mod.patch.name === 'string') patch.name = mod.patch.name.trim();
+    if (mod.patch?.status && ['active', 'recovering', 'cleared'].includes(mod.patch.status)) patch.status = mod.patch.status;
+    if (typeof mod.patch?.notes === 'string') patch.notes = mod.patch.notes;
+    if (Array.isArray(mod.patch?.restrictions)) patch.restrictions = mod.patch.restrictions;
+    if (Object.keys(patch).length === 0) continue;
+    injuries[idx] = { ...injuries[idx], ...patch };
+    mutated = true;
+    applied.push(mod);
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({ where: { id: operatorId }, data: { injuries: injuries as object } });
+  } catch (err) {
+    console.error('[gunny/applyInjuryModifications] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface DayTagRequest {
+  date?: string;
+  color?: 'green' | 'amber' | 'red' | 'cyan';
+  note?: string;
+  op?: 'set' | 'clear';
+}
+
+async function applyDayTags(
+  operatorId: string,
+  reqs: DayTagRequest[],
+  clientDate: string | undefined,
+): Promise<DayTagRequest[]> {
+  if (!reqs || reqs.length === 0) return [];
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { dayTags: true } });
+  } catch (err) {
+    console.error('[gunny/applyDayTags] DB read failed:', err);
+    return [];
+  }
+  if (!operator) return [];
+  const dayTags = { ...((operator.dayTags || {}) as Record<string, { color: string; note: string }>) };
+  const applied: DayTagRequest[] = [];
+  let mutated = false;
+
+  for (const req of reqs) {
+    const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
+      ? req.date
+      : (clientDate || new Date().toISOString().slice(0, 10));
+    const op = req.op === 'clear' ? 'clear' : 'set';
+    if (op === 'clear') {
+      if (dayTags[date]) {
+        delete dayTags[date];
+        mutated = true;
+        applied.push({ ...req, date, op: 'clear' });
+      }
+      continue;
+    }
+    const color = (['green', 'amber', 'red', 'cyan'].includes(req.color || '')
+      ? req.color
+      : 'amber') as 'green' | 'amber' | 'red' | 'cyan';
+    const note = (typeof req.note === 'string' ? req.note : '').slice(0, 200);
+    dayTags[date] = { color, note };
+    mutated = true;
+    applied.push({ date, color, note, op: 'set' });
+  }
+
+  if (!mutated) return [];
+  try {
+    await prisma.operator.update({ where: { id: operatorId }, data: { dayTags: dayTags as object } });
+  } catch (err) {
+    console.error('[gunny/applyDayTags] DB update failed:', err);
+    return [];
+  }
+  return applied;
+}
+
+interface NutritionTargetsRequest { calories?: number; protein?: number; carbs?: number; fat?: number }
+
+async function applyNutritionTargets(
+  operatorId: string,
+  req: NutritionTargetsRequest | null,
+): Promise<NutritionTargetsRequest | null> {
+  if (!req) return null;
+  const fields: NutritionTargetsRequest = {};
+  for (const k of ['calories', 'protein', 'carbs', 'fat'] as const) {
+    const n = Number(req[k]);
+    if (Number.isFinite(n) && n > 0) fields[k] = Math.round(n);
+  }
+  if (Object.keys(fields).length === 0) return null;
+
+  let operator;
+  try {
+    operator = await prisma.operator.findUnique({ where: { id: operatorId }, select: { nutrition: true } });
+  } catch (err) {
+    console.error('[gunny/applyNutritionTargets] DB read failed:', err);
+    return null;
+  }
+  if (!operator) return null;
+  const nutrition = (operator.nutrition || {}) as { targets?: NutritionTargetsRequest };
+  const targets = { ...(nutrition.targets || {}), ...fields };
+
+  try {
+    await prisma.operator.update({
+      where: { id: operatorId },
+      data: { nutrition: { ...nutrition, targets } as object },
+    });
+  } catch (err) {
+    console.error('[gunny/applyNutritionTargets] DB update failed:', err);
+    return null;
+  }
+  return targets;
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireAuth(req);
   if (auth instanceof NextResponse) return auth;
@@ -2005,7 +2468,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // the real conversation.
     type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
     let mergedMessages: IncomingMsg[] = messages;
-    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control)>/g;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json)>/g;
     const historyChatType: string | null =
       typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
         ? chatTypeFromBody
@@ -2302,6 +2765,45 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         } catch { /* ignore malformed block */ }
       }
 
+      // ─── Tier-1 channel parsers (Apr 2026) ──────────────────────────────
+      // <hydration_json>, <readiness_json>, <injury_modification>,
+      // <day_tag_json>, <nutrition_targets_json>. Each is parsed once;
+      // applier helpers above this function persist + return the diff.
+
+      let hydrationReq: HydrationRequest | null = null;
+      const hydM = responseText.match(/<hydration_json>([\s\S]*?)<\/hydration_json>/);
+      if (hydM) {
+        try { hydrationReq = JSON.parse(hydM[1].trim()) as HydrationRequest; } catch { /* invalid */ }
+      }
+
+      let readinessReq: ReadinessRequest | null = null;
+      const rdM = responseText.match(/<readiness_json>([\s\S]*?)<\/readiness_json>/);
+      if (rdM) {
+        try { readinessReq = JSON.parse(rdM[1].trim()) as ReadinessRequest; } catch { /* invalid */ }
+      }
+
+      const injuryMods: InjuryModification[] = [];
+      for (const m of responseText.matchAll(/<injury_modification>([\s\S]*?)<\/injury_modification>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') injuryMods.push(parsed as InjuryModification);
+        } catch { /* invalid */ }
+      }
+
+      const dayTagReqs: DayTagRequest[] = [];
+      for (const m of responseText.matchAll(/<day_tag_json>([\s\S]*?)<\/day_tag_json>/g)) {
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (parsed && typeof parsed === 'object') dayTagReqs.push(parsed as DayTagRequest);
+        } catch { /* invalid */ }
+      }
+
+      let targetsReq: NutritionTargetsRequest | null = null;
+      const ntM = responseText.match(/<nutrition_targets_json>([\s\S]*?)<\/nutrition_targets_json>/);
+      if (ntM) {
+        try { targetsReq = JSON.parse(ntM[1].trim()) as NutritionTargetsRequest; } catch { /* invalid */ }
+      }
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -2315,6 +2817,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
         .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
         .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
+        .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+        .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+        .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+        .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+        .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
         .trim();
 
       // Read-first-then-write dedup. Looks at the operator's CURRENT
@@ -2340,6 +2847,22 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         clientDate,
       );
 
+      // Tier-1 appliers — fired in parallel since each touches a disjoint
+      // JSON column and there's no ordering dependency between them.
+      const [
+        hydrationApplied,
+        readinessApplied,
+        injuryModsApplied,
+        dayTagsApplied,
+        nutritionTargetsApplied,
+      ] = await Promise.all([
+        applyHydration(auth.operatorId, hydrationReq, clientDate),
+        applyReadinessEntry(auth.operatorId, readinessReq, clientDate),
+        applyInjuryModifications(auth.operatorId, injuryMods),
+        applyDayTags(auth.operatorId, dayTagReqs, clientDate),
+        applyNutritionTargets(auth.operatorId, targetsReq),
+      ]);
+
       return NextResponse.json({
         response: dedupResult.dedupNote ? `${cleanResponse}\n\n[${dedupResult.dedupNote}]` : cleanResponse,
         workoutData,
@@ -2351,6 +2874,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         mealData: finalMealData,
         prData: finalPrData,
         mealDeletes: appliedMealDeletes,
+        hydration: hydrationApplied,
+        readiness: readinessApplied,
+        injuryModifications: injuryModsApplied,
+        dayTags: dayTagsApplied,
+        nutritionTargets: nutritionTargetsApplied,
         dedupNote: dedupResult.dedupNote,
         voiceControl,
         // Junior safety events (empty array for adults / flag-disabled juniors).
@@ -2485,6 +3013,37 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             } catch { /* ignore malformed block */ }
           }
 
+          // Tier-1 channel parsers — mirror of the non-streaming path.
+          let hydrationReq: HydrationRequest | null = null;
+          const hydM = fullText.match(/<hydration_json>([\s\S]*?)<\/hydration_json>/);
+          if (hydM) {
+            try { hydrationReq = JSON.parse(hydM[1].trim()) as HydrationRequest; } catch { /* invalid */ }
+          }
+          let readinessReq: ReadinessRequest | null = null;
+          const rdM = fullText.match(/<readiness_json>([\s\S]*?)<\/readiness_json>/);
+          if (rdM) {
+            try { readinessReq = JSON.parse(rdM[1].trim()) as ReadinessRequest; } catch { /* invalid */ }
+          }
+          const injuryMods: InjuryModification[] = [];
+          for (const m of fullText.matchAll(/<injury_modification>([\s\S]*?)<\/injury_modification>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') injuryMods.push(parsed as InjuryModification);
+            } catch { /* invalid */ }
+          }
+          const dayTagReqs: DayTagRequest[] = [];
+          for (const m of fullText.matchAll(/<day_tag_json>([\s\S]*?)<\/day_tag_json>/g)) {
+            try {
+              const parsed = JSON.parse(m[1].trim());
+              if (parsed && typeof parsed === 'object') dayTagReqs.push(parsed as DayTagRequest);
+            } catch { /* invalid */ }
+          }
+          let targetsReq: NutritionTargetsRequest | null = null;
+          const ntM = fullText.match(/<nutrition_targets_json>([\s\S]*?)<\/nutrition_targets_json>/);
+          if (ntM) {
+            try { targetsReq = JSON.parse(ntM[1].trim()) as NutritionTargetsRequest; } catch { /* invalid */ }
+          }
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
@@ -2496,6 +3055,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
             .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
             .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
+            .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+            .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+            .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+            .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+            .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
             .trim();
 
           // Read-first-then-write dedup. Mirrors the non-streaming path —
@@ -2524,6 +3088,21 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             clientDate,
           );
 
+          // Tier-1 appliers in parallel. See non-streaming path for rationale.
+          const [
+            hydrationApplied,
+            readinessApplied,
+            injuryModsApplied,
+            dayTagsApplied,
+            nutritionTargetsApplied,
+          ] = await Promise.all([
+            applyHydration(auth.operatorId, hydrationReq, clientDate),
+            applyReadinessEntry(auth.operatorId, readinessReq, clientDate),
+            applyInjuryModifications(auth.operatorId, injuryMods),
+            applyDayTags(auth.operatorId, dayTagReqs, clientDate),
+            applyNutritionTargets(auth.operatorId, targetsReq),
+          ]);
+
           controller.enqueue(
             encoder.encode(
               `event: final\ndata: ${JSON.stringify({
@@ -2537,6 +3116,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 mealData: finalMealData,
                 prData: finalPrData,
                 mealDeletes: appliedMealDeletes,
+                hydration: hydrationApplied,
+                readiness: readinessApplied,
+                injuryModifications: injuryModsApplied,
+                dayTags: dayTagsApplied,
+                nutritionTargets: nutritionTargetsApplied,
                 dedupNote: dedupResult.dedupNote,
                 voiceControl,
                 // Junior safety events captured pre-LLM (see non-streaming
