@@ -3997,6 +3997,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           );
           controller.close();
         } catch (err: unknown) {
+          // Surface the failure to Railway logs so we can diagnose
+          // beta-tester reports of "Comms dropped mid-stream" — without
+          // this, the only signal in production was the user-facing
+          // fallback message and we had no idea what threw. Captures
+          // operator id (so we can correlate to the affected user) and
+          // whether the request had an image attached (vision payloads
+          // are the most common failure mode — context-window or media-
+          // type rejections).
+          const hadImage = anthropicMessages.some((m) =>
+            Array.isArray(m.content) && m.content.some((c) => c.type === 'image')
+          );
+          console.error('[gunny/stream] failure', {
+            operatorId: auth.operatorId,
+            hadImage,
+            messageCount: anthropicMessages.length,
+            error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
+          });
           const message = err instanceof Error ? err.message : 'Unknown error';
           controller.enqueue(
             encoder.encode(
