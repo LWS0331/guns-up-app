@@ -18,6 +18,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getAuthToken } from '@/lib/authClient';
 import { loadNotificationPrefs, saveNotificationPrefs, type NotificationPreferences } from '@/lib/notifications';
+import { compressImageForVision } from '@/lib/imageCompress';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -3546,13 +3547,25 @@ ${mealSuggestion}`;
             type="file"
             accept="image/*"
             style={{ display: 'none' }}
-            onChange={(e) => {
+            onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
-              if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return; }
-              const reader = new FileReader();
-              reader.onload = () => setPendingImage(reader.result as string);
-              reader.readAsDataURL(file);
+              // Hard cap at 25 MB raw — beyond that, decoding the image
+              // into a canvas can OOM mobile Safari. Below that, we
+              // resize + recompress so the base64 payload fits the
+              // Anthropic 5 MB API limit. See compressImageForVision.
+              if (file.size > 25 * 1024 * 1024) {
+                alert('Image is too large (max 25 MB raw). Try a smaller photo.');
+                e.target.value = '';
+                return;
+              }
+              try {
+                const dataUrl = await compressImageForVision(file);
+                setPendingImage(dataUrl);
+              } catch (err) {
+                console.error('[GunnyChat:imageAttach] failed:', err);
+                alert("Couldn't process that image. Try a different photo.");
+              }
               e.target.value = '';
             }}
           />
