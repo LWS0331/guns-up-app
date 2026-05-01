@@ -3117,9 +3117,59 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         {/* Mid-workout edit controls — secondary affordances styled
             as ghost (add) and danger-outline (remove) buttons. Only
             rendered on exercise steps so warmup/cooldown screens
-            stay focused on the movement list. */}
+            stay focused on the movement list.
+            Move Up / Move Down let users reorder the current exercise
+            within the blocks array. Disabled at the array edges. */}
         {currentStep.kind === 'exercise' && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (currentStep.kind !== 'exercise') return;
+              const targetIdx = currentStep.blockIdx;
+              if (targetIdx <= 0) return;
+              const dateStr = selectedDate || formatDate(currentDate);
+              const next = [...workout.blocks];
+              [next[targetIdx - 1], next[targetIdx]] = [next[targetIdx], next[targetIdx - 1]];
+              const updated = { ...operator };
+              updated.workouts = { ...updated.workouts };
+              updated.workouts[dateStr] = { ...workout, blocks: next };
+              onUpdateOperator(updated);
+              // Move the cursor with the block so the user keeps
+              // viewing the same exercise (now one step earlier).
+              setStepIdx(prev => Math.max(0, prev - 1));
+            }}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
+            disabled={currentStep.blockIdx <= 0}
+            aria-label="Move exercise up"
+            title={currentStep.blockIdx <= 0 ? 'Already first' : 'Shift this exercise earlier in the workout'}
+          >
+            ↑ Up
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (currentStep.kind !== 'exercise') return;
+              const targetIdx = currentStep.blockIdx;
+              if (targetIdx >= workout.blocks.length - 1) return;
+              const dateStr = selectedDate || formatDate(currentDate);
+              const next = [...workout.blocks];
+              [next[targetIdx], next[targetIdx + 1]] = [next[targetIdx + 1], next[targetIdx]];
+              const updated = { ...operator };
+              updated.workouts = { ...updated.workouts };
+              updated.workouts[dateStr] = { ...workout, blocks: next };
+              onUpdateOperator(updated);
+              setStepIdx(prev => prev + 1);
+            }}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
+            disabled={currentStep.blockIdx >= workout.blocks.length - 1}
+            aria-label="Move exercise down"
+            title={currentStep.blockIdx >= workout.blocks.length - 1 ? 'Already last' : 'Shift this exercise later in the workout'}
+          >
+            ↓ Down
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -3142,7 +3192,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               setWorkoutResults(prev => ({ ...prev, [newBlock.id]: { sets: [{ weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }], notes: '' } }));
             }}
             className="btn btn-ghost btn-sm"
-            style={{ flex: 1, borderStyle: 'dashed' }}
+            style={{ flex: '1 1 100px', borderStyle: 'dashed' }}
           >
             + Add Exercise
           </button>
@@ -3187,7 +3237,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }
             }}
             className="btn btn-danger-outline btn-sm"
-            style={{ borderStyle: 'dashed' }}
+            style={{ flex: '1 1 100px', borderStyle: 'dashed' }}
             disabled={workout.blocks.length <= 1}
             title={workout.blocks.length <= 1 ? 'At least one exercise must remain' : 'Remove this exercise'}
           >
