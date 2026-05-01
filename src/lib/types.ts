@@ -131,9 +131,32 @@ export type CompetitionLevel = 'recreational' | 'club' | 'academy' | 'high_schoo
 export type MaturationStage = 'pre_phv' | 'peri_phv' | 'post_phv' | 'unknown';
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 
+/**
+ * Sport disciplines supported by the Junior Operator program.
+ * Each sport gets its own corpus overlay (youth-soccer.md,
+ * youth-football.md) and its own position vocabulary. The persona
+ * scaling (10-12 / 13-15 / 16-18) and core safety rules (concussion
+ * recognition, no-1RM-under-14, parent visibility) are shared across
+ * all sports.
+ *
+ * `position` stays typed as SoccerPosition for backward compat — when
+ * sport === 'football', a free-form football position string lives in
+ * `footballPosition` (kept off the soccer enum to avoid leaking
+ * football slots into the soccer dropdown).
+ */
+export type Sport = 'soccer' | 'football';
+
 export interface SportProfile {
-  sport: 'soccer';                                // hard-coded for v1, expandable later
+  sport: Sport;
+  /** Soccer position. Required when sport === 'soccer'. */
   position: SoccerPosition;
+  /**
+   * Football position key, matching positions.<position_key> in the
+   * youth-football corpus (e.g. "pocket_passer_qb", "x_wr",
+   * "mike_lb"). Required when sport === 'football'. Free-form so
+   * adding a new position is a corpus-only update.
+   */
+  footballPosition?: string;
   level: CompetitionLevel;
   yearsPlaying: number;
   trainingDaysPerWeek: number;                    // soccer practice days

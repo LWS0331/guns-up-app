@@ -2848,19 +2848,29 @@ export async function POST(req: NextRequest) {
     // Memoized in the loader, so disk reads happen at most once per file per
     // process. Anthropic prompt-cache reuse handles cross-request caching.
     let corpusBlock = '';
-    if (!isJuniorOperator && operatorContext) {
+    if (operatorContext) {
       try {
         const injuries = Array.isArray(operatorContext.injuries) ? operatorContext.injuries : [];
         const hasActiveInjury = injuries.some(
           (inj: { status?: string } | null) =>
             !!inj && (inj.status === 'active' || inj.status === 'rehab'),
         );
+        // Sport-aware overlay flags for junior operators. The
+        // youth-soccer / youth-football overlays in the corpus
+        // manifest fire on these. Adults always pass false. The
+        // junior-context branch (buildJuniorContextBlock) layers on
+        // top of these — corpus = source-of-truth reference text;
+        // junior context = operator-specific data.
+        const sport = operatorContext.sportProfile?.sport;
+        const juniorSoccer = isJuniorOperator && sport === 'soccer';
+        const juniorFootball = isJuniorOperator && sport === 'football';
         const corpusInput: CorpusSelectionInput = {
           trainingPath: operatorContext.trainingPath as TrainingPath | undefined,
           hasActiveInjury,
           lifeStage: operatorContext.lifeStage ?? null,
           fmsRequested: false,
-          juniorSoccer: false,
+          juniorSoccer,
+          juniorFootball,
         };
         const rendered = loadGunnyCorpus(corpusInput);
         corpusBlock = rendered.text;

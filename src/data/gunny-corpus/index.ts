@@ -35,7 +35,8 @@ export interface CorpusOverlay extends CorpusFile {
     | 'lifestage_pregnancy'
     | 'lifestage_postpartum'
     | 'fms_assessment'
-    | 'junior_soccer';
+    | 'junior_soccer'
+    | 'junior_football';
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +300,16 @@ export const OVERLAYS: CorpusOverlay[] = [
       'Long-term athletic development, US Soccer PDI, heading restrictions, biological-age training caps. Already cited by SOCCER_YOUTH_PROMPT in route.ts.',
     trigger: 'junior_soccer',
   },
+  {
+    id: 'youth-football',
+    label: 'Youth Football (Junior Operator) Reference',
+    path: 'overlays/youth-football.md',
+    format: 'md',
+    approxBytes: 50_254,
+    description:
+      '34-position football corpus (15 offense / 13 defense / 6 special teams) split across three age bands (10-12 / 13-15 / 16-18). Each band covers drills, S&C programming, game IQ / film, key progressions, common mistakes, and position-specific safety. Coach persona layer (Gunny voice scaled per band) + do-not-do list (no 1RM under 14, no live OL/DL collisions at 10-12, head-injury / concussion protocols per CDC Heads Up). Sources: USA Football, NFHS, NSCA Youth, AAP, Mike Boyle, Eric Cressey, Driveline.',
+    trigger: 'junior_football',
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -314,6 +325,8 @@ export interface CorpusSelectionInput {
   fmsRequested?: boolean;
   /** youth/junior operator on the soccer track */
   juniorSoccer?: boolean;
+  /** youth/junior operator on the football track */
+  juniorFootball?: boolean;
 }
 
 const KNOWN_PATHS: TrainingPath[] = [
@@ -335,10 +348,20 @@ function normalizePath(p: string | undefined | null): TrainingPath {
  * Returns the ordered corpus file list for an operator. Phase 2 loader is
  * responsible for reading file contents, applying token budget, and
  * formatting into the Gunny system prompt.
+ *
+ * Junior operators (juniorSoccer / juniorFootball === true) skip the
+ * adult PATH_CORPUS entirely — they don't have a training-path
+ * selection, and loading the full kitchen sink would push them past
+ * budget. They get ALWAYS_ON (operating manual + exercises) plus
+ * their sport-specific youth overlay plus any conditional overlays
+ * (injury, FMS) that still apply.
  */
 export function selectCorpus(input: CorpusSelectionInput): CorpusFile[] {
+  const isJunior = !!input.juniorSoccer || !!input.juniorFootball;
   const path = normalizePath(input.trainingPath);
-  const files: CorpusFile[] = [...ALWAYS_ON, ...PATH_CORPUS[path]];
+  const files: CorpusFile[] = isJunior
+    ? [...ALWAYS_ON]
+    : [...ALWAYS_ON, ...PATH_CORPUS[path]];
 
   for (const overlay of OVERLAYS) {
     let include = false;
@@ -360,6 +383,9 @@ export function selectCorpus(input: CorpusSelectionInput): CorpusFile[] {
         break;
       case 'junior_soccer':
         include = !!input.juniorSoccer;
+        break;
+      case 'junior_football':
+        include = !!input.juniorFootball;
         break;
     }
     if (include) files.push(overlay);
