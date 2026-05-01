@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     const body = await request.json();
-    const { email, password, name, callsign } = body;
+    const { email, password, name, callsign, language } = body;
 
     // Validate inputs
     if (!email || !password || !name || !callsign) {
@@ -32,6 +32,13 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Language is optional but if provided must be 'en' or 'es'.
+    // Selection happens once at signup and is persisted to
+    // operator.preferences.language. Post-signup switches require a
+    // support request — see /docs/i18n-language-policy.md.
+    const lang: 'en' | 'es' =
+      language === 'es' ? 'es' : language === 'en' ? 'en' : 'en';
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -93,7 +100,10 @@ export async function POST(request: NextRequest) {
         nutrition: {},
         prs: [],
         injuries: [],
-        preferences: {},
+        // Persist the operator's language choice from signup. Once set,
+        // the in-app toggle is hidden — switches require a support
+        // request. AppShell hydrates from this on every login.
+        preferences: { language: lang },
         workouts: {},
         dayTags: {},
       },

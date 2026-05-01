@@ -30,7 +30,7 @@ interface Particle {
 }
 
 export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [loginMode, setLoginMode] = useState<LoginMode>('email');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
@@ -111,7 +111,12 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, callsign }),
+        // `language` reflects whatever the user picked from the
+        // top-right LanguageToggle on the login screen. Once
+        // submitted, this becomes the operator's locked preference —
+        // the in-app toggle is hidden post-signup. Switches require
+        // a support request.
+        body: JSON.stringify({ email, password, name, callsign, language }),
       });
 
       if (res.ok) {
@@ -640,6 +645,23 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
                 {error}
               </div>
             )}
+
+            {/* Language-lock notice. The user's current EN/ES choice
+                (set via the top-right toggle) becomes their locked
+                language at signup. Switching post-signup requires
+                a support request — keeps users from accidentally
+                ping-ponging the app's language. */}
+            <div style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: '10px',
+              color: '#666',
+              textAlign: 'center',
+              lineHeight: 1.5,
+              padding: '4px 0',
+              maxWidth: 280,
+            }}>
+              {t('login.language_lock_hint')}
+            </div>
 
             {/* Register button */}
             <button

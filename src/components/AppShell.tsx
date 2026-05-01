@@ -11,7 +11,8 @@ import Icon, { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
 import UserSwitcher from '@/components/UserSwitcher';
-import LanguageToggle from '@/components/LanguageToggle';
+// LanguageToggle removed from AppShell — language now locks at
+// signup. Picker still lives on LoginScreen.
 import { useLanguage } from '@/lib/i18n';
 import COCDashboard from '@/components/COCDashboard';
 import Planner, { WorkoutModeState } from '@/components/Planner';
@@ -187,7 +188,61 @@ const AppShell: React.FC<AppShellProps> = ({
   onUpdateOperator,
   onLogout,
 }) => {
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
+
+  // ─── Language lock (May 2026) ───────────────────────────────────────
+  // Operators pick EN or ES at signup, and that choice is stored in
+  // operator.preferences.language. The in-app LanguageToggle has been
+  // hidden — switches require a support request.
+  //
+  // Three layers of resolution, in order of trust:
+  //   1. operator.preferences.language (server, source of truth)
+  //   2. localStorage (legacy beta operators who toggled via the old UI)
+  //   3. default 'en'
+  //
+  // For (2): we backfill the localStorage value into the operator
+  // record one time, so going forward the server is canonical and
+  // they survive device changes / cache wipes.
+  useEffect(() => {
+    const prefs = (currentUser.preferences || {}) as Record<string, unknown>;
+    const serverLang = prefs.language;
+    if (serverLang === 'en' || serverLang === 'es') {
+      if (serverLang !== language) setLanguage(serverLang);
+      return;
+    }
+    // No server preference yet — backfill from localStorage if present.
+    let lsLang: 'en' | 'es' | null = null;
+    try {
+      const v = localStorage.getItem('gunsup-language');
+      if (v === 'en' || v === 'es') lsLang = v;
+    } catch { /* localStorage unavailable */ }
+    const resolved: 'en' | 'es' = lsLang ?? 'en';
+    if (resolved !== language) setLanguage(resolved);
+    // Persist back to the operator record so future logins on any
+    // device honor this choice. Best-effort; silent failure is fine
+    // because localStorage continues to keep the client consistent.
+    (async () => {
+      try {
+        const token = getAuthToken();
+        await fetch(`/api/operators/${currentUser.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            preferences: { ...(currentUser.preferences || {}), language: resolved },
+          }),
+        });
+      } catch {
+        // Silent — backfill will retry on next login.
+      }
+    })();
+    // We intentionally only depend on operator id — preferences object
+    // identity changes on every render and would loop the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser.id]);
+
   // Check if intake is completed — 3-layer check: intake column, profile flag, localStorage backup
   const lsIntakeDone = (() => { try { return localStorage.getItem(`guns-up-intake-done-${currentUser.id}`) === 'true'; } catch { return false; } })();
   const intakeCompleted = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true || lsIntakeDone;
@@ -2409,9 +2464,11 @@ const AppShell: React.FC<AppShellProps> = ({
           })}
         </nav>
 
-        {/* Right: Language Toggle + User Switcher (desktop) */}
+        {/* Right: User Switcher (desktop). The EN/ES toggle was
+            removed in May 2026 — language is now locked at signup
+            and switches require a support request. The picker still
+            lives on the LoginScreen. */}
         <div className="desktop-user-switcher" style={{ minWidth: '280px', display: 'flex', justifyContent: 'flex-end', gap: '16px', alignItems: 'center' }}>
-          <LanguageToggle compact={true} />
           <UserSwitcher
             currentUser={currentUser}
             accessibleUsers={accessibleUsers}
@@ -2421,16 +2478,13 @@ const AppShell: React.FC<AppShellProps> = ({
           />
         </div>
 
-        {/* Mobile: compact language toggle + user switcher.
-            Previously only the user switcher rendered here, so the
-            EN/ES toggle was invisible on mobile (hidden inside the
-            desktop-only block above). That made the bilingual claim
-            literally invisible on the surface where 80%+ of operators
-            actually use the app. Toggle is small (compact={true})
-            and sits flush-right next to the callsign chip. */}
+        {/* Mobile: user switcher only.
+            The compact EN/ES toggle that used to live here was
+            removed in May 2026 (language locks at signup; switches
+            go through support). LoginScreen still surfaces the
+            picker pre-signup. */}
         {isMobile && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <LanguageToggle compact={true} />
             <UserSwitcher
               currentUser={currentUser}
               accessibleUsers={accessibleUsers}

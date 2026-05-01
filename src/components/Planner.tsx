@@ -509,11 +509,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // HR Zone definitions based on max HR (220 - age)
   const maxHR = 220 - (operator.profile?.age || 30);
   const HR_ZONES = [
-    { zone: 1, name: 'RECOVERY', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
-    { zone: 2, name: 'FAT BURN', min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
-    { zone: 3, name: 'CARDIO', min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
-    { zone: 4, name: 'THRESHOLD', min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
-    { zone: 5, name: 'MAX EFFORT', min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
+    { zone: 1, name: t('planner.hr_zone_recovery'),  min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
+    { zone: 2, name: t('planner.hr_zone_fat_burn'),  min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
+    { zone: 3, name: t('planner.hr_zone_cardio'),    min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
+    { zone: 4, name: t('planner.hr_zone_threshold'), min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
+    { zone: 5, name: t('planner.hr_zone_max_effort'),min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
   ];
 
   const getCurrentZone = (hr: number) => {
@@ -1214,7 +1214,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             marginBottom: isMobile ? 2 : 4,
           }}
         >
-          {(isMobile ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']).map((day, i) => (
+          {(isMobile
+            ? [t('planner.day_min_mon'), t('planner.day_min_tue'), t('planner.day_min_wed'), t('planner.day_min_thu'), t('planner.day_min_fri'), t('planner.day_min_sat'), t('planner.day_min_sun')]
+            : [t('planner.day_short_mon'), t('planner.day_short_tue'), t('planner.day_short_wed'), t('planner.day_short_thu'), t('planner.day_short_fri'), t('planner.day_short_sat'), t('planner.day_short_sun')]
+          ).map((day, i) => (
             <div
               key={`${day}-${i}`}
               className="t-label"
@@ -2691,7 +2694,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               >
                 <span className="bl" /><span className="br" />
                 <div className="row-between" style={{ marginBottom: 8 }}>
-                  <span className="t-eyebrow amber">GO TIME</span>
+                  <span className="t-eyebrow amber">{t('planner.go_time')}</span>
                   <span className="t-mono-data" style={{ color: 'var(--amber)' }}>
                     {condBlock.format}
                   </span>
@@ -2860,7 +2863,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     marginBottom: 12,
                   }}
                 >
-                  ✓ ALL SETS COMPLETE
+                  ✓ {t('planner.all_sets_complete')}
                 </div>
               )}
 
@@ -2950,15 +2953,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     }}
                   >
                     {[
-                      { label: 'WEIGHT', placeholder: 'lbs', value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
-                      { label: 'REPS',   placeholder: 'reps', value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
+                      { label: t('planner.weight'), placeholder: t('planner.weight_input_placeholder'), value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
+                      { label: t('planner.reps'),   placeholder: t('planner.reps_input_placeholder'), value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
                         const bd = { ...(prev[block.id] || { sets: [] }) };
                         const ss = [...bd.sets];
                         while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
                         ss[nowSetIdx] = { ...ss[nowSetIdx], reps: v };
                         return { ...prev, [block.id]: { ...bd, sets: ss } };
                       }) },
-                      { label: 'RPE',    placeholder: '0-10', value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
+                      { label: t('planner.rpe'),    placeholder: t('planner.rpe_input_placeholder'), value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
                         const bd = { ...(prev[block.id] || { sets: [] }) };
                         const ss = [...bd.sets];
                         while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
@@ -3401,10 +3404,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               {[
-                { label: 'DURATION', value: `${completionData.duration} MIN`, color: '#00ff41' },
-                { label: 'EXERCISES', value: String(completionData.exerciseCount), color: '#00ff41' },
-                { label: 'VOLUME', value: `${completionData.totalVolume.toLocaleString()} LBS`, color: '#FFB800' },
-                { label: 'COMPLETION', value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
+                { label: t('planner.stat_duration'), value: `${completionData.duration} ${t('planner.unit_min')}`, color: '#00ff41' },
+                { label: t('planner.stat_exercises'), value: String(completionData.exerciseCount), color: '#00ff41' },
+                { label: t('planner.stat_volume'), value: `${completionData.totalVolume.toLocaleString()} ${t('planner.unit_lbs')}`, color: '#FFB800' },
+                { label: t('planner.stat_completion'), value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
               ].map((stat) => (
                 <div
                   key={stat.label}
@@ -3479,7 +3482,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 textAlign: 'left',
               }}
             >
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>GUNNY SAYS</div>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>{t('planner.gunny_says')}</div>
               {completionData.gunnyMessage}
             </div>
 
@@ -3494,7 +3497,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               marginBottom: 24,
             }}>
               <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 12, textAlign: 'center' }}>
-                SESSION RPE — HOW HARD WAS THAT?
+                {t('planner.session_rpe_question')}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4, marginBottom: 8 }}>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
