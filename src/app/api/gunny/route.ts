@@ -3373,9 +3373,21 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       const modePrefix = MODE_PREFIXES[mode] || '';
       systemPrompt = modePrefix ? (modePrefix + '\n\n' + SOCCER_YOUTH_PROMPT) : SOCCER_YOUTH_PROMPT;
     } else if (isOnboardingMode) {
-      systemPrompt = ONBOARDING_PROMPT;
+      // Per personas.ts migration note 3: prepend the active persona's
+      // coreIdentityPrompt so the intake conversation inherits voice.
+      // ONBOARDING_PROMPT itself stays generic (it just defines the
+      // intake task structure); the persona block above it is what
+      // makes a Raven-track operator hear Raven during intake instead
+      // of always-Gunny.
+      const personaId = resolvePersonaId(operatorContext?.personaId);
+      systemPrompt = getCoreIdentity(personaId) + '\n\n' + ONBOARDING_PROMPT;
     } else if (isAssistantMode) {
-      systemPrompt = ASSISTANT_PROMPT;
+      // Same migration: assistant-panel chats inherit the operator's
+      // selected persona. ASSISTANT_PROMPT defines the panel-mode
+      // behavior (smaller responses, screen-context aware); the
+      // persona block sets the voice.
+      const personaId = resolvePersonaId(operatorContext?.personaId);
+      systemPrompt = getCoreIdentity(personaId) + '\n\n' + ASSISTANT_PROMPT;
     } else {
       // Regular gameplan mode: build the system prompt per-operator from
       // their selected persona. SITREP_PREAMBLE + getCoreIdentity(personaId)

@@ -37,6 +37,10 @@ import SocialFeed from '@/components/SocialFeed';
 import BetaFeedback from '@/components/BetaFeedback';
 import TrainerDashboard from '@/components/TrainerDashboard';
 import { TermsOfService, PrivacyPolicy } from '@/components/LegalPages';
+import WhatsNewModal from '@/components/WhatsNewModal';
+import PersonaPicker from '@/components/PersonaPicker';
+import type { Announcement, AnnouncementAction } from '@/data/announcements';
+import type { PersonaId } from '@/lib/personas';
 import { trackEvent, EVENTS } from '@/lib/analytics';
 import {
   requestNotificationPermission,
@@ -233,6 +237,14 @@ const AppShell: React.FC<AppShellProps> = ({
   const [pendingSitrep, setPendingSitrep] = useState<import('@/lib/types').Sitrep | null>(null);
   const [showNewPlanConfirm, setShowNewPlanConfirm] = useState(false);
 
+  // ─── What's New (standing shipping order) ────────────────────────────
+  // Fetch /api/announcements/current on mount. If an unseen entry comes
+  // back, render WhatsNewModal. CTA actions route through
+  // handleAnnouncementAction below — that's how `open_persona_picker`
+  // surfaces a full-screen PersonaPicker without modal nesting.
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [showStandalonePersonaPicker, setShowStandalonePersonaPicker] = useState(false);
+
   // Gunny AI panel state
   const [showGunnyPanel, setShowGunnyPanel] = useState(false);
   const [gunnyMessages, setGunnyMessages] = useState<ChatMessage[]>([]);
@@ -268,6 +280,60 @@ const AppShell: React.FC<AppShellProps> = ({
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  // ─── What's New fetch on mount ──────────────────────────────────────
+  // Skip while intake is in progress so we don't stack a modal over a
+  // brand-new operator onboarding. Once intake clears, this runs.
+  useEffect(() => {
+    if (showIntake) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = getAuthToken();
+        const res = await fetch('/api/announcements/current', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.announcement) {
+          setAnnouncement(data.announcement as Announcement);
+        }
+      } catch {
+        // Silent — announcements are nice-to-have, not critical path.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showIntake, currentUser.id]);
+
+  // CTA action router. Keys must match the AnnouncementAction union in
+  // src/data/announcements.ts. WhatsNewModal already POSTs the dismiss
+  // before invoking this, so we just route to the right surface.
+  const handleAnnouncementAction = useCallback((action: AnnouncementAction) => {
+    switch (action) {
+      case 'open_persona_picker':
+        setShowStandalonePersonaPicker(true);
+        break;
+      case 'open_intake':
+        setShowIntake(true);
+        break;
+      case 'open_billing':
+        // Billing tab lives under ops center for now — drop into ops if
+        // this operator has access. OPS_CENTER_ACCESS is keyed by op id,
+        // not role. Non-admins fall through to dismiss-only.
+        if (OPS_CENTER_ACCESS.includes(currentUser.id)) {
+          setActiveTab('ops');
+        }
+        break;
+      case 'open_wearable_connect':
+        // Wearable hub is reached from Intel Center. Route there.
+        setActiveTab('intel');
+        break;
+      case 'dismiss_only':
+      default:
+        break;
+    }
+  }, [currentUser.id]);
 
   // ═══ Compliance Notification Engine ═══
   useEffect(() => {
@@ -1810,6 +1876,33 @@ const AppShell: React.FC<AppShellProps> = ({
     );
   }
 
+  // ─── Standalone PersonaPicker takeover ──────────────────────────────
+  // Triggered by the What's New modal CTA `open_persona_picker`. Renders
+  // as a full-screen page that writes the operator's choice and exits.
+  // Intentionally placed BEFORE the intake check so a mid-onboarding
+  // takeover doesn't happen — intake always wins.
+  if (showStandalonePersonaPicker && !showIntake) {
+    return (
+      <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
+        <DataRain />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <PersonaPicker
+            currentPersonaId={(currentUser.personaId as PersonaId | undefined) ?? 'gunny'}
+            operatorAge={currentUser.profile?.age}
+            operatorFitnessLevel={currentUser.intake?.fitnessLevel}
+            mode="standalone"
+            onBack={() => setShowStandalonePersonaPicker(false)}
+            onSelectPersona={(id) => {
+              const updated: Operator = { ...currentUser, personaId: id };
+              onUpdateOperator(updated, true);
+              setShowStandalonePersonaPicker(false);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Show intake form if not completed OR user requested to re-take it.
   // Junior operators (with the flag on) get the youth-safe JuniorIntakeForm
   // instead of the adult IntakeForm. Adult flow + flag-disabled juniors
@@ -2591,6 +2684,18 @@ const AppShell: React.FC<AppShellProps> = ({
       {/* Legal Pages Overlays */}
       {showTOS && <TermsOfService onClose={() => setShowTOS(false)} />}
       {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
+
+      {/* What's New — first-login alert per the standing shipping order.
+          The modal fires server-side dismiss before close, then routes
+          the CTA action through handleAnnouncementAction (which can
+          surface the standalone PersonaPicker, intake flow, etc.). */}
+      {announcement && (
+        <WhatsNewModal
+          announcement={announcement}
+          onClose={() => setAnnouncement(null)}
+          onActionClick={handleAnnouncementAction}
+        />
+      )}
 
       {/* Classification Bar */}
       <div className="classification-bar" style={{ pointerEvents: 'auto', justifyContent: 'space-between', padding: '0 12px' }}>
