@@ -217,21 +217,54 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
 
   // ═══════════════════════════════════════
   // REVENUE CALCULATIONS (DB-fresh via displayOperators + TIER_CONFIGS)
+  //
+  // Paying-status logic mirrors the cost-per-user STATUS derivation
+  // below — kept consistent so the Revenue tab and the per-user table
+  // never disagree about who's paying. A client is treated as PAID
+  // unless one of these flags exempts them:
+  //   - betaUser && !tierLocked → "BETA FREE" (closed-beta exemption)
+  //   - isVanguard              → "VANGUARD" (founder freebie)
+  //   - promoActive             → "PROMO" (current promo / free month)
+  //
+  // Why split paid vs total:
+  //   - MRR / ARR / Trainer Payout / Platform Revenue / Stripe Fees
+  //     come from money the platform actually receives → paid count.
+  //   - API Cost / Infra Cost hit on usage regardless of payment
+  //     status (we still pay Anthropic when a beta user chats with
+  //     Gunny) → total count.
+  //
+  // Pre-fix bug: every client at a tier was treated as paying revenue,
+  // so a 17-operator beta cohort was showing ~$200 MRR / ~$2,400 ARR
+  // when the real number was $0.
   // ═══════════════════════════════════════
+  const isPayingClient = (op: DisplayOp): boolean => {
+    if (op.role !== 'client') return false;
+    if (op.betaUser && !op.tierLocked) return false;
+    if (op.isVanguard) return false;
+    if (op.promoActive) return false;
+    return true;
+  };
+
   const revenueByTier = (Object.keys(TIER_CONFIGS) as AiTier[]).reduce((acc, tier) => {
-    const count = displayOperators.filter(c => c.role === 'client' && c.tier === tier).length;
+    const allOnTier = displayOperators.filter(c => c.role === 'client' && c.tier === tier);
+    const paidOnTier = allOnTier.filter(isPayingClient);
+    const totalCount = allOnTier.length;
+    const paidCount = paidOnTier.length;
     const config = TIER_CONFIGS[tier];
     acc[tier] = {
-      count,
-      mrr: count * config.monthlyPrice,
-      trainerPayout: count * config.trainerShare,
-      platformRevenue: count * config.platformShare,
-      apiCost: count * config.apiCostEstimate,
-      stripeFees: count * config.stripeFee,
-      infraCost: count * config.infraCost,
+      count: totalCount,
+      paidCount,
+      // Revenue lines: paid only.
+      mrr: paidCount * config.monthlyPrice,
+      trainerPayout: paidCount * config.trainerShare,
+      platformRevenue: paidCount * config.platformShare,
+      stripeFees: paidCount * config.stripeFee,
+      // Cost lines: every user hits the API, infra scales with totals.
+      apiCost: totalCount * config.apiCostEstimate,
+      infraCost: totalCount * config.infraCost,
     };
     return acc;
-  }, {} as Record<AiTier, { count: number; mrr: number; trainerPayout: number; platformRevenue: number; apiCost: number; stripeFees: number; infraCost: number }>);
+  }, {} as Record<AiTier, { count: number; paidCount: number; mrr: number; trainerPayout: number; platformRevenue: number; apiCost: number; stripeFees: number; infraCost: number }>);
 
   const totalMRR = Object.values(revenueByTier).reduce((sum, t) => sum + t.mrr, 0);
   const totalTrainerPayout = Object.values(revenueByTier).reduce((sum, t) => sum + t.trainerPayout, 0);
@@ -241,6 +274,8 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const totalInfraCost = Object.values(revenueByTier).reduce((sum, t) => sum + t.infraCost, 0);
   const totalARR = totalMRR * 12;
   const netProfit = totalPlatformRevenue - totalApiCost - totalStripeFees - totalInfraCost;
+  const paidClientCount = clients.filter(isPayingClient).length;
+  const betaClientCount = clients.filter(c => c.betaUser && !c.tierLocked).length;
 
   // ═══════════════════════════════════════
   // LIVE DATA BADGE
@@ -429,6 +464,8 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       const estTokens = messages * 500;
       const estCost = (estTokens / 1000000) * 3;
 
+      // Status derivation kept in lockstep with isPayingClient() at
+      // the top of the component — same priority chain, just labeled.
       let status = 'PAID';
       if (op.betaUser && !op.tierLocked) {
         status = 'BETA FREE';
@@ -453,12 +490,19 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     return (
       <div style={{ padding: '20px' }}>
         <LiveBadge />
-        {/* Top-level KPIs */}
+        {/* Top-level KPIs.
+            MRR / ARR / Trainer Payout count PAID clients only — beta,
+            vanguard, and promo accounts are exempted. PAID CLIENTS is
+            shown alongside TOTAL CLIENTS so the gap is obvious at a
+            glance: if the cohort is 17 total / 0 paid, MRR is correctly
+            $0 instead of an inflated tier-mix theoretical. */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="MRR" value={`$${totalMRR.toFixed(2)}`} color="#00ff41" />
-          <KPICard label="ARR" value={`$${totalARR.toFixed(2)}`} color="#00ff41" />
+          <KPICard label="MRR (PAID)" value={`$${totalMRR.toFixed(2)}`} color={totalMRR > 0 ? '#00ff41' : '#555'} />
+          <KPICard label="ARR (PAID)" value={`$${totalARR.toFixed(2)}`} color={totalARR > 0 ? '#00ff41' : '#555'} />
           <KPICard label="NET PROFIT/MO" value={`$${netProfit.toFixed(2)}`} color={netProfit > 0 ? '#00ff41' : '#ff4444'} />
           <KPICard label="TOTAL CLIENTS" value={String(clients.length)} color="#00ff41" />
+          <KPICard label="PAID CLIENTS" value={`${paidClientCount} / ${clients.length}`} color={paidClientCount > 0 ? '#00ff41' : '#888'} />
+          <KPICard label="BETA (FREE)" value={String(betaClientCount)} color="#ff00ff" />
           <KPICard label="TRAINER PAYOUT" value={`$${totalTrainerPayout.toFixed(2)}/mo`} color="#ffb800" />
           <KPICard label="API COST" value={`$${totalApiCost.toFixed(2)}/mo`} color="#ff4444" />
         </div>
@@ -469,7 +513,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
-                {['TIER', 'USERS', 'PRICE', 'MRR', 'TRAINER $', 'PLATFORM $', 'API COST', 'STRIPE', 'MARGIN'].map(h => (
+                {['TIER', 'USERS', 'PAID', 'PRICE', 'MRR', 'TRAINER $', 'PLATFORM $', 'API COST', 'STRIPE', 'MARGIN'].map(h => (
                   <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
                 ))}
               </tr>
@@ -479,17 +523,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                 const config = TIER_CONFIGS[tier];
                 const data = revenueByTier[tier];
                 const margin = data.mrr > 0 ? ((data.platformRevenue - data.apiCost - data.stripeFees - data.infraCost) / data.mrr * 100) : 0;
+                // Dim the all-zero rows so the eye lands on whichever tier
+                // has actual paid users (none today, but ready for when
+                // beta lifts).
+                const dim = data.paidCount === 0;
                 return (
-                  <tr key={tier} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <tr key={tier} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: dim ? 0.6 : 1 }}>
                     <td style={{ padding: '10px 8px', color: tierColor(tier), fontWeight: 700 }}>{config.codename}</td>
                     <td style={{ padding: '10px 8px', color: '#ddd' }}>{data.count}</td>
+                    <td style={{ padding: '10px 8px', color: data.paidCount > 0 ? '#00ff41' : '#555' }}>{data.paidCount}</td>
                     <td style={{ padding: '10px 8px', color: '#888' }}>${config.monthlyPrice}</td>
-                    <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.mrr.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#ffb800' }}>${data.trainerPayout.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.platformRevenue.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#ff4444' }}>${data.apiCost.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.mrr > 0 ? '#00ff41' : '#555' }}>${data.mrr.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.trainerPayout > 0 ? '#ffb800' : '#555' }}>${data.trainerPayout.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.platformRevenue > 0 ? '#00ff41' : '#555' }}>${data.platformRevenue.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.apiCost > 0 ? '#ff4444' : '#555' }}>${data.apiCost.toFixed(2)}</td>
                     <td style={{ padding: '10px 8px', color: '#888' }}>${data.stripeFees.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{margin.toFixed(1)}%</td>
+                    <td style={{ padding: '10px 8px', color: data.mrr === 0 ? '#555' : margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{data.mrr === 0 ? '—' : `${margin.toFixed(1)}%`}</td>
                   </tr>
                 );
               })}
@@ -524,11 +573,20 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           </table>
         </div>
 
-        {/* Trainer Revenue Breakdown */}
+        {/* Trainer Revenue Breakdown — DB-fresh via displayOperators
+            (the previous version used the stale `operators` prop, so a
+            newly-assigned client wouldn't show in the trainer's row
+            until the parent re-fetched). Only PAID clients contribute
+            to trainerMRR; the chip shows "X clients (Y paid)" so the
+            gap between cohort size and active payout is visible. */}
         <SectionHeader title="TRAINER PAYOUT BREAKDOWN" />
-        {operators.filter(op => op.role === 'trainer').map(trainer => {
-          const trainerClients = operators.filter(op => op.trainerId === trainer.id);
-          const trainerMRR = trainerClients.reduce((sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0), 0);
+        {displayOperators.filter(op => op.role === 'trainer').map(trainer => {
+          const trainerClients = displayOperators.filter(op => op.trainerId === trainer.id);
+          const paidTrainerClients = trainerClients.filter(isPayingClient);
+          const trainerMRR = paidTrainerClients.reduce(
+            (sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0),
+            0,
+          );
           return (
             <div key={trainer.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -536,30 +594,72 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
             }}>
               <div>
                 <span style={{ color: '#ddd', fontFamily: '"Chakra Petch", sans-serif', fontSize: '14px' }}>{trainer.callsign}</span>
-                <span style={{ color: '#555', fontSize: '12px', marginLeft: '8px' }}>({trainerClients.length} clients)</span>
+                <span style={{ color: '#555', fontSize: '12px', marginLeft: '8px' }}>
+                  ({trainerClients.length} clients · {paidTrainerClients.length} paid)
+                </span>
               </div>
-              <span style={{ color: '#ffb800', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px' }}>${trainerMRR.toFixed(2)}/mo</span>
+              <span style={{ color: trainerMRR > 0 ? '#ffb800' : '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px' }}>
+                ${trainerMRR.toFixed(2)}/mo
+              </span>
             </div>
           );
         })}
 
-        {/* Projections */}
-        <SectionHeader title="GROWTH PROJECTIONS" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          {[25, 50, 100, 250, 500].map(count => {
-            const avgRevPerUser = clients.length > 0 ? totalMRR / clients.length : 5;
-            const projected = count * avgRevPerUser;
-            return (
-              <div key={count} style={{
-                padding: '12px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)',
+        {/* Projections.
+            Two ARPU sources, picked by data availability:
+              1. ACTUAL ARPU = totalMRR / paidClientCount.
+                 Used once we have any paid users — that's our real
+                 conversion picture.
+              2. THEORETICAL ARPU = sum(monthlyPrice for current tier
+                 mix) / clients.length.
+                 Used during closed beta when paidClientCount is 0.
+                 Answers: "if every current operator converted to paid
+                 at their assigned tier, what would the cohort look
+                 like?" — useful for sizing pricing decisions.
+            The header label tells you which one is feeding the math
+            so the projections aren't read as a forecast they're not. */}
+        {(() => {
+          const actualARPU = paidClientCount > 0 ? totalMRR / paidClientCount : 0;
+          const theoreticalARPU = clients.length > 0
+            ? clients.reduce(
+                (sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.monthlyPrice || 0),
+                0,
+              ) / clients.length
+            : 0;
+          const projectionARPU = actualARPU > 0 ? actualARPU : theoreticalARPU;
+          const arpuSource = actualARPU > 0
+            ? `ACTUAL ARPU $${actualARPU.toFixed(2)} (paid clients)`
+            : `THEORETICAL ARPU $${theoreticalARPU.toFixed(2)} (current tier mix at full price)`;
+          return (
+            <>
+              <SectionHeader title="GROWTH PROJECTIONS" />
+              <div style={{
+                fontFamily: '"Share Tech Mono", monospace',
+                fontSize: '11px',
+                color: '#666',
+                marginBottom: '8px',
+                letterSpacing: '0.5px',
               }}>
-                <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{count} USERS</div>
-                <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700 }}>${projected.toFixed(0)}/mo</div>
-                <div style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>${(projected * 12).toFixed(0)}/yr</div>
+                {arpuSource}
+                {actualARPU === 0 && ' — assumes 100% conversion if beta lifted today'}
               </div>
-            );
-          })}
-        </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                {[25, 50, 100, 250, 500].map(count => {
+                  const projected = count * projectionARPU;
+                  return (
+                    <div key={count} style={{
+                      padding: '12px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)',
+                    }}>
+                      <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{count} USERS</div>
+                      <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700 }}>${projected.toFixed(0)}/mo</div>
+                      <div style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>${(projected * 12).toFixed(0)}/yr</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </div>
     );
   };
