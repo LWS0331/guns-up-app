@@ -1078,15 +1078,21 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
 
   const renderMarketing = () => (
     <div style={{ padding: '20px' }}>
+      {/* MANUAL-MODE BANNER (May 2026) — until paid revenue arrives,
+          marketing posting is human-driven. The provider integration
+          (Buffer / Hootsuite / Publer) costs ~$12-30/mo + dev time
+          and isn't justified during closed beta. The cards below
+          stay visible so we have a checklist of what's coming and a
+          place to paste links once we wire it. */}
       <div style={{
-        background: 'rgba(255,184,0,0.05)', border: '1px solid rgba(255,184,0,0.12)',
+        background: 'rgba(255,140,0,0.06)', border: '1px solid rgba(255,140,0,0.25)',
         padding: '16px 20px', marginBottom: '24px',
       }}>
-        <div style={{ color: '#ffb800', fontFamily: '"Orbitron", sans-serif', fontSize: '13px', fontWeight: 700, letterSpacing: '2px', marginBottom: '8px' }}>
-          MARKETING COMMAND CENTER
+        <div style={{ color: '#ff8c00', fontFamily: '"Orbitron", sans-serif', fontSize: '13px', fontWeight: 700, letterSpacing: '2px', marginBottom: '8px' }}>
+          MARKETING — MANUAL MODE
         </div>
-        <div style={{ color: '#888', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.6' }}>
-          Centralized hub for scheduling and pushing content across all social platforms. Connect platform APIs below — the marketing agent will use these endpoints to publish content on your behalf.
+        <div style={{ color: '#bbb', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.6' }}>
+          Posting is manual during the closed beta. Platform integrations (one provider covering all six channels) ship once paid revenue justifies the ~$12-30/mo provider fee + dev time. For now, post directly from each platform&apos;s native app and use the cards below as a reference of what&apos;s on the roadmap.
         </div>
       </div>
 

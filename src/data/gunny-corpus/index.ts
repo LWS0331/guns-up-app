@@ -231,6 +231,34 @@ export const PATH_CORPUS: Record<TrainingPath, CorpusFile[]> = {
 // ---------------------------------------------------------------------------
 
 export const OVERLAYS: CorpusOverlay[] = [
+  // Nicotine pouches & oral health — always available so Gunny can
+  // answer pouch / dental questions accurately regardless of which
+  // training path the operator picked. The QA file is the primary
+  // response surface (Q&A pairs already in Gunny's voice). The KB
+  // file is structured fact citations behind it. Both load under
+  // standard paths; CrossFit's tight budget may truncate one or
+  // both — acceptable since CrossFit-specific corpus is higher
+  // priority for those operators.
+  {
+    id: 'nicotine-pouches-qa',
+    label: 'Nicotine Pouches Q&A (oral health)',
+    path: 'overlays/nicotine-pouches-qa.json',
+    format: 'json',
+    approxBytes: 31_381,
+    description:
+      'Q&A pairs covering staining, enamel, cavities, gum recession, leukoplakia, oral cancer, smoking-cessation framing, and pouch-specific harm reduction. Voice already matches Gunny.',
+    trigger: 'always',
+  },
+  {
+    id: 'nicotine-pouches-kb',
+    label: 'Nicotine Pouches Knowledge Base (oral health)',
+    path: 'overlays/nicotine-pouches-kb.json',
+    format: 'json',
+    approxBytes: 29_976,
+    description:
+      'Structured fact base with citations: pH chemistry, enamel staining studies (Dalrymple 2021, Liu 2025), nicotine-driven S. mutans virulence, snus epidemiology extrapolations, leukoplakia case reports, evidence-quality grading. Cite sources via [corpus_id: nicotine-pouches-kb].',
+    trigger: 'always',
+  },
   {
     id: 'fms',
     label: 'Functional Movement Screen Reference',
