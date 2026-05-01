@@ -17,6 +17,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   Operator,
+  Sport,
   SportProfile,
   JuniorConsent,
   SoccerPosition,
@@ -78,6 +79,42 @@ const POSITION_OPTIONS: { id: SoccerPosition; labelKey: string; descKey: string 
   { id: 'unsure', labelKey: 'junior.pos.unsure.label', descKey: 'junior.pos.unsure.desc' },
 ];
 
+// Football position roles. Curated set of 11 broad roles instead of
+// surfacing all 34 specific positions from the corpus — youth athletes
+// (10-18) typically know their general role but not the specific
+// alignment (e.g. they know "Wide Receiver", not "X-receiver vs Z").
+// The football corpus has 34 specific position keys; the route layer
+// passes the kid's broad role to Gunny and lets Gunny ask follow-ups
+// about the specific alignment when relevant. Storing the broad role
+// keeps the intake friction low.
+//
+// `id` values are deliberately distinct from the corpus position_keys
+// so the route layer can map broad → specific (or skip the filter
+// when the kid picked unsure / multi-position).
+export type FootballPositionRole =
+  | 'qb' | 'rb' | 'wr' | 'te' | 'ol' | 'dl' | 'lb' | 'db'
+  | 'safety' | 'st' | 'ath' | 'unsure';
+
+const FOOTBALL_POSITION_OPTIONS: { id: FootballPositionRole; labelKey: string; descKey: string }[] = [
+  { id: 'qb',     labelKey: 'junior.fb_pos.qb.label',     descKey: 'junior.fb_pos.qb.desc' },
+  { id: 'rb',     labelKey: 'junior.fb_pos.rb.label',     descKey: 'junior.fb_pos.rb.desc' },
+  { id: 'wr',     labelKey: 'junior.fb_pos.wr.label',     descKey: 'junior.fb_pos.wr.desc' },
+  { id: 'te',     labelKey: 'junior.fb_pos.te.label',     descKey: 'junior.fb_pos.te.desc' },
+  { id: 'ol',     labelKey: 'junior.fb_pos.ol.label',     descKey: 'junior.fb_pos.ol.desc' },
+  { id: 'dl',     labelKey: 'junior.fb_pos.dl.label',     descKey: 'junior.fb_pos.dl.desc' },
+  { id: 'lb',     labelKey: 'junior.fb_pos.lb.label',     descKey: 'junior.fb_pos.lb.desc' },
+  { id: 'db',     labelKey: 'junior.fb_pos.db.label',     descKey: 'junior.fb_pos.db.desc' },
+  { id: 'safety', labelKey: 'junior.fb_pos.safety.label', descKey: 'junior.fb_pos.safety.desc' },
+  { id: 'st',     labelKey: 'junior.fb_pos.st.label',     descKey: 'junior.fb_pos.st.desc' },
+  { id: 'ath',   labelKey: 'junior.fb_pos.ath.label',    descKey: 'junior.fb_pos.ath.desc' },
+  { id: 'unsure', labelKey: 'junior.fb_pos.unsure.label', descKey: 'junior.fb_pos.unsure.desc' },
+];
+
+const SPORT_OPTIONS: { id: Sport; labelKey: string; descKey: string }[] = [
+  { id: 'soccer',   labelKey: 'junior.sport.soccer.label',   descKey: 'junior.sport.soccer.desc' },
+  { id: 'football', labelKey: 'junior.sport.football.label', descKey: 'junior.sport.football.desc' },
+];
+
 const LEVEL_OPTIONS: { id: CompetitionLevel; labelKey: string; descKey: string }[] = [
   { id: 'recreational', labelKey: 'junior.lvl.recreational.label', descKey: 'junior.lvl.recreational.desc' },
   { id: 'club', labelKey: 'junior.lvl.club.label', descKey: 'junior.lvl.club.desc' },
@@ -130,7 +167,17 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
 
   // Sport profile
   const initialSp = operator.sportProfile;
+  // Sport selector — defaults to soccer for backward compat. Pre-existing
+  // operators who already saved a sportProfile keep whichever sport they
+  // had (soccer for everyone today).
+  const [sport, setSport] = useState<Sport>(initialSp?.sport || 'soccer');
   const [position, setPosition] = useState<SoccerPosition>(initialSp?.position || 'unsure');
+  // Football position role (broad). Persisted to sportProfile.footballPosition
+  // when sport === 'football'. The route layer maps this broad role to
+  // the corpus's 34 specific position_keys when filtering.
+  const [footballPosition, setFootballPosition] = useState<FootballPositionRole>(
+    (initialSp?.footballPosition as FootballPositionRole) || 'unsure',
+  );
   const [level, setLevel] = useState<CompetitionLevel>(initialSp?.level || 'club');
   const [yearsPlaying, setYearsPlaying] = useState<number>(initialSp?.yearsPlaying || 0);
   const [trainingDaysPerWeek, setTrainingDaysPerWeek] = useState<number>(initialSp?.trainingDaysPerWeek || 3);
@@ -195,9 +242,18 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
 
   const handleComplete = useCallback(() => {
     const formattedHeight = formatHeightInput(heightRaw) || operator.profile.height;
+    // Build the sport profile with sport-aware position data.
+    //   - Soccer: position is the SoccerPosition enum (GK/CB/FB/CM/W/ST/unsure).
+    //     footballPosition is left undefined so consumers can branch on
+    //     `sport` rather than checking both fields.
+    //   - Football: position stays at 'unsure' as a placeholder (the
+    //     soccer field is required by the type) and footballPosition
+    //     carries the broad role. The gunny route checks sport first
+    //     and only reads footballPosition when sport === 'football'.
     const sportProfile: SportProfile = {
-      sport: 'soccer',
-      position,
+      sport,
+      position: sport === 'soccer' ? position : 'unsure',
+      footballPosition: sport === 'football' ? footballPosition : undefined,
       level,
       yearsPlaying,
       trainingDaysPerWeek,
@@ -279,7 +335,9 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
     age,
     heightRaw,
     weight,
+    sport,
     position,
+    footballPosition,
     level,
     yearsPlaying,
     trainingDaysPerWeek,
@@ -396,18 +454,46 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
         <div>
           <div style={s.stepTitle}>{t('junior.sport_profile')}</div>
 
-          <label style={s.label}>{t('junior.position')}</label>
+          {/* Sport picker — soccer / football. Drives which corpus
+              Gunny loads (youth-soccer.md vs youth-football.md) and
+              which position-selector renders below. */}
+          <label style={s.label}>{t('junior.sport_label')}</label>
           <div style={{ ...s.optionGrid, gridTemplateColumns: 'repeat(2, 1fr)' }}>
-            {POSITION_OPTIONS.map(p => (
+            {SPORT_OPTIONS.map(sp => (
               <div
-                key={p.id}
-                style={{ ...s.optionCard, ...(position === p.id ? s.optionCardActive : {}) }}
-                onClick={() => setPosition(p.id)}
+                key={sp.id}
+                style={{ ...s.optionCard, ...(sport === sp.id ? s.optionCardActive : {}) }}
+                onClick={() => setSport(sp.id)}
               >
-                <div style={{ ...s.optionCardLabel, ...(position === p.id ? s.optionCardLabelActive : {}) }}>{t(p.labelKey)}</div>
-                <div style={s.optionCardDesc}>{t(p.descKey)}</div>
+                <div style={{ ...s.optionCardLabel, ...(sport === sp.id ? s.optionCardLabelActive : {}) }}>{t(sp.labelKey)}</div>
+                <div style={s.optionCardDesc}>{t(sp.descKey)}</div>
               </div>
             ))}
+          </div>
+
+          <label style={s.label}>{t('junior.position')}</label>
+          <div style={{ ...s.optionGrid, gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            {(sport === 'football' ? FOOTBALL_POSITION_OPTIONS : POSITION_OPTIONS).map(p => {
+              const isActive = sport === 'football'
+                ? footballPosition === p.id
+                : position === p.id;
+              return (
+              <div
+                key={p.id}
+                style={{ ...s.optionCard, ...(isActive ? s.optionCardActive : {}) }}
+                onClick={() => {
+                  if (sport === 'football') {
+                    setFootballPosition(p.id as FootballPositionRole);
+                  } else {
+                    setPosition(p.id as SoccerPosition);
+                  }
+                }}
+              >
+                <div style={{ ...s.optionCardLabel, ...(isActive ? s.optionCardLabelActive : {}) }}>{t(p.labelKey)}</div>
+                <div style={s.optionCardDesc}>{t(p.descKey)}</div>
+              </div>
+            );
+            })}
           </div>
 
           <label style={s.label}>{t('junior.competition_level')}</label>
@@ -632,7 +718,14 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
           <div style={s.reviewSection}>
             <div style={s.reviewLabel}>{t('junior.review_sport_profile')}</div>
             <div style={s.reviewValue}>
-              {(() => { const p = POSITION_OPTIONS.find(p => p.id === position); return p ? t(p.labelKey) : ''; })()} · {(() => { const l = LEVEL_OPTIONS.find(l => l.id === level); return l ? t(l.labelKey) : ''; })()} · {yearsPlaying} {t('junior.review_yrs_suffix')}
+              {(() => {
+                const sportLabel = SPORT_OPTIONS.find(sp => sp.id === sport);
+                const posLabel = sport === 'football'
+                  ? FOOTBALL_POSITION_OPTIONS.find(p => p.id === footballPosition)
+                  : POSITION_OPTIONS.find(p => p.id === position);
+                const lvlLabel = LEVEL_OPTIONS.find(l => l.id === level);
+                return `${sportLabel ? t(sportLabel.labelKey) + ' · ' : ''}${posLabel ? t(posLabel.labelKey) : ''} · ${lvlLabel ? t(lvlLabel.labelKey) : ''} · ${yearsPlaying} ${t('junior.review_yrs_suffix')}`;
+              })()}
             </div>
             <div style={{ ...s.reviewValue, fontSize: 12, color: '#888' }}>
               {t('junior.review_game_day')} {(() => { const d = DAY_OPTIONS.find(d => d.id === gameDay); return d ? t(d.labelKey) : gameDay.toUpperCase(); })()} · {t('junior.review_sc_off')} {noTrainingDays.length ? noTrainingDays.map(id => { const d = DAY_OPTIONS.find(d => d.id === id); return d ? t(d.labelKey) : id.toUpperCase(); }).join(', ') : t('junior.review_none')}
