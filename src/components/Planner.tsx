@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
 import { hasCommanderAccess } from '@/lib/tierGates';
-import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
+import { EXERCISE_LIBRARY, getVideoUrl, resolveExerciseName } from '@/data/exercises';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
@@ -471,9 +471,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         const blockData = workoutResults[exerciseBlocks[i].id];
         if (!blockData || blockData.sets.some(s => !s.completed)) {
           setActiveBlockIdx(i);
-          const exName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName || 'Next exercise';
-          showVoiceFeedback(`NEXT: ${exName}`);
-          speak(`Moving to ${exName}.`);
+          // Resolve to ES name when the operator is on Spanish so
+          // both the on-screen banner and the TTS voice match the
+          // language they're using everywhere else.
+          const rawName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName;
+          const exName = rawName
+            ? resolveExerciseName(rawName, language)
+            : (language === 'es' ? 'Siguiente ejercicio' : 'Next exercise');
+          showVoiceFeedback(`${language === 'es' ? 'SIGUIENTE' : 'NEXT'}: ${exName}`);
+          speak(language === 'es' ? `Pasando a ${exName}.` : `Moving to ${exName}.`);
           break;
         }
       }
@@ -1494,7 +1500,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                             const label = getBlockLabels(workout.blocks)[bi];
                             const isExercise = block.type === 'exercise';
                             const name = isExercise
-                              ? (block as ExerciseBlock).exerciseName
+                              ? resolveExerciseName((block as ExerciseBlock).exerciseName, language)
                               : (block as ConditioningBlock).format;
                             const rx = isExercise ? (block as ExerciseBlock).prescription : '';
                             // Pull just the sets-x-reps fragment out of
@@ -1677,7 +1683,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                           const label = getBlockLabels(workout.blocks)[bi];
                           const isExercise = block.type === 'exercise';
                           const name = isExercise
-                            ? (block as ExerciseBlock).exerciseName
+                            ? resolveExerciseName((block as ExerciseBlock).exerciseName, language)
                             : (block as ConditioningBlock).format;
                           const rx = isExercise ? (block as ExerciseBlock).prescription : '';
                           const setsReps = rx?.match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i)?.[0] || '';
@@ -2874,8 +2880,16 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                       got malformed), show "Exercise N" so the user can
                       still see what set they're on. Without this, the
                       title slot collapses to 0 height and the user has
-                      no idea which exercise they're doing. */}
-                  {block.exerciseName?.trim() || `Exercise ${idx + 1}`}
+                      no idea which exercise they're doing.
+                      Phase B i18n: resolveExerciseName looks up the ES
+                      form from EXERCISE_LIBRARY when the operator's
+                      language is 'es' and the name matches a library
+                      entry. AI-generated or freeform names that don't
+                      match the library fall through to the EN string
+                      (workout JSON stores the EN name canonically). */}
+                  {block.exerciseName?.trim()
+                    ? resolveExerciseName(block.exerciseName, language)
+                    : `Exercise ${idx + 1}`}
                 </div>
                 {/* Form Demo button — surfaced in the card header next
                     to the exercise name so beginners see it at first
@@ -3789,7 +3803,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                               className="t-body-sm"
                               style={{ color: 'var(--text-primary)', fontWeight: 600, flex: '1 1 auto' }}
                             >
-                              {block.exerciseName}
+                              {resolveExerciseName(block.exerciseName, language)}
                             </span>
                             {vidUrl && (
                               <a

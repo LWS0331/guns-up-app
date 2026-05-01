@@ -448,6 +448,15 @@ export interface DailyReadinessEntry {
 export interface Exercise {
   id: string;
   name: string;
+  /**
+   * Spanish display name. Optional — when missing, callers fall back
+   * to `name`. Use the `resolveExerciseName(exercise, language)`
+   * helper from src/data/exercises.ts at every render site instead
+   * of reading `name` directly when an operator's language pref is
+   * available (Phase B i18n, May 2026). Stored workouts keep their
+   * baked-in name so historical data never shifts language.
+   */
+  nameEs?: string;
   category: string;
   equipment: string;
   videoUrl?: string;
