@@ -2844,7 +2844,14 @@ ${mealSuggestion}`;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter inserts a newline so users can build multi-paragraph
+    // messages (Apr 30 beta note: "Currently you can only send a
+    // paragraph at time"). Sending requires the SEND button or
+    // Cmd/Ctrl+Enter for desktop power users — same convention as
+    // most modern chat composers (Slack, Discord with the right pref,
+    // etc.). The textarea's default behavior already handles plain
+    // Enter as newline, so we only intercept the modifier shortcut.
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleSendMessage();
     }
