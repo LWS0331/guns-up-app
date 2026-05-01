@@ -1811,35 +1811,47 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'ops':
         // Trainer-specific view
         if (currentUser.role === 'trainer') {
+          // The two-button toggle (MY CLIENTS / COMMAND CENTER) was
+          // clipping behind the topbar on mobile because the buttons
+          // were sized as full bracket-card chrome (.btn-primary /
+          // .btn-ghost render at ~44px tall with 14px+ padding) and
+          // the row sat flush against the AppShell header.
+          //
+          // Mobile fix: smaller pill segmented control, equal-width
+          // splits, tighter padding. Desktop keeps the spacious
+          // version. The toggle is also Command-Center-only (admins),
+          // so non-admins skip the toggle entirely.
+          const hasCommandCenter = OPS_CENTER_ACCESS.includes(currentUser.id);
           return (
             <div>
-              {/* Sub-tab toggle for trainers */}
-              <div style={{
-                display: 'flex',
-                gap: '10px',
-                padding: '14px 18px',
-                borderBottom: '1px solid var(--border-green-soft)',
-                background: 'var(--bg-card)',
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowTrainerDashboard(false)}
-                  className={`btn btn-sm ${!showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
-                >
-                  My Clients
-                </button>
-                {OPS_CENTER_ACCESS.includes(currentUser.id) && (
+              {hasCommandCenter && (
+                <div style={{
+                  display: 'flex',
+                  gap: isMobile ? '6px' : '10px',
+                  padding: isMobile ? '8px 12px' : '14px 18px',
+                  borderBottom: '1px solid var(--border-green-soft)',
+                  background: 'var(--bg-card)',
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowTrainerDashboard(false)}
+                    className={`btn ${isMobile ? 'btn-xs' : 'btn-sm'} ${!showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ flex: 1, minHeight: isMobile ? 32 : 40, fontSize: isMobile ? 11 : 13 }}
+                  >
+                    {isMobile ? 'CLIENTS' : 'My Clients'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setShowTrainerDashboard(true)}
-                    className={`btn btn-sm ${showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    className={`btn ${isMobile ? 'btn-xs' : 'btn-sm'} ${showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ flex: 1, minHeight: isMobile ? 32 : 40, fontSize: isMobile ? 11 : 13 }}
                   >
-                    Command Center
+                    {isMobile ? 'COMMAND' : 'Command Center'}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
               {/* Content */}
-              {showTrainerDashboard && OPS_CENTER_ACCESS.includes(currentUser.id) ? (
+              {showTrainerDashboard && hasCommandCenter ? (
                 <OpsCenter currentUser={currentUser} operators={operators} />
               ) : (
                 <TrainerDashboard trainer={currentUser} allOperators={operators} onUpdateOperator={onUpdateOperator} />

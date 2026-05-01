@@ -47,6 +47,7 @@ interface DbMetrics {
       promoActive: boolean;
       trainerId: string | null;
       betaUser: boolean;
+      billingStatus: string | null;
       workoutCount: number;
       mealCount: number;
       prCount: number;
@@ -207,6 +208,12 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     email?: string | null; tierLocked?: boolean; isVanguard?: boolean;
     betaUser?: boolean; trainerId?: string | null; promoActive?: boolean;
     googleId?: string | null;
+    /**
+     * Stripe billing status from operator.billing.status. Only 'active'
+     * counts as paying revenue. NULL / 'beta' / 'cancelled' / 'past_due'
+     * all evaluate to non-paying. Source of truth for the Revenue tab.
+     */
+    billingStatus?: string | null;
   };
   const displayOperators: DisplayOp[] = opStats.length > 0
     ? opStats
@@ -218,13 +225,17 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   // ═══════════════════════════════════════
   // REVENUE CALCULATIONS (DB-fresh via displayOperators + TIER_CONFIGS)
   //
-  // Paying-status logic mirrors the cost-per-user STATUS derivation
-  // below — kept consistent so the Revenue tab and the per-user table
-  // never disagree about who's paying. A client is treated as PAID
-  // unless one of these flags exempts them:
-  //   - betaUser && !tierLocked → "BETA FREE" (closed-beta exemption)
-  //   - isVanguard              → "VANGUARD" (founder freebie)
-  //   - promoActive             → "PROMO" (current promo / free month)
+  // Paying status is gated on a positive Stripe signal:
+  // billing.status === 'active'. The previous version inferred PAID
+  // by the absence of exemption flags (no betaUser / no vanguard / no
+  // promo → PAID) which let any operator missing all three flags
+  // through, even when there was no Stripe subscription. Closed beta
+  // had several operators that didn't have betaUser=true set yet but
+  // weren't paying either — those rows showed up as PAID.
+  //
+  // The forecast endpoint at /api/financials/forecast already uses
+  // billing.status === 'active' as the gate — this brings the Revenue
+  // tab in line with that single source of truth.
   //
   // Why split paid vs total:
   //   - MRR / ARR / Trainer Payout / Platform Revenue / Stripe Fees
@@ -232,17 +243,10 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   //   - API Cost / Infra Cost hit on usage regardless of payment
   //     status (we still pay Anthropic when a beta user chats with
   //     Gunny) → total count.
-  //
-  // Pre-fix bug: every client at a tier was treated as paying revenue,
-  // so a 17-operator beta cohort was showing ~$200 MRR / ~$2,400 ARR
-  // when the real number was $0.
   // ═══════════════════════════════════════
   const isPayingClient = (op: DisplayOp): boolean => {
     if (op.role !== 'client') return false;
-    if (op.betaUser && !op.tierLocked) return false;
-    if (op.isVanguard) return false;
-    if (op.promoActive) return false;
-    return true;
+    return op.billingStatus === 'active';
   };
 
   const revenueByTier = (Object.keys(TIER_CONFIGS) as AiTier[]).reduce((acc, tier) => {
@@ -464,15 +468,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       const estTokens = messages * 500;
       const estCost = (estTokens / 1000000) * 3;
 
-      // Status derivation kept in lockstep with isPayingClient() at
-      // the top of the component — same priority chain, just labeled.
-      let status = 'PAID';
-      if (op.betaUser && !op.tierLocked) {
+      // Status priority — only PAID when Stripe says so. Everything
+      // else falls through the descriptive flags. NOT ACTIVE is the
+      // catch-all for operators sitting in the DB without a billing
+      // status and without any of the exemption flags set yet.
+      const opAsDisplay = op as unknown as DisplayOp;
+      let status: 'PAID' | 'BETA FREE' | 'VANGUARD' | 'PROMO' | 'NOT ACTIVE';
+      if (opAsDisplay.billingStatus === 'active') {
+        status = 'PAID';
+      } else if (op.betaUser && !op.tierLocked) {
         status = 'BETA FREE';
       } else if (op.isVanguard) {
         status = 'VANGUARD';
       } else if (op.promoActive) {
         status = 'PROMO';
+      } else {
+        status = 'NOT ACTIVE';
       }
 
       return {
@@ -566,7 +577,16 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                   <td style={{ padding: '10px 8px', color: '#888' }}>{row.messages}</td>
                   <td style={{ padding: '10px 8px', color: '#00ff41' }}>{row.estTokens.toLocaleString()}</td>
                   <td style={{ padding: '10px 8px', color: row.estCost > 10 ? '#ff4444' : '#00ff41' }}>${row.estCost.toFixed(2)}</td>
-                  <td style={{ padding: '10px 8px', color: row.status === 'VANGUARD' ? '#ff00ff' : row.status === 'BETA FREE' ? '#00ff41' : row.status === 'PROMO' ? '#ffb800' : '#888' }}>{row.status}</td>
+                  <td style={{
+                    padding: '10px 8px',
+                    color:
+                      row.status === 'PAID'       ? '#00ff41' :
+                      row.status === 'VANGUARD'   ? '#ff00ff' :
+                      row.status === 'BETA FREE'  ? '#00ff41' :
+                      row.status === 'PROMO'      ? '#ffb800' :
+                      row.status === 'NOT ACTIVE' ? '#ff4444' :
+                      '#888',
+                  }}>{row.status}</td>
                 </tr>
               ))}
             </tbody>
