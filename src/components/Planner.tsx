@@ -3120,53 +3120,62 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             stay focused on the movement list.
             Move Up / Move Down let users reorder the current exercise
             within the blocks array. Disabled at the array edges. */}
-        {currentStep.kind === 'exercise' && (
+        {currentStep.kind === 'exercise' && (() => {
+          // Shared swap helper for the Up / Down buttons. Pulled out
+          // of the inline onClick handlers so the swap + sortOrder
+          // normalization + cursor-shift logic only lives in one
+          // place. sortOrder is reset after every reorder to match
+          // the convention in src/lib/workoutModification.ts (which
+          // does `blocks = blocks.map((b, i) => ({ ...b, sortOrder: i }))`
+          // after every move). Nothing currently reads sortOrder
+          // for display ordering — array position is canonical — but
+          // keeping the field consistent means a future feature that
+          // sorts by it (e.g. an undo log, an analytics by-position
+          // chart, a Gunny analysis) can trust the value.
+          const swapBlocks = (direction: -1 | 1) => {
+            if (currentStep.kind !== 'exercise') return;
+            const targetIdx = currentStep.blockIdx;
+            const swapWith = targetIdx + direction;
+            if (swapWith < 0 || swapWith >= workout.blocks.length) return;
+            const dateStr = selectedDate || formatDate(currentDate);
+            const next = [...workout.blocks];
+            [next[targetIdx], next[swapWith]] = [next[swapWith], next[targetIdx]];
+            // Renumber sortOrder so it mirrors array position. Same
+            // pattern workoutModification.ts uses after a reorder.
+            const normalized = next.map((b, i) => ({ ...b, sortOrder: i }));
+            const updated = { ...operator };
+            updated.workouts = { ...updated.workouts };
+            updated.workouts[dateStr] = { ...workout, blocks: normalized };
+            onUpdateOperator(updated);
+            // Cursor follows the block so the user keeps viewing the
+            // same exercise, now in its new position.
+            setStepIdx(prev => Math.max(0, prev + direction));
+          };
+
+          const isFirstExercise = currentStep.blockIdx <= 0;
+          const isLastExercise = currentStep.blockIdx >= workout.blocks.length - 1;
+
+          return (
         <div style={{ display: 'flex', gap: 6, marginTop: 8, marginBottom: 4, flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={() => {
-              if (currentStep.kind !== 'exercise') return;
-              const targetIdx = currentStep.blockIdx;
-              if (targetIdx <= 0) return;
-              const dateStr = selectedDate || formatDate(currentDate);
-              const next = [...workout.blocks];
-              [next[targetIdx - 1], next[targetIdx]] = [next[targetIdx], next[targetIdx - 1]];
-              const updated = { ...operator };
-              updated.workouts = { ...updated.workouts };
-              updated.workouts[dateStr] = { ...workout, blocks: next };
-              onUpdateOperator(updated);
-              // Move the cursor with the block so the user keeps
-              // viewing the same exercise (now one step earlier).
-              setStepIdx(prev => Math.max(0, prev - 1));
-            }}
+            onClick={() => swapBlocks(-1)}
             className="btn btn-ghost btn-sm"
             style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
-            disabled={currentStep.blockIdx <= 0}
+            disabled={isFirstExercise}
             aria-label="Move exercise up"
-            title={currentStep.blockIdx <= 0 ? 'Already first' : 'Shift this exercise earlier in the workout'}
+            title={isFirstExercise ? 'Already first' : 'Shift this exercise earlier in the workout'}
           >
             ↑ Up
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (currentStep.kind !== 'exercise') return;
-              const targetIdx = currentStep.blockIdx;
-              if (targetIdx >= workout.blocks.length - 1) return;
-              const dateStr = selectedDate || formatDate(currentDate);
-              const next = [...workout.blocks];
-              [next[targetIdx], next[targetIdx + 1]] = [next[targetIdx + 1], next[targetIdx]];
-              const updated = { ...operator };
-              updated.workouts = { ...updated.workouts };
-              updated.workouts[dateStr] = { ...workout, blocks: next };
-              onUpdateOperator(updated);
-              setStepIdx(prev => prev + 1);
-            }}
+            onClick={() => swapBlocks(1)}
             className="btn btn-ghost btn-sm"
             style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
-            disabled={currentStep.blockIdx >= workout.blocks.length - 1}
+            disabled={isLastExercise}
             aria-label="Move exercise down"
-            title={currentStep.blockIdx >= workout.blocks.length - 1 ? 'Already last' : 'Shift this exercise later in the workout'}
+            title={isLastExercise ? 'Already last' : 'Shift this exercise later in the workout'}
           >
             ↓ Down
           </button>
@@ -3244,7 +3253,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             − Remove This
           </button>
         </div>
-        )}
+          );
+        })()}
 
         {/* ═══ COOLDOWN — single amber bracket card per the stepped
             flow spec. Only renders when the cursor is on the
