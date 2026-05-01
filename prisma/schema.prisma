@@ -17,6 +17,9 @@ model Operator {
   googleId    String?   @unique  // Google OAuth `sub` claim — set after first sign-in via /api/auth/google/callback
   role        String                  // "trainer" | "client"
   tier        String                  // "haiku" | "sonnet" | "opus" | "white_glove"
+  // AI coach persona — see src/lib/personas.ts. NULL or unknown values
+  // resolve to 'gunny' via resolvePersonaId() (legacy default).
+  personaId   String?                  // "gunny" | "raven" | "buck" | "coach"
   coupleWith  String?
   trainerId   String?
   clientIds   String[]  @default([])

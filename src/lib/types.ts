@@ -197,6 +197,11 @@ export interface Operator {
   googleId?: string; // Google OAuth `sub` claim — set after first /api/auth/google sign-in
   role: UserRole;
   tier: AiTier;
+  // AI coach persona — drives src/lib/personas.ts → getCoreIdentity().
+  // Defaults to 'gunny' for legacy operators (resolvePersonaId() handles
+  // missing/invalid values). Closed-beta minors are auto-set to 'coach'.
+  // The PersonaPicker UI persists changes here via onUpdateOperator.
+  personaId?: 'gunny' | 'raven' | 'buck' | 'coach';
   coupleWith: string | null; // ID of partner operator
   trainerId?: string; // ID of trainer (for clients)
   clientIds?: string[]; // IDs of clients (for trainers)

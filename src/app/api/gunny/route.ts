@@ -14,6 +14,7 @@ import type { MacroGoal, MacroGoalType, MacroCycle, PRRecord } from '@/lib/types
 import type { JuniorSafetyEvent } from '@/lib/types';
 import { loadGunnyCorpus } from '@/lib/gunnyCorpus';
 import type { TrainingPath, CorpusSelectionInput } from '@/data/gunny-corpus';
+import { getCoreIdentity, resolvePersonaId, detectPersonaDrift } from '@/lib/personas';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -40,16 +41,16 @@ When they mention an exercise — check if it conflicts with their injury restri
 
 `;
 
-const SYSTEM_PROMPT = SITREP_PREAMBLE + `You are GUNNY — the most advanced tactical AI fitness coach ever built. You live inside the GUNS UP app. You are a former Marine drill instructor turned elite strength coach, sports scientist, and nutrition strategist. You have encyclopedic knowledge of:
-
-CORE IDENTITY:
-- You speak with Marine DI cadence — direct, sharp, zero filler
-- ALWAYS address the operator by their CALLSIGN — never their real name. Their callsign is in the operator profile below. Use it in greetings, mid-conversation, and sign-offs. Example: "Roger that, RAMPAGE" or "Listen up, GHOST". If no callsign is set, fall back to "operator"
-- Military terminology flows naturally: "roger that", "copy", "execute", "mission", "AO", "sitrep", "oscar mike"
-- You are NEVER generic. Every response is personalized to the operator's profile, goals, weight, PRs, injuries, and training age
-- Format with markdown: ## headers for major sections, **bold** for key numbers, and tables for structured numeric data (macros, sets/reps/load, PR comparisons). Tight prose between tables — no filler
-
-IMAGE ANALYSIS:
+// DOMAIN_KNOWLEDGE is the persona-AGNOSTIC body of the system prompt:
+// image-analysis rules, expert references, workout JSON protocols, meal
+// logging, scaling rules, video links, etc. Every persona inherits it.
+//
+// The persona-SPECIFIC identity block (voice, posture, forbidden vocab,
+// roster awareness) is now sourced from src/lib/personas.ts via
+// getCoreIdentity(personaId) and prepended at request time. The legacy
+// inline GUNNY identity block was deleted from this constant — its
+// equivalent now lives in PERSONAS.gunny.coreIdentityPrompt.
+const DOMAIN_KNOWLEDGE = `IMAGE ANALYSIS:
 - When the operator sends an image, analyze it thoroughly
 - For FOOD images: identify the meal, estimate portion sizes, and provide macro estimates (calories, protein, carbs, fat). Offer to log it
 - For FORM CHECK images: analyze body positioning, joint angles, and provide technique corrections
@@ -3376,7 +3377,13 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     } else if (isAssistantMode) {
       systemPrompt = ASSISTANT_PROMPT;
     } else {
-      // Regular gameplan mode: optionally prepend mode-specific prefix
+      // Regular gameplan mode: build the system prompt per-operator from
+      // their selected persona. SITREP_PREAMBLE + getCoreIdentity(personaId)
+      // + DOMAIN_KNOWLEDGE — see src/lib/personas.ts for the full rationale.
+      // Legacy operators with no personaId fall back to 'gunny' via
+      // resolvePersonaId() so the migration is backwards-compatible.
+      const personaId = resolvePersonaId(operatorContext?.personaId);
+      const SYSTEM_PROMPT = SITREP_PREAMBLE + getCoreIdentity(personaId) + DOMAIN_KNOWLEDGE;
       const modePrefix = MODE_PREFIXES[mode] || '';
       systemPrompt = modePrefix ? (modePrefix + '\n\n' + SYSTEM_PROMPT) : SYSTEM_PROMPT;
     }
@@ -3427,6 +3434,27 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .filter((block): block is Anthropic.TextBlock => block.type === 'text')
         .map((block) => block.text)
         .join('');
+
+      // Persona drift detection — runtime hook from src/lib/persona-eval.ts.
+      // Cheap regex check that flags when the response contains forbidden
+      // vocabulary for the operator's selected persona (e.g. "queen" in a
+      // Raven response, profanity in a Coach response). Logs to stdout for
+      // PostHog / Datadog scrape; does not block the response. Skipped for
+      // junior + ops modes which use SOCCER_YOUTH_PROMPT / OPS_PROMPT
+      // directly and aren't governed by the persona library.
+      if (!isJuniorOperator && !isOpsMode) {
+        const personaId = resolvePersonaId(operatorContext?.personaId);
+        const drift = detectPersonaDrift(personaId, responseText);
+        if (drift.length > 0) {
+          console.warn('[persona-drift]', JSON.stringify({
+            operatorId: auth.operatorId,
+            personaId,
+            forbidden: drift,
+            preview: responseText.slice(0, 240),
+            ts: new Date().toISOString(),
+          }));
+        }
+      }
 
       let workoutData = null;
       const jsonMatch = responseText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
