@@ -16,6 +16,7 @@ import SupplementStack from '@/components/SupplementStack';
 import RecoveryReadout from '@/components/RecoveryReadout';
 import ReadinessPanel from '@/components/ReadinessPanel';
 import FormAnalysis from '@/components/FormAnalysis';
+import OperatingManual from '@/components/OperatingManual';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
@@ -47,7 +48,7 @@ interface IntelCenterProps {
   onRequestIntake?: () => void;
 }
 
-type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES' | 'FORM_CHECK' | 'MACROCYCLE';
+type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES' | 'FORM_CHECK' | 'MACROCYCLE' | 'MANUAL';
 
 interface LocalState {
   profile: {
@@ -3532,6 +3533,11 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </div>
           </div>
         );
+      case 'MANUAL':
+        // User-facing operating manual — every feature explained.
+        // Bilingual via internal language hook (no operator data
+        // needed). Mirrors the OpsCenter ROADMAP tab in chrome.
+        return <OperatingManual />;
       case 'FORM_CHECK':
         // AI Form Analysis (Video) — feature #47. Operator uploads a
         // short clip; client-side frame extraction + Claude vision
@@ -3559,6 +3565,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PREFERENCES: '◇',
     WEARABLES: '◎',
     FORM_CHECK: '◊',
+    MANUAL: '☰',
   };
 
   const getTabLabels = (): Record<SubTab, string> => ({
@@ -3571,6 +3578,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PREFERENCES: t('intel.preferences'),
     WEARABLES: 'WEARABLES',
     FORM_CHECK: 'FORM CHECK',
+    // MANUAL is the user-facing operating manual — every feature
+    // explained, parallel to OPS Center's ROADMAP tab. Translated
+    // inline by OperatingManual based on operator language.
+    MANUAL: t('intel.manual') || 'MANUAL',
   });
 
   const [isMobile, setIsMobile] = useState(false);
