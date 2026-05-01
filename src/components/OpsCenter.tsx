@@ -1226,11 +1226,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         </div>
       </div>
 
-      {/* Sub-tabs */}
+      {/* Sub-tabs.
+          Six buttons wrap into 2 rows on narrow viewports instead of
+          overflow-scrolling and getting clipped at the right edge
+          (the previous version used overflowX:auto with no visible
+          scroll indicator, so on mobile the sixth tab — ROADMAP —
+          looked like a permanently-cut-off "ROADMA"). Each button
+          has flex: 1 1 30% so three fit per row at ≤375px and they
+          distribute evenly when the strip is wider. The icon is
+          dropped on narrow viewports so the labels stay legible. */}
       <div style={{
-        display: 'flex', gap: '4px', padding: '10px 20px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '6px',
+        padding: '10px 16px',
         borderBottom: '1px solid rgba(255,68,68,0.06)',
-        background: 'rgba(255,0,0,0.01)', overflowX: 'auto',
+        background: 'rgba(255,0,0,0.01)',
       }}>
         {tabConfig.map(tab => {
           const isActive = activeTab === tab.id;
@@ -1239,20 +1250,27 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
-                padding: '8px 16px', fontSize: '12px',
+                flex: '1 1 30%',
+                minWidth: 90,
+                padding: '8px 10px',
+                fontSize: '11px',
                 fontFamily: '"Share Tech Mono", monospace',
                 fontWeight: isActive ? 700 : 400,
-                letterSpacing: '1.5px',
+                letterSpacing: '1px',
                 color: isActive ? '#ff4444' : '#555',
                 background: isActive ? 'rgba(255,68,68,0.08)' : 'transparent',
-                border: `1px solid ${isActive ? 'rgba(255,68,68,0.2)' : 'transparent'}`,
+                border: `1px solid ${isActive ? 'rgba(255,68,68,0.2)' : 'rgba(255,255,255,0.04)'}`,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
               }}
             >
-              <span style={{ marginRight: 6, opacity: 0.7, display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}>
-                {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 13 })}
+              <span style={{ opacity: 0.7, display: 'inline-flex', alignItems: 'center' }}>
+                {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 12 })}
               </span>
               {tab.label}
             </button>
