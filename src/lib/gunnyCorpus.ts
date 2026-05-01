@@ -42,14 +42,20 @@ export interface RenderedCorpus {
 
 // ---------------------------------------------------------------------------
 // Defaults — cap the corpus at a sane size to protect the prompt budget.
-// 400 KB ≈ 100K tokens. Sized so the priority paths (tactical + crossfit)
-// fit even with overlays (rehab, pregnancy) layered on. Hybrid + multiple
-// overlays may still hit the cap — selectCorpus() returns highest-priority
-// files first so always-on + path corpus survive truncation. Anthropic
-// prompt caching keeps the per-call cost trivial after the first warm-up.
+// 500 KB ≈ 125K tokens. Bumped from 400KB → 500KB on May 1 2026 so the
+// always-on nicotine pouches corpus (~60KB across QA + KB) fits inside
+// the CrossFit path budget without dropping Olympic technique. Math:
+//   manual (88) + crossfit (278) + perio_tac (12) + perio_oly (9) +
+//   oly_tech (113) + nicotine_qa (31) + nicotine_kb (30) = 561KB
+// → still over 500KB, so CrossFit will drop nicotine_kb (lowest
+// priority) but keep oly_tech and nicotine_qa. Tactical / bodybuilding /
+// powerlifting / athletic / hybrid all have ample headroom.
+// Anthropic prompt caching keeps the per-call cost trivial after the
+// first warm-up regardless of size — the budget is about avoiding
+// runaway prompt growth, not per-call cost.
 // ---------------------------------------------------------------------------
 
-const DEFAULT_BUDGET_BYTES = 400_000;
+const DEFAULT_BUDGET_BYTES = 500_000;
 
 // Files we never inline-inject regardless of selection: they're either too
 // large for the prompt, or surfaced through other channels (tool calls,
