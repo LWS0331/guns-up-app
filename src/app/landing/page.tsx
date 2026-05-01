@@ -174,6 +174,13 @@ export default function LandingPage() {
             <a href="#tiers">{t('landing.nav.tiers')}</a>
             <a href="#trainers">{t('landing.nav.trainers')}</a>
             <a href="#founder">{t('landing.nav.founders')}</a>
+            {/* Route-level link to the youth-tier landing. Lives in
+                the same nav row as the in-page anchors so visitors
+                see Junior Operator as a peer destination, not a
+                buried sub-page. */}
+            <Link href="/junior-operator" style={{ color: 'inherit', textDecoration: 'none' }}>
+              JR. OPERATOR
+            </Link>
             {/* MEMBER LOGIN — distinct from the primary "Deploy" CTA. Members
                 returning to the site click here; the Deploy CTA is for new
                 signups (currently routes to the same /login page until a
@@ -473,6 +480,50 @@ export default function LandingPage() {
               );
             })}
           </div>
+        </div>
+      </section>
+
+      {/* ========== JUNIOR OPERATOR TEASER ==========
+          Single-screen tease for the youth-tier landing at
+          /junior-operator. Sits between TIERS and TRAINERS so the
+          flow reads "what we sell adults" → "and we have a youth
+          tier" → "trainers earn rev share across both". Stats
+          mirror the receipts on the dedicated landing — Rössler
+          BMJ 2018 cluster RCT. */}
+      <section className={styles.juniorTeaser}>
+        <div className={styles.juniorTeaserWrap}>
+          <div className={styles.juniorTeaserEyebrow}>// YOUTH TIER · AGES 10–18</div>
+          <h2 className={styles.juniorTeaserTitle}>
+            JUNIOR OPERATOR.
+            <span className={styles.juniorTeaserTitleDim}>Sport-specific training protocol for all ages.</span>
+          </h2>
+          <p className={styles.juniorTeaserSub}>
+            Biological-age caps. FIFA 11+ warm-up. Coach-built programming. Auto-capped per kid, every session.
+          </p>
+          <div className={styles.juniorStatRow}>
+            <div>
+              <div className={styles.juniorStatNum}>↓48%</div>
+              <div className={styles.juniorStatLbl}>OVERALL INJURIES</div>
+            </div>
+            <div>
+              <div className={styles.juniorStatNum}>↓74%</div>
+              <div className={styles.juniorStatLbl}>SEVERE INJURIES</div>
+            </div>
+            <div>
+              <div className={styles.juniorStatNum}>↓55%</div>
+              <div className={styles.juniorStatLbl}>LOWER EXTREMITY</div>
+            </div>
+          </div>
+          <div className={styles.juniorCitation}>
+            // RÖSSLER · BMJ SPORTS MED 2018 · N=3,895 · FIFA 11+ KIDS RCT
+          </div>
+          <Link
+            href="/junior-operator"
+            className={styles.juniorCta}
+            onClick={() => trackLandingCta('junior_teaser')}
+          >
+            EXPLORE JUNIOR OPERATOR <span>→</span>
+          </Link>
         </div>
       </section>
 

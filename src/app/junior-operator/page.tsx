@@ -1,0 +1,545 @@
+// Junior Operator landing — marketing route at /junior-operator.
+//
+// Source: design_handoff_junior_operator_landing/Junior Operator
+// Landing.html (May 2026 design handoff). The HTML was a working
+// prototype; this is the production port. Visual tokens + section
+// chrome live in junior-operator.module.css; only the form is a
+// client component (JuniorBetaForm).
+//
+// Targets: parents of 10-18 athletes, serious lifters 14-18, coaches
+// who want a 20-40% rev share. Single primary CTA — DM @gunnyai_fit
+// "EARLY ACCESS" on Instagram — with a segmented intake form as the
+// secondary path. Beta-wave-01 messaging is intentional; rotate to
+// "wave 02" copy once the first wave closes.
+//
+// Server-rendered. No useState at this level — the form is the only
+// interactive piece and lives in its own client component to keep
+// the rest of the page out of the JS bundle.
+
+import Link from 'next/link';
+import Image from 'next/image';
+import type { Metadata } from 'next';
+import styles from './junior-operator.module.css';
+import JuniorBetaForm from './JuniorBetaForm';
+
+export const metadata: Metadata = {
+  title: 'Junior Operator — Sport-specific training for ages 10-18 | Gunny AI',
+  description:
+    'AI-powered, evidence-based training for young athletes. Biological-age caps. FIFA 11+ warm-up. Coach-built. Closed beta now.',
+};
+
+const IG_URL = 'https://instagram.com/gunnyai_fit';
+
+export default function JuniorOperatorPage() {
+  return (
+    <div className={styles.page}>
+      {/* ============================================================
+          NAV
+         ============================================================ */}
+      <nav className={styles.nav}>
+        <div className={styles.navInner}>
+          <Link href="/" className={styles.navBrand} style={{ textDecoration: 'none' }}>
+            <Image src="/logo-glow.png" alt="GUNS UP" width={22} height={22} priority />
+            <span>GUNNY AI</span>
+            <span className={styles.corp}>· JUNIOR OPERATOR</span>
+          </Link>
+          <div className={styles.navStatus}>
+            <span className={styles.dot} />
+            <span>BETA · WAVE 01</span>
+          </div>
+          <div className={styles.navLinks}>
+            <a href="#how">HOW</a>
+            <a href="#research">RESEARCH</a>
+            <a href="#founder">OPERATORS</a>
+            <a href="#beta">BETA</a>
+          </div>
+          <a href="#beta" className={styles.navCta}>
+            GET ACCESS
+          </a>
+        </div>
+      </nav>
+
+      {/* ============================================================
+          HERO
+         ============================================================ */}
+      <section className={styles.hero}>
+        <div className={styles.wrap}>
+          <div className={styles.heroGrid}>
+            <div>
+              <div className={styles.heroMeta}>
+                <span>// AGES <b>10–18</b></span>
+                <span>// SOCCER · LIFTERS · ATHLETES</span>
+                <span>// BETA <b>NOW</b> · APP STORE <b>JUN 2026</b></span>
+              </div>
+              <h1 className={styles.heroH1}>
+                TRAIN <span className={styles.slash}>BIOLOGICAL</span><br />
+                AGE.
+              </h1>
+              <p className={styles.heroSub}>
+                Two kids. Same birthday. Bodies <b>4 years apart</b>. The youth-soccer industry treats them the same anyway. <b>Junior Operator</b> doesn&rsquo;t.
+              </p>
+              <div className={styles.heroCtas}>
+                <a className={`${styles.btn} ${styles.btnPrimary}`} href="#beta">
+                  DM &ldquo;EARLY ACCESS&rdquo; <span className={styles.arrow}>→</span>
+                </a>
+                <a className={`${styles.btn} ${styles.btnSecondary}`} href="#how">
+                  HOW IT WORKS <span className={styles.arrow}>→</span>
+                </a>
+              </div>
+              <div className={styles.heroHandle}>
+                → instagram <b>@gunnyai_fit</b> · message us &ldquo;EARLY ACCESS&rdquo; for the beta
+              </div>
+
+              <div className={`${styles.heroCreds} ${styles.brackets}`}>
+                <div>
+                  <div className={styles.num}>48%</div>
+                  <div className={styles.lbl}>FEWER OVERALL INJURIES · FIFA 11+ KIDS</div>
+                </div>
+                <div>
+                  <div className={styles.num}>74%</div>
+                  <div className={styles.lbl}>FEWER SEVERE INJURIES · RÖSSLER 2018</div>
+                </div>
+                <div>
+                  <div className={styles.num}>≤AGE</div>
+                  <div className={styles.lbl}>WEEKLY HOURS CAP · JAYANTHI 2015</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right column — static "13 ≠ 13" poster (no real reel
+                wired yet; the design's reel link in the prototype
+                was a placeholder file. Posters communicate the
+                Mirwald PHV thesis in one image.) */}
+            <div className={styles.posterWrap}>
+              <div className={styles.poster}>
+                <div className={styles.posterText}>
+                  <div className={styles.posterAge}>
+                    13<span className={styles.gap}>≠</span>13
+                  </div>
+                  <div className={styles.posterSub}>SAME BIRTHDAY · 4-YEAR GAP</div>
+                  <div className={styles.posterSrc}>
+                    // MIRWALD MSSE 2002 · PHV BOYS ~14 / GIRLS ~12
+                  </div>
+                </div>
+              </div>
+              <div className={styles.posterMeta}>
+                <span>// 9:16 · BIOLOGICAL AGE</span>
+                <span className={styles.live}>● LIVE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          TICKER
+         ============================================================ */}
+      <div className={styles.tickerBar}>
+        <div className={styles.ticker}>
+          {[0, 1].map((i) => (
+            <span key={i} style={{ display: 'contents' }}>
+              <span><b>BETA NOW</b> · DM @gunnyai_fit</span><span className={styles.tdot}>◆</span>
+              <span>FIFA 11+ KIDS · <b>−48% INJURIES</b></span><span className={styles.tdot}>◆</span>
+              <span>JAYANTHI RULE · <b>HOURS ≤ AGE</b></span><span className={styles.tdot}>◆</span>
+              <span>US SOCCER HEADING RULES · <b>HARD-CODED</b></span><span className={styles.tdot}>◆</span>
+              <span>SERIOUS LIFTERS &amp; ENTRY-LEVEL · <b>BOTH WELCOME</b></span><span className={styles.tdot}>◆</span>
+              <span>APP STORE · <b>JUN 2026</b></span><span className={styles.tdot}>◆</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ============================================================
+          PROBLEM (13 ≠ 13)
+         ============================================================ */}
+      <section className={`${styles.section} ${styles.problem}`}>
+        <div className={styles.wrap}>
+          <div className={styles.sectionHead}>
+            <div className={styles.eyebrow}>// THE PROBLEM</div>
+            <h2>One U13 squad. <em>4–5 year spread</em> in biological age.</h2>
+            <p>Peak Height Velocity — the growth spurt — hits boys 12–16 and girls 10–14. Inside one age-group team, that&rsquo;s a four- to five-year gap in actual physical maturity. The generic program built for the calendar age wrecks the early bloomer and bores the late one.</p>
+          </div>
+
+          <div className={styles.roster}>
+            <div className={styles.rCard}>
+              <div className={styles.rHead}>// PLAYER 01 · F</div>
+              <div className={styles.rName}>A. CHEN</div>
+              <div className={styles.rRow}><span>AGE</span><b>13.4 yr</b></div>
+              <div className={styles.rRow}><span>HEIGHT</span><b>5&apos;2&quot;</b></div>
+              <div className={styles.rRow}><span>PHV</span><b className={styles.amber}>−1.2 yr</b></div>
+              <div className={styles.rRow}><span>STAGE</span><b>PRE</b></div>
+              <div className={styles.rStage}>PRE-PHV</div>
+            </div>
+            <div className={`${styles.rCard} ${styles.flag}`}>
+              <div className={styles.rHead}>// PLAYER 02 · M</div>
+              <div className={styles.rName}>J. MORAES</div>
+              <div className={styles.rRow}><span>AGE</span><b>13.5 yr</b></div>
+              <div className={styles.rRow}><span>HEIGHT</span><b>5&apos;9&quot;</b></div>
+              <div className={styles.rRow}><span>PHV</span><b className={styles.green}>+0.7 yr</b></div>
+              <div className={styles.rRow}><span>STAGE</span><b>PERI</b></div>
+              <div className={styles.rStage}>PERI-PHV</div>
+            </div>
+            <div className={styles.rCard}>
+              <div className={styles.rHead}>// PLAYER 03 · M</div>
+              <div className={styles.rName}>D. PATEL</div>
+              <div className={styles.rRow}><span>AGE</span><b>13.6 yr</b></div>
+              <div className={styles.rRow}><span>HEIGHT</span><b>6&apos;0&quot;</b></div>
+              <div className={styles.rRow}><span>PHV</span><b className={styles.green}>+1.4 yr</b></div>
+              <div className={styles.rRow}><span>STAGE</span><b>POST</b></div>
+              <div className={styles.rStage}>POST-PHV</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          HOW IT WORKS
+         ============================================================ */}
+      <section className={styles.section} id="how">
+        <div className={styles.wrap}>
+          <div className={styles.sectionHead}>
+            <div className={styles.eyebrow}>// HOW IT WORKS</div>
+            <h2>Three rules. <em>Hard-coded.</em></h2>
+            <p>We don&rsquo;t bury the safety stuff in a settings menu. The youth program is the rules.</p>
+          </div>
+
+          <div className={styles.how}>
+            <div className={styles.howCell}>
+              <div className={styles.num}>RULE 01</div>
+              <h3>Cap by Biological Age</h3>
+              <p>Every session caps RPE, plyo contacts, and duration based on the athlete&rsquo;s PHV stage — pre, peri, or post. The early bloomer doesn&rsquo;t smoke the late bloomer&rsquo;s program. The late bloomer doesn&rsquo;t get crushed by the early bloomer&rsquo;s.</p>
+              <div className={styles.stats}>PRE-PHV → <b>RPE ≤ 6 · ≤80 PLYO · ≤45 MIN</b></div>
+            </div>
+            <div className={styles.howCell}>
+              <div className={styles.num}>RULE 02</div>
+              <h3>FIFA 11+ Kids by Default</h3>
+              <p>The 15-minute neuromuscular warm-up runs on the front of every session. Not because it&rsquo;s trendy. Because the largest cluster RCT we have shows it cuts overall injuries nearly in half.</p>
+              <div className={styles.stats}>RÖSSLER 2018 · n=3,895 · <b>−48% INJURIES</b></div>
+            </div>
+            <div className={styles.howCell}>
+              <div className={styles.num}>RULE 03</div>
+              <h3>Jayanthi + Heading</h3>
+              <p>Weekly organized-sport hours never exceed the athlete&rsquo;s age. Hard ceiling at 16 h/wk regardless. US Soccer heading rules locked in: zero at U11 and below, capped at U12–U13. Non-negotiable.</p>
+              <div className={styles.stats}>JAYANTHI 2015 · US SOCCER PDI 2017</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          FEATURES GRID
+         ============================================================ */}
+      <section className={styles.section}>
+        <div className={styles.wrap}>
+          <div className={styles.sectionHead}>
+            <div className={styles.eyebrow}>// IN THE APP</div>
+            <h2>What <em>Junior Operator</em> actually does.</h2>
+            <p>Not a workout PDF. A coach in the parent&rsquo;s pocket — built around the research the youth-sports industry tends to ignore.</p>
+          </div>
+
+          <div className={styles.featGrid}>
+            {[
+              { ico: '// 01', h: 'PHV Stage Detection', body: <>Quick parent intake — age, height, sitting height, parent height. Gunny estimates maturation stage and re-evaluates each block. <b>No body composition. No weigh-ins.</b></> },
+              { ico: '// 02', h: 'Auto-Capped Sessions', body: <>Every workout is generated against the stage. RPE, plyo contacts, sprint volume, and session length scale automatically. The cap is the program.</> },
+              { ico: '// 03', h: 'FIFA 11+ Kids · Always On', body: <>Front-loads every session. Animated, age-appropriate, takes 15 minutes. <b>Compliance is the dose</b> — we make compliance easy.</> },
+              { ico: '// 04', h: 'Weekly Hours Tracker', body: <>Logs club, school, training, pickup. Flags the parent the moment weekly organized hours pass the athlete&rsquo;s age. Hard ceiling 16 h/wk.</> },
+              { ico: '// 05', h: 'Heading Rules · By Age', body: <>Header drills are gated by US Soccer guidance. U11 and below = zero. U12–U13 = capped. Coaches can override with a logged reason; parents see it.</> },
+              { ico: '// 06', h: 'Sleep · Mood · Recovery', body: <>Daily 30-second check-in: sleep, soreness, mood. Trends visible to the parent. Inputs throttle next-session intensity. <b>Safe to put in a 13-year-old&rsquo;s hands.</b></> },
+              { ico: '// 07', h: 'Sprint & Jump · Periodic', body: <>10m sprint and counter-movement jump on a schedule the stage allows. Track rate of progress, not absolute number. Late bloomers don&rsquo;t get punished for being late.</> },
+              { ico: '// 08', h: 'Lifter-Friendly Onboarding', body: <>Older athletes already lifting? Gunny respects existing strength work and weaves it in alongside FIFA 11+ and field load. Entry-level start? Pattern mastery first, load later.</> },
+              { ico: '// 09', h: 'Coach & Parent View', body: <>Parents see the plan. Coaches see compliance. Trainers on Guns Up keep <b>20–40%</b> of every athlete subscription. Free to coaches, always.</> },
+            ].map((f) => (
+              <div key={f.ico} className={styles.feat}>
+                <div className={styles.ico}>{f.ico}</div>
+                <h4>{f.h}</h4>
+                <p>{f.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          WONT-DO
+         ============================================================ */}
+      <section className={`${styles.section} ${styles.wont}`}>
+        <div className={styles.wrap}>
+          <div className={styles.sectionHead}>
+            <div className={styles.eyebrow}>// WHAT IT WON&rsquo;T DO</div>
+            <h2>By design. <em>Not by oversight.</em></h2>
+            <p>Most youth fitness apps cosplay an adult product, miniaturized. That&rsquo;s how kids get hurt. Here&rsquo;s what we will not ship for athletes 10–18, ever.</p>
+          </div>
+
+          <div className={styles.wontGrid}>
+            {[
+              { h: 'Won’t weigh your kid', body: <>No body-comp tracking. No scales. No before/after photos. Soccer is not a weight-class sport for adolescents. <b>Body image risk is the bigger threat than the perceived gain.</b></> },
+              { h: 'Won’t talk macros or "clean" food', body: <>No calorie targets, no &ldquo;clean / dirty&rdquo; framing, no fasting prompts, no supplement recs. Fueling questions for 10–18 → registered dietitian. Always.</> },
+              { h: 'Won’t replace your pediatrician', body: <>RED-S, growth-plate injury, eating concerns, concussions, return-to-play clearance — those are clinical decisions. Gunny refers out and stays in its lane.</> },
+              { h: 'Won’t coach through pain', body: <>Gunny doesn&rsquo;t &ldquo;rub some dirt on it.&rdquo; Pain past a defined threshold pulls the session, logs it, and routes the parent to a clinician. Cowboy coaching is a feature we deleted.</> },
+            ].map((w) => (
+              <div key={w.h} className={styles.wontCell}>
+                <div className={styles.x}>✕</div>
+                <div>
+                  <h4>{w.h}</h4>
+                  <p>{w.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.wontFoot}>
+            We coach the <span className={styles.green}>95% in between</span> — the ordinary training week where a kid is either falling in love with their sport for life, or quietly building toward quitting at 14. <b>That&rsquo;s our job.</b> The other 5% — clinical decisions — belong to professionals with the training to make them.
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          RESEARCH
+         ============================================================ */}
+      <section className={styles.section} id="research">
+        <div className={styles.wrap}>
+          <div className={styles.sectionHead}>
+            <div className={styles.eyebrow}>// THE RECEIPTS</div>
+            <h2>Built on <em>research</em>, not on &ldquo;what worked for me.&rdquo;</h2>
+            <p>Every rule above traces to a primary source. Citations live in-app on the rule itself — tap and read.</p>
+          </div>
+
+          <div className={styles.researchGrid}>
+            <div className={styles.cite}>
+              <div className={styles.src}>// MIRWALD MSSE · 2002</div>
+              <div className={styles.stat}>~14<span className={styles.unit}>/12 yr</span></div>
+              <p>Mean Peak Height Velocity age, boys / girls. Range 12–16 / 10–14. The methodology behind biological-age estimation in Junior Operator.</p>
+            </div>
+            <div className={styles.cite}>
+              <div className={styles.src}>// RÖSSLER · BMJ 2018</div>
+              <div className={styles.stat}>−48<span className={styles.unit}>%</span></div>
+              <p>Overall injury reduction with FIFA 11+ Kids in 7–13 y.o. footballers. Cluster RCT, n=3,895. Severe injuries: <b>−74%</b>.</p>
+            </div>
+            <div className={styles.cite}>
+              <div className={styles.src}>// JAYANTHI AJSM · 2015</div>
+              <div className={styles.stat}>≤AGE<span className={styles.unit}>h/wk</span></div>
+              <p>Risk of overuse injury rises sharply when weekly organized-sport hours exceed the athlete&rsquo;s age in years. The cap is the rule.</p>
+            </div>
+            <div className={styles.cite}>
+              <div className={styles.src}>// US SOCCER PDI · 2017</div>
+              <div className={styles.stat}>0<span className={styles.unit}>@U11</span></div>
+              <p>Heading prohibited at U11 and below; restricted at U12–U13. Junior Operator gates header drills against this rule by default.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          FAQ
+         ============================================================ */}
+      <section className={styles.section}>
+        <div className={styles.wrap}>
+          <div className={styles.sectionHead}>
+            <div className={styles.eyebrow}>// PARENTS · ASK</div>
+            <h2>Questions parents <em>actually</em> ask.</h2>
+          </div>
+          <div className={styles.faqList}>
+            {[
+              { q: 'My kid is 11 and already lifting. Are you going to tell me to stop?', a: <>No. Resistance training in pre-PHV is <b>safe and beneficial</b> when programmed for pattern mastery and submaximal load. Gunny caps RPE at 6/10 in pre-PHV, prioritizes technique on bilateral lifts, and never programs 1RM testing for that stage.</> },
+              { q: 'Do you talk about food or weight at all?', a: <>For 10–18, <b>no.</b> No macros, no calories, no &ldquo;clean&rdquo; food labels, no scales. Fueling is a registered-dietitian conversation, not an app one. We&rsquo;ll always refer out.</> },
+              { q: 'My kid plays year-round club. Will Gunny conflict with their team training?', a: <>It complements it. You log practice, school PE, pickup, and games — Gunny adjusts the rest of the week against the Jayanthi cap. If your kid is over-scheduled, you&rsquo;ll see it before the injury does.</> },
+              { q: 'What about concussions or injuries?', a: <>Gunny does <b>not</b> clear concussions or return-to-play. If symptoms are logged or pain crosses threshold, the session pulls and we route you to a clinician. That stays human, every time.</> },
+              { q: 'My kid is 16 and a serious lifter. Is the youth tier still useful?', a: <>Yes. Post-PHV programming is closer to adult — but the Jayanthi cap, sleep/mood gating, and recovery scaling still apply. Beta wave 1 specifically wants <b>serious lifters and entry-level</b> athletes both.</> },
+              { q: 'How do I get into the beta?', a: <>DM <b>@gunnyai_fit</b> on Instagram with the words <b>&ldquo;EARLY ACCESS&rdquo;</b> — or fill the form below. We onboard in waves; serious lifters and entry-level athletes welcome equally.</> },
+            ].map((item) => (
+              <details key={item.q}>
+                <summary>{item.q}</summary>
+                <p>{item.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          FOUNDERS
+         ============================================================ */}
+      <section className={styles.section} id="founder">
+        <div className={styles.wrap}>
+          <div className={styles.sectionHead}>
+            <div className={styles.eyebrow}>// THE OPERATORS</div>
+            <h2>Built by <em>two coaches</em>, not a tech company.</h2>
+            <p>Guns Up Fitness has run adult programs for years. Junior Operator is the youth tier we needed in the field — not a pivot, not a side project.</p>
+          </div>
+
+          <div className={`${styles.founders} ${styles.brackets}`}>
+            {/* Britney */}
+            <div className={styles.founderCard}>
+              <div
+                className={styles.founderPhoto}
+                style={{
+                  backgroundImage: `url('/junior-operator/cofounder-soccer-action.jpg')`,
+                  backgroundPosition: '38% 35%',
+                }}
+              >
+                <span className={styles.photoTag}>// CO-FOUNDER</span>
+              </div>
+              <div className={styles.founderBody}>
+                <div className={styles.founderTag}>// CO-FOUNDER</div>
+                <div className={styles.founderName}>BRITNEY RODRIGUEZ</div>
+                <div className={styles.founderRole}>HEAD OF JUNIOR OPERATOR TRAINING</div>
+
+                <blockquote className={styles.founderPullquote}>
+                  &ldquo;Not just to build better athletes — <span className={styles.green}>to empower young people to grow into resilient, confident, well-rounded humans.</span>&rdquo;
+                </blockquote>
+
+                <p className={styles.founderBio}>
+                  Player, then competitor, then coach, then mentor. <b>Multi-sport All-Star</b> at Madera High. <b>Collegiate soccer</b> athlete. <b>NPC Figure</b> competitor. <b>Spartan World Championship Elite</b> athlete. Now coaches the same levels she came through — high-school and pro-am — and builds the Junior Operator training voice.
+                </p>
+
+                <div className={styles.founderResume}>
+                  {[
+                    ['PLAYER',  'Multi-sport All-Star · Madera High'],
+                    ['PLAYER',  'Collegiate soccer athlete'],
+                    ['ATHLETE', 'NPC Figure competitor · national stage'],
+                    ['ATHLETE', 'Spartan World Championship · Elite'],
+                    ['COACH',   'High-school + pro-am soccer'],
+                    ['FOUNDER', 'Head of Junior Operator Training'],
+                  ].map(([yr, what]) => (
+                    <div key={yr + what} className={styles.row}>
+                      <span className={styles.yr}>{yr}</span>
+                      <span className={styles.what}>{what}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className={styles.founderWhy}>
+                  <div className={styles.whyLabel}>// WHY JUNIOR OPERATOR</div>
+                  <p>A lifetime of <b>mastering the pursuit of elite performance</b> — soccer field, NPC stage, Spartan World Championship. Versatility and grit on every surface I&rsquo;ve competed on.</p>
+                  <p>Now coaching the same levels I came through, my mission has evolved into <b>mentorship</b>. I&rsquo;m dedicated to passing down what I&rsquo;ve earned to the next generation.</p>
+                  <p>Not just to build better athletes — to empower young people to grow into <b>resilient, confident, well-rounded humans</b>. That&rsquo;s the voice Junior Operator speaks in. That&rsquo;s why I&rsquo;m here.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Ruben */}
+            <div className={styles.founderCard}>
+              <div
+                className={styles.founderPhoto}
+                style={{
+                  backgroundImage: `url('/junior-operator/founder-football-action.jpg')`,
+                  backgroundPosition: 'center 30%',
+                }}
+              >
+                <span className={styles.photoTag}>// CO-FOUNDER</span>
+              </div>
+              <div className={styles.founderBody}>
+                <div className={styles.founderTag}>// CO-FOUNDER</div>
+                <div className={styles.founderName}>RUBEN RODRIGUEZ</div>
+                <div className={styles.founderRole}>HEAD OF TRAINING OPERATIONS</div>
+
+                <blockquote className={styles.founderPullquote}>
+                  &ldquo;Leverage AI to have a <span className={styles.green}>fully customized experience</span> for developing young talent — safely and with proven research-backed protocols. <span className={styles.green}>No guessing, just execution.</span>&rdquo;
+                </blockquote>
+
+                <p className={styles.founderBio}>
+                  Marine, then trainer, then recruiter, then founder. <b>USMC infantry machine gunner</b> (0331) who mentored junior Marines through two combat deployments. <b>Certified personal trainer</b>, <b>CrossFit competitor</b>, <b>Classic Physique competitor</b>. Builds the system, runs the programming, ships the product.
+                </p>
+
+                <div className={styles.founderResume}>
+                  {[
+                    ['MARINE',  'USMC · 0331 Machine Gunner · 3/4 Marines'],
+                    ['PLAYER',  'Football · Kerman High'],
+                    ['ATHLETE', 'CrossFit competitor'],
+                    ['ATHLETE', 'Classic Physique competitor'],
+                    ['COACH',   'Certified Personal Trainer'],
+                    ['FOUNDER', 'GUNS UP Fitness'],
+                  ].map(([yr, what]) => (
+                    <div key={yr + what} className={styles.row}>
+                      <span className={styles.yr}>{yr}</span>
+                      <span className={styles.what}>{what}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className={styles.founderWhy}>
+                  <div className={styles.whyLabel}>// WHY JUNIOR OPERATOR</div>
+                  <p>Two combat deployments taught me one thing about training young people: <b>you don&rsquo;t guess</b>. You write the standard, you train to the standard, you execute. The Marines did it for infantry. Strength &amp; conditioning research has done it for athletes. Nobody has done it for a 12-year-old kid with a phone.</p>
+                  <p>Junior Operator is that. Biological-age caps, FIFA 11+ warm-up, evidence-based progression — <b>built into the app, not a coach&rsquo;s opinion</b>. AI handles the customization. The protocols handle the safety. The kid handles the work.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          BETA / CTA
+         ============================================================ */}
+      <section className={`${styles.section} ${styles.beta}`} id="beta">
+        <div className={styles.wrap}>
+          <div className={styles.betaGrid}>
+            <div>
+              <div className={styles.eyebrow} style={{ marginBottom: 18 }}>// BETA · WAVE 01</div>
+              <h2 style={{
+                fontFamily: 'var(--display)', fontWeight: 800, fontSize: 'clamp(34px, 4vw, 52px)',
+                lineHeight: 1.02, color: 'var(--text-bright)', textTransform: 'uppercase',
+                marginBottom: 18, letterSpacing: '-0.005em',
+              }}>
+                Get in <em style={{ fontStyle: 'normal', color: 'var(--green)', textShadow: '0 0 18px rgba(0,255,65,0.3)' }}>before the App Store does.</em>
+              </h2>
+              <p className={styles.betaLede}>
+                Beta is open right now. We&rsquo;re onboarding serious lifters, entry-level athletes, parents of 10–18 soccer kids, and trainers who want a revenue share. <b>Wave 01 closes when wave 01 closes.</b>
+              </p>
+
+              <div className={styles.betaOptions}>
+                <div className={styles.betaOption}><span className={styles.num}>01</span><span><b>Serious lifters · 14–18.</b> Already training. Want a real program with real ceilings.</span></div>
+                <div className={styles.betaOption}><span className={styles.num}>02</span><span><b>Entry-level athletes · 10–18.</b> Just starting. Need pattern mastery before load.</span></div>
+                <div className={styles.betaOption}><span className={styles.num}>03</span><span><b>Soccer parents.</b> You&rsquo;ll see the rules before your kid sees the workout.</span></div>
+                <div className={styles.betaOption}><span className={styles.num}>04</span><span><b>Coaches &amp; trainers.</b> 20–40% revenue share on every athlete subscription.</span></div>
+              </div>
+
+              <a className={styles.dmBlock} href={IG_URL} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
+                <div className={styles.labelSm}>// FASTEST PATH</div>
+                <div className={styles.handle}>@gunnyai_fit</div>
+                <div className={styles.msg}>DM us &ldquo;<b>EARLY ACCESS</b>&rdquo; on Instagram. We reply.</div>
+              </a>
+            </div>
+
+            <JuniorBetaForm />
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================
+          FOOTER
+         ============================================================ */}
+      <footer className={styles.foot}>
+        <div className={styles.wrap}>
+          <div className={styles.footGrid}>
+            <div className={styles.footCol}>
+              <h5>// JUNIOR OPERATOR</h5>
+              <div style={{
+                fontFamily: 'var(--display)', fontWeight: 800, fontSize: 18,
+                color: 'var(--text-bright)', letterSpacing: 1, marginBottom: 8,
+              }}>GUNS UP FITNESS</div>
+              <div className={styles.footDesc}>
+                The youth tier inside Gunny AI. Ages 10–18. Train biological age, not the number on the birth certificate. App Store · June 2026.
+              </div>
+            </div>
+            <div className={styles.footCol}>
+              <h5>// PRODUCT</h5>
+              <a href="#how">How it works</a>
+              <a href="#beta">Join beta</a>
+              <a href={IG_URL} target="_blank" rel="noopener noreferrer">DM @gunnyai_fit</a>
+            </div>
+            <div className={styles.footCol}>
+              <h5>// RECEIPTS</h5>
+              <a href="#research">Research</a>
+              <a href="#wont">What it won&rsquo;t do</a>
+              <Link href="/landing">Adult tier</Link>
+            </div>
+          </div>
+          <div className={styles.footBottom}>
+            // © {new Date().getFullYear()} GUNS UP FITNESS · ALL RIGHTS RESERVED
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
