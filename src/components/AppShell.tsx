@@ -1402,9 +1402,21 @@ const AppShell: React.FC<AppShellProps> = ({
       const current = workingOp.workouts?.[today];
       if (!current) continue;
       try {
-        const modified = applyWorkoutModification(current, mod);
-        workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-        touched = true;
+        // Unwrap the new return shape — silent no-ops are surfaced
+        // via result.changed so the caller can decide whether to
+        // persist anything. Without this branch we'd persist the
+        // unchanged workout reference, which is harmless but
+        // generates noise re-renders.
+        const result = applyWorkoutModification(current, mod);
+        if (result.changed) {
+          workingOp = {
+            ...workingOp,
+            workouts: { ...workingOp.workouts, [today]: result.workout },
+          };
+          touched = true;
+        } else {
+          console.warn('[gunny-mod:appshell] no-op:', result.reason, mod);
+        }
       } catch (e) {
         console.error('applyWorkoutModification failed:', e);
       }

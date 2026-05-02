@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
+import { Operator, Meal, Workout, WorkoutBlock, ExerciseBlock, TIER_CONFIGS } from '@/lib/types';
 import Icon from './Icons';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
@@ -2279,28 +2279,100 @@ ${mealSuggestion}`;
         const today = getLocalDateStr();
         let workingOp = operator;
         let touched = false;
+        // Track silent-no-op modifications so we can surface them to
+        // the user. Without this, Gunny's confirmation text in the
+        // chat ("done, added it back!") would lie when the actual
+        // apply path matched nothing — see workoutModification.ts
+        // ApplyWorkoutModificationResult.changed for why this matters.
+        const silentlyDropped: string[] = [];
         for (const mod of mods) {
           if (!mod || typeof mod !== 'object') continue;
           if (mod.type === 'prefill_weights') {
-            // Live prefill of workout-mode inputs — Planner's listener handles
-            // it. Does not mutate the persisted workout.
             dispatchPrefillWeights(mod as PrefillWeightsMod);
             wasModification = true;
             continue;
           }
-          // Block-shape mods write to the persisted workout.
-          const current = workingOp.workouts?.[today];
-          if (!current) continue;
+          // Block-shape mods write to the persisted workout. Look at
+          // today FIRST (the common case for mid-workout asks); fall
+          // back to scanning recent dates so a request like "add
+          // curls back to my last workout" doesn't silently drop.
+          let targetDate = today;
+          let current = workingOp.workouts?.[today];
+          if (!current) {
+            // Walk back up to 14 days searching for the most recent
+            // workout that has the block this mod targets. This makes
+            // "add it back" / "swap that exercise" requests work even
+            // when the user is browsing an older day or the request
+            // came in well after the workout completed.
+            const wantedName = (mod as { targetExerciseName?: string; afterExerciseName?: string }).targetExerciseName
+              ?? (mod as { afterExerciseName?: string }).afterExerciseName
+              ?? '';
+            const lowered = wantedName.toLowerCase().trim();
+            const allDates = Object.keys(workingOp.workouts || {}).sort().reverse();
+            for (const d of allDates.slice(0, 14)) {
+              const w = workingOp.workouts?.[d];
+              if (!w?.blocks?.length) continue;
+              if (mod.type === 'add_block') {
+                // For adds, the most recent workout is usually right.
+                targetDate = d;
+                current = w;
+                break;
+              }
+              // For swap/remove/update, prefer a workout that
+              // actually contains the named block.
+              const hit = w.blocks.some((b) =>
+                b.type === 'exercise' &&
+                lowered.length > 0 &&
+                (b as ExerciseBlock).exerciseName?.toLowerCase().trim() === lowered,
+              );
+              if (hit) {
+                targetDate = d;
+                current = w;
+                break;
+              }
+            }
+          }
+          if (!current) {
+            console.warn('[gunny-mod] no target workout found for', mod);
+            silentlyDropped.push(`No workout to target (Gunny tried ${mod.type})`);
+            continue;
+          }
           try {
-            const modified = applyWorkoutModification(current, mod);
-            workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-            touched = true;
-            wasModification = true;
+            const result = applyWorkoutModification(current, mod);
+            if (result.changed) {
+              workingOp = {
+                ...workingOp,
+                workouts: { ...workingOp.workouts, [targetDate]: result.workout },
+              };
+              touched = true;
+              wasModification = true;
+            } else {
+              // Gunny's apply was a no-op (block name didn't match,
+              // empty payload, etc.). Log the reason and queue a
+              // user-visible warning so the chat doesn't lie.
+              console.warn('[gunny-mod] apply was a no-op:', result.reason, mod);
+              silentlyDropped.push(result.reason || 'modification did not match anything in your workout');
+            }
           } catch (e) {
             console.error('applyWorkoutModification failed:', e);
+            silentlyDropped.push('applyWorkoutModification threw — see console');
           }
         }
         if (touched && onUpdateOperator) onUpdateOperator(workingOp);
+        // If Gunny acknowledged but the apply silently failed, append
+        // a clarifying note to the chat so the user knows to retry
+        // with a more specific name. Without this, the user sees
+        // Gunny's confirmation, looks at the workout, sees nothing
+        // changed, and thinks the feature is broken.
+        if (silentlyDropped.length > 0 && !touched) {
+          const note = silentlyDropped[0];
+          setMessages(prev => [...prev, {
+            id: 'gunny-mod-note-' + Date.now(),
+            role: 'gunny',
+            text: `⚠ Heads up — I tried to apply that change but couldn't find the right exercise to act on. ${note}. Try naming the exercise exactly as it appears in your workout, or open the workout and tell me which one.`,
+            timestamp: new Date(),
+          }]);
+        }
       }
 
       // Store workout data if AI generated a NEW complete workout
@@ -2839,10 +2911,19 @@ ${mealSuggestion}`;
           const current = workingOp.workouts?.[today];
           if (!current) continue;
           try {
-            const modified = applyWorkoutModification(current, mod);
-            workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-            touched = true;
-            wasModification = true;
+            // Quick-action path mirrors the chat-handler updates above:
+            // unwrap the result + log/skip silent no-ops.
+            const result = applyWorkoutModification(current, mod);
+            if (result.changed) {
+              workingOp = {
+                ...workingOp,
+                workouts: { ...workingOp.workouts, [today]: result.workout },
+              };
+              touched = true;
+              wasModification = true;
+            } else {
+              console.warn('[gunny-mod:quick-action] no-op:', result.reason, mod);
+            }
           } catch (e) {
             console.error('applyWorkoutModification (quick action) failed:', e);
           }

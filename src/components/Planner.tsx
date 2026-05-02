@@ -333,6 +333,30 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const fallbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string }>>({});
 
+  // REMOVE THIS — confirm-then-delete + undo toast.
+  //
+  // Old behavior: single tap = instant delete with no undo. Users
+  // were accidentally removing exercises mid-workout and asking
+  // Gunny to add them back (which was its own hit-or-miss path —
+  // see workoutModification.ts comments). New flow:
+  //   1. First tap → button label + style flips to confirm. 3-sec
+  //      timeout reverts back to the safe state.
+  //   2. Second tap (within 3 sec) → actually removes, snapshots
+  //      the removed block + its results into removedSnapshot, and
+  //      shows a 10-sec UNDO toast.
+  //   3. Tap UNDO on the toast → restore the block at its original
+  //      array position with its original results intact.
+  const [removeConfirmAt, setRemoveConfirmAt] = useState<number | null>(null);
+  const [removedSnapshot, setRemovedSnapshot] = useState<{
+    dateStr: string;
+    block: WorkoutBlock;
+    insertAt: number;
+    resultsForBlock: { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string } | null;
+    removedAt: number;
+  } | null>(null);
+  const removeConfirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Mission Complete overlay — shown after COMPLETE WORKOUT, before returning to day view
   const [showCompletionScreen, setShowCompletionScreen] = useState(false);
 
@@ -3283,23 +3307,50 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           >
             + Add Exercise
           </button>
+          {/* REMOVE THIS — two-tap confirm to prevent accidental
+              deletes mid-workout. The first tap arms the button;
+              a second tap within 3 sec actually removes. After
+              removal, an UNDO toast appears below for 10 sec. */}
           <button
             type="button"
             onClick={() => {
-              // Remove the EXERCISE THE USER IS CURRENTLY VIEWING.
-              // The legacy "Remove Last" semantics (pop the tail of
-              // the blocks array) silently failed in the stepped
-              // flow because the user only ever sees one block at a
-              // time — clicking the button while on exercise 1 of 5
-              // removed exercise 5, which was off-screen, so nothing
-              // visible changed. Now operates on currentStep.blockIdx
-              // so removal always corresponds to what's on screen.
               if (workout.blocks.length <= 1) return;
               if (currentStep.kind !== 'exercise') return;
+
+              // FIRST TAP — arm the button, set 3-sec auto-revert.
+              if (removeConfirmAt === null) {
+                setRemoveConfirmAt(Date.now());
+                if (removeConfirmTimeoutRef.current) {
+                  clearTimeout(removeConfirmTimeoutRef.current);
+                }
+                removeConfirmTimeoutRef.current = setTimeout(() => {
+                  setRemoveConfirmAt(null);
+                  removeConfirmTimeoutRef.current = null;
+                }, 3000);
+                return;
+              }
+
+              // SECOND TAP — actually remove. Snapshot the block +
+              // its results so the user can undo within 10 sec.
               const targetIdx = currentStep.blockIdx;
               const dateStr = selectedDate || formatDate(currentDate);
-              const removedId = workout.blocks[targetIdx]?.id;
-              if (!removedId) return;
+              const removedBlock = workout.blocks[targetIdx];
+              if (!removedBlock) return;
+
+              if (removeConfirmTimeoutRef.current) {
+                clearTimeout(removeConfirmTimeoutRef.current);
+                removeConfirmTimeoutRef.current = null;
+              }
+              setRemoveConfirmAt(null);
+
+              setRemovedSnapshot({
+                dateStr,
+                block: removedBlock,
+                insertAt: targetIdx,
+                resultsForBlock: workoutResults[removedBlock.id] || null,
+                removedAt: Date.now(),
+              });
+
               const updated = { ...operator };
               updated.workouts = { ...updated.workouts };
               updated.workouts[dateStr] = {
@@ -3309,26 +3360,45 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               onUpdateOperator(updated);
               setWorkoutResults(prev => {
                 const next = { ...prev };
-                delete next[removedId];
+                delete next[removedBlock.id];
                 return next;
               });
+
+              // Auto-clear the undo toast after 10 sec.
+              if (undoToastTimeoutRef.current) {
+                clearTimeout(undoToastTimeoutRef.current);
+              }
+              undoToastTimeoutRef.current = setTimeout(() => {
+                setRemovedSnapshot(null);
+                undoToastTimeoutRef.current = null;
+              }, 10_000);
+
               // safeStepIdx in render clamps automatically when the
               // removed block was the tail, but if the removed block
-              // was mid-list and was also the last step (e.g. the
-              // workout has no cooldown), defensively decrement so
-              // the user sees the previous exercise instead of
-              // jumping straight to the cooldown / Complete state.
+              // was mid-list and was also the last step, defensively
+              // decrement so the user sees the previous exercise
+              // instead of jumping straight to the cooldown.
               const wasTailExercise = targetIdx === workout.blocks.length - 1;
               if (wasTailExercise) {
                 setStepIdx(prev => Math.max(0, prev - 1));
               }
             }}
-            className="btn btn-danger-outline btn-sm"
-            style={{ flex: '1 1 100px', borderStyle: 'dashed' }}
+            className={removeConfirmAt !== null ? 'btn btn-danger btn-sm' : 'btn btn-danger-outline btn-sm'}
+            style={{
+              flex: '1 1 100px',
+              borderStyle: removeConfirmAt !== null ? 'solid' : 'dashed',
+              animation: removeConfirmAt !== null ? 'workoutCardGlow 1.5s ease-in-out infinite' : undefined,
+            }}
             disabled={workout.blocks.length <= 1}
-            title={workout.blocks.length <= 1 ? 'At least one exercise must remain' : 'Remove this exercise'}
+            title={
+              workout.blocks.length <= 1
+                ? 'At least one exercise must remain'
+                : removeConfirmAt !== null
+                  ? 'Tap again to confirm — auto-cancels in 3s'
+                  : 'Remove this exercise'
+            }
           >
-            − Remove This
+            {removeConfirmAt !== null ? '✕ TAP AGAIN TO CONFIRM' : '− Remove This'}
           </button>
         </div>
           );
@@ -3712,6 +3782,118 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               DEBRIEF COMPLETE
+            </button>
+          </div>
+        )}
+
+        {/* UNDO toast for accidental REMOVE THIS taps. Fixed-position
+            overlay so it's visible regardless of scroll. Auto-dismisses
+            after 10 sec; tapping UNDO restores the block at its
+            original index with logged results intact. */}
+        {removedSnapshot && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              position: 'fixed',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+              zIndex: 10_000,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              maxWidth: 'calc(100vw - 32px)',
+              padding: '12px 14px 12px 18px',
+              background: 'rgba(10, 10, 10, 0.96)',
+              border: '1px solid rgba(0,255,65,0.35)',
+              boxShadow: '0 0 32px rgba(0,255,65,0.18), 0 8px 24px rgba(0,0,0,0.5)',
+              borderRadius: 4,
+              fontFamily: 'var(--mono)',
+              fontSize: 13,
+              color: 'var(--text-primary)',
+              animation: 'msgSlideIn 0.25s ease-out',
+            }}
+          >
+            <span style={{ color: 'var(--text-secondary)' }}>
+              Removed{' '}
+              <span style={{ color: '#fff', fontWeight: 600 }}>
+                {removedSnapshot.block.type === 'exercise'
+                  ? (removedSnapshot.block as ExerciseBlock).exerciseName
+                  : (removedSnapshot.block as ConditioningBlock).format || 'conditioning block'}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (!removedSnapshot) return;
+                if (undoToastTimeoutRef.current) {
+                  clearTimeout(undoToastTimeoutRef.current);
+                  undoToastTimeoutRef.current = null;
+                }
+                // Restore block at its original position. operator
+                // may have changed since removal (other tabs, etc.) —
+                // re-clamp the insert index to current bounds.
+                const ds = removedSnapshot.dateStr;
+                const updated = { ...operator };
+                updated.workouts = { ...updated.workouts };
+                const liveDayWorkout = updated.workouts[ds] as Workout | undefined;
+                if (liveDayWorkout) {
+                  const next = [...liveDayWorkout.blocks];
+                  const insertIdx = Math.min(removedSnapshot.insertAt, next.length);
+                  next.splice(insertIdx, 0, removedSnapshot.block);
+                  updated.workouts[ds] = {
+                    ...liveDayWorkout,
+                    blocks: next.map((b, i) => ({ ...b, sortOrder: i })),
+                  };
+                  onUpdateOperator(updated);
+                }
+                // Restore logged results too if there were any.
+                if (removedSnapshot.resultsForBlock) {
+                  setWorkoutResults((prev) => ({
+                    ...prev,
+                    [removedSnapshot.block.id]: removedSnapshot.resultsForBlock!,
+                  }));
+                }
+                setRemovedSnapshot(null);
+              }}
+              style={{
+                padding: '6px 14px',
+                background: 'rgba(0,255,65,0.18)',
+                border: '1px solid var(--green)',
+                color: 'var(--green)',
+                fontFamily: 'var(--display)',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                cursor: 'pointer',
+                borderRadius: 2,
+                textTransform: 'uppercase',
+              }}
+            >
+              ↶ Undo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (undoToastTimeoutRef.current) {
+                  clearTimeout(undoToastTimeoutRef.current);
+                  undoToastTimeoutRef.current = null;
+                }
+                setRemovedSnapshot(null);
+              }}
+              aria-label="Dismiss"
+              style={{
+                padding: '6px 8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-tertiary)',
+                fontSize: 16,
+                cursor: 'pointer',
+                lineHeight: 1,
+              }}
+            >
+              ×
             </button>
           </div>
         )}
