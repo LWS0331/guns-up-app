@@ -704,40 +704,69 @@ export default function LandingPage() {
           own iframe at runtime — same DOM IG uses on partner
           sites. The iframe is white (their UI); we lean into
           the contrast against the black tactical surface
-          instead of fighting it. */}
+          instead of fighting it.
+          Layout: 2-column grid — tactical copy on the left,
+          IG card on the right. The IG iframe caps at 540px so
+          a single-column layout left dead space inside the
+          bracket frame; this version balances the row. */}
       <section className={styles.igSection}>
         <div className={styles.igWrap}>
-          <div className={styles.igEyebrow}>// SOCIAL · @GUNNYAI_FIT</div>
-          <h2 className={styles.igTitle}>
-            FOLLOW THE <em>BUILD.</em>
-          </h2>
-          <p className={styles.igSub}>
-            Day-by-day, reel-by-reel. The roll-out happens in public — every
-            ship, every protocol, every operator-of-the-week.
-          </p>
+          <div className={styles.igGrid}>
+            {/* Left col — copy + stats + pull quote + CTA */}
+            <div className={styles.igCopy}>
+              <div className={styles.igEyebrow}>// SOCIAL · @GUNNYAI_FIT</div>
+              <h2 className={styles.igTitle}>
+                FOLLOW THE <em>BUILD.</em>
+              </h2>
+              <p className={styles.igSub}>
+                Day-by-day, reel-by-reel. The roll-out happens in public — every
+                ship, every protocol, every operator-of-the-week.
+              </p>
 
-          <div className={styles.igCard}>
-            <div
-              /* IG's blockquote replaces itself in-place when
-                 embed.js processes it. Markup is verbatim from
-                 IG's "Embed" snippet — touching it would void
-                 the contract. */
-              dangerouslySetInnerHTML={{
-                __html:
-                  '<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/gunnyai_fit/?utm_source=ig_embed&amp;utm_campaign=loading" data-instgrm-version="14" style=" background:#FFF; border:0; border-radius:3px; box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15); margin: 1px; max-width:540px; min-width:326px; padding:0; width:99.375%; width:-webkit-calc(100% - 2px); width:calc(100% - 2px);"><div style="padding:16px;"><a href="https://www.instagram.com/gunnyai_fit/?utm_source=ig_embed&amp;utm_campaign=loading" style=" background:#FFFFFF; line-height:0; padding:0 0; text-align:center; text-decoration:none; width:100%;" target="_blank">View this profile on Instagram</a></div></blockquote>',
-              }}
-            />
+              <div className={styles.igStats}>
+                <div>
+                  <div className={styles.igStatNum}>8.2K</div>
+                  <div className={styles.igStatLbl}>FOLLOWERS</div>
+                </div>
+                <div>
+                  <div className={styles.igStatNum}>796</div>
+                  <div className={styles.igStatLbl}>POSTS</div>
+                </div>
+                <div>
+                  <div className={styles.igStatNum}>DAILY</div>
+                  <div className={styles.igStatLbl}>ROLLOUT REELS</div>
+                </div>
+              </div>
+
+              <blockquote className={styles.igPullquote}>
+                We post when we ship. <span className={styles.igPullquoteEm}>Build in public, train in public.</span>
+              </blockquote>
+
+              <a
+                className={styles.igFollow}
+                href="https://www.instagram.com/gunnyai_fit/"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => trackLandingCta('ig_follow')}
+              >
+                FOLLOW @GUNNYAI_FIT <span>→</span>
+              </a>
+            </div>
+
+            {/* Right col — IG profile blockquote */}
+            <div className={styles.igCard}>
+              <div
+                /* IG's blockquote replaces itself in-place when
+                   embed.js processes it. Markup is verbatim from
+                   IG's "Embed" snippet — touching it would void
+                   the contract. */
+                dangerouslySetInnerHTML={{
+                  __html:
+                    '<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/gunnyai_fit/?utm_source=ig_embed&amp;utm_campaign=loading" data-instgrm-version="14" style=" background:#FFF; border:0; border-radius:3px; box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15); margin: 1px; max-width:540px; min-width:326px; padding:0; width:99.375%; width:-webkit-calc(100% - 2px); width:calc(100% - 2px);"><div style="padding:16px;"><a href="https://www.instagram.com/gunnyai_fit/?utm_source=ig_embed&amp;utm_campaign=loading" style=" background:#FFFFFF; line-height:0; padding:0 0; text-align:center; text-decoration:none; width:100%;" target="_blank">View this profile on Instagram</a></div></blockquote>',
+                }}
+              />
+            </div>
           </div>
-
-          <a
-            className={styles.igFollow}
-            href="https://www.instagram.com/gunnyai_fit/"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => trackLandingCta('ig_follow')}
-          >
-            FOLLOW @GUNNYAI_FIT <span>→</span>
-          </a>
         </div>
       </section>
       {/* Lazy-load IG's processor. embed.js scans for any
