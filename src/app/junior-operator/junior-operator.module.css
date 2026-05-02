@@ -343,7 +343,42 @@
   line-height: 1.4;
 }
 
-/* -------- HERO POSTER (no real reel; landing-only static poster) -------- */
+/* -------- HERO REEL EMBED (Instagram /embed/ iframe) --------
+   The .posterWrap class is kept for any future static-poster
+   fallback; the live page uses .reelEmbed which wraps an
+   <iframe> from instagram.com/p/<id>/embed/.
+
+   IG's embed renders a vertical reel card with a header
+   (handle, follow button), the video, and a small footer.
+   Their iframe takes its own height — typically 800-1100px
+   depending on caption length. We give it a fixed min-height
+   so first paint doesn't reflow when IG finally responds.
+*/
+.reelEmbed {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid rgba(0, 255, 65, 0.18);
+  padding: 14px;
+  box-shadow: 0 0 40px rgba(0, 255, 65, 0.08);
+}
+.reelIframe {
+  display: block;
+  width: 100%;
+  min-height: 720px;
+  border: 1px solid rgba(0, 255, 65, 0.2);
+  background: #000;
+  /* IG's iframe sets its own scroll behavior; the outer card
+     should never scroll horizontally either way. */
+  max-width: 100%;
+  overflow: hidden;
+}
+@media (max-width: 980px) {
+  .reelIframe { min-height: 640px; }
+}
+@media (max-width: 600px) {
+  .reelIframe { min-height: 580px; }
+}
+
 .posterWrap {
   position: relative;
   background: var(--bg-card);

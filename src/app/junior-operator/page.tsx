@@ -124,24 +124,26 @@ export default function JuniorOperatorPage() {
               </div>
             </div>
 
-            {/* Right column — static "13 ≠ 13" poster (no real reel
-                wired yet; the design's reel link in the prototype
-                was a placeholder file. Posters communicate the
-                Mirwald PHV thesis in one image.) */}
-            <div className={styles.posterWrap}>
-              <div className={styles.poster}>
-                <div className={styles.posterText}>
-                  <div className={styles.posterAge}>
-                    13<span className={styles.gap}>≠</span>13
-                  </div>
-                  <div className={styles.posterSub}>SAME BIRTHDAY · 4-YEAR GAP</div>
-                  <div className={styles.posterSrc}>
-                    // MIRWALD MSSE 2002 · PHV BOYS ~14 / GIRLS ~12
-                  </div>
-                </div>
-              </div>
+            {/* Right column — Instagram reel embed.
+                Reel: instagram.com/p/DX0RNtZpdaFEOdCYEUTShaDud81x5HqFYoOUNE0/
+                Posted May 2026 — the "13 ≠ 13" Mirwald thesis in
+                video form. Using IG's own /embed/ iframe instead of
+                their embed.js so we don't load IG's JS bundle on
+                every landing page hit. The iframe is 9:16-friendly:
+                the .reelEmbed wrapper holds the bracket card chrome
+                and the iframe stretches to fill it. lazy-loaded so
+                first paint isn't held up by IG's CDN. */}
+            <div className={styles.reelEmbed}>
+              <iframe
+                src="https://www.instagram.com/p/DX0RNtZpdaFEOdCYEUTShaDud81x5HqFYoOUNE0/embed/"
+                title='Instagram reel — "13 ≠ 13" biological age'
+                loading="lazy"
+                allowFullScreen
+                scrolling="no"
+                className={styles.reelIframe}
+              />
               <div className={styles.posterMeta}>
-                <span>// 9:16 · BIOLOGICAL AGE</span>
+                <span>// 9:16 · @gunnyai_fit</span>
                 <span className={styles.live}>● LIVE</span>
               </div>
             </div>
