@@ -36,6 +36,7 @@ export interface CorpusOverlay extends CorpusFile {
     | 'lifestage_postpartum'
     | 'fms_assessment'
     | 'junior_soccer'
+    | 'junior_soccer_female'
     | 'junior_football';
 }
 
@@ -311,6 +312,16 @@ export const OVERLAYS: CorpusOverlay[] = [
     trigger: 'junior_soccer',
   },
   {
+    id: 'female-youth-soccer-4-10',
+    label: 'Female Youth Soccer Drills Corpus (ages 4-10) — companion to youth-soccer-4-10',
+    path: 'overlays/female-youth-soccer-4-10.md',
+    format: 'md',
+    approxBytes: 345_921,
+    description:
+      'Female-specific companion volume to youth-soccer-4-10.md. 245 nodes — Tier 2 (6-7, 116 nodes across 16 positions) and Tier 3 (8-10, 129 nodes across 16 positions). Tier 1 (4-5) is shared with the male corpus per pre-pubertal parity evidence (Quatman 2008, Ford 2010, Hewett 2015, Roth 2021, Nuzzo 2025) — joint-laxity and neuromuscular sex differences emerge at PHV, not before. Female-specific adaptations integrated throughout: knee-over-toe alignment cues, quiet-landings as default, mistake-reset ritual baked into every drill, process praise > outcome praise, coached-self-awareness debriefs at session end, FIFA 11+ Kids 12-min warm-up opening every Tier 3 session, PEP-derived plyo with mandatory two-foot landings per <=12-yr protocol, Tuck Jump Assessment self-screen every 4 weeks. Voice guardrails: "squad" not "warriors", "battle buddy" not "rival", mastery climate language. Zero heading nodes (US Soccer policy). Sources: Mandelbaum 2005 PEP RCT (n=1,885; 88% Y1 ACL reduction), Rossler 2018 FIFA 11+ Kids RCT (n=3,895; 48-74% reduction), Sugimoto 2014 dose-response, LaBella 2011 cluster RCT, AAP / Brenner 2016 specialization, Smoll-Smith CET, PCA mastery-climate frameworks, Erica Suter (Mulholland) Strong Female Athlete / Total Youth Soccer Fitness / Female Athlete High Performance. Loads in addition to youth-soccer-4-10.md when juniorSoccerFemale is true; the female nodes are preferred over their male-corpus counterparts at Tier 2 and Tier 3.',
+    trigger: 'junior_soccer_female',
+  },
+  {
     id: 'youth-football',
     label: 'Youth Football (Junior Operator) Reference',
     path: 'overlays/youth-football.md',
@@ -335,6 +346,17 @@ export interface CorpusSelectionInput {
   fmsRequested?: boolean;
   /** youth/junior operator on the soccer track */
   juniorSoccer?: boolean;
+  /**
+   * Female junior on the soccer track. When true, the female-specific
+   * companion corpus (female-youth-soccer-4-10.md) loads in addition
+   * to the default male / universal youth-soccer-4-10.md. Tier 1
+   * (ages 4-5) is shared via the male file per pre-pubertal parity
+   * evidence; Tier 2 / Tier 3 in the female file integrate ACL-protective
+   * cues, quiet-landings defaults, mistake-reset ritual, and process-
+   * praise voice patterns. Defaults to false when bio sex is unknown
+   * — no breakage if intake never captures the field.
+   */
+  juniorSoccerFemale?: boolean;
   /** youth/junior operator on the football track */
   juniorFootball?: boolean;
 }
@@ -393,6 +415,9 @@ export function selectCorpus(input: CorpusSelectionInput): CorpusFile[] {
         break;
       case 'junior_soccer':
         include = !!input.juniorSoccer;
+        break;
+      case 'junior_soccer_female':
+        include = !!input.juniorSoccerFemale;
         break;
       case 'junior_football':
         include = !!input.juniorFootball;

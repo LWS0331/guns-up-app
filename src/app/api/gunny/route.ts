@@ -3080,20 +3080,43 @@ export async function POST(req: NextRequest) {
         const sport = operatorContext.sportProfile?.sport;
         const juniorSoccer = isJuniorOperator && sport === 'soccer';
         const juniorFootball = isJuniorOperator && sport === 'football';
+        // Female junior soccer operators get the female-specific
+        // companion corpus layered on top of the male / universal one.
+        // Reads any of: sportProfile.bioSex, profile.sex, profile.gender
+        // — whichever the intake form happens to populate (safe nil-check
+        // chain; defaults to false / male-corpus only if unset).
+        const sportProfileAny = (operatorContext.sportProfile ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const profileAny = (operatorContext.profile ?? {}) as Record<string, unknown>;
+        const sexCandidates = [
+          sportProfileAny['bioSex'],
+          sportProfileAny['sex'],
+          profileAny['sex'],
+          profileAny['gender'],
+          profileAny['biologicalSex'],
+        ];
+        const isFemale = sexCandidates.some(
+          (v) => typeof v === 'string' && v.toLowerCase() === 'female',
+        );
+        const juniorSoccerFemale = juniorSoccer && isFemale;
         const corpusInput: CorpusSelectionInput = {
           trainingPath: operatorContext.trainingPath as TrainingPath | undefined,
           hasActiveInjury,
           lifeStage: operatorContext.lifeStage ?? null,
           fmsRequested: false,
           juniorSoccer,
+          juniorSoccerFemale,
           juniorFootball,
         };
         // Junior operators skip the adult PATH_CORPUS but pull in the
         // (large) sport-specific drill corpus — youth-soccer-4-10.md alone
-        // is ~380KB. Bump their budget so the drill playbook isn't
-        // truncated. Adult operators stay on the default 500KB budget.
+        // is ~380KB, and the female companion (when active) adds another
+        // ~346KB. Bump their budget so neither playbook is truncated.
+        // Adult operators stay on the default 500KB budget.
         const corpusBudget =
-          juniorSoccer || juniorFootball ? 800_000 : undefined;
+          juniorSoccer || juniorFootball ? 1_200_000 : undefined;
         const rendered = loadGunnyCorpus(corpusInput, corpusBudget);
         corpusBlock = rendered.text;
         if (rendered.truncated) {
