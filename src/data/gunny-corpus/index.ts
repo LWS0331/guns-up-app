@@ -297,7 +297,17 @@ export const OVERLAYS: CorpusOverlay[] = [
     format: 'md',
     approxBytes: 45_090,
     description:
-      'Long-term athletic development, US Soccer PDI, heading restrictions, biological-age training caps. Already cited by SOCCER_YOUTH_PROMPT in route.ts.',
+      'Long-term athletic development, US Soccer PDI, heading restrictions, biological-age training caps. Already cited by SOCCER_YOUTH_PROMPT in route.ts. Targets the 10-18 age band.',
+    trigger: 'junior_soccer',
+  },
+  {
+    id: 'youth-soccer-4-10',
+    label: 'Youth Soccer Tier-1 Drills Corpus (ages 4-10)',
+    path: 'overlays/youth-soccer-4-10.md',
+    format: 'md',
+    approxBytes: 66_215,
+    description:
+      'Parent-coached backyard / park drill corpus for ages 4-10. ~370 nodes across 3 age tiers (4-5 / 6-7 / 8-10) and 16 positions. Each node carries setup, instructions, progressions, coaching cues, common mistakes, success metrics, and a verbatim Gunny tactical-drill-sergeant parent script. Sources: US Soccer PDI, FA Youth Award, KNVB, FC Barcelona La Masia, Ajax TIPS, Coerver, Belgian FA, FIFA 11+ Kids, NSCA Youth, Canadian LTAD. Honors US Soccer no-heading-under-U11 policy and NSCA Youth no-heavy-load rules. Loads alongside youth-soccer.md so Gunny has both the developmental-research synthesis (10-18) AND the drill-by-drill backyard playbook (4-10) for any soccer junior.',
     trigger: 'junior_soccer',
   },
   {
