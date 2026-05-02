@@ -1780,76 +1780,140 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     } catch { /* vibrate API unavailable — silent */ }
   };
 
-  // Rest timer countdown — ref-based interval that owns its lifecycle so
-  // the timer reliably stops at zero. The previous implementation
-  // depended on [restRunning, restTimer] which forced the effect to
-  // tear down + recreate the setInterval every second; under rapid
-  // state changes (auto-add, voice command, mid-rest set logging) it
-  // could leak intervals or fail to fire the stop branch.
+  // Rest timer countdown — wall-clock anchored.
   //
-  // New shape: effect runs only when restRunning toggles. The interval
-  // callback uses the setState updater form to read the latest tick
-  // value, hits its own stop branch when prev <= 1, and clears the
-  // interval from inside the callback (plus the cleanup). No more
-  // race between re-render and tick.
-  const restIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Why anchored to a wall-clock timestamp instead of a tick counter:
+  // setInterval(..., 1000) is NOT wall-clock-accurate. When the JS
+  // thread is blocked (Gunny chat fetch, big re-render, Markdown
+  // parse) or the mobile tab is backgrounded, ticks get throttled
+  // or batched. The previous implementation decremented `restTimer`
+  // once per tick, so any missed tick = countdown drifted out of
+  // sync with the user's actual perception of time. Worse: when a
+  // backgrounded tab returned, the browser sometimes fired multiple
+  // ticks in a burst, blowing past the prev<=1 threshold and
+  // sometimes triggering the completion alarm at the wrong wall-
+  // clock moment. That's the "fires off randomly" symptom.
+  //
+  // New shape: store the END TIMESTAMP. Each tick recomputes
+  // secondsLeft from `now`. Drift-proof and burst-proof.
+  //
+  // Side effects (alarm + TTS + beeps) moved to a separate effect
+  // that watches secondsLeft transitions. Putting side effects
+  // inside the setState updater (the old shape) was the second bug:
+  // React can invoke an updater multiple times (StrictMode in dev,
+  // concurrent rendering in prod) — each invocation re-fired the
+  // alarm, double-played the TTS, and queued duplicate haptics.
+  // Updaters must be pure; the effect handles the impure work and
+  // uses a ref to fire each side-effect exactly once per cycle.
+  const restEndTimeRef = useRef<number | null>(null);
+  const restAlarmedAtRef = useRef<number | null>(null); // timestamp the cycle ended; idempotency guard
+  const lastBeepSecondRef = useRef<number | null>(null); // dedupe the 3-2-1 beeps so each second beeps once
+  const beepCtxRef = useRef<AudioContext | null>(null); // single shared AudioContext for the per-second beeps
+
+  // Lifecycle: when the user starts/restarts the timer (or adds 30s),
+  // recompute the end timestamp from the CURRENT restTimer value.
+  // setRestTimer + setRestRunning(true) is the only entry point;
+  // pause sets restRunning=false; reset clears restTimer and stops.
   useEffect(() => {
-    const clearRest = () => {
-      if (restIntervalRef.current) {
-        clearInterval(restIntervalRef.current);
-        restIntervalRef.current = null;
-      }
-    };
     if (!restRunning) {
-      clearRest();
+      // Cleared / paused — drop the anchor so the next start gets a
+      // fresh end timestamp.
+      restEndTimeRef.current = null;
+      lastBeepSecondRef.current = null;
+      restAlarmedAtRef.current = null;
       return;
     }
-    // Already running — guard against duplicate intervals (StrictMode
-    // double-invoke in dev).
-    if (restIntervalRef.current) return;
+    // (Re)anchor whenever the timer flips on or restTimer was changed
+    // externally (e.g. +30s tap during an active rest). Compute end
+    // from now + remaining.
+    restEndTimeRef.current = Date.now() + restTimer * 1000;
+    lastBeepSecondRef.current = null;
+    restAlarmedAtRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restRunning, restTimer]);
 
-    restIntervalRef.current = setInterval(() => {
-      setRestTimer(prev => {
-        // Hit zero: stop the interval, fire the completion alarm.
-        if (prev <= 1) {
-          clearRest();
-          setRestRunning(false);
-          playCompletionAlarm();
-          setTimerAlarm(true);
-          setTimeout(() => setTimerAlarm(false), 5000);
-          speak('Time. Next set.');
-          return 0;
-        }
-        // Final-3-second countdown beeps + short haptic.
-        if (prev <= 4) {
-          try {
-            const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-            const ctx = new AudioCtx();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'square';
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.frequency.value = 520;
-            gain.gain.setValueAtTime(0, ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.01);
-            gain.gain.setValueAtTime(0.6, ctx.currentTime + 0.22);
-            gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.25);
-          } catch { /* AudioContext unavailable */ }
-          try {
-            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-              navigator.vibrate(80);
-            }
-          } catch { /* vibrate API unavailable */ }
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return clearRest;
+  // Tick — pure: reads the wall clock, derives secondsLeft, writes
+  // it to state. No side effects beyond the state write. Runs at
+  // 250ms so the UI display is smoother than 1Hz; the alarm timing
+  // stays accurate because everything is wall-clock derived.
+  useEffect(() => {
+    if (!restRunning) return;
+    const tick = () => {
+      const endAt = restEndTimeRef.current;
+      if (endAt == null) return;
+      const remaining = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      setRestTimer((prev) => (prev === remaining ? prev : remaining));
+      if (remaining <= 0) {
+        setRestRunning(false);
+      }
+    };
+    // Tick immediately so a freshly-started 0-second timer doesn't
+    // wait 250ms to fire its alarm.
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
   }, [restRunning]);
+
+  // Side effects — single source of truth. Watches restTimer and
+  // fires beeps at 3/2/1 (deduped via lastBeepSecondRef so a burst
+  // tick pattern can't trigger the same second's beep twice) and
+  // the completion alarm + TTS exactly once per timer cycle (deduped
+  // via restAlarmedAtRef).
+  useEffect(() => {
+    // Beep on each of the final 3 seconds — once per second value.
+    if (restRunning && restTimer > 0 && restTimer <= 3) {
+      if (lastBeepSecondRef.current !== restTimer) {
+        lastBeepSecondRef.current = restTimer;
+        try {
+          const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          // Reuse a single shared context — creating one per beep
+          // exhausts the browser's per-page AudioContext quota
+          // (capped around 6 on Chromium). Lazily create on first
+          // beep so we don't pay the suspend/resume cost on every
+          // page load.
+          if (!beepCtxRef.current) beepCtxRef.current = new AudioCtx();
+          const ctx = beepCtxRef.current;
+          // Some browsers suspend the context after period of
+          // inactivity; resume() is a no-op if running.
+          if (ctx.state === 'suspended') void ctx.resume();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 520;
+          const t = ctx.currentTime;
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.6, t + 0.01);
+          gain.gain.setValueAtTime(0.6, t + 0.22);
+          gain.gain.linearRampToValueAtTime(0, t + 0.25);
+          osc.start(t);
+          osc.stop(t + 0.25);
+        } catch { /* AudioContext unavailable */ }
+        try {
+          if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            navigator.vibrate(80);
+          }
+        } catch { /* vibrate unavailable */ }
+      }
+    }
+
+    // Completion alarm + TTS — fire exactly once when the cycle
+    // ends. restAlarmedAtRef is set with the end-timestamp; a new
+    // timer cycle resets the ref so the next alarm can fire.
+    if (restTimer === 0 && restEndTimeRef.current != null) {
+      const cycleId = restEndTimeRef.current;
+      if (restAlarmedAtRef.current !== cycleId) {
+        restAlarmedAtRef.current = cycleId;
+        playCompletionAlarm();
+        setTimerAlarm(true);
+        const dismissId = window.setTimeout(() => setTimerAlarm(false), 5000);
+        speak('Time. Next set.');
+        return () => window.clearTimeout(dismissId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restTimer, restRunning]);
 
   // Wake lock — keep screen awake during rest timer and workout mode
   useEffect(() => {
