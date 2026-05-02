@@ -205,6 +205,40 @@ model WearableSnapshot {
 // Trainer applications submitted via /trainer-apply landing page form.
 // Public POST endpoint; admin-only GET. Reviewed manually — no auto-acceptance.
 // Migration NOT run automatically; apply via `prisma migrate dev` when ready.
+// Junior Operator beta-list signups (May 2026, /junior-operator
+// landing). Public form takes role + email + name + an optional
+// "lifter experience" follow-up. We onboard in waves; status flips
+// from "pending" → "invited" once an admin sends the magic link
+// from the founder dashboard. Same shape as TrainerApplication so
+// the admin tooling can be unified later.
+model JuniorBetaLead {
+  id                  String   @id @default(cuid())
+  email               String
+  name                String
+  // "parent" | "coach" | "athlete" | "lifter" — discriminator that
+  // routes the lead into the right onboarding bucket.
+  role                String
+  // Free-form context only meaningful when role === "lifter"
+  // ("2 years · novice · serious", etc.). NULL for other roles.
+  lifterExperience    String?
+
+  status              String   @default("pending")  // "pending" | "invited" | "rejected"
+  reviewedBy          String?                       // operatorId of admin who reviewed
+  reviewedAt          DateTime?
+  reviewNotes         String?
+
+  // Spam-protection metadata (mirrors /api/trainer-applications)
+  ip                  String?
+  userAgent           String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
+  @@index([role])
+}
+
 model TrainerApplication {
   id                  String   @id @default(cuid())
   email               String
