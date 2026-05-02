@@ -361,33 +361,17 @@
   padding: 14px;
   box-shadow: 0 0 40px rgba(0, 255, 65, 0.08);
 }
-/* Container for IG's blockquote embed. embed.js replaces the
-   blockquote with an iframe inline; we set a min-height so the
-   layout doesn't reflow when IG's CDN finally responds. The
-   iframe IG drops in handles its own width up to 540px max
-   (documented blockquote `max-width: 540px`). */
-.reelEmbedHost {
-  display: flex;
-  justify-content: center;
-  min-height: 720px;
+/* Self-hosted reel — 9:16 native aspect. The bracket card hugs
+   the video; aspect-ratio holds the slot so the layout doesn't
+   reflow during the fetch. object-fit:cover stays clean if the
+   source is ever swapped for a slightly different aspect. */
+.reelVideo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
   background: #000;
   border: 1px solid rgba(0, 255, 65, 0.2);
-  overflow: hidden;
-}
-.reelEmbedHost > blockquote,
-.reelEmbedHost > iframe {
-  /* IG enforces its own min-width:326px / max-width:540px on the
-     blockquote via inline styles. Don't fight that — let the embed
-     center inside our card. */
-  margin: 0;
-  width: 100%;
-  max-width: 540px;
-}
-@media (max-width: 980px) {
-  .reelEmbedHost { min-height: 640px; }
-}
-@media (max-width: 600px) {
-  .reelEmbedHost { min-height: 580px; }
+  object-fit: cover;
 }
 
 .posterWrap {

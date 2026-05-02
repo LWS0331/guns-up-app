@@ -18,7 +18,6 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import Script from 'next/script';
 import type { Metadata } from 'next';
 import styles from './junior-operator.module.css';
 import JuniorBetaForm from './JuniorBetaForm';
@@ -125,58 +124,54 @@ export default function JuniorOperatorPage() {
               </div>
             </div>
 
-            {/* Right column — Instagram reel embed.
-                Canonical: instagram.com/reel/DXr6NJGj5JE/
-                Verified against IG's oEmbed API (returns real
-                caption JSON, not "No Media Match"). Day-2 rollout
-                reel — "TRAINERS — WE BUILT GUNNY FOR YOU."
-
-                Implementation: IG's official blockquote +
-                embed.js pattern (the snippet IG generates on the
-                "Embed" share option). On first run, embed.js scans
-                the DOM for any blockquote.instagram-media and
-                replaces it with an iframe pointing at /embed/ —
-                same end result as a hand-rolled iframe but matches
-                IG's documented contract for embeds, so future
-                policy changes (auth-walling, geo-restriction,
-                viewer-attribution) don't silently break us.
-                Script is lazy-loaded with next/script so first
-                paint isn't held up by IG's CDN.
-
-                Verification command for future swaps:
-                  curl -s "https://www.instagram.com/api/v1/oembed/
-                  ?url=<urlencoded>" — JSON = good, "No Media Match"
-                  = bad URL. */}
+            {/* Right column — self-hosted reel video.
+                Source: public/junior-operator/reel.mov, 6.3MB H.264
+                at 538×924 (9:16, ~35s).
+                Switched off the IG blockquote+embed.js path in May
+                2026 because IG's player redirects users to
+                instagram.com on tap-to-play (their product
+                decision; not a config option on our side). Hosting
+                the video ourselves gives true inline playback —
+                autoplay-muted-loop matches the TikTok/IG feed
+                pattern visitors already expect.
+                Attributes:
+                  autoPlay + muted + playsInline → required combo
+                    for iOS Safari autoplay (otherwise iOS blocks
+                    even muted autoplay).
+                  loop → reel restarts; no user action needed.
+                  preload="metadata" → don't pull all 6MB until
+                    visible (saves bandwidth on bounce visits;
+                    autoplay still kicks in fast because the
+                    container is small).
+                  poster → first-frame PNG generated via macOS
+                    qlmanage so the card has visual content during
+                    the brief network fetch.
+                The "@gunnyai_fit" link below the player keeps the
+                social-proof CTA intact. */}
             <div className={styles.reelEmbed}>
-              <div
-                className={styles.reelEmbedHost}
-                /* IG's blockquote replaces itself in-place when
-                   embed.js processes it. We render it via
-                   dangerouslySetInnerHTML because the blockquote's
-                   inline-style placeholder markup is verbatim from
-                   IG's "Embed" snippet — touching it would void
-                   the contract. */
-                dangerouslySetInnerHTML={{
-                  __html: `
-<blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="https://www.instagram.com/reel/DXr6NJGj5JE/?utm_source=ig_embed&amp;utm_campaign=loading" data-instgrm-version="14" style=" background:#FFF; border:0; border-radius:3px; box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15); margin: 1px; max-width:540px; min-width:326px; padding:0; width:99.375%; width:-webkit-calc(100% - 2px); width:calc(100% - 2px);"><div style="padding:16px;"><a href="https://www.instagram.com/reel/DXr6NJGj5JE/?utm_source=ig_embed&amp;utm_campaign=loading" style=" background:#FFFFFF; line-height:0; padding:0 0; text-align:center; text-decoration:none; width:100%;" target="_blank">View this post on Instagram</a></div></blockquote>
-`.trim(),
-                }}
+              <video
+                className={styles.reelVideo}
+                src="/junior-operator/reel.mov"
+                poster="/junior-operator/reel-poster.png"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                aria-label='Junior Operator reel — "TRAINERS, WE BUILT GUNNY FOR YOU"'
               />
               <div className={styles.posterMeta}>
-                <span>// 9:16 · @gunnyai_fit</span>
+                <a
+                  href="https://www.instagram.com/reel/DXr6NJGj5JE/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'inherit', textDecoration: 'none' }}
+                >
+                  // 9:16 · <span style={{ color: 'var(--green)' }}>@gunnyai_fit</span>
+                </a>
                 <span className={styles.live}>● LIVE</span>
               </div>
             </div>
-            {/* Lazy-load IG's processor script after the page is
-                interactive. embed.js scans for any
-                blockquote.instagram-media on load and on subsequent
-                document mutations, so loading it once at page
-                bottom is enough. */}
-            <Script
-              src="https://www.instagram.com/embed.js"
-              strategy="lazyOnload"
-              async
-            />
           </div>
         </div>
       </section>
