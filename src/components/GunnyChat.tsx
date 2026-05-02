@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
 import Icon from './Icons';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
-import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
+import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext, speak as gunnySpeak, stopSpeaking } from '@/lib/tts';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
@@ -528,6 +528,65 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     const unsub = onTtsEnabledChange((enabled) => setTtsOn(enabled));
     return unsub;
   }, []);
+
+  // Track which Gunny message is currently being read aloud so we can
+  // (a) toggle the per-bubble play/stop affordance icon, and (b) cancel
+  // the previous message's playback when the user taps a different one.
+  // Null when nothing is playing.
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+
+  // Per-message play handler. Routes through the shared lib/tts speak()
+  // pipeline (OpenAI TTS → browser speechSynthesis fallback). This is
+  // ALWAYS user-initiated, which is critical: iOS Safari blocks any
+  // audio.play() that doesn't trace back to a tap, so per-message
+  // buttons survive autoplay restrictions even when the auto-speak path
+  // is silently blocked.
+  //
+  // Bypasses the global TTS-mute flag because the user explicitly
+  // asked to hear THIS message — muting was about not getting auto-
+  // spoken bombarded, not about disabling on-demand playback. We
+  // temporarily re-enable around the speak() call so isTtsEnabled()
+  // inside speak() doesn't short-circuit, then restore the prior state.
+  const playMessage = useCallback((id: string, text: string) => {
+    if (!text || !text.trim()) return;
+    // If THIS message is already playing → tap acts as stop.
+    if (speakingMessageId === id) {
+      stopSpeaking();
+      setSpeakingMessageId(null);
+      return;
+    }
+    // Otherwise switch playback to this message — cancel any prior.
+    stopSpeaking();
+    unlockAudioContext();
+    const wasMuted = !isTtsEnabled();
+    if (wasMuted) setTtsEnabled(true);
+    setSpeakingMessageId(id);
+    gunnySpeak(text)
+      .catch((err) => console.warn('[gunny-chat] play-message failed:', err))
+      .finally(() => {
+        // Restore muted state if the user had it muted before tapping.
+        if (wasMuted) setTtsEnabled(false);
+      });
+    // The speak() call returns once the request is queued, not when
+    // playback finishes. Use onSpeechDone for the "done" signal —
+    // imported via lib/tts. We poll a short interval as a safety net
+    // because the cb fires when the WHOLE queue empties; multi-tap
+    // races are rare here since stopSpeaking() flushes the queue.
+    const interval = window.setInterval(() => {
+      // If the audio element is no longer in the DOM playing, clear.
+      const stillSpeaking = document.querySelectorAll('audio').length > 0
+        || (window.speechSynthesis && window.speechSynthesis.speaking);
+      if (!stillSpeaking) {
+        setSpeakingMessageId((cur) => (cur === id ? null : cur));
+        window.clearInterval(interval);
+      }
+    }, 600);
+    // Give up after 60s no matter what — protects against orphaned state.
+    window.setTimeout(() => {
+      window.clearInterval(interval);
+      setSpeakingMessageId((cur) => (cur === id ? null : cur));
+    }, 60_000);
+  }, [speakingMessageId]);
 
   const toggleTts = () => {
     const next = !ttsOn;
@@ -3393,17 +3452,75 @@ ${mealSuggestion}`;
                   </span>
                 </div>
               )}
-              {/* Timestamp — small mono caption pinned right for
-                  user, left for gunny per the handoff bubble layout. */}
+              {/* Timestamp + per-message play button (Gunny only).
+                  The play button gives users an explicit way to hear
+                  the message — works even when the global TTS mute
+                  is on and (more importantly) survives iOS Safari's
+                  autoplay block because it's a direct user gesture.
+                  Tapping the same button while playing acts as stop;
+                  tapping a different message stops the prior one and
+                  starts the new one. */}
               <div
                 className="t-mono-sm"
                 style={{
                   marginTop: 6,
-                  textAlign: isUser ? 'right' : 'left',
+                  display: 'flex',
+                  justifyContent: isUser ? 'flex-end' : 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
                   color: 'var(--text-tertiary)',
                 }}
               >
-                {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                <span>
+                  {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                {!isUser && message.text && message.text.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playMessage(message.id, message.text);
+                    }}
+                    aria-label={
+                      speakingMessageId === message.id
+                        ? 'Stop reading message'
+                        : 'Read message aloud'
+                    }
+                    title={
+                      speakingMessageId === message.id
+                        ? 'Stop'
+                        : 'Hear Gunny say this'
+                    }
+                    style={{
+                      background: speakingMessageId === message.id
+                        ? 'rgba(0,255,65,0.18)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${
+                        speakingMessageId === message.id
+                          ? 'rgba(0,255,65,0.6)'
+                          : 'rgba(0,255,65,0.2)'
+                      }`,
+                      color: speakingMessageId === message.id
+                        ? '#00ff41'
+                        : 'var(--text-secondary)',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      padding: '3px 8px',
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      transition: 'all 0.15s ease',
+                      boxShadow: speakingMessageId === message.id
+                        ? '0 0 8px rgba(0,255,65,0.25)'
+                        : 'none',
+                    }}
+                  >
+                    {speakingMessageId === message.id ? '◼ STOP' : '▶ HEAR IT'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

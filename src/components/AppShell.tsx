@@ -25,7 +25,7 @@ import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { getParentJuniors } from '@/data/operators';
 import SitrepView from '@/components/SitrepView';
 import TacticalRadio from '@/components/TacticalRadio';
-import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
+import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext, stopSpeaking } from '@/lib/tts';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
 import { getAuthToken } from '@/lib/authClient';
@@ -315,6 +315,10 @@ const AppShell: React.FC<AppShellProps> = ({
     if (typeof window === 'undefined') return true;
     return isTtsEnabled();
   });
+  // Index of the Gunny message in the side-panel chat that is
+  // currently being read aloud (or null if nothing is speaking).
+  // Drives the per-message HEAR IT / STOP button state.
+  const [panelSpeakingIdx, setPanelSpeakingIdx] = useState<number | null>(null);
   const [workoutModeState, setWorkoutModeState] = useState<WorkoutModeState>({ active: false, workoutTitle: '', exercises: [] });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1059,6 +1063,48 @@ const AppShell: React.FC<AppShellProps> = ({
   const speakGunny = (text: string) => {
     if (gunnyTtsEnabled) gunnySpeak(text);
   };
+
+  // Per-message playback for the side-panel chat. Tap once → Gunny
+  // reads it aloud; tap the SAME button again → stop. Tapping a
+  // different message stops the prior one and starts the new one.
+  // Bypasses the global TTS-mute flag (the user explicitly asked to
+  // hear THIS message; muting was about not getting auto-spoken
+  // bombarded). Always user-initiated, so it survives iOS Safari's
+  // autoplay block even when the auto-speak path is silently dropped.
+  const playPanelMessage = useCallback((idx: number, text: string) => {
+    if (!text || !text.trim()) return;
+    if (panelSpeakingIdx === idx) {
+      stopSpeaking();
+      setPanelSpeakingIdx(null);
+      return;
+    }
+    stopSpeaking();
+    unlockAudioContext();
+    const wasMuted = !isTtsEnabled();
+    if (wasMuted) setTtsEnabledGlobal(true);
+    setPanelSpeakingIdx(idx);
+    gunnySpeak(text)
+      .catch((err) => console.warn('[appshell] panel play-message failed:', err))
+      .finally(() => {
+        if (wasMuted) setTtsEnabledGlobal(false);
+      });
+    // Poll for end-of-playback so the icon flips back from STOP to
+    // HEAR IT without us having to subscribe to onSpeechDone (which
+    // fires on whole-queue empty, not per-message).
+    const interval = window.setInterval(() => {
+      const stillSpeaking =
+        document.querySelectorAll('audio').length > 0 ||
+        (window.speechSynthesis && window.speechSynthesis.speaking);
+      if (!stillSpeaking) {
+        setPanelSpeakingIdx((cur) => (cur === idx ? null : cur));
+        window.clearInterval(interval);
+      }
+    }, 600);
+    window.setTimeout(() => {
+      window.clearInterval(interval);
+      setPanelSpeakingIdx((cur) => (cur === idx ? null : cur));
+    }, 60_000);
+  }, [panelSpeakingIdx]);
 
   const toggleGunnyTts = () => {
     const next = !gunnyTtsEnabled;
@@ -2702,6 +2748,57 @@ const AppShell: React.FC<AppShellProps> = ({
                 className={`gunny-message ${msg.role}`}
               >
                 {msg.role === 'gunny' ? <GunnyMarkdown text={msg.text} accent="#ffb800" /> : msg.text}
+                {/* Per-message HEAR IT button — Gunny messages only.
+                    User-initiated playback bypasses iOS autoplay
+                    blocks AND the global TTS mute (so users who
+                    silenced auto-speak can still hear specific
+                    responses on demand). */}
+                {msg.role === 'gunny' && msg.text && msg.text.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playPanelMessage(idx, msg.text);
+                    }}
+                    aria-label={
+                      panelSpeakingIdx === idx
+                        ? 'Stop reading message'
+                        : 'Read message aloud'
+                    }
+                    title={
+                      panelSpeakingIdx === idx
+                        ? 'Stop'
+                        : 'Hear Gunny say this'
+                    }
+                    style={{
+                      marginTop: 8,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      background: panelSpeakingIdx === idx
+                        ? 'rgba(255,140,0,0.18)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${
+                        panelSpeakingIdx === idx
+                          ? 'rgba(255,140,0,0.6)'
+                          : 'rgba(255,140,0,0.2)'
+                      }`,
+                      color: panelSpeakingIdx === idx ? '#ffb800' : 'rgba(255,184,0,0.7)',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      padding: '3px 8px',
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      transition: 'all 0.15s ease',
+                      boxShadow: panelSpeakingIdx === idx
+                        ? '0 0 8px rgba(255,140,0,0.25)'
+                        : 'none',
+                    }}
+                  >
+                    {panelSpeakingIdx === idx ? '◼ STOP' : '▶ HEAR IT'}
+                  </button>
+                )}
               </div>
             ))}
             {gunnyLoading && (
