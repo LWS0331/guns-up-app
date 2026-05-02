@@ -7,7 +7,7 @@ import Icon from './Icons';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
-import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext, speak as gunnySpeak, stopSpeaking } from '@/lib/tts';
+import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext, speak as gunnySpeak, stopSpeaking, onSpeechDone, offSpeechDone } from '@/lib/tts';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
@@ -535,24 +535,41 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   // Null when nothing is playing.
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
+  // Subscribe to lib/tts's queue-empty signal. Fires when the audio
+  // finishes naturally OR when stopSpeaking() runs — either way the
+  // HEAR IT button needs to flip back from STOP. Replaces the earlier
+  // 600ms DOM polling which was unreliable (Audio elements created
+  // via `new Audio(url)` aren't attached to the DOM, so the poll
+  // immediately decided playback was done while the audio kept
+  // playing).
+  useEffect(() => {
+    const cb = () => setSpeakingMessageId(null);
+    onSpeechDone(cb);
+    return () => offSpeechDone(cb);
+  }, []);
+
   // Per-message play handler. Routes through the shared lib/tts speak()
-  // pipeline (OpenAI TTS → browser speechSynthesis fallback). This is
-  // ALWAYS user-initiated, which is critical: iOS Safari blocks any
+  // pipeline (OpenAI TTS → browser speechSynthesis fallback). ALWAYS
+  // user-initiated, which is critical: iOS Safari blocks any
   // audio.play() that doesn't trace back to a tap, so per-message
-  // buttons survive autoplay restrictions even when the auto-speak path
-  // is silently blocked.
+  // buttons survive autoplay restrictions even when the auto-speak
+  // path is silently blocked.
   //
   // Bypasses the global TTS-mute flag because the user explicitly
   // asked to hear THIS message — muting was about not getting auto-
   // spoken bombarded, not about disabling on-demand playback. We
   // temporarily re-enable around the speak() call so isTtsEnabled()
-  // inside speak() doesn't short-circuit, then restore the prior state.
+  // inside speak() doesn't short-circuit, then restore the prior
+  // state. Restore happens after the audio finishes (onSpeechDone),
+  // not just after speak() returns — speak() resolves once the
+  // request is queued, not when playback ends.
   const playMessage = useCallback((id: string, text: string) => {
     if (!text || !text.trim()) return;
     // If THIS message is already playing → tap acts as stop.
     if (speakingMessageId === id) {
       stopSpeaking();
-      setSpeakingMessageId(null);
+      // setSpeakingMessageId(null) gets fired by the onSpeechDone
+      // subscription above when stopSpeaking() emits the empty event.
       return;
     }
     // Otherwise switch playback to this message — cancel any prior.
@@ -562,30 +579,18 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     if (wasMuted) setTtsEnabled(true);
     setSpeakingMessageId(id);
     gunnySpeak(text)
-      .catch((err) => console.warn('[gunny-chat] play-message failed:', err))
-      .finally(() => {
-        // Restore muted state if the user had it muted before tapping.
-        if (wasMuted) setTtsEnabled(false);
-      });
-    // The speak() call returns once the request is queued, not when
-    // playback finishes. Use onSpeechDone for the "done" signal —
-    // imported via lib/tts. We poll a short interval as a safety net
-    // because the cb fires when the WHOLE queue empties; multi-tap
-    // races are rare here since stopSpeaking() flushes the queue.
-    const interval = window.setInterval(() => {
-      // If the audio element is no longer in the DOM playing, clear.
-      const stillSpeaking = document.querySelectorAll('audio').length > 0
-        || (window.speechSynthesis && window.speechSynthesis.speaking);
-      if (!stillSpeaking) {
-        setSpeakingMessageId((cur) => (cur === id ? null : cur));
-        window.clearInterval(interval);
-      }
-    }, 600);
-    // Give up after 60s no matter what — protects against orphaned state.
-    window.setTimeout(() => {
-      window.clearInterval(interval);
-      setSpeakingMessageId((cur) => (cur === id ? null : cur));
-    }, 60_000);
+      .catch((err) => console.warn('[gunny-chat] play-message failed:', err));
+    // Restore muted state once the audio actually finishes (not when
+    // gunnySpeak() returns). The onSpeechDone callback above already
+    // clears the button state; we hook in here just for the mute
+    // restore. One-shot subscription so we don't restore twice.
+    if (wasMuted) {
+      const restore = () => {
+        setTtsEnabled(false);
+        offSpeechDone(restore);
+      };
+      onSpeechDone(restore);
+    }
   }, [speakingMessageId]);
 
   const toggleTts = () => {

@@ -25,7 +25,7 @@ import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { getParentJuniors } from '@/data/operators';
 import SitrepView from '@/components/SitrepView';
 import TacticalRadio from '@/components/TacticalRadio';
-import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext, stopSpeaking } from '@/lib/tts';
+import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext, stopSpeaking, onSpeechDone, offSpeechDone } from '@/lib/tts';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
 import { getAuthToken } from '@/lib/authClient';
@@ -1064,18 +1064,29 @@ const AppShell: React.FC<AppShellProps> = ({
     if (gunnyTtsEnabled) gunnySpeak(text);
   };
 
+  // Subscribe to lib/tts queue-empty so the panel HEAR IT button
+  // flips back from STOP when audio finishes naturally OR when
+  // stopSpeaking() runs. Replaces the prior 600ms DOM polling
+  // which was unreliable for OpenAI TTS audio (those Audio
+  // elements aren't attached to the DOM, so the poll thought
+  // playback was done while the audio kept playing).
+  useEffect(() => {
+    const cb = () => setPanelSpeakingIdx(null);
+    onSpeechDone(cb);
+    return () => offSpeechDone(cb);
+  }, []);
+
   // Per-message playback for the side-panel chat. Tap once → Gunny
   // reads it aloud; tap the SAME button again → stop. Tapping a
   // different message stops the prior one and starts the new one.
   // Bypasses the global TTS-mute flag (the user explicitly asked to
-  // hear THIS message; muting was about not getting auto-spoken
-  // bombarded). Always user-initiated, so it survives iOS Safari's
-  // autoplay block even when the auto-speak path is silently dropped.
+  // hear THIS message). Always user-initiated, so it survives iOS
+  // Safari's autoplay block.
   const playPanelMessage = useCallback((idx: number, text: string) => {
     if (!text || !text.trim()) return;
     if (panelSpeakingIdx === idx) {
       stopSpeaking();
-      setPanelSpeakingIdx(null);
+      // setPanelSpeakingIdx(null) fires via the onSpeechDone hook above.
       return;
     }
     stopSpeaking();
@@ -1083,27 +1094,18 @@ const AppShell: React.FC<AppShellProps> = ({
     const wasMuted = !isTtsEnabled();
     if (wasMuted) setTtsEnabledGlobal(true);
     setPanelSpeakingIdx(idx);
-    gunnySpeak(text)
-      .catch((err) => console.warn('[appshell] panel play-message failed:', err))
-      .finally(() => {
-        if (wasMuted) setTtsEnabledGlobal(false);
-      });
-    // Poll for end-of-playback so the icon flips back from STOP to
-    // HEAR IT without us having to subscribe to onSpeechDone (which
-    // fires on whole-queue empty, not per-message).
-    const interval = window.setInterval(() => {
-      const stillSpeaking =
-        document.querySelectorAll('audio').length > 0 ||
-        (window.speechSynthesis && window.speechSynthesis.speaking);
-      if (!stillSpeaking) {
-        setPanelSpeakingIdx((cur) => (cur === idx ? null : cur));
-        window.clearInterval(interval);
-      }
-    }, 600);
-    window.setTimeout(() => {
-      window.clearInterval(interval);
-      setPanelSpeakingIdx((cur) => (cur === idx ? null : cur));
-    }, 60_000);
+    gunnySpeak(text).catch((err) =>
+      console.warn('[appshell] panel play-message failed:', err),
+    );
+    if (wasMuted) {
+      // Restore mute once playback actually finishes (not when
+      // gunnySpeak resolves — that happens at request-queue time).
+      const restore = () => {
+        setTtsEnabledGlobal(false);
+        offSpeechDone(restore);
+      };
+      onSpeechDone(restore);
+    }
   }, [panelSpeakingIdx]);
 
   const toggleGunnyTts = () => {
