@@ -125,17 +125,20 @@ export default function JuniorOperatorPage() {
             </div>
 
             {/* Right column — Instagram reel embed.
-                Reel: instagram.com/p/DX0RNtZpdaFEOdCYEUTShaDud81x5HqFYoOUNE0/
-                Posted May 2026 — the "13 ≠ 13" Mirwald thesis in
-                video form. Using IG's own /embed/ iframe instead of
-                their embed.js so we don't load IG's JS bundle on
-                every landing page hit. The iframe is 9:16-friendly:
-                the .reelEmbed wrapper holds the bracket card chrome
-                and the iframe stretches to fill it. lazy-loaded so
-                first paint isn't held up by IG's CDN. */}
+                Canonical shortcode: DX0RNtZpdaF (the original URL
+                from the share sheet, instagram.com/p/DX0RNtZpdaF
+                EOdCYEUTShaDud81x5HqFYoOUNE0/, had a 28-char share-
+                attribution token glued onto it which IG's /embed/
+                endpoint rejected as "post may have been removed").
+                Standard IG shortcodes are 11 characters; the rest
+                is referrer tracking.
+                Using IG's /embed/ iframe instead of their embed.js
+                so we don't load IG's JS bundle on every landing
+                hit. lazy-loaded so first paint isn't held up by
+                IG's CDN. */}
             <div className={styles.reelEmbed}>
               <iframe
-                src="https://www.instagram.com/p/DX0RNtZpdaFEOdCYEUTShaDud81x5HqFYoOUNE0/embed/"
+                src="https://www.instagram.com/p/DX0RNtZpdaF/embed/"
                 title='Instagram reel — "13 ≠ 13" biological age'
                 loading="lazy"
                 allowFullScreen
