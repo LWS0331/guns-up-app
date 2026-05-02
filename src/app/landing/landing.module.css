@@ -1717,3 +1717,135 @@
   .juniorStatRow { grid-template-columns: 1fr 1fr; }
   .juniorStatRow > div:last-child { grid-column: 1 / -1; }
 }
+
+/* ============================================================
+   IG profile embed (May 2026, /landing).
+   Single section that wraps Instagram's official profile
+   blockquote in our tactical chrome. embed.js (loaded via
+   next/script lazyOnload) replaces the blockquote with IG's
+   own iframe at runtime. The card itself is white — IG's
+   product UI — and we lean into the contrast against the
+   black tactical surface rather than fighting it. The eyebrow,
+   headline, and follow CTA stay on-brand; the IG card sits
+   centered, max 540px wide (IG's documented hard cap).
+   ============================================================ */
+.igSection {
+  padding: 96px 0;
+  border-top: 1px solid rgba(0, 255, 65, 0.08);
+  border-bottom: 1px solid rgba(0, 255, 65, 0.08);
+  background:
+    radial-gradient(ellipse at 30% 50%, rgba(0, 255, 65, 0.03), transparent 60%),
+    var(--bg-base, #030303);
+}
+.igWrap {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 32px;
+  text-align: center;
+}
+.igEyebrow {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3.5px;
+  text-transform: uppercase;
+  color: #00ff41;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.igEyebrow::before {
+  content: '';
+  width: 18px;
+  height: 1px;
+  background: #00ff41;
+  box-shadow: 0 0 6px #00ff41;
+}
+.igTitle {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.02;
+  text-transform: uppercase;
+  color: #fff;
+  letter-spacing: -0.005em;
+  margin-bottom: 14px;
+}
+.igTitle em {
+  font-style: normal;
+  color: #00ff41;
+  text-shadow: 0 0 18px rgba(0, 255, 65, 0.3);
+}
+.igSub {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: #a0a0a0;
+  max-width: 580px;
+  margin: 0 auto 40px;
+}
+
+/* Card frame around IG's blockquote — bracket corners + a
+   thin green border so the IG embed reads as part of our
+   page, not a foreign drop-in. */
+.igCard {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 18px;
+  background: #0a0a0a;
+  border: 1px solid rgba(0, 255, 65, 0.18);
+  margin-bottom: 32px;
+  min-height: 580px;
+}
+.igCard::before,
+.igCard::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: #00ff41;
+  border-style: solid;
+  pointer-events: none;
+}
+.igCard::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+.igCard::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
+}
+.igCard > blockquote,
+.igCard > iframe {
+  /* IG enforces its own min-width:326px / max-width:540px on
+     the blockquote via inline styles. Center inside our card. */
+  margin: 0;
+  width: 100%;
+  max-width: 540px;
+}
+
+.igFollow {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 14px 26px;
+  background: #00ff41;
+  color: #000;
+  border: 1px solid #00ff41;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.igFollow:hover {
+  background: transparent;
+  color: #00ff41;
+  box-shadow: 0 0 18px rgba(0, 255, 65, 0.4);
+}

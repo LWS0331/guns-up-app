@@ -22,6 +22,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import Script from 'next/script';
 import styles from './landing.module.css';
 import FounderRotator, { RUBEN_SLIDES, BRITNEY_SLIDES } from './FounderRotator';
 import { trackEvent } from '@/lib/analytics';
@@ -695,6 +696,58 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* ========== INSTAGRAM (@gunnyai_fit) ==========
+          Official IG profile blockquote pulled from IG's
+          "Embed" share option. embed.js (loaded via next/script
+          lazyOnload) auto-replaces the blockquote with IG's
+          own iframe at runtime — same DOM IG uses on partner
+          sites. The iframe is white (their UI); we lean into
+          the contrast against the black tactical surface
+          instead of fighting it. */}
+      <section className={styles.igSection}>
+        <div className={styles.igWrap}>
+          <div className={styles.igEyebrow}>// SOCIAL · @GUNNYAI_FIT</div>
+          <h2 className={styles.igTitle}>
+            FOLLOW THE <em>BUILD.</em>
+          </h2>
+          <p className={styles.igSub}>
+            Day-by-day, reel-by-reel. The roll-out happens in public — every
+            ship, every protocol, every operator-of-the-week.
+          </p>
+
+          <div className={styles.igCard}>
+            <div
+              /* IG's blockquote replaces itself in-place when
+                 embed.js processes it. Markup is verbatim from
+                 IG's "Embed" snippet — touching it would void
+                 the contract. */
+              dangerouslySetInnerHTML={{
+                __html:
+                  '<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/gunnyai_fit/?utm_source=ig_embed&amp;utm_campaign=loading" data-instgrm-version="14" style=" background:#FFF; border:0; border-radius:3px; box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15); margin: 1px; max-width:540px; min-width:326px; padding:0; width:99.375%; width:-webkit-calc(100% - 2px); width:calc(100% - 2px);"><div style="padding:16px;"><a href="https://www.instagram.com/gunnyai_fit/?utm_source=ig_embed&amp;utm_campaign=loading" style=" background:#FFFFFF; line-height:0; padding:0 0; text-align:center; text-decoration:none; width:100%;" target="_blank">View this profile on Instagram</a></div></blockquote>',
+              }}
+            />
+          </div>
+
+          <a
+            className={styles.igFollow}
+            href="https://www.instagram.com/gunnyai_fit/"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => trackLandingCta('ig_follow')}
+          >
+            FOLLOW @GUNNYAI_FIT <span>→</span>
+          </a>
+        </div>
+      </section>
+      {/* Lazy-load IG's processor. embed.js scans for any
+          blockquote.instagram-media on load + future DOM
+          mutations; loading once at page bottom is enough. */}
+      <Script
+        src="https://www.instagram.com/embed.js"
+        strategy="lazyOnload"
+        async
+      />
 
       {/* ========== FAQ ========== */}
       <section className={styles.section}>
