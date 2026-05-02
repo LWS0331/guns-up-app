@@ -18,6 +18,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import Script from 'next/script';
 import type { Metadata } from 'next';
 import styles from './junior-operator.module.css';
 import JuniorBetaForm from './JuniorBetaForm';
@@ -124,36 +125,58 @@ export default function JuniorOperatorPage() {
               </div>
             </div>
 
-            {/* Right column — static "13 ≠ 13" poster (reel embed
-                pending). The first reel URL we tried (DX0RNtZpdaF…)
-                returned "No Media Match" from IG's oEmbed API for
-                both the full share-token form and the trimmed 11-
-                char shortcode — the post either isn't public, is a
-                Story (not embeddable), or was deleted. Until we have
-                a working canonical URL, the static poster
-                communicates the Mirwald PHV thesis in one image and
-                doesn't surface a broken IG card to visitors. Swap
-                this back to <iframe src="…/embed/"> the moment we
-                have a reel URL where curl -s "https://www.instagram
-                .com/api/v1/oembed/?url=<encoded>" returns JSON, not
-                "No Media Match". */}
-            <div className={styles.posterWrap}>
-              <div className={styles.poster}>
-                <div className={styles.posterText}>
-                  <div className={styles.posterAge}>
-                    13<span className={styles.gap}>≠</span>13
-                  </div>
-                  <div className={styles.posterSub}>SAME BIRTHDAY · 4-YEAR GAP</div>
-                  <div className={styles.posterSrc}>
-                    // MIRWALD MSSE 2002 · PHV BOYS ~14 / GIRLS ~12
-                  </div>
-                </div>
-              </div>
+            {/* Right column — Instagram reel embed.
+                Canonical: instagram.com/reel/DXr6NJGj5JE/
+                Verified against IG's oEmbed API (returns real
+                caption JSON, not "No Media Match"). Day-2 rollout
+                reel — "TRAINERS — WE BUILT GUNNY FOR YOU."
+
+                Implementation: IG's official blockquote +
+                embed.js pattern (the snippet IG generates on the
+                "Embed" share option). On first run, embed.js scans
+                the DOM for any blockquote.instagram-media and
+                replaces it with an iframe pointing at /embed/ —
+                same end result as a hand-rolled iframe but matches
+                IG's documented contract for embeds, so future
+                policy changes (auth-walling, geo-restriction,
+                viewer-attribution) don't silently break us.
+                Script is lazy-loaded with next/script so first
+                paint isn't held up by IG's CDN.
+
+                Verification command for future swaps:
+                  curl -s "https://www.instagram.com/api/v1/oembed/
+                  ?url=<urlencoded>" — JSON = good, "No Media Match"
+                  = bad URL. */}
+            <div className={styles.reelEmbed}>
+              <div
+                className={styles.reelEmbedHost}
+                /* IG's blockquote replaces itself in-place when
+                   embed.js processes it. We render it via
+                   dangerouslySetInnerHTML because the blockquote's
+                   inline-style placeholder markup is verbatim from
+                   IG's "Embed" snippet — touching it would void
+                   the contract. */
+                dangerouslySetInnerHTML={{
+                  __html: `
+<blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="https://www.instagram.com/reel/DXr6NJGj5JE/?utm_source=ig_embed&amp;utm_campaign=loading" data-instgrm-version="14" style=" background:#FFF; border:0; border-radius:3px; box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15); margin: 1px; max-width:540px; min-width:326px; padding:0; width:99.375%; width:-webkit-calc(100% - 2px); width:calc(100% - 2px);"><div style="padding:16px;"><a href="https://www.instagram.com/reel/DXr6NJGj5JE/?utm_source=ig_embed&amp;utm_campaign=loading" style=" background:#FFFFFF; line-height:0; padding:0 0; text-align:center; text-decoration:none; width:100%;" target="_blank">View this post on Instagram</a></div></blockquote>
+`.trim(),
+                }}
+              />
               <div className={styles.posterMeta}>
                 <span>// 9:16 · @gunnyai_fit</span>
                 <span className={styles.live}>● LIVE</span>
               </div>
             </div>
+            {/* Lazy-load IG's processor script after the page is
+                interactive. embed.js scans for any
+                blockquote.instagram-media on load and on subsequent
+                document mutations, so loading it once at page
+                bottom is enough. */}
+            <Script
+              src="https://www.instagram.com/embed.js"
+              strategy="lazyOnload"
+              async
+            />
           </div>
         </div>
       </section>
