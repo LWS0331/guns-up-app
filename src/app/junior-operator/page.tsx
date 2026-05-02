@@ -124,27 +124,31 @@ export default function JuniorOperatorPage() {
               </div>
             </div>
 
-            {/* Right column — Instagram reel embed.
-                Canonical shortcode: DX0RNtZpdaF (the original URL
-                from the share sheet, instagram.com/p/DX0RNtZpdaF
-                EOdCYEUTShaDud81x5HqFYoOUNE0/, had a 28-char share-
-                attribution token glued onto it which IG's /embed/
-                endpoint rejected as "post may have been removed").
-                Standard IG shortcodes are 11 characters; the rest
-                is referrer tracking.
-                Using IG's /embed/ iframe instead of their embed.js
-                so we don't load IG's JS bundle on every landing
-                hit. lazy-loaded so first paint isn't held up by
-                IG's CDN. */}
-            <div className={styles.reelEmbed}>
-              <iframe
-                src="https://www.instagram.com/p/DX0RNtZpdaF/embed/"
-                title='Instagram reel — "13 ≠ 13" biological age'
-                loading="lazy"
-                allowFullScreen
-                scrolling="no"
-                className={styles.reelIframe}
-              />
+            {/* Right column — static "13 ≠ 13" poster (reel embed
+                pending). The first reel URL we tried (DX0RNtZpdaF…)
+                returned "No Media Match" from IG's oEmbed API for
+                both the full share-token form and the trimmed 11-
+                char shortcode — the post either isn't public, is a
+                Story (not embeddable), or was deleted. Until we have
+                a working canonical URL, the static poster
+                communicates the Mirwald PHV thesis in one image and
+                doesn't surface a broken IG card to visitors. Swap
+                this back to <iframe src="…/embed/"> the moment we
+                have a reel URL where curl -s "https://www.instagram
+                .com/api/v1/oembed/?url=<encoded>" returns JSON, not
+                "No Media Match". */}
+            <div className={styles.posterWrap}>
+              <div className={styles.poster}>
+                <div className={styles.posterText}>
+                  <div className={styles.posterAge}>
+                    13<span className={styles.gap}>≠</span>13
+                  </div>
+                  <div className={styles.posterSub}>SAME BIRTHDAY · 4-YEAR GAP</div>
+                  <div className={styles.posterSrc}>
+                    // MIRWALD MSSE 2002 · PHV BOYS ~14 / GIRLS ~12
+                  </div>
+                </div>
+              </div>
               <div className={styles.posterMeta}>
                 <span>// 9:16 · @gunnyai_fit</span>
                 <span className={styles.live}>● LIVE</span>
