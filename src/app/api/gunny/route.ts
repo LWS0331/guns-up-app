@@ -3088,7 +3088,13 @@ export async function POST(req: NextRequest) {
           juniorSoccer,
           juniorFootball,
         };
-        const rendered = loadGunnyCorpus(corpusInput);
+        // Junior operators skip the adult PATH_CORPUS but pull in the
+        // (large) sport-specific drill corpus — youth-soccer-4-10.md alone
+        // is ~380KB. Bump their budget so the drill playbook isn't
+        // truncated. Adult operators stay on the default 500KB budget.
+        const corpusBudget =
+          juniorSoccer || juniorFootball ? 800_000 : undefined;
+        const rendered = loadGunnyCorpus(corpusInput, corpusBudget);
         corpusBlock = rendered.text;
         if (rendered.truncated) {
           console.warn(

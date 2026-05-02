@@ -302,12 +302,12 @@ export const OVERLAYS: CorpusOverlay[] = [
   },
   {
     id: 'youth-soccer-4-10',
-    label: 'Youth Soccer Tier-1 Drills Corpus (ages 4-10)',
+    label: 'Youth Soccer Drills Corpus (ages 4-10)',
     path: 'overlays/youth-soccer-4-10.md',
     format: 'md',
-    approxBytes: 66_215,
+    approxBytes: 380_440,
     description:
-      'Parent-coached backyard / park drill corpus for ages 4-10. ~370 nodes across 3 age tiers (4-5 / 6-7 / 8-10) and 16 positions. Each node carries setup, instructions, progressions, coaching cues, common mistakes, success metrics, and a verbatim Gunny tactical-drill-sergeant parent script. Sources: US Soccer PDI, FA Youth Award, KNVB, FC Barcelona La Masia, Ajax TIPS, Coerver, Belgian FA, FIFA 11+ Kids, NSCA Youth, Canadian LTAD. Honors US Soccer no-heading-under-U11 policy and NSCA Youth no-heavy-load rules. Loads alongside youth-soccer.md so Gunny has both the developmental-research synthesis (10-18) AND the drill-by-drill backyard playbook (4-10) for any soccer junior.',
+      'Parent-coached backyard / park drill corpus for ages 4-10. 267 fully-detailed nodes across 3 age tiers — Tier 1 (4-5, 35 universal nodes), Tier 2 (6-7, 96 nodes covering all 16 positions), Tier 3 (8-10, 136 position-specific nodes). Each node carries setup, instructions, progressions, coaching cues, common mistakes, success metrics, and a verbatim Gunny tactical-drill-sergeant parent script. Sources: US Soccer PDI, FA Youth Award, KNVB, FC Barcelona La Masia, Ajax TIPS, Coerver, Belgian FA, FIFA 11+ Kids, NSCA Youth, Canadian LTAD. Honors US Soccer no-heading-under-U11 policy (foam/beach-ball technique-intro only at age 10, max 6-8 reps) and NSCA Youth no-heavy-load rules. Loads alongside youth-soccer.md so Gunny has both the developmental-research synthesis (10-18) AND the drill-by-drill backyard playbook (4-10) for any soccer junior.',
     trigger: 'junior_soccer',
   },
   {
