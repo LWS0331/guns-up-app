@@ -17,6 +17,7 @@
 // below to false and ship — the closed state takes over.
 
 import styles from './early-access.module.css';
+import EarlyAccessChat from './EarlyAccessChat';
 
 // Toggle to false when the campaign closes or all 20 seats fill.
 const CAMPAIGN_OPEN = true;
@@ -265,6 +266,9 @@ export default function EarlyAccessPage() {
             </div>
           </div>
         </section>
+
+        {/* Gunny-Lite chat — long-tail Q&A, 2-message cap then IG DM */}
+        <EarlyAccessChat />
 
         {/* Disclaimer */}
         <footer className={styles.footer}>

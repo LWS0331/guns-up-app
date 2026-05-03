@@ -441,6 +441,143 @@
   color: #c0ccc0;
 }
 
+/* ─── CHAT (Gunny-Lite Q&A) ─── */
+/* Anonymous chatbot that answers GUNS-UP product questions. Server
+   rate-limits to 2 user messages per IP per 24h — past that, the
+   input is replaced with a big IG DM CTA to push the conversation
+   to Ruben directly. */
+.chatSection { margin-bottom: 48px; }
+
+.chatHead { margin-bottom: 16px; }
+
+.chatLede {
+  font-size: 14px;
+  color: #888;
+  margin: 8px 0 0 0;
+  line-height: 1.55;
+}
+
+.chatPanel {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+}
+
+.chatLog {
+  padding: 18px 18px 8px;
+  max-height: 380px;
+  min-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Subtle terminal-scan tint at top so it reads as a screen */
+  background:
+    linear-gradient(180deg, rgba(0, 255, 65, 0.02) 0%, transparent 60px);
+}
+
+.chatMsg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.chatRole {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.chatMsgBot .chatRole { color: rgba(0, 255, 65, 0.6); }
+.chatMsgUser .chatRole { color: rgba(255, 255, 255, 0.5); }
+
+.chatText {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-left: 12px;
+  border-left: 2px solid rgba(0, 255, 65, 0.4);
+}
+
+.chatMsgUser .chatText {
+  color: #f5f5f5;
+  border-left-color: rgba(255, 255, 255, 0.18);
+}
+
+.chatMsgBot .chatText {
+  color: #d8e3d8;
+}
+
+.chatTyping {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: rgba(0, 255, 65, 0.5);
+  font-style: italic;
+}
+
+.chatInputRow {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid rgba(0, 255, 65, 0.18);
+}
+
+.chatInput {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: #f5f5f5;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 14px 16px;
+  outline: none;
+  /* iOS Safari renders inputs as translucent pills without this. */
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+}
+
+.chatInput:focus { background: rgba(0, 0, 0, 0.85); }
+.chatInput:disabled { opacity: 0.5; }
+
+.chatInput::placeholder { color: rgba(255, 255, 255, 0.35); }
+
+.chatSendBtn {
+  background: #00ff41;
+  color: #000;
+  border: none;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0 22px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+  transition: background 0.15s;
+  min-width: 88px;
+}
+
+.chatSendBtn:hover:not(:disabled) { background: #4dff7a; }
+.chatSendBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.chatLimitCta {
+  display: block;
+  text-align: center;
+  background: #00ff41;
+  color: #000;
+  text-decoration: none;
+  padding: 18px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  border-top: 1px solid rgba(0, 255, 65, 0.4);
+  transition: background 0.15s;
+}
+
+.chatLimitCta:hover { background: #4dff7a; }
+
 /* ─── FOOTER ─── */
 .footer {
   text-align: center;
