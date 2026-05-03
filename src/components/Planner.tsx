@@ -2993,11 +2993,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
-                    className="btn btn-amber btn-sm"
+                    className="btn btn-ghost btn-sm"
                     aria-label={`Watch form demo for ${block.exerciseName}`}
                     style={{ padding: '6px 10px', flexShrink: 0 }}
                   >
-                    <Icon.Play size={11} /> Form Demo
+                    <Icon.Play size={11} /> DEMO
                   </button>
                 )}
                 {/* Notes / Form Check icon — single tap opens the
@@ -3033,10 +3033,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
-                  className="btn btn-amber btn-sm"
+                  className="btn btn-ghost btn-sm"
                   style={{ marginBottom: 8, padding: '6px 10px' }}
                 >
-                  <Icon.Play size={11} /> Form Demo
+                  <Icon.Play size={11} /> DEMO
                 </button>
               )}
 
@@ -4056,10 +4056,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                                 href={vidUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="btn btn-amber btn-sm"
+                                className="btn btn-ghost btn-sm"
                                 style={{ padding: '4px 8px', fontSize: 9, flexShrink: 0 }}
                               >
-                                ▶ Demo
+                                <Icon.Play size={10} /> DEMO
                               </a>
                             )}
                           </div>
