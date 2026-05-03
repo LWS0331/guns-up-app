@@ -26,9 +26,20 @@ import { requireAuth } from '@/lib/requireAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 
 // Trainer accounts that stay on opus regardless of any rebalance.
-// Hardcoded by callsign rather than id so it survives DB id renames
-// (e.g. if seed changes id format).
-const KEEP_OPUS_CALLSIGNS = ['RAMPAGE', 'VALKYRIE'];
+//
+// MATCHED BY ID (primary). Earlier version of this file matched by
+// callsign string-equality and missed an operator whose callsign in
+// production was 'RAMPAGE ' (trailing whitespace) — the founder's own
+// row got demoted with everyone else. ID-based matching is immune to
+// callsign typos / whitespace / casing. Callsign comparisons below
+// are kept as a backup but use trim() so a trailing space won't
+// defeat them again.
+const KEEP_OPUS_IDS = new Set(['op-ruben', 'op-britney']);
+const KEEP_OPUS_CALLSIGNS = new Set(['RAMPAGE', 'VALKYRIE']);
+function shouldKeepOpus(op: { id: string; callsign: string }): boolean {
+  if (KEEP_OPUS_IDS.has(op.id)) return true;
+  return KEEP_OPUS_CALLSIGNS.has(op.callsign.trim().toUpperCase());
+}
 
 interface DemoteRow {
   id: string;
@@ -42,11 +53,14 @@ interface DemoteRow {
 }
 
 async function buildDemoteList(includeJuniors: boolean): Promise<DemoteRow[]> {
-  const rows = await prisma.operator.findMany({
-    where: {
-      tier: 'opus',
-      callsign: { notIn: KEEP_OPUS_CALLSIGNS },
-    },
+  // Pull ALL opus operators, then filter via shouldKeepOpus() in
+  // application code. Doing the filter at the DB layer with a
+  // notIn list of callsigns proved fragile — a trailing-space
+  // typo defeated the equality check and we demoted the founder.
+  // Application-layer filtering also lets us match by id as the
+  // primary signal with callsign as a defensive backup.
+  const allOpus = await prisma.operator.findMany({
+    where: { tier: 'opus' },
     select: {
       id: true,
       callsign: true,
@@ -57,6 +71,7 @@ async function buildDemoteList(includeJuniors: boolean): Promise<DemoteRow[]> {
     },
     orderBy: { callsign: 'asc' },
   });
+  const rows = allOpus.filter((r) => !shouldKeepOpus(r));
 
   return rows.map((r): DemoteRow => {
     if (r.isJunior && !includeJuniors) {
