@@ -242,160 +242,103 @@
   font-weight: 700;
 }
 
-/* ─── FORM ─── */
-.formSection { margin-bottom: 48px; }
+/* ─── CTA SECTION (IG DM intake) ─── */
+/* Replaces the original form. Two big tap targets that deep-link
+   into Instagram DM compose with @gunnyai_fit — onboarding for the
+   first 20 is fully manual, so the page just routes traffic. */
+.ctaSection { margin-bottom: 48px; }
 
-.form {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(0, 255, 65, 0.2);
-  padding: 32px 28px;
-}
+.ctaHead { margin-bottom: 20px; }
 
-.formHead { margin-bottom: 24px; }
-
-.formLede {
+.ctaLede {
   font-size: 14px;
   color: #888;
   margin: 8px 0 0 0;
+  line-height: 1.55;
 }
 
-.field { margin-bottom: 18px; }
-
-.label {
-  display: block;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  color: #00ff41;
-  margin-bottom: 6px;
-  text-transform: uppercase;
-}
-
-.required { color: #ff6b35; }
-.optional { color: #666; font-weight: normal; }
-
-.input,
-.textarea {
-  width: 100%;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(0, 255, 65, 0.2);
-  color: #f5f5f5;
-  font-family: inherit;
-  font-size: 15px;
-  padding: 12px 14px;
-  outline: none;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
-  /* iOS Safari renders <input> with translucent-pill default chrome
-     unless appearance is stripped. Same gotcha that bit the Daily Ops
-     surface earlier — fix it here at the source. */
-  -webkit-appearance: none;
-  appearance: none;
-  border-radius: 0;
-}
-
-.input:focus,
-.textarea:focus { border-color: #00ff41; }
-
-.textarea {
-  resize: vertical;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.tierRadio {
+.ctaGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-@media (max-width: 540px) {
-  .tierRadio { grid-template-columns: 1fr; }
-}
-
-.tierRadioOption {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(0, 255, 65, 0.15);
-  padding: 14px 16px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.tierRadioOption:has(input:checked) {
-  border-color: #00ff41;
-  background: rgba(0, 255, 65, 0.05);
-}
-
-.tierRadioOption input { margin-bottom: 4px; accent-color: #00ff41; }
-
-.tierRadioName {
-  font-weight: 700;
-  font-size: 14px;
-  color: #f5f5f5;
-  letter-spacing: 0.05em;
-}
-
-.tierRadioPrice {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 12px;
-  color: #888;
-}
-
-.tierRadioDisabled { opacity: 0.4; cursor: not-allowed; }
-
-.errorBox {
-  background: rgba(255, 107, 53, 0.1);
-  border: 1px solid rgba(255, 107, 53, 0.4);
-  color: #ff9b6b;
-  padding: 12px 14px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
-.submitBtn {
-  width: 100%;
+@media (max-width: 540px) {
+  .ctaGrid { grid-template-columns: 1fr; }
+}
+
+.ctaPrimary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   background: #00ff41;
   color: #000;
+  text-decoration: none;
+  padding: 22px 56px 22px 24px;
+  border: 2px solid #00ff41;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 14px;
-  letter-spacing: 0.1em;
   font-weight: 700;
-  padding: 16px;
-  border: none;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
-  text-transform: uppercase;
-  -webkit-appearance: none;
-  appearance: none;
-  border-radius: 0;
+  letter-spacing: 0.05em;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
 }
 
-.submitBtn:hover:not(:disabled) {
+.ctaPrimary:hover {
   background: #4dff7a;
-  transform: translateY(-1px);
+  border-color: #4dff7a;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 255, 65, 0.25);
 }
 
-.submitBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+/* WARFIGHTER variant — outlined to differentiate from the primary
+   COMMANDER button. Visual hierarchy: solid = entry tier, outline =
+   premium concierge tier (matches the seatCardFeatured pattern). */
+.ctaPrimaryAccent {
+  background: #050505;
+  color: #00ff41;
+}
 
-.altCta {
+.ctaPrimaryAccent:hover {
+  background: rgba(0, 255, 65, 0.08);
+  color: #4dff7a;
+  border-color: #4dff7a;
+}
+
+.ctaTier {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ctaPrice {
+  font-size: 12px;
+  opacity: 0.75;
+  letter-spacing: 0.05em;
+}
+
+.ctaArrow {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ctaHelper {
   margin: 16px 0 0 0;
   font-size: 13px;
   color: #888;
   text-align: center;
 }
 
-.altCta strong { color: #00ff41; }
+.ctaHelper strong { color: #00ff41; }
+.ctaHelper a { color: #00ff41; text-decoration: underline; }
 
-.altCta a { color: #00ff41; text-decoration: underline; }
-
-/* ─── SUCCESS / CLOSED STATES ─── */
-.successBox,
+/* ─── CLOSED STATE ─── */
 .closedBox {
   background: rgba(0, 255, 65, 0.05);
   border: 1px solid rgba(0, 255, 65, 0.3);
@@ -403,7 +346,6 @@
   text-align: center;
 }
 
-.successTitle,
 .closedTitle {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 14px;
@@ -413,11 +355,7 @@
   margin-bottom: 16px;
 }
 
-.successBox p { font-size: 15px; line-height: 1.55; margin: 0 0 12px 0; }
-
-.successSecondary { font-size: 13px !important; color: #888 !important; }
-
-.successBox a { color: #00ff41; }
+.closedBox p { font-size: 15px; line-height: 1.55; margin: 0; }
 
 .closedBox a { color: #00ff41; }
 

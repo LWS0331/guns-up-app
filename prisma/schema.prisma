@@ -307,34 +307,6 @@ model PersonalRhythm {
   updatedAt               DateTime @updatedAt
 }
 
-// EarlyAccessReservation — May 2026 IG-reel campaign reservations.
-//
-// 20 total seats: 15 commander + 5 warfighter. Each reservation is
-// manually onboarded by Ruben via Stripe checkout link. status
-// transitions: 'reserved' (initial) → 'onboarded' (paid) | 'rejected'
-// (founder declined) | 'withdrawn' (user pulled out).
-//
-// Both 'reserved' AND 'onboarded' rows count against the seat cap so
-// in-flight reservations don't get oversold.
-model EarlyAccessReservation {
-  id          String   @id @default(cuid())
-  name        String
-  email       String
-  tier        String   // "commander" | "warfighter"
-  callsign    String?
-  note        String?
-  status      String   @default("reserved") // "reserved" | "onboarded" | "rejected" | "withdrawn"
-  source      String   @default("unknown")  // e.g. "ig-reel-may-2026"
-  notes       String?  // founder review notes (admin-only)
-  onboardedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([tier, status])
-  @@index([email])
-  @@index([createdAt])
-}
-
 // ChatHistorySnapshot — append-only audit of every ChatHistory.messages
 // overwrite. Captured by /api/chat PUT BEFORE applying the upsert,
 // so the prior state is always preserved even if a buggy client (or

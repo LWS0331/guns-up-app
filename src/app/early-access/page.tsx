@@ -1,19 +1,21 @@
-// /early-access — temporary single-page landing for the May 2026
-// Instagram reel campaign. 20 total seats: 15 COMMANDER + 5 WARFIGHTER.
-// Pricing here matches the Master Plan v3 (NOT the live /landing,
-// which still shows v2 prices pending the pricing-v3 handoff).
+// /early-access — single-page landing for the May 2026 Instagram-reel
+// campaign. 20 total seats: 15 COMMANDER + 5 WARFIGHTER. Pricing here
+// matches the Master Plan v3 (NOT the live /landing, which still shows
+// v2 prices pending the pricing-v3 handoff).
 //
-// Flow: visitor reserves a seat → /api/early-access POST → row in
-// EarlyAccessReservation → email to founder inbox → Ruben follows up
-// manually with Stripe checkout link.
+// Onboarding is fully manual via Instagram DM — no form, no DB, no
+// notification email plumbing. Visitor reads the pitch → taps a tier
+// CTA → IG opens to a fresh DM with @gunnyai_fit → Ruben handles the
+// onboarding by hand and sends a Stripe link within 24 hours.
 //
-// This page is server-rendered with `force-dynamic` so the seat
-// counter is fresh on every load. After the campaign ends (or all
-// 20 seats reserved), update CAMPAIGN_OPEN below to false to render
-// the closed state.
+// Why not a form? Speed. The first 20 are all hands-on anyway, so a
+// form just adds a step that filters out conversational intent. IG DM
+// is where the founder already lives; the page just routes traffic
+// there.
+//
+// When the campaign closes (or all seats fill), flip CAMPAIGN_OPEN
+// below to false and ship — the closed state takes over.
 
-import { prisma } from '@/lib/db';
-import EarlyAccessForm from './EarlyAccessForm';
 import styles from './early-access.module.css';
 
 // Toggle to false when the campaign closes or all 20 seats fill.
@@ -22,39 +24,11 @@ const CAMPAIGN_OPEN = true;
 const COMMANDER_TOTAL = 15;
 const WARFIGHTER_TOTAL = 5;
 
-interface SeatCounts {
-  commanderRemaining: number;
-  warfighterRemaining: number;
-  closed: boolean;
-}
-
-async function getSeatCounts(): Promise<SeatCounts> {
-  try {
-    const [commanderTaken, warfighterTaken] = await Promise.all([
-      prisma.earlyAccessReservation.count({
-        where: { tier: 'commander', status: { in: ['reserved', 'onboarded'] } },
-      }),
-      prisma.earlyAccessReservation.count({
-        where: { tier: 'warfighter', status: { in: ['reserved', 'onboarded'] } },
-      }),
-    ]);
-    const commanderRemaining = Math.max(0, COMMANDER_TOTAL - commanderTaken);
-    const warfighterRemaining = Math.max(0, WARFIGHTER_TOTAL - warfighterTaken);
-    const closed = commanderRemaining === 0 && warfighterRemaining === 0;
-    return { commanderRemaining, warfighterRemaining, closed };
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[early-access] seat count failed:', err);
-    // On DB error, optimistically show seats available so we don't
-    // block legitimate reservations. If the API fails on submit, the
-    // user gets a clear error then.
-    return {
-      commanderRemaining: COMMANDER_TOTAL,
-      warfighterRemaining: WARFIGHTER_TOTAL,
-      closed: false,
-    };
-  }
-}
+// ig.me/m/<handle> deep-links straight into a fresh DM compose with
+// the recipient pre-filled — works on iOS, Android, and web. Falling
+// back to the profile URL would require an extra tap.
+const IG_DM_URL = 'https://ig.me/m/gunnyai_fit';
+const IG_PROFILE_URL = 'https://instagram.com/gunnyai_fit';
 
 export const metadata = {
   title: 'GUNS UP · Early Access',
@@ -62,13 +36,7 @@ export const metadata = {
     'Founder-direct early access to GUNS UP COMMANDER and WARFIGHTER tiers. 20 seats. Limited release.',
 };
 
-// Force dynamic rendering so seat counts are fresh on every page load.
-export const dynamic = 'force-dynamic';
-
-export default async function EarlyAccessPage() {
-  const seats = await getSeatCounts();
-  const fullyClosed = !CAMPAIGN_OPEN || seats.closed;
-
+export default function EarlyAccessPage() {
   return (
     <main className={styles.main}>
       {/* Background grid overlay */}
@@ -112,13 +80,10 @@ export default async function EarlyAccessPage() {
           </p>
         </section>
 
-        {/* Seat counter */}
+        {/* Seat grid — static cohort sizes (no live counter; intake is
+            via IG DM). Flip CAMPAIGN_OPEN to false when filled. */}
         <section className={styles.seatGrid}>
-          <article
-            className={`${styles.seatCard} ${
-              seats.commanderRemaining === 0 ? styles.seatCardSold : ''
-            }`}
-          >
+          <article className={styles.seatCard}>
             <div className={styles.seatLabel}>// TIER 03</div>
             <div className={styles.seatName}>COMMANDER</div>
             <div className={styles.seatPrice}>
@@ -133,25 +98,15 @@ export default async function EarlyAccessPage() {
               <li>Priority response queue</li>
             </ul>
             <div className={styles.seatCounter}>
-              {seats.commanderRemaining > 0 ? (
-                <>
-                  <span className={styles.seatCounterNum}>
-                    {seats.commanderRemaining}
-                  </span>
-                  <span className={styles.seatCounterLabel}>
-                    of {COMMANDER_TOTAL} seats remaining
-                  </span>
-                </>
-              ) : (
-                <span className={styles.seatCounterClosed}>SEATS FILLED</span>
-              )}
+              <span className={styles.seatCounterNum}>{COMMANDER_TOTAL}</span>
+              <span className={styles.seatCounterLabel}>
+                seats · founding cohort
+              </span>
             </div>
           </article>
 
           <article
-            className={`${styles.seatCard} ${styles.seatCardFeatured} ${
-              seats.warfighterRemaining === 0 ? styles.seatCardSold : ''
-            }`}
+            className={`${styles.seatCard} ${styles.seatCardFeatured}`}
           >
             <div className={styles.seatBadge}>CONCIERGE</div>
             <div className={styles.seatLabel}>// TIER 04</div>
@@ -170,41 +125,87 @@ export default async function EarlyAccessPage() {
               <li>Beta feature access</li>
             </ul>
             <div className={styles.seatCounter}>
-              {seats.warfighterRemaining > 0 ? (
-                <>
-                  <span className={styles.seatCounterNum}>
-                    {seats.warfighterRemaining}
-                  </span>
-                  <span className={styles.seatCounterLabel}>
-                    of {WARFIGHTER_TOTAL} seats remaining
-                  </span>
-                </>
-              ) : (
-                <span className={styles.seatCounterClosed}>SEATS FILLED</span>
-              )}
+              <span className={styles.seatCounterNum}>{WARFIGHTER_TOTAL}</span>
+              <span className={styles.seatCounterLabel}>
+                seats · founding cohort
+              </span>
             </div>
           </article>
         </section>
 
-        {/* Form / closed state */}
-        <section className={styles.formSection}>
-          {fullyClosed ? (
+        {/* CTA section — IG DM intake */}
+        <section className={styles.ctaSection}>
+          {CAMPAIGN_OPEN ? (
+            <>
+              <div className={styles.ctaHead}>
+                <span className={styles.eyebrow}>// RESERVE YOUR SEAT</span>
+                <p className={styles.ctaLede}>
+                  Onboarding is hands-on for the first 20. Tap below, send
+                  one DM, I send back a Stripe link within 24 hours.
+                </p>
+              </div>
+
+              <div className={styles.ctaGrid}>
+                <a
+                  className={styles.ctaPrimary}
+                  href={IG_DM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open Instagram DM and reserve a COMMANDER seat"
+                >
+                  <span className={styles.ctaTier}>
+                    DM &ldquo;COMMANDER&rdquo;
+                  </span>
+                  <span className={styles.ctaPrice}>$39.99 / mo</span>
+                  <span className={styles.ctaArrow} aria-hidden="true">
+                    →
+                  </span>
+                </a>
+                <a
+                  className={`${styles.ctaPrimary} ${styles.ctaPrimaryAccent}`}
+                  href={IG_DM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open Instagram DM and reserve a WARFIGHTER seat"
+                >
+                  <span className={styles.ctaTier}>
+                    DM &ldquo;WARFIGHTER&rdquo;
+                  </span>
+                  <span className={styles.ctaPrice}>$149 / mo</span>
+                  <span className={styles.ctaArrow} aria-hidden="true">
+                    →
+                  </span>
+                </a>
+              </div>
+
+              <p className={styles.ctaHelper}>
+                Not sure which tier? DM <strong>&ldquo;OPS&rdquo;</strong> to{' '}
+                <a
+                  href={IG_PROFILE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  @gunnyai_fit
+                </a>{' '}
+                — I&apos;ll help you pick.
+              </p>
+            </>
+          ) : (
             <div className={styles.closedBox}>
               <div className={styles.closedTitle}>// EARLY ACCESS · CLOSED</div>
               <p>
                 All 20 seats are reserved. The next intake window opens after
-                the v3 platform launch. Want a heads-up?{' '}
-                <a href="/contact?subject=early-access-waitlist">
-                  Drop me a line
+                the v3 platform launch. Want a heads-up? DM{' '}
+                <a
+                  href={IG_PROFILE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  @gunnyai_fit
                 </a>
                 .
               </p>
             </div>
-          ) : (
-            <EarlyAccessForm
-              commanderAvailable={seats.commanderRemaining > 0}
-              warfighterAvailable={seats.warfighterRemaining > 0}
-            />
           )}
         </section>
 
@@ -229,10 +230,10 @@ export default async function EarlyAccessPage() {
           <h2 className={styles.faqTitle}>// COMMON QUERIES</h2>
           <div className={styles.faqGrid}>
             <div className={styles.faqItem}>
-              <div className={styles.faqQ}>What happens after I reserve?</div>
+              <div className={styles.faqQ}>What happens after I DM?</div>
               <div className={styles.faqA}>
-                I email you within 24 hours with a Stripe link to lock in
-                your seat. If I take longer than that, your spot is held —
+                I reply within 24 hours with a Stripe link to lock in your
+                seat. If I take longer than that, your spot is held —
                 I&apos;m one person doing this manually for the first 20.
               </div>
             </div>
@@ -241,9 +242,9 @@ export default async function EarlyAccessPage() {
                 What if I want WARFIGHTER but it&apos;s full?
               </div>
               <div className={styles.faqA}>
-                Reserve COMMANDER instead, or hit the contact form for the
-                waitlist. WARFIGHTER reopens later — but at the public $149
-                rate. Founding cohort price doesn&apos;t reset.
+                Take COMMANDER instead, or ask me for the WARFIGHTER
+                waitlist. When WARFIGHTER reopens it&apos;s at the public
+                $149 rate — founding cohort price doesn&apos;t reset.
               </div>
             </div>
             <div className={styles.faqItem}>
