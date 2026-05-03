@@ -337,6 +337,43 @@ model ChatHistorySnapshot {
   @@index([operatorId, replacedAt])
 }
 
+// GunnyUsageLog — per-call accounting of Anthropic API usage. Added
+// May 2026 alongside prompt caching to make the cost picture
+// auditable. One row per LLM call from /api/gunny (both streaming
+// and non-streaming paths). Cache_read / cache_write counts surface
+// whether the caching pass is actually paying off; estimated_cost_usd
+// computed via src/lib/anthropicCost.ts at write time so a later
+// rate change doesn't backdate historical numbers.
+//
+// Indexes optimized for:
+//   - per-operator daily rollups (operatorId, createdAt)
+//   - cost dashboard (createdAt) sorted DESC
+model GunnyUsageLog {
+  id                String   @id @default(cuid())
+  operatorId        String
+  /// Optional — populated when this call was tied to a specific
+  /// chatType (gunny-tab, gunny-onboarding) so we can split spend by
+  /// surface.
+  chatType          String?
+  /// Optional — 'workout', 'voice', 'assistant', 'ops', 'onboarding', etc.
+  mode              String?
+  model             String   // e.g. 'claude-opus-4-6-20250101'
+  inputTokens       Int      @default(0)
+  outputTokens      Int      @default(0)
+  cacheReadTokens   Int      @default(0)
+  cacheWriteTokens  Int      @default(0)
+  /// USD, 6-decimal precision. Computed at write time from the rate
+  /// card in src/lib/anthropicCost.ts.
+  estimatedCostUsd  Decimal  @default(0) @db.Decimal(12, 6)
+  /// Anthropic billing only counts non-cached input as "input_tokens".
+  /// Cache reads + writes are reported separately. We mirror that
+  /// shape here so the row is directly comparable to the CSV export.
+  createdAt         DateTime @default(now())
+
+  @@index([operatorId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}
+
 // PushSubscription — Web Push (RFC 8030) subscription rows. Phase 2C.
 // One row per (operatorId, endpoint). Endpoint uniqueness across
 // operators is enforced too — if a device's endpoint already exists

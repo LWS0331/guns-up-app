@@ -7,6 +7,7 @@ import { FOOD_DB_SYSTEM_INSTRUCTION, buildFoodContextFromMessage } from '@/lib/f
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 import { upsertDailyOpsPlan, applyBlockOverride } from '@/lib/dailyOpsPersistence';
+import { computeAnthropicCost, type AnthropicUsage } from '@/lib/anthropicCost';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
 import { prisma } from '@/lib/db';
@@ -20,6 +21,43 @@ import { getCoreIdentity, resolvePersonaId, detectPersonaDrift } from '@/lib/per
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
+
+// ────────────────────────────────────────────────────────────────────────
+// Usage logging — May 2026 cost-control pass.
+//
+// Writes a GunnyUsageLog row after every Anthropic call so we can
+// see cache hit rate, per-operator spend, and per-mode breakdown
+// without scraping the Anthropic billing CSV. Best-effort: a write
+// failure NEVER blocks the chat response — the caller's catch
+// swallows + logs.
+// ────────────────────────────────────────────────────────────────────────
+async function logGunnyUsage(args: {
+  operatorId: string;
+  chatType?: string | null;
+  mode?: string | null;
+  model: string;
+  usage: AnthropicUsage;
+}): Promise<void> {
+  try {
+    const cost = computeAnthropicCost(args.model, args.usage);
+    await prisma.gunnyUsageLog.create({
+      data: {
+        operatorId: args.operatorId,
+        chatType: args.chatType ?? null,
+        mode: args.mode ?? null,
+        model: args.model,
+        inputTokens: cost.inputTokens,
+        outputTokens: cost.outputTokens,
+        cacheReadTokens: cost.cacheReadTokens,
+        cacheWriteTokens: cost.cacheWriteTokens,
+        estimatedCostUsd: cost.totalCost,
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[gunny-usage] log write failed (non-fatal):', err);
+  }
+}
 
 const SITREP_PREAMBLE = `YOU HAVE FULL ACCESS TO THIS OPERATOR'S PROFILE AND DATA. You are not a generic chatbot — you are a personal AI trainer with deep knowledge of this specific operator. You know their:
 - Physical stats, fitness level, and training age
@@ -3939,12 +3977,65 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     const acceptHeader = req.headers.get('accept') || '';
     const wantsStream = acceptHeader.includes('text/event-stream');
 
+    // ── PROMPT CACHING (May 2026 cost-control pass) ──
+    //
+    // Split the system message into a content-block array with
+    // cache_control on the stable prefix. Layout:
+    //
+    //   Block 1 (cached, ephemeral 5-min): systemPrompt
+    //     persona + DOMAIN_KNOWLEDGE + SITREP_PREAMBLE — only changes
+    //     when an operator switches persona, which is rare. ~10-20K
+    //     tokens.
+    //
+    //   Block 2 (cached, ephemeral 5-min): corpusBlock
+    //     loaded reference material (operating manual + path corpus +
+    //     youth corpus + nicotine pouches QA). Stable per (operatorId,
+    //     trainingPath, sport, juniorAge). May be 0 chars for ops mode
+    //     and other edge paths — we only emit this block when non-empty
+    //     so the cache breakpoint isn't wasted on a stub.
+    //
+    //   Block 3 (NOT cached): gapsBlock + contextBlock + Daily Ops
+    //     personalization signals — anything that mutates per-turn
+    //     (today's date, screen context, opsData, fresh wearable +
+    //     rhythm signals). Inlining these in a cached block would
+    //     bust every cache hit on the first turn of a new day.
+    //
+    // Constraints honored:
+    //   - Each cached block must be ≥1024 tokens for Opus/Sonnet.
+    //     systemPrompt alone clears that comfortably (~10K+ tokens).
+    //   - Max 4 cache_control breakpoints per request — using 2.
+    //   - Cache TTL is 5 minutes (default ephemeral). Long enough to
+    //     amortize across a multi-turn conversation; short enough that
+    //     stale data doesn't linger across sessions.
+    type SystemBlock = {
+      type: 'text';
+      text: string;
+      cache_control?: { type: 'ephemeral' };
+    };
+    const dynamicSuffix = gapsBlock + contextBlock;
+    const systemBlocks: SystemBlock[] = [];
+    systemBlocks.push({
+      type: 'text',
+      text: systemPrompt,
+      cache_control: { type: 'ephemeral' },
+    });
+    if (corpusBlock.length > 0) {
+      systemBlocks.push({
+        type: 'text',
+        text: corpusBlock,
+        cache_control: { type: 'ephemeral' },
+      });
+    }
+    if (dynamicSuffix.length > 0) {
+      systemBlocks.push({ type: 'text', text: dynamicSuffix });
+    }
+
     // ── NON-STREAMING (JSON) FALLBACK — for voice handler and legacy clients ──
     if (!wantsStream) {
       const response = await client.messages.create({
         model: finalModel,
         max_tokens: maxTokens,
-        system: systemPrompt + corpusBlock + gapsBlock + contextBlock,
+        system: systemBlocks as Anthropic.Messages.TextBlockParam[],
         messages: anthropicMessages,
       });
 
@@ -4329,6 +4420,22 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           `\n\n⚠ Heads up — I drafted today's daily ops but it didn't save: ${dailyOpsResult.error}.`;
       }
 
+      // Best-effort usage log — must NOT block the response.
+      void logGunnyUsage({
+        operatorId: auth.operatorId,
+        chatType: historyChatType,
+        mode: typeof mode === 'string' ? mode : null,
+        model: finalModel,
+        usage: {
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens,
+          cache_read_input_tokens:
+            (response.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0,
+          cache_creation_input_tokens:
+            (response.usage as { cache_creation_input_tokens?: number }).cache_creation_input_tokens ?? 0,
+        },
+      });
+
       return NextResponse.json({
         response: responseWithDailyOpsError,
         workoutData,
@@ -4367,15 +4474,28 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         // for the canonical list.
         safetyEvents,
         model: finalModel,
-        usage: { input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens },
+        usage: {
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens,
+          cache_read_input_tokens:
+            (response.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0,
+          cache_creation_input_tokens:
+            (response.usage as { cache_creation_input_tokens?: number }).cache_creation_input_tokens ?? 0,
+        },
       });
     }
 
     // ── SSE STREAMING ──
+    // Streaming path uses the SAME cache layout as the non-streaming
+    // path above (see the long comment for rationale). Note the
+    // pre-cache code path above did NOT include gapsBlock here, but
+    // we add it now: keeping the two transports identical means
+    // they share cache hits, and gapsBlock is per-turn data that
+    // belongs in the dynamic tail anyway.
     const stream = client.messages.stream({
       model: finalModel,
       max_tokens: maxTokens,
-      system: systemPrompt + corpusBlock + contextBlock,
+      system: systemBlocks as Anthropic.Messages.TextBlockParam[],
       messages: anthropicMessages,
     });
 
@@ -4735,6 +4855,22 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             streamCleanTextWithDailyOpsError +=
               `\n\n⚠ Heads up — I drafted today's daily ops but it didn't save: ${dailyOpsResult.error}.`;
           }
+
+          // Best-effort usage log for the streaming path.
+          void logGunnyUsage({
+            operatorId: auth.operatorId,
+            chatType: historyChatType,
+            mode: typeof mode === 'string' ? mode : null,
+            model: finalModel,
+            usage: {
+              input_tokens: final.usage.input_tokens,
+              output_tokens: final.usage.output_tokens,
+              cache_read_input_tokens:
+                (final.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0,
+              cache_creation_input_tokens:
+                (final.usage as { cache_creation_input_tokens?: number }).cache_creation_input_tokens ?? 0,
+            },
+          });
 
           controller.enqueue(
             encoder.encode(
