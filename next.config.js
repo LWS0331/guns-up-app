@@ -8,6 +8,19 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['@mui/material', '@mui/icons-material', 'recharts', 'posthog-js'],
   },
+  // Redirects — defensive routing for retired URLs
+  async redirects() {
+    return [
+      {
+        // Old marketing campaigns linked to /trainers — route to the
+        // /trainer-apply coming-soon screen until the new license
+        // program goes public. Permanent (301) so search engines update.
+        source: '/trainers',
+        destination: '/trainer-apply',
+        permanent: true,
+      },
+    ];
+  },
   // Security + caching headers
   async headers() {
     return [

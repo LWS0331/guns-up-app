@@ -10,9 +10,17 @@
 // Visual styling reuses the contact CSS module so the form reads as a sibling
 // surface to /contact rather than a brand-new design.
 
+// TODO(handoff: feat/pricing-v3-strip-revshare):
+// When TRAINER_APPLICATIONS_OPEN flips back to true, the form copy
+// below MUST be rewritten for the Certified GUNS UP Trainer license
+// model: $499 one-time + $99/mo + 70/30 platform/trainer split, NOT
+// the prior 25-40% commission revenue share. Current copy is stale.
+// See GUNS_UP_Master_Plan_v2.md §3 for the new program details.
+
 import React, { useState } from 'react';
 import Link from 'next/link';
 import styles from '../contact/contact.module.css';
+import { TRAINER_APPLICATIONS_OPEN } from '@/lib/featureFlags';
 
 const DISCIPLINE_OPTIONS: { value: string; label: string }[] = [
   { value: 'strength',          label: 'Strength · powerlifting-adjacent' },
@@ -32,6 +40,53 @@ const TEXT_MAX = 5000;
 const TEXT_WARN_AT = 4500;
 
 export default function TrainerApplyPage() {
+  // Gate the entire form behind the TRAINER_APPLICATIONS_OPEN flag. While
+  // the new Certified GUNS UP Trainer license program is being finalized,
+  // visitors land on a coming-soon screen instead of the stale revshare-era
+  // application form. Hooks below are guarded by this early return so React
+  // doesn't see a hook count change between renders — Next renders this
+  // component once with the flag value baked in at build time.
+  if (!TRAINER_APPLICATIONS_OPEN) {
+    return (
+      <div className={styles.root}>
+        <div className={styles.scanlines} aria-hidden />
+        <nav className={styles.nav}>
+          <div className={styles.navInner}>
+            <Link href="/" className={styles.brand}>
+              <img src="/logo-glow.png" alt="" />
+              <span>GUNS UP</span>
+            </Link>
+            <Link href="/" className={styles.backLink}>← Back to brief</Link>
+          </div>
+        </nav>
+        <main className={styles.wrap}>
+          <span className={styles.eyebrow}>// CERTIFIED GUNS UP TRAINER</span>
+          <h1 className={styles.h1}>Coming soon.</h1>
+          <p className={styles.lede}>
+            We&rsquo;re rebuilding our trainer program from the ground up. The
+            new model is a proprietary license — not a referral commission.
+            Certified GUNS UP Trainers will earn the right to operate under
+            our brand, our methodology, and our AI system. Application
+            window opens when the licensing agreement is finalized.
+          </p>
+          <p className={styles.lede}>
+            If you&rsquo;re a credentialed S&amp;C coach, youth athletic
+            development specialist, or tactical fitness trainer who wants
+            to be notified when applications open, drop us a line.
+          </p>
+          <Link href="/contact?subject=trainer-license" className={styles.submit}>
+            Notify me when applications open →
+          </Link>
+          <p className={styles.altContact} style={{ marginTop: 28, textAlign: 'left' }}>
+            Existing trainers under the prior revenue-share program: your
+            access continues unchanged through the transition. We&rsquo;ll be
+            in touch directly.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [callsign, setCallsign] = useState('');

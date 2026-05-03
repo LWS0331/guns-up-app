@@ -34,3 +34,14 @@ export function isJuniorOperatorEnabledServer(): boolean {
     process.env.NEXT_PUBLIC_JUNIOR_OPERATOR_ENABLED === 'true'
   );
 }
+
+// ─── TRAINER_APPLICATIONS_OPEN ──────────────────────────────────────────
+//
+// Trainer applications gate. When false, /trainer-apply renders a
+// "coming soon" screen instead of the application form.
+//
+// Flip to true only when the Certified GUNS UP Trainer licensing
+// agreement is finalized by counsel and the new pricing/license
+// model is ready for public marketing.
+export const TRAINER_APPLICATIONS_OPEN: boolean =
+  process.env.NEXT_PUBLIC_TRAINER_APPLICATIONS_OPEN === 'true';

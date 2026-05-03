@@ -3,13 +3,13 @@
 // GUNS UP landing page — production port of the design-handoff prototype
 // (gun-up-gunny-ai-website/project/Landing Page.html). Single-page marketing
 // site: hero + HUD, ticker, four-pillar overview, Gunny demo, feature grid,
-// tier pricing, trainer revenue calculator, founder section, FAQ, CTA, footer.
+// tier pricing, Junior Operator wedge, founder section, FAQ, CTA, footer.
 //
 // Scope:
-// - Client component because the revenue slider uses useState. Everything else
-//   is static markup; fonts and CSS vars come from the module-scoped stylesheet
-//   (landing.module.css) plus the global Google Fonts import already in
-//   src/app/layout.tsx.
+// - Now a static-render client component (no revenue slider state since
+//   pricing v3 stripped the trainer rev-share section). Fonts and CSS vars
+//   come from the module-scoped stylesheet (landing.module.css) plus the
+//   global Google Fonts import already in src/app/layout.tsx.
 // - The design-time "tweaks" panel + parent postMessage edit-mode from the
 //   prototype are intentionally NOT ported — they're only useful inside the
 //   Claude Design viewer and would ship dead code.
@@ -19,7 +19,6 @@
 // i18n (Phase 5): all marketing copy now goes through `useLanguage().t()`.
 // Spanish translations live in src/lib/i18n.tsx under `// ─── Landing ───`.
 
-import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import Script from 'next/script';
@@ -27,12 +26,6 @@ import styles from './landing.module.css';
 import FounderRotator, { RUBEN_SLIDES, BRITNEY_SLIDES } from './FounderRotator';
 import { trackEvent } from '@/lib/analytics';
 import { useLanguage } from '@/lib/i18n';
-
-// Per-client monthly commission for the Commander tier (drives the
-// landing-page revenue calculator). Pricing v1.0 (Apr 2026) lowered
-// Commander's trainer share from 35% → 20% — $14.99 × 20% = $3.00.
-// If tier pricing moves, update lib/types.ts::TIER_CONFIGS and mirror here.
-const COMMANDER_PER_CLIENT = 3.00;
 
 // Wrapper for landing-CTA analytics. We always emit the same event name with
 // a `cta` discriminator so the dashboards can group + filter without us
@@ -48,8 +41,6 @@ function trackLandingCta(cta: string, extra?: Record<string, unknown>) {
 
 export default function LandingPage() {
   const { t } = useLanguage();
-  const [clients, setClients] = useState(50);
-  const mrr = useMemo(() => (clients * COMMANDER_PER_CLIENT).toFixed(2), [clients]);
 
   // Pillars — `key` references resolve via t(). Stats are split (number + label)
   // so Gunny's accent color hits just the number, not the whole line.
@@ -78,11 +69,11 @@ export default function LandingPage() {
   ];
 
   // Tier ordnance — `key` matches operator.tier + lib/stripe.ts::TIER_PRICES so the
-  // CTA can hand it straight to /api/stripe/checkout. Pricing v2.0 (Apr 2026):
-  // RECON now FREE with hard caps (30 chats/24h, 5 workout gens/7d). Apple IAP
-  // path for OPERATOR; COMMANDER + WARFIGHTER are Stripe web-only to protect
-  // trainer revenue share. Don't drift these without updating
-  // lib/stripe.ts::TIER_PRICES first.
+  // CTA can hand it straight to /api/stripe/checkout. Pricing v3.0 (May 2026):
+  // RECON FREE with hard caps; OPERATOR raised to $19.99 (Sonnet, soft 50 msg/day);
+  // COMMANDER raised to $39.99 (Sonnet unlimited + $15/mo Opus credits, web only);
+  // WARFIGHTER raised to $149 (concierge tier, 25-seat cap). Don't drift these
+  // without updating lib/stripe.ts::TIER_PRICES first.
   const tiers: Array<{
     key: string;
     nsKey: 'recon' | 'operator' | 'commander' | 'warfighter';
@@ -92,27 +83,12 @@ export default function LandingPage() {
     featured: boolean;
   }> = [
     { key: 'haiku',       nsKey: 'recon',      price: 'FREE', showMo: false, featCount: 6, featured: false },
-    { key: 'sonnet',      nsKey: 'operator',   price: '$9',   showMo: true,  featCount: 6, featured: false },
-    { key: 'opus',        nsKey: 'commander',  price: '$14',  showMo: true,  featCount: 7, featured: true },
-    { key: 'white_glove', nsKey: 'warfighter', price: '$49',  showMo: true,  featCount: 7, featured: false },
+    { key: 'sonnet',      nsKey: 'operator',   price: '$19',  showMo: true,  featCount: 6, featured: false },
+    { key: 'opus',        nsKey: 'commander',  price: '$39',  showMo: true,  featCount: 7, featured: true },
+    { key: 'white_glove', nsKey: 'warfighter', price: '$149', showMo: true,  featCount: 7, featured: false },
   ];
   // FREE label is i18n-driven for RECON
   const reconPriceLabel = t('landing.tiers.recon.price');
-
-  // Revenue table — same layout in both languages, content from t().
-  const revRows = [
-    { tn: t('landing.trainers.rev.recon_name'),      pays: t('landing.trainers.rev.recon_pays'),      cut: t('landing.trainers.rev.dash'),               earn: t('landing.trainers.rev.dash') },
-    { tn: t('landing.trainers.rev.operator_name'),   pays: t('landing.trainers.rev.operator_pays'),   cut: t('landing.trainers.rev.dash'),               earn: t('landing.trainers.rev.operator_earn') },
-    { tn: t('landing.trainers.rev.commander_name'),  pays: t('landing.trainers.rev.commander_pays'),  cut: t('landing.trainers.rev.commander_cut'),      earn: t('landing.trainers.rev.commander_earn') },
-    { tn: t('landing.trainers.rev.warfighter_name'), pays: t('landing.trainers.rev.warfighter_pays'), cut: t('landing.trainers.rev.warfighter_cut'),     earn: t('landing.trainers.rev.warfighter_earn') },
-  ];
-
-  // Rank bonuses
-  const ranks = [
-    { tier: t('landing.trainers.rank10_tier'), desc: t('landing.trainers.rank10_desc'), bonus: t('landing.trainers.rank10_bonus') },
-    { tier: t('landing.trainers.rank25_tier'), desc: t('landing.trainers.rank25_desc'), bonus: t('landing.trainers.rank25_bonus') },
-    { tier: t('landing.trainers.rank50_tier'), desc: t('landing.trainers.rank50_desc'), bonus: t('landing.trainers.rank50_bonus') },
-  ];
 
   // FAQ list
   const faqs = [
@@ -140,7 +116,7 @@ export default function LandingPage() {
     { k: t('landing.gunny.ctx.injury'),     v: t('landing.gunny.ctx.injury_v'),     tone: 'amber' },
     { k: t('landing.gunny.ctx.macro_hit'),  v: t('landing.gunny.ctx.macro_hit_v') },
     { k: t('landing.gunny.ctx.milestones'), v: t('landing.gunny.ctx.milestones_v') },
-    { k: t('landing.gunny.ctx.trainer'),    v: t('landing.gunny.ctx.trainer_v') },
+    { k: t('landing.gunny.ctx.track'),      v: t('landing.gunny.ctx.track_v') },
   ];
 
   return (
@@ -173,15 +149,8 @@ export default function LandingPage() {
             <a href="#arsenal">{t('landing.nav.arsenal')}</a>
             <a href="#gunny">{t('landing.nav.gunny')}</a>
             <a href="#tiers">{t('landing.nav.tiers')}</a>
-            <a href="#trainers">{t('landing.nav.trainers')}</a>
+            <a href="/junior-operator">{t('landing.nav.junior_operator')}</a>
             <a href="#founder">{t('landing.nav.founders')}</a>
-            {/* Route-level link to the youth-tier landing. Lives in
-                the same nav row as the in-page anchors so visitors
-                see Junior Operator as a peer destination, not a
-                buried sub-page. */}
-            <Link href="/junior-operator" style={{ color: 'inherit', textDecoration: 'none' }}>
-              JR. OPERATOR
-            </Link>
             {/* MEMBER LOGIN — distinct from the primary "Deploy" CTA. Members
                 returning to the site click here; the Deploy CTA is for new
                 signups (currently routes to the same /login page until a
@@ -200,7 +169,7 @@ export default function LandingPage() {
             <div className={styles.heroMeta}>
               <span><b>//</b> {t('landing.hero.meta_classified').replace(/^\/\/\s*/, '')}</span>
               <span><b>//</b> {t('landing.hero.meta_version').replace(/^\/\/\s*/, '')}</span>
-              <span><b>//</b> {t('landing.hero.meta_trainers').replace(/^\/\/\s*/, '')}</span>
+              <span><b>//</b> {t('landing.hero.meta_two_founders').replace(/^\/\/\s*/, '')}</span>
             </div>
 
             <h1>
@@ -299,7 +268,7 @@ export default function LandingPage() {
               <span><b>[NUTRITION]</b> {t('landing.ticker.nutrition').replace(/^\[(NUTRITION|NUTRICIÓN)\]\s*/, '')}</span><span className="tickerDot">·</span>
               <span><b>[FIELD]</b> {t('landing.ticker.field').replace(/^\[(FIELD|CAMPO)\]\s*/, '')}</span><span className="tickerDot">·</span>
               <span><b>[GUNNY]</b> {t('landing.ticker.gunny').replace(/^\[GUNNY\]\s*/, '')}</span><span className="tickerDot">·</span>
-              <span><b>[TRAINERS]</b> {t('landing.ticker.trainers').replace(/^\[(TRAINERS|ENTRENADORES)\]\s*/, '')}</span><span className="tickerDot">·</span>
+              <span><b>[BUILT BY]</b> {t('landing.ticker.built_by').replace(/^\[(BUILT BY|CONSTRUIDO POR)\]\s*/, '')}</span><span className="tickerDot">·</span>
             </div>
           ))}
         </div>
@@ -486,11 +455,11 @@ export default function LandingPage() {
 
       {/* ========== JUNIOR OPERATOR TEASER ==========
           Single-screen tease for the youth-tier landing at
-          /junior-operator. Sits between TIERS and TRAINERS so the
-          flow reads "what we sell adults" → "and we have a youth
-          tier" → "trainers earn rev share across both". Stats
-          mirror the receipts on the dedicated landing — Rössler
-          BMJ 2018 cluster RCT. */}
+          /junior-operator. Sits between TIERS and the JUNIOR
+          OPERATOR WEDGE / FOUNDERS so the flow reads "what we
+          sell adults" → "and we have a youth tier" → "the operators
+          behind the brand". Stats mirror the receipts on the
+          dedicated landing — Rössler BMJ 2018 cluster RCT. */}
       <section className={styles.juniorTeaser}>
         <div className={styles.juniorTeaserWrap}>
           <div className={styles.juniorTeaserEyebrow}>// YOUTH TIER · AGES 10–18</div>
@@ -528,109 +497,29 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ========== TRAINERS ========== */}
-      <section
-        id="trainers"
-        className={styles.section}
-        style={{ background: 'linear-gradient(180deg, transparent, rgba(0,255,65,0.02))' }}
-      >
+      {/* ========== JUNIOR OPERATOR WEDGE ==========
+          Brief, credential-led wedge for the Junior Operator track —
+          complements the JUNIOR OPERATOR TEASER section above by
+          surfacing Britney's youth-specialist creds. Sits between
+          tiers and founders so the marketing flow reads
+          "what we sell" → "youth track + who runs it" → "the operators
+          behind the brand". No `juniorWedge` class in the CSS module
+          yet — falling back to existing `.section` + `.sectionWrap`
+          utilities so we don't ship broken styling. */}
+      <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <span className={styles.eyebrow}>{t('landing.trainers.eyebrow')}</span>
-          <h2>{t('landing.trainers.title_1')}<br />{t('landing.trainers.title_2')} <em>{t('landing.trainers.title_em')}</em>{t('landing.trainers.title_3')}</h2>
-          <p>{t('landing.trainers.lede')}</p>
+          <span className={styles.eyebrow}>{t('landing.junior_wedge.eyebrow')}</span>
+          <h2>{t('landing.junior_wedge.title_1')}<br />{t('landing.junior_wedge.title_2')} <em>{t('landing.junior_wedge.title_em')}</em>.</h2>
+          <p>{t('landing.junior_wedge.lede')}</p>
         </div>
-        <div className={styles.sectionWrap}>
-          <div className={styles.trainerWrap}>
-            <div className={styles.trainerCopy}>
-              <h3>{t('landing.trainers.copy_h3_1')}<br />{t('landing.trainers.copy_h3_2')}</h3>
-              <p>{t('landing.trainers.copy_p')}</p>
-
-              <div className={`${styles.rankBonuses} ${styles.bracket}`}>
-                <span className="bl" /><span className="br" />
-                <span className={styles.label}>{t('landing.trainers.rank_label')}</span>
-                <div className={styles.rankList}>
-                  {ranks.map((r) => (
-                    <div key={r.tier} className={styles.rankRow}>
-                      <span className="tierLbl">{r.tier}</span>
-                      <span className="desc">{r.desc}</span>
-                      <span className="bonus">{r.bonus}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className={`${styles.revTable} ${styles.bracket}`}>
-              <span className="bl" /><span className="br" />
-              <div className={styles.revHead}>
-                <span>{t('landing.trainers.rev.col_tier')}</span>
-                <span>{t('landing.trainers.rev.col_pays')}</span>
-                <span>{t('landing.trainers.rev.col_cut')}</span>
-                <span>{t('landing.trainers.rev.col_per_client')}</span>
-              </div>
-              {revRows.map((r) => (
-                <div key={r.tn} className={styles.revRow}>
-                  <span className="tn">{r.tn}</span>
-                  <span>{r.pays}</span>
-                  <span className="cut">{r.cut}</span>
-                  <span className="earn">{r.earn}</span>
-                </div>
-              ))}
-
-              <div className={styles.revCalc}>
-                <div>
-                  <div className="unit">{t('landing.trainers.calc.clients')}</div>
-                  <div className="num">{clients}</div>
-                </div>
-                <div className="op">×</div>
-                <div>
-                  <div className="unit">{t('landing.trainers.calc.commander_cut')}</div>
-                  <div className="num">${COMMANDER_PER_CLIENT.toFixed(2)}</div>
-                </div>
-                <div className="op">=</div>
-                <div className="res">
-                  <div className="unit">{t('landing.trainers.calc.mrr')}</div>
-                  <div className="num">${mrr}</div>
-                </div>
-              </div>
-              <div className={styles.revSliderWrap}>
-                <input
-                  type="range"
-                  min={10}
-                  max={200}
-                  value={clients}
-                  onChange={(e) => setClients(parseInt(e.target.value, 10))}
-                  aria-label={t('landing.trainers.calc.slider_label')}
-                />
-                <span>{t('landing.trainers.calc.slider_helper')}</span>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 60, textAlign: 'center' }}>
-            {/* APPLY AS TRAINER routes to /trainer-apply — a structured,
-                gated application that lands in the TrainerApplication DB
-                queue (NOT inbox-based contact form). Selectivity by design:
-                applications are reviewed manually, no auto-acceptance, no
-                self-serve Stripe checkout for trainers.
-                One-pager still routes to /contact?subject=trainer until a
-                real PDF asset exists to download. */}
-            <Link
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              href="/trainer-apply"
-              onClick={() => trackLandingCta('trainer_apply')}
-            >
-              {t('landing.trainers.cta_apply')} <span className={styles.arrow}>→</span>
-            </Link>
-            <Link
-              className={`${styles.btn} ${styles.btnSecondary}`}
-              href="/contact?subject=trainer"
-              style={{ marginLeft: 10 }}
-              onClick={() => trackLandingCta('trainer_one_pager')}
-            >
-              {t('landing.trainers.cta_one_pager')}
-            </Link>
-          </div>
+        <div className={styles.sectionWrap} style={{ textAlign: 'center', paddingBottom: 40 }}>
+          <Link
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            href="/junior-operator"
+            onClick={() => trackLandingCta('junior_operator_visit')}
+          >
+            {t('landing.junior_wedge.cta')} <span className={styles.arrow}>→</span>
+          </Link>
         </div>
       </section>
 
@@ -844,11 +733,9 @@ export default function LandingPage() {
             <a href="#founder">{t('landing.nav.founders')}</a>
           </div>
           <div className={styles.footCol}>
-            <h5>{t('landing.footer.for_trainers')}</h5>
-            <a href="#trainers">{t('landing.footer.revenue_share')}</a>
-            <a href="#trainers">{t('landing.footer.rank_bonuses')}</a>
-            <Link href="/trainer-apply">{t('landing.footer.apply')}</Link>
-            <Link href="/contact?subject=trainer">{t('landing.footer.marketing_playbook')}</Link>
+            <h5>{t('landing.footer.youth')}</h5>
+            <Link href="/junior-operator">{t('landing.nav.junior_operator')}</Link>
+            <Link href="/contact?subject=junior">{t('landing.footer.parent_inquiry')}</Link>
           </div>
           <div className={styles.footCol}>
             <h5>{t('landing.footer.intel')}</h5>

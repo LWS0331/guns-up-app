@@ -45,18 +45,19 @@ interface TierOffer {
 // in sync — landing copy + this in-app panel + stripe.ts → real Stripe
 // products. Annual = ~17% off the monthly equivalent.
 //
-// Pricing v2 (April 2026): RECON is FREE with hard usage caps. Don't
-// render an upgrade button for it — display the caps instead. Display
-// `free` flag drives that branching below.
+// Pricing v3 (May 2026): RECON FREE with caps; OPERATOR $19.99,
+// COMMANDER $39.99, WARFIGHTER $149 (concierge, 25-seat cap). Junior
+// tiers ($24.99 / $49.99) are intentionally NOT in this array — separate
+// UI sprint.
 interface TierOfferV2 extends TierOffer {
   free?: boolean;
   caps?: string;
 }
 const TIER_OFFERS: TierOfferV2[] = [
-  { key: 'haiku',       name: 'RECON',      monthly: 0,     annual: 0,      annualSavings: 0,   blurb: 'Free entry — Haiku 4.5 · capped',            accent: '#7dd3fc', free: true, caps: '30 chats / 24h · 5 workout gens / 7d' },
-  { key: 'sonnet',      name: 'OPERATOR',   monthly: 9.99,  annual: 99.50,  annualSavings: 20,  blurb: 'Sonnet brain · SITREP + history · uncapped', accent: '#22d3ee' },
-  { key: 'opus',        name: 'COMMANDER',  monthly: 14.99, annual: 149.40, annualSavings: 30,  blurb: 'Opus brain · voice + wearable HR · web only',accent: '#facc15' },
-  { key: 'white_glove', name: 'WARFIGHTER', monthly: 49.99, annual: 497.90, annualSavings: 102, blurb: 'Human trainer + weekly brief · web only',    accent: '#ff6b35' },
+  { key: 'haiku',       name: 'RECON',      monthly: 0,      annual: 0,       annualSavings: 0,   blurb: 'Free entry — Haiku 4.5 · capped',                       accent: '#7dd3fc', free: true, caps: '30 chats / 24h · 5 workout gens / 7d' },
+  { key: 'sonnet',      name: 'OPERATOR',   monthly: 19.99,  annual: 199.90,  annualSavings: 40,  blurb: 'Sonnet brain · SITREP + history · soft 50 msg/day cap', accent: '#22d3ee' },
+  { key: 'opus',        name: 'COMMANDER',  monthly: 39.99,  annual: 399.90,  annualSavings: 80,  blurb: 'Sonnet unlimited + $15/mo Opus credits · web only',     accent: '#facc15' },
+  { key: 'white_glove', name: 'WARFIGHTER', monthly: 149.00, annual: 1490.00, annualSavings: 298, blurb: 'Unlimited Opus + monthly 1:1 with Ruben · 25-seat cap', accent: '#ff6b35' },
 ];
 
 export default function BillingPanel({ operator }: BillingPanelProps) {
