@@ -6,6 +6,7 @@ import LanguageToggle from '@/components/LanguageToggle';
 import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
 import { TermsOfService, PrivacyPolicy } from '@/components/LegalPages';
+import { REGISTRATION_OPEN } from '@/lib/featureFlags';
 
 interface LoginScreenProps {
   onLogin: (operator: Operator) => void;
@@ -523,9 +524,14 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               {isLoading ? 'LOGGING IN...' : 'LOGIN'}
             </button>
 
-            {/* Register link — closed beta. Public registration starts
-                June 2026. Until then, clicking the button surfaces an
-                explainer popup instead of switching to the register form. */}
+            {/* Register link. Behavior gated by REGISTRATION_OPEN flag
+                (src/lib/featureFlags.ts). When the flag is false (closed
+                beta), clicking surfaces the closed-beta explainer modal —
+                same as before. When the flag is true (Pricing v3 era,
+                May 2026), clicking flips loginMode → 'register' so the
+                visitor reaches the existing create-account form below.
+                Server-side /api/auth/register has its own REGISTRATION_OPEN
+                gate; both must be set for sign-up to round-trip. */}
             <div style={{
               fontFamily: 'Orbitron, monospace',
               fontSize: '11px',
@@ -534,7 +540,16 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               New operator?{' '}
               <button
                 type="button"
-                onClick={() => setShowRegistrationClosedModal(true)}
+                onClick={() => {
+                  if (REGISTRATION_OPEN) {
+                    setLoginMode('register');
+                    setError('');
+                    setEmail('');
+                    setPassword('');
+                  } else {
+                    setShowRegistrationClosedModal(true);
+                  }
+                }}
                 style={{
                   fontFamily: 'Orbitron, monospace',
                   fontSize: '11px',
