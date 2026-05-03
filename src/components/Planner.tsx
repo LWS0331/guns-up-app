@@ -4828,7 +4828,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           aria-label={t('common.previous')}
           style={{ padding: '9px 12px' }}
         >
-          ◀
+          <Icon.ChevronLeft size={14} />
         </button>
 
         <div className="segmented">
@@ -4865,7 +4865,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           aria-label={t('common.next')}
           style={{ padding: '9px 12px' }}
         >
-          ▶
+          <Icon.ChevronRight size={14} />
         </button>
       </div>
 
