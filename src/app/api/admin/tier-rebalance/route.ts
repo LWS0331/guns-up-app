@@ -53,12 +53,18 @@ interface DemoteRow {
 }
 
 async function buildDemoteList(includeJuniors: boolean): Promise<DemoteRow[]> {
-  // Pull ALL opus operators, then filter via shouldKeepOpus() in
-  // application code. Doing the filter at the DB layer with a
-  // notIn list of callsigns proved fragile — a trailing-space
-  // typo defeated the equality check and we demoted the founder.
-  // Application-layer filtering also lets us match by id as the
-  // primary signal with callsign as a defensive backup.
+  // Pull ALL opus operators and tag each with its disposition. We
+  // INCLUDE keep-list trainers in the response (with willDemoteTo:null)
+  // so the dry-run audit is fully verifiable — without this, kept
+  // trainers were silently filtered out before the response and the
+  // caller had no way to confirm the keep list was working without an
+  // external check (which is exactly how I missed the trailing-space
+  // bug that demoted the founder).
+  //
+  // The apply path's `targets` filter still selects only
+  // willDemoteTo === 'sonnet' rows, so including the kept rows in
+  // candidates is purely a visibility win — no risk of accidentally
+  // demoting them.
   const allOpus = await prisma.operator.findMany({
     where: { tier: 'opus' },
     select: {
@@ -71,9 +77,23 @@ async function buildDemoteList(includeJuniors: boolean): Promise<DemoteRow[]> {
     },
     orderBy: { callsign: 'asc' },
   });
-  const rows = allOpus.filter((r) => !shouldKeepOpus(r));
 
-  return rows.map((r): DemoteRow => {
+  return allOpus.map((r): DemoteRow => {
+    // Keep-list match wins over junior status — trainer accounts on
+    // the keep list stay opus regardless of any other tag.
+    if (shouldKeepOpus(r)) {
+      return {
+        id: r.id,
+        callsign: r.callsign,
+        role: r.role,
+        currentTier: r.tier,
+        isJunior: r.isJunior,
+        juniorAge: r.juniorAge,
+        willDemoteTo: null,
+        reason:
+          'TRAINER (keep-list) — preserved on opus regardless of other rules. Match by id (primary) + trimmed callsign (backup).',
+      };
+    }
     if (r.isJunior && !includeJuniors) {
       return {
         id: r.id,
