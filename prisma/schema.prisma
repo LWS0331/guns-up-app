@@ -307,6 +307,36 @@ model PersonalRhythm {
   updatedAt               DateTime @updatedAt
 }
 
+// ChatHistorySnapshot — append-only audit of every ChatHistory.messages
+// overwrite. Captured by /api/chat PUT BEFORE applying the upsert,
+// so the prior state is always preserved even if a buggy client (or
+// a future regression) sends a wipe.
+//
+// Existed in pre-emptive response to the May 2026 Daily Ops chat-wipe
+// incident: client-side hydration race wiped Ruben's full chat
+// history when sendGunnyVoiceMessage ran before gunnyMessages had
+// loaded from the DB. The shrink guard added at the same time
+// rejects the obvious wipes; this table guarantees recovery even
+// from non-obvious ones.
+//
+// Retention: keep all snapshots forever for now (cheap — tens of KB
+// per row). Future cleanup cron can drop snapshots older than 90
+// days IF storage becomes an issue.
+model ChatHistorySnapshot {
+  id           String   @id @default(cuid())
+  operatorId   String
+  chatType     String
+  messages     Json     // the previous value, captured immediately before overwrite
+  replacedAt   DateTime @default(now())
+  replacedByOp String?  // auth.operatorId of the caller who triggered the overwrite
+  reason       String?  // 'normal-update' | 'force-clear' | 'admin-restore' | 'migration'
+  prevLen      Int      @default(0) // length of prev messages — fast filter for queries
+  newLen       Int      @default(0) // length of incoming — diagnostic
+
+  @@index([operatorId, chatType, replacedAt])
+  @@index([operatorId, replacedAt])
+}
+
 // PushSubscription — Web Push (RFC 8030) subscription rows. Phase 2C.
 // One row per (operatorId, endpoint). Endpoint uniqueness across
 // operators is enforced too — if a device's endpoint already exists
