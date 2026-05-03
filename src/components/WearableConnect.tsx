@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Operator } from '@/lib/types';
 import { getAuthToken } from '@/lib/authClient';
 import { hasCommanderAccess } from '@/lib/tierGates';
@@ -80,25 +80,36 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(true);
 
+  // Request-token guard. loadConnections fires on mount and on every
+  // connect / disconnect action (lines 143, 185). A quick unmount mid-
+  // load triggers React's "setState on unmounted component" warning;
+  // the guard suppresses that and protects against a slow mount-load
+  // resolving after a fast post-action reload.
+  const lastFetchRef = useRef(0);
+
   // Load existing connections
   const loadConnections = useCallback(async () => {
+    const myReq = ++lastFetchRef.current;
     try {
       const res = await fetch(`/api/wearables?operatorId=${operator.id}`, {
         headers: { 'Authorization': `Bearer ${getAuthToken()}` },
       });
+      if (lastFetchRef.current !== myReq) return; // superseded
       if (res.ok) {
         const data = await res.json();
+        if (lastFetchRef.current !== myReq) return;
         setConnections(data.connections || []);
       } else {
         console.warn('[WearableConnect:load] /api/wearables non-ok:', res.status);
       }
     } catch (err) {
+      if (lastFetchRef.current !== myReq) return;
       // Wearables UI is optional — non-fatal — but log so 500/network errors
       // are debuggable instead of producing an empty connection list with
       // no signal. Operator still sees "no wearables connected" UI.
       console.warn('[WearableConnect:load] /api/wearables fetch failed:', err);
     }
-    setLoading(false);
+    if (lastFetchRef.current === myReq) setLoading(false);
   }, [operator.id]);
 
   useEffect(() => {
