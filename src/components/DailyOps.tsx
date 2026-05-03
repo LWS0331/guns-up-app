@@ -18,7 +18,7 @@
 // uses .btn / .btn-amber / inline tactical chrome to match
 // ParentDashboard / Planner / IntelCenter styling.
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
 import { hasCommanderAccess } from '@/lib/tierGates';
@@ -686,7 +686,18 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     [operator.id, operator.tier, operator.role],
   );
 
+  // Request-token guard. Toggling `mode` from 'today' → 'week' (or vice
+  // versa) re-runs the useEffect below, kicking off a new fetch while
+  // the previous one is still in flight. Without the guard, the OLD
+  // fetch's resolution lands AFTER the new fetch's and overwrites
+  // state with stale data — visible to operators as a flicker between
+  // today's plan and last-week's plan.
+  // Each call increments the counter; setState gates on `myReq ===
+  // lastFetchRef.current` so superseded fetches no-op.
+  const lastFetchRef = useRef(0);
+
   const fetchToday = useCallback(async () => {
+    const myReq = ++lastFetchRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -694,6 +705,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
         `/api/daily-ops?date=${today}&operatorId=${encodeURIComponent(operator.id)}&include=rhythm`,
         { credentials: 'include' },
       );
+      if (lastFetchRef.current !== myReq) return; // superseded — drop result
       if (res.status === 402) {
         setError(
           'Daily Ops is a Commander-tier feature. Upgrade to enable Gunny\'s daily schedule planner.',
@@ -707,17 +719,20 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
         return;
       }
       const data = await res.json();
+      if (lastFetchRef.current !== myReq) return;
       setPlan(data.plan ?? null);
       setRhythm(data.rhythm ?? null);
     } catch (err) {
+      if (lastFetchRef.current !== myReq) return;
       console.error('[daily-ops] fetch failed', err);
       setError('Network error loading plan.');
     } finally {
-      setLoading(false);
+      if (lastFetchRef.current === myReq) setLoading(false);
     }
   }, [operator.id, today]);
 
   const fetchWeek = useCallback(async () => {
+    const myReq = ++lastFetchRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -727,6 +742,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
         `/api/daily-ops?from=${from}&to=${to}&operatorId=${encodeURIComponent(operator.id)}&include=rhythm`,
         { credentials: 'include' },
       );
+      if (lastFetchRef.current !== myReq) return;
       if (res.status === 402) {
         setError(
           'Daily Ops is a Commander-tier feature. Upgrade to enable Gunny\'s daily schedule planner.',
@@ -740,13 +756,15 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
         return;
       }
       const data = await res.json();
+      if (lastFetchRef.current !== myReq) return;
       setWeekPlans(Array.isArray(data.plans) ? data.plans : []);
       setRhythm(data.rhythm ?? null);
     } catch (err) {
+      if (lastFetchRef.current !== myReq) return;
       console.error('[daily-ops] week fetch failed', err);
       setError('Network error loading week.');
     } finally {
-      setLoading(false);
+      if (lastFetchRef.current === myReq) setLoading(false);
     }
   }, [operator.id, today]);
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Operator, TIER_CONFIGS, AiTier, OPS_CENTER_ACCESS } from '@/lib/types';
 import { getAuthToken } from '@/lib/authClient';
 import Icon from '@/components/Icons';
@@ -145,22 +145,33 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     );
   }
 
+  // Request-token guard. fetchMetrics fires on mount, on visibilitychange
+  // (tab refocus), and on 60s polling. With three trigger sources the
+  // odds of overlapping requests are real — without the guard, a slow
+  // mount-fetch resolving AFTER a fast refocus-fetch would overwrite
+  // fresh metrics with stale ones.
+  const lastFetchRef = useRef(0);
+
   // Fetch real metrics from DB
   const fetchMetrics = async () => {
+    const myReq = ++lastFetchRef.current;
     setMetricsLoading(true);
     try {
       const res = await fetch(`/api/ops?operatorId=${currentUser.id}`, {
         headers: { 'Authorization': `Bearer ${getAuthToken()}` },
       });
+      if (lastFetchRef.current !== myReq) return; // superseded
       if (res.ok) {
         const data = await res.json();
+        if (lastFetchRef.current !== myReq) return;
         setMetrics(data);
         setLastRefresh(new Date().toLocaleTimeString());
       }
     } catch (err) {
+      if (lastFetchRef.current !== myReq) return;
       console.error('[OpsCenter:fetchMetrics] Failed:', err);
     } finally {
-      setMetricsLoading(false);
+      if (lastFetchRef.current === myReq) setMetricsLoading(false);
     }
   };
 

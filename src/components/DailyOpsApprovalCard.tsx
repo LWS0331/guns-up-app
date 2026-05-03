@@ -7,7 +7,7 @@
 // `/api/daily-ops?pendingApprovals=true` on mount, and re-fetches
 // after each decision so the queue stays in sync.
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import type { DailyOpsPlanShape, DailyBlock } from '@/lib/dailyOpsTypes';
 
@@ -82,19 +82,29 @@ const DailyOpsApprovalCard: React.FC = () => {
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [rejectionTextById, setRejectionTextById] = useState<Record<string, string>>({});
 
+  // Request-token guard. fetchPending fires on mount and on every
+  // approve/reject action (via decide() at the bottom of this file).
+  // Rapid navigate-away-then-back can leave a stale pending list set
+  // by the orphaned mount fetch; the guard makes the latest call win.
+  const lastFetchRef = useRef(0);
+
   const fetchPending = useCallback(async () => {
+    const myReq = ++lastFetchRef.current;
     setLoading(true);
     try {
       const res = await fetch('/api/daily-ops?pendingApprovals=true', {
         credentials: 'include',
       });
+      if (lastFetchRef.current !== myReq) return; // superseded
       if (!res.ok) return;
       const data = await res.json();
+      if (lastFetchRef.current !== myReq) return;
       setPending(Array.isArray(data.pending) ? data.pending : []);
     } catch (err) {
+      if (lastFetchRef.current !== myReq) return;
       console.error('[daily-ops-approval] fetch failed', err);
     } finally {
-      setLoading(false);
+      if (lastFetchRef.current === myReq) setLoading(false);
     }
   }, []);
 
