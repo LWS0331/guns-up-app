@@ -411,7 +411,10 @@ const AppShell: React.FC<AppShellProps> = ({
 
   // ═══ Compliance Notification Engine ═══
   useEffect(() => {
-    // Request notification permission once on mount
+    // Request notification permission once on mount. Silent .catch is
+    // intentional — user-denied permission is normal and shouldn't pollute
+    // the console. The other AppShell .catch sites (chat saves at 686/695/
+    // 722/800/821) ARE logged because silent failure there = data loss.
     requestNotificationPermission().catch(() => {});
 
     const prefs = loadNotificationPrefs(currentUser.id);
@@ -683,7 +686,7 @@ const AppShell: React.FC<AppShellProps> = ({
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
             body: JSON.stringify({ operatorId: opId, chatType: CANONICAL_TYPE, messages: canonical }),
-          }).catch(() => {});
+          }).catch(err => console.error('[AppShell:migrate] canonical PUT failed:', err));
           // Clear legacy thread so a stale client can't pull it again.
           // ?force=true bypasses the shrink-guard added May 2026 — this
           // is an INTENTIONAL clear (legacy thread already merged into
@@ -692,7 +695,7 @@ const AppShell: React.FC<AppShellProps> = ({
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
             body: JSON.stringify({ operatorId: opId, chatType: LEGACY_TYPE, messages: [] }),
-          }).catch(() => {});
+          }).catch(err => console.error('[AppShell:migrate] legacy clear failed:', err));
         }
 
         // Always mark migrated to prevent re-running, and clear the
@@ -719,7 +722,7 @@ const AppShell: React.FC<AppShellProps> = ({
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
           body: JSON.stringify({ operatorId: opId, chatType: CANONICAL_TYPE, messages: localCanonical }),
-        }).catch(() => {});
+        }).catch(err => console.error('[AppShell:fallback-hydrate] PUT failed:', err));
         return;
       }
 
@@ -797,7 +800,7 @@ const AppShell: React.FC<AppShellProps> = ({
         keepalive: true,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
         body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-tab', messages: pending.serialized }),
-      }).catch(() => {});
+      }).catch(err => console.error('[AppShell:panel-debounce] PUT /api/chat failed:', err));
       lastPanelPendingRef.current = null;
     }, 600);
   }, [gunnyMessages, selectedOperator.id]);
@@ -818,7 +821,7 @@ const AppShell: React.FC<AppShellProps> = ({
           keepalive: true,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
           body: JSON.stringify({ operatorId, chatType: 'gunny-tab', messages: pending.serialized }),
-        }).catch(() => {});
+        }).catch(err => console.error('[AppShell:panel-unmount-flush] PUT /api/chat failed:', err));
         lastPanelPendingRef.current = null;
       }
     };
