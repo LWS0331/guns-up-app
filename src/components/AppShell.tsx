@@ -1341,22 +1341,69 @@ const AppShell: React.FC<AppShellProps> = ({
             const payload = JSON.parse(dataStr);
             if (eventType === 'delta' && payload.text) {
               accumulated += payload.text;
+              // Strip ALL structured-data tags from the visible stream so
+              // raw JSON never leaks into the side-panel chat bubble.
+              // KEEP IN SYNC with GunnyChat.tsx — this is the same set of
+              // tags the main chat surface strips. The side-panel had
+              // historically stripped only 4 tags (workout_json /
+              // workout_modification / profile_json / meal_json) plus the
+              // 2 daily-ops tags added in PR #116, leaving 17 other tags
+              // capable of leaking through if Gunny emitted them while
+              // the side panel was active. Synced May 2026.
+              //
+              // Each tag gets two regexes:
+              //   - non-greedy <TAG>...</TAG> for fully-arrived blocks
+              //   - greedy <TAG>...$ for in-flight (closing tag pending)
               const visible = accumulated
                 .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
                 .replace(/<workout_json>[\s\S]*$/, '')
                 .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
                 .replace(/<workout_modification>[\s\S]*$/, '')
+                .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
+                .replace(/<workout_delete>[\s\S]*$/, '')
                 .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
                 .replace(/<meal_json>[\s\S]*$/, '')
-                // Daily Ops: side-panel chat needs the same strips as the
-                // main GunnyChat surface. Without these the raw JSON +
-                // closing tag leak into the side-panel bubble.
+                .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
+                .replace(/<meal_delete>[\s\S]*$/, '')
+                .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
+                .replace(/<pr_json>[\s\S]*$/, '')
+                .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+                .replace(/<pr_modification>[\s\S]*$/, '')
+                .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+                .replace(/<pr_delete>[\s\S]*$/, '')
+                .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+                .replace(/<hydration_json>[\s\S]*$/, '')
+                .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+                .replace(/<readiness_json>[\s\S]*$/, '')
+                .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+                .replace(/<injury_modification>[\s\S]*$/, '')
+                .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+                .replace(/<day_tag_json>[\s\S]*$/, '')
+                .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+                .replace(/<nutrition_targets_json>[\s\S]*$/, '')
+                .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+                .replace(/<goal_json>[\s\S]*$/, '')
+                .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+                .replace(/<dietary_json>[\s\S]*$/, '')
+                .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+                .replace(/<macrocycle_json>[\s\S]*$/, '')
+                .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+                .replace(/<wearable_control>[\s\S]*$/, '')
+                .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+                .replace(/<notification_json>[\s\S]*$/, '')
+                .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+                .replace(/<trainer_note_json>[\s\S]*$/, '')
                 .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
                 .replace(/<daily_ops_json>[\s\S]*$/, '')
                 .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
-                .replace(/<daily_ops_block_override>[\s\S]*$/, '');
+                .replace(/<daily_ops_block_override>[\s\S]*$/, '')
+                .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
+                .replace(/<voice_control>[\s\S]*$/, '')
+                // Trailing half-streamed markdown table row (pipe-led line
+                // missing its closing pipe) — same as GunnyChat.
+                .replace(/\n\|[^\n|]*$/, '');
               // Hide thinking indicator once we have content
               if (visible.length > 0) {
                 setGunnyLoading(false);
