@@ -216,10 +216,27 @@ export const translations = {
     'gunny.placeholder': "What's the mission, champ?",
     'gunny.send': 'SEND',
     'gunny.welcome': 'War room is open',
+    'gunny.waiting': 'Awaiting orders...',
     'gunny.thinking': 'Thinking...',
     'gunny.tap_to_speak': 'TAP TO SPEAK',
     'gunny.recording': 'RECORDING',
     'gunny.need_help': 'NEED HELP? ASK GUNNY',
+
+    // ─── Intel · Nutrition tab Tracking Accuracy Tiers ──────────────
+    // Surfaced in audit (May 2026) — these were rendered via inline
+    // string literals in IntelCenter.tsx Nutrition tab and not
+    // translated, so ES operators saw a 4-tile English block on the
+    // Nutrition surface they otherwise spend most of their time on.
+    'intel.tracking_tiers.heading': 'Tracking Accuracy Tiers',
+    'intel.tracking_tiers.health_conditions_label': 'Health Conditions (select all that apply)',
+    'intel.tracking_tiers.tier1.label': 'MANUAL ENTRY',
+    'intel.tracking_tiers.tier1.desc': 'You weigh + enter exact macros',
+    'intel.tracking_tiers.tier2.label': 'USDA SEARCH',
+    'intel.tracking_tiers.tier2.desc': 'FDA-verified database lookup',
+    'intel.tracking_tiers.tier3.label': 'QUICK LOG',
+    'intel.tracking_tiers.tier3.desc': 'AI text parsing from description',
+    'intel.tracking_tiers.tier4.label': 'PHOTO SNAP',
+    'intel.tracking_tiers.tier4.desc': 'AI vision analysis of plate photo',
 
     // ─── Tier upgrade card ──────────────────────────────────────────
     'upgrade.locked': 'LOCKED',
@@ -1696,10 +1713,23 @@ export const translations = {
     'gunny.placeholder': '¿Cuál es la misión, campeón?',
     'gunny.send': 'ENVIAR',
     'gunny.welcome': 'La sala de guerra está abierta',
+    'gunny.waiting': 'Esperando órdenes...',
     'gunny.thinking': 'Pensando...',
     'gunny.tap_to_speak': 'TOCA PARA HABLAR',
     'gunny.recording': 'GRABANDO',
     'gunny.need_help': '¿NECESITAS AYUDA? PREGÚNTALE A GUNNY',
+
+    // ─── Intel · Nutrition tab Tracking Accuracy Tiers ──────────────
+    'intel.tracking_tiers.heading': 'Niveles de Precisión de Seguimiento',
+    'intel.tracking_tiers.health_conditions_label': 'Condiciones de Salud (selecciona todas las que apliquen)',
+    'intel.tracking_tiers.tier1.label': 'ENTRADA MANUAL',
+    'intel.tracking_tiers.tier1.desc': 'Pesas e ingresas macros exactos',
+    'intel.tracking_tiers.tier2.label': 'BÚSQUEDA USDA',
+    'intel.tracking_tiers.tier2.desc': 'Consulta de base de datos verificada por FDA',
+    'intel.tracking_tiers.tier3.label': 'REGISTRO RÁPIDO',
+    'intel.tracking_tiers.tier3.desc': 'Análisis de texto por IA desde descripción',
+    'intel.tracking_tiers.tier4.label': 'FOTO INSTANTÁNEA',
+    'intel.tracking_tiers.tier4.desc': 'Análisis visual por IA del plato',
 
     // ─── Tier upgrade card ──────────────────────────────────────────
     'upgrade.locked': 'BLOQUEADO',
