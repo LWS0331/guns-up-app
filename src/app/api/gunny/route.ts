@@ -4316,8 +4316,21 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         applyTrainerNoteWrite(auth.operatorId, trainerNoteReq, clientDate),
       ]);
 
+      // Surface Daily Ops persistence failures inline in the chat
+      // response. Without this, a tier-gate rejection or junior
+      // guardrail strip just logs to console.warn and the user
+      // wonders why their plan didn't show up. Better to tell them
+      // explicitly so they can act on it.
+      let responseWithDailyOpsError = dedupResult.dedupNote
+        ? `${cleanResponse}\n\n[${dedupResult.dedupNote}]`
+        : cleanResponse;
+      if (dailyOpsResult && 'error' in dailyOpsResult) {
+        responseWithDailyOpsError +=
+          `\n\n⚠ Heads up — I drafted today's daily ops but it didn't save: ${dailyOpsResult.error}.`;
+      }
+
       return NextResponse.json({
-        response: dedupResult.dedupNote ? `${cleanResponse}\n\n[${dedupResult.dedupNote}]` : cleanResponse,
+        response: responseWithDailyOpsError,
         workoutData,
         workoutModification,
         workoutModifications,
@@ -4714,10 +4727,19 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             applyTrainerNoteWrite(auth.operatorId, trainerNoteReq, clientDate),
           ]);
 
+          // Mirror of the non-streaming path: surface Daily Ops
+          // persistence failures inline so the user knows why their
+          // plan didn't materialize.
+          let streamCleanTextWithDailyOpsError = finalCleanText;
+          if (dailyOpsResult && 'error' in dailyOpsResult) {
+            streamCleanTextWithDailyOpsError +=
+              `\n\n⚠ Heads up — I drafted today's daily ops but it didn't save: ${dailyOpsResult.error}.`;
+          }
+
           controller.enqueue(
             encoder.encode(
               `event: final\ndata: ${JSON.stringify({
-                cleanText: finalCleanText,
+                cleanText: streamCleanTextWithDailyOpsError,
                 workoutData,
                 workoutModification,
                 workoutModifications,

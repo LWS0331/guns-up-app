@@ -135,12 +135,30 @@ const styles = {
     fontFamily: "'Share Tech Mono', monospace",
   } as React.CSSProperties,
   headerRow: {
+    // CSS grid (vs flex+wrap) gives us deterministic ordering and
+    // lets the date chip pin right while the title and toggle wrap
+    // gracefully on narrow widths. Three rows max on phones; one
+    // row on tablets+.
+    display: 'grid',
+    gridTemplateColumns: 'auto 1fr auto',
+    gridTemplateAreas: '"title controls date"',
+    alignItems: 'center',
+    columnGap: 10,
+    rowGap: 8,
+    marginBottom: 14,
+  } as React.CSSProperties,
+  headerTitleSlot: { gridArea: 'title' } as React.CSSProperties,
+  headerControlsSlot: {
+    gridArea: 'controls',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
     flexWrap: 'wrap',
-    marginBottom: 14,
+    justifyContent: 'flex-end',
+  } as React.CSSProperties,
+  headerDateSlot: {
+    gridArea: 'date',
+    justifySelf: 'end',
   } as React.CSSProperties,
   title: {
     color: '#ff8c00',
@@ -176,31 +194,35 @@ const styles = {
     cursor: 'pointer',
     minHeight: 32,
   }),
-  bell: (state: PushPermission): React.CSSProperties => ({
-    appearance: 'none',
-    WebkitAppearance: 'none',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    padding: '6px 8px',
-    background: '#0a0a0a',
-    border: `1px solid ${
-      state === 'granted'
-        ? 'rgba(0, 255, 65, 0.4)'
-        : state === 'denied'
-          ? 'rgba(255, 64, 64, 0.4)'
-          : '#2a2a2a'
-    }`,
-    color:
-      state === 'granted' ? '#00ff41' : state === 'denied' ? '#ff4040' : '#888',
-    fontFamily: 'Orbitron, sans-serif',
-    fontSize: 9,
-    fontWeight: 700,
-    letterSpacing: 1.5,
-    borderRadius: 3,
-    cursor: 'pointer',
-    minHeight: 32,
-  }),
+  bell: (state: PushPermission, subscribed: boolean): React.CSSProperties => {
+    // Three real states the chip surfaces:
+    //   on      = browser permission granted AND server subscription live
+    //   denied  = browser permission denied (can't recover without going to OS settings)
+    //   off     = anything else: default permission OR granted-but-unsubscribed
+    //             (tapping prompts / re-subscribes)
+    const live = state === 'granted' && subscribed;
+    const blocked = state === 'denied';
+    return {
+      appearance: 'none',
+      WebkitAppearance: 'none',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      padding: '6px 8px',
+      background: '#0a0a0a',
+      border: `1px solid ${
+        live ? 'rgba(0, 255, 65, 0.4)' : blocked ? 'rgba(255, 64, 64, 0.4)' : '#2a2a2a'
+      }`,
+      color: live ? '#00ff41' : blocked ? '#ff4040' : '#888',
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: 9,
+      fontWeight: 700,
+      letterSpacing: 1.5,
+      borderRadius: 3,
+      cursor: 'pointer',
+      minHeight: 32,
+    };
+  },
   emptyCard: {
     background: '#0a0a0a',
     border: '1px solid #1a1a1a',
@@ -667,6 +689,12 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
   const [error, setError] = useState<string | null>(null);
   const [pushState, setPushState] = useState<PushPermission>('default');
   const [pushBusy, setPushBusy] = useState(false);
+  // Tracks whether the server-side push subscription succeeded.
+  // Distinct from `pushState` (browser permission). Both must be
+  // green for notifications to fire — and the chip shouldn't claim
+  // 'NOTIFY ON' if permission was granted but the subscription POST
+  // failed (e.g. VAPID_PUBLIC_KEY not configured server-side).
+  const [pushSubscribed, setPushSubscribed] = useState(false);
 
   const today = useMemo(() => {
     try {
@@ -773,17 +801,29 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     else void fetchWeek();
   }, [mode, fetchToday, fetchWeek]);
 
-  // Default-on push subscribe.
+  // Push permission read on mount — DOES NOT auto-prompt. The
+  // earlier default-on policy fired the OS permission dialog
+  // unsolicited every first-mount, then silently failed when VAPID
+  // wasn't configured server-side. That's worse UX than asking
+  // explicitly. Now: surface the chip in its current state and let
+  // the user opt in by tapping. If they've already granted +
+  // subscribed in a previous session, this re-syncs that state
+  // without prompting.
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
       const state = getPushPermissionState();
       if (cancelled) return;
       setPushState(state);
-      if (state === 'unsupported' || state === 'denied') return;
-      const result = await ensurePushSubscription({ defaultOn: true });
+      if (state !== 'granted') return;
+      // Permission already granted in a prior session — try to
+      // re-attach the subscription silently (no prompt). Honors
+      // existing subscription if present; falls through gracefully
+      // if VAPID isn't configured.
+      const result = await ensurePushSubscription({ defaultOn: false });
       if (cancelled) return;
       setPushState(result.state);
+      setPushSubscribed(result.subscribed);
     };
     void init();
     return () => {
@@ -794,17 +834,48 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
   const togglePushSubscription = useCallback(async () => {
     setPushBusy(true);
     try {
-      if (pushState === 'granted') {
+      if (pushState === 'granted' && pushSubscribed) {
+        // Both green → user wants to turn off. Unsubscribe locally +
+        // server-side; OS permission stays granted (browser doesn't
+        // expose a programmatic revoke).
         await unsubscribePush();
-        setPushState('default');
+        setPushSubscribed(false);
       } else {
+        // Either denied / default OR granted-but-not-subscribed.
+        // Tap = "I want notifications on". Prompt if needed,
+        // subscribe, surface the real outcome.
         const r = await ensurePushSubscription({ defaultOn: true });
         setPushState(r.state);
+        setPushSubscribed(r.subscribed);
+        if (r.state === 'granted' && !r.subscribed && r.message) {
+          // Surface the underlying failure so the user knows why
+          // the chip didn't flip on. Most common cause: server-side
+          // VAPID env vars not set.
+          alert(`Push notifications are blocked: ${r.message}`);
+        }
       }
     } finally {
       setPushBusy(false);
     }
-  }, [pushState]);
+  }, [pushState, pushSubscribed]);
+
+  // Refresh when window regains focus (user tabs back into the PWA
+  // after asking Gunny to generate a plan in the chat tab). Without
+  // this, the surface shows stale state until a manual reload.
+  useEffect(() => {
+    const onFocus = () => {
+      if (mode === 'today') void fetchToday();
+      else void fetchWeek();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') onFocus();
+    });
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [mode, fetchToday, fetchWeek]);
 
   const submitFeedback = useCallback(
     async (blockId: string, followed: BlockFeedback['followed']) => {
@@ -895,51 +966,57 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
   return (
     <div style={mode === 'week' ? styles.pageWide : styles.page}>
       <div style={styles.headerRow}>
-        <h1 style={styles.title}>DAILY OPS</h1>
+        <h1 style={{ ...styles.title, ...styles.headerTitleSlot }}>DAILY OPS</h1>
 
-        <div style={styles.segmented}>
-          <button
-            type="button"
-            onClick={() => setMode('today')}
-            style={styles.segBtn(mode === 'today')}
-          >
-            TODAY
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('week')}
-            style={styles.segBtn(mode === 'week')}
-          >
-            WEEK
-          </button>
+        <div style={styles.headerControlsSlot}>
+          <div style={styles.segmented}>
+            <button
+              type="button"
+              onClick={() => setMode('today')}
+              style={styles.segBtn(mode === 'today')}
+            >
+              TODAY
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('week')}
+              style={styles.segBtn(mode === 'week')}
+            >
+              WEEK
+            </button>
+          </div>
+
+          {pushState !== 'unsupported' && (
+            <button
+              type="button"
+              onClick={togglePushSubscription}
+              disabled={pushBusy}
+              title={
+                pushState === 'granted' && pushSubscribed
+                  ? 'Notifications on for this device — tap to turn off'
+                  : pushState === 'denied'
+                    ? 'Notifications blocked. Re-enable in your browser settings.'
+                    : 'Tap to turn notifications on'
+              }
+              style={styles.bell(pushState, pushSubscribed)}
+            >
+              <span aria-hidden style={{ fontSize: 11 }}>
+                {pushState === 'granted' && pushSubscribed
+                  ? '🔔'
+                  : pushState === 'denied'
+                    ? '🚫'
+                    : '🔕'}
+              </span>
+              {pushState === 'granted' && pushSubscribed
+                ? 'NOTIFY ON'
+                : pushState === 'denied'
+                  ? 'BLOCKED'
+                  : 'NOTIFY OFF'}
+            </button>
+          )}
         </div>
 
-        {pushState !== 'unsupported' && (
-          <button
-            type="button"
-            onClick={togglePushSubscription}
-            disabled={pushBusy}
-            title={
-              pushState === 'granted'
-                ? 'Notifications on for this device — tap to turn off'
-                : pushState === 'denied'
-                  ? 'Notifications blocked. Re-enable in your browser settings.'
-                  : 'Tap to turn notifications on'
-            }
-            style={styles.bell(pushState)}
-          >
-            <span aria-hidden style={{ fontSize: 11 }}>
-              {pushState === 'granted' ? '🔔' : pushState === 'denied' ? '🚫' : '🔕'}
-            </span>
-            {pushState === 'granted'
-              ? 'NOTIFY ON'
-              : pushState === 'denied'
-                ? 'BLOCKED'
-                : 'NOTIFY OFF'}
-          </button>
-        )}
-
-        <span style={styles.dateChip}>{today}</span>
+        <span style={{ ...styles.dateChip, ...styles.headerDateSlot }}>{today}</span>
       </div>
 
       {loading && (
