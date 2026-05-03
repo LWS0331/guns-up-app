@@ -45,3 +45,25 @@ export function isJuniorOperatorEnabledServer(): boolean {
 // model is ready for public marketing.
 export const TRAINER_APPLICATIONS_OPEN: boolean =
   process.env.NEXT_PUBLIC_TRAINER_APPLICATIONS_OPEN === 'true';
+
+// ─── REGISTRATION_OPEN ──────────────────────────────────────────────────
+//
+// Public sign-up gate. When false, the LoginScreen REGISTER button
+// surfaces a "closed beta" explainer modal instead of switching to the
+// register form. When true, REGISTER toggles the form so a new visitor
+// can create an account.
+//
+// CLIENT FLAG ONLY — the server-side /api/auth/register endpoint has
+// its own gate that reads `process.env.REGISTRATION_OPEN === '1'`.
+// Both must be flipped together for sign-up to work end-to-end:
+//   - Railway env: REGISTRATION_OPEN=1
+//   - Railway env: NEXT_PUBLIC_REGISTRATION_OPEN=true
+// If only the client flag is set, users see the form but every submit
+// 403s with "Registration closed". If only the server flag is set, the
+// form is unreachable from the UI.
+//
+// Default = false (closed-beta era). Pricing v3 + Stripe wired
+// (May 2026) → time to flip both ON. Until env vars are set, the modal
+// still shows and the landing CTAs effectively dead-end at /login.
+export const REGISTRATION_OPEN: boolean =
+  process.env.NEXT_PUBLIC_REGISTRATION_OPEN === 'true';
