@@ -106,12 +106,12 @@ const PERIODIZATION_POWERLIFTING: CorpusFile = {
 
 const PERIODIZATION_HYPERTROPHY: CorpusFile = {
   id: 'periodization-hypertrophy',
-  label: 'Hypertrophy / Bodybuilding Periodization Templates',
+  label: 'Hypertrophy / Bodybuilding Periodization Templates + Supplementation & Natural T Protocols',
   path: 'periodization/hypertrophy.md',
   format: 'md',
-  approxBytes: 15_139,
+  approxBytes: 74_163,
   description:
-    '5 templates spanning RP-style hypertrophy blocks, classical bodybuilding splits, and volume-progression schemes.',
+    '5 periodization templates (RP-style hypertrophy blocks, classical bodybuilding splits, volume-progression schemes) PLUS 2 supplementation/lifestyle protocols that integrate with all 5: (13) Operator Supplement Stack — evidence-tiered (A/B/C/D) creatine, protein, caffeine, beta-alanine, citrulline, vit D, omega-3, Mg, Zn, ashwagandha KSM-66, tongkat ali, sleep stack (glycine, melatonin 0.3-0.5mg, tart cherry); fadogia/turkesterone/tribulus/DAA explicitly EXCLUDED with reasoning; CYP1A2 caffeine stratification; phase dosing; third-party testing tier; bloodwork tracking; (14) Natural Testosterone Optimization Protocol — Endocrine Society 2018 + AUA 2018/2024 aligned, sleep/training/nutrition/body-comp/lifestyle/environmental/supplement pillars, debunks the acute-T-spike-→-hypertrophy myth (West & Phillips 2010-2012, Schoenfeld 2013), debunks the no-fap T-boost myth (Jiang 2003 retracted Dec 2021), TRT referral criteria, full bloodwork panel with LC-MS/MS preferences. Both protocols cite their evidence base verbatim.',
 };
 
 const PERIODIZATION_TACTICAL: CorpusFile = {
