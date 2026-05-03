@@ -598,8 +598,11 @@ export const OPERATORS: Operator[] = [
     callsign: 'WARDOG',
     pin: '1111',
     role: 'client',
-    // Promoted to COMMANDER (opus) for beta testing — Apr 2026.
-    tier: 'opus',
+    // Demoted COMMANDER (opus) → OPERATOR (sonnet) — May 2026 cost-control
+    // pass. The Apr 2026 beta-testing promotion to opus is over;
+    // adult clients now run on sonnet by default with only the
+    // trainer accounts (Ruben + Britney) on opus.
+    tier: 'sonnet',
     coupleWith: 'op-erika',
     trainerId: 'op-ruben',
     teamId: 'team-wolf-pack',
@@ -883,8 +886,9 @@ export const OPERATORS: Operator[] = [
     callsign: 'PHOENIX',
     pin: '2222',
     role: 'client',
-    // Promoted to COMMANDER (opus) for beta testing — Apr 2026.
-    tier: 'opus',
+    // Demoted COMMANDER (opus) → OPERATOR (sonnet) — May 2026 cost-control
+    // pass. See WARDOG above for full rationale.
+    tier: 'sonnet',
     coupleWith: 'op-efrain',
     trainerId: 'op-ruben',
     teamId: 'team-wolf-pack',
