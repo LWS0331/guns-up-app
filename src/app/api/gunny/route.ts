@@ -6,7 +6,7 @@ import { checkAndIncrement, capExceededBody } from '@/lib/usageCaps';
 import { FOOD_DB_SYSTEM_INSTRUCTION, buildFoodContextFromMessage } from '@/lib/foodDbContext';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
-import { upsertDailyOpsPlan } from '@/lib/dailyOpsPersistence';
+import { upsertDailyOpsPlan, applyBlockOverride } from '@/lib/dailyOpsPersistence';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
 import { prisma } from '@/lib/db';
@@ -414,6 +414,48 @@ Format:
   ]
 }
 </daily_ops_json>
+
+BLOCK OVERRIDE (Phase 2B — surgical single-block edit):
+When the operator asks for a SMALL change to ONE block in the existing
+plan (rather than a full re-plan), use <daily_ops_block_override>
+INSTEAD of regenerating the whole <daily_ops_json>. Examples:
+  - "push my caffeine cutoff 90 min later" → override the
+    caffeine_cutoff block's startTime
+  - "move my workout to 7pm" → override the workout block's startTime
+  - "wind-down at 9 instead" → override wind_down startTime
+
+You can emit MULTIPLE <daily_ops_block_override> blocks in one
+response if the operator requests several small changes.
+
+Format:
+
+<daily_ops_block_override>
+{
+  "blockId": "caff-cut-1",
+  "newStartTime": "15:30",
+  "perceivedFit": "too_early"
+}
+</daily_ops_block_override>
+
+Fields:
+  - blockId       (required) — the id from the existing plan's blocks[]
+  - newStartTime  (optional, HH:MM) — required if newEndTime omitted
+  - newEndTime    (optional, HH:MM) — required if newStartTime omitted
+  - date          (optional, YYYY-MM-DD) — defaults to operator's
+                  most recent plan
+  - perceivedFit  (optional) — one of 'too_early' | 'too_late' |
+                  'right' | 'na'. If omitted, the server infers from
+                  the time direction (later = too_early).
+
+The server stamps a BlockFeedback with source='chat' for each
+override so the next PERSONAL RHYTHM compute picks it up — i.e. one
+block override updates today's plan AND becomes a future-default
+nudge automatically.
+
+Use the FULL <daily_ops_json> path only when the operator asks for a
+fresh plan from scratch ("rebuild today", "design my day from
+scratch", "start over") OR when ≥3 blocks need to change. Surgical
+edits = override; sweeping edits = regenerate.
 
 PERSONALIZATION SIGNALS (Phase 2A, when present in the context block):
 The system may inject two blocks above this prompt — "PERSONAL RHYTHM"
@@ -3638,7 +3680,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // the real conversation.
     type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
     let mergedMessages: IncomingMsg[] = messages;
-    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json)>/g;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json|daily_ops_block_override)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json|daily_ops_block_override)>/g;
     const historyChatType: string | null =
       typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
         ? chatTypeFromBody
@@ -4153,6 +4195,46 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         }
       }
 
+      // <daily_ops_block_override> — Phase 2B. Surgical single-block
+      // edit ("push my caffeine cutoff 90 min later"). Multiple blocks
+      // can be emitted in one response. Each one updates the target
+      // block's startTime / endTime AND stamps a BlockFeedback so the
+      // PersonalRhythm aggregator picks up the signal next compute.
+      const dailyOpsOverrides: Array<
+        | { ok: true; blockId: string; planId: string }
+        | { ok: false; blockId: string; error: string }
+      > = [];
+      for (const m of responseText.matchAll(
+        /<daily_ops_block_override>([\s\S]*?)<\/daily_ops_block_override>/g,
+      )) {
+        let parsed: Record<string, unknown> | null = null;
+        try { parsed = JSON.parse(m[1].trim()); } catch { /* invalid */ }
+        if (!parsed || typeof parsed !== 'object') continue;
+        const blockId = typeof parsed.blockId === 'string' ? parsed.blockId : null;
+        if (!blockId) continue;
+        const result = await applyBlockOverride({
+          operatorId: auth.operatorId,
+          date: typeof parsed.date === 'string' ? parsed.date : undefined,
+          blockId,
+          newStartTime: typeof parsed.newStartTime === 'string' ? parsed.newStartTime : undefined,
+          newEndTime: typeof parsed.newEndTime === 'string' ? parsed.newEndTime : undefined,
+          perceivedFit:
+            parsed.perceivedFit === 'too_early' ||
+            parsed.perceivedFit === 'too_late' ||
+            parsed.perceivedFit === 'right' ||
+            parsed.perceivedFit === 'na'
+              ? parsed.perceivedFit
+              : undefined,
+          feedbackSource: 'chat',
+        });
+        if ('error' in result) {
+          dailyOpsOverrides.push({ ok: false, blockId, error: result.error });
+          console.warn('[daily-ops] block override failed:', blockId, result.error);
+        } else {
+          dailyOpsOverrides.push({ ok: true, blockId, planId: result.plan.id });
+        }
+      }
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -4180,6 +4262,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
         .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
         .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+        .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
         .trim();
 
       // Read-first-then-write dedup. Looks at the operator's CURRENT
@@ -4261,8 +4344,11 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         voiceControl,
         // Daily Ops result — null if no plan was emitted, otherwise
         // { ok, planId, status, guardrail? } for the client to refresh
-        // /api/daily-ops.
+        // /api/daily-ops. dailyOpsOverrides is the list of block-level
+        // edits applied this turn; client refreshes /api/daily-ops if
+        // either field is non-empty.
         dailyOps: dailyOpsResult,
+        dailyOpsOverrides,
         // Junior safety events (empty array for adults / flag-disabled juniors).
         // Client surfaces a banner; ParentDashboard polls juniorSafety.events
         // for the canonical list.
@@ -4511,6 +4597,42 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             }
           }
 
+          // <daily_ops_block_override> — streaming-path mirror.
+          const dailyOpsOverrides: Array<
+            | { ok: true; blockId: string; planId: string }
+            | { ok: false; blockId: string; error: string }
+          > = [];
+          for (const m of fullText.matchAll(
+            /<daily_ops_block_override>([\s\S]*?)<\/daily_ops_block_override>/g,
+          )) {
+            let parsed: Record<string, unknown> | null = null;
+            try { parsed = JSON.parse(m[1].trim()); } catch { /* invalid */ }
+            if (!parsed || typeof parsed !== 'object') continue;
+            const blockId = typeof parsed.blockId === 'string' ? parsed.blockId : null;
+            if (!blockId) continue;
+            const result = await applyBlockOverride({
+              operatorId: auth.operatorId,
+              date: typeof parsed.date === 'string' ? parsed.date : undefined,
+              blockId,
+              newStartTime: typeof parsed.newStartTime === 'string' ? parsed.newStartTime : undefined,
+              newEndTime: typeof parsed.newEndTime === 'string' ? parsed.newEndTime : undefined,
+              perceivedFit:
+                parsed.perceivedFit === 'too_early' ||
+                parsed.perceivedFit === 'too_late' ||
+                parsed.perceivedFit === 'right' ||
+                parsed.perceivedFit === 'na'
+                  ? parsed.perceivedFit
+                  : undefined,
+              feedbackSource: 'chat',
+            });
+            if ('error' in result) {
+              dailyOpsOverrides.push({ ok: false, blockId, error: result.error });
+              console.warn('[daily-ops] block override failed (stream):', blockId, result.error);
+            } else {
+              dailyOpsOverrides.push({ ok: true, blockId, planId: result.plan.id });
+            }
+          }
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
@@ -4536,6 +4658,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
             .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
             .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+            .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
             .trim();
 
           // Read-first-then-write dedup. Mirrors the non-streaming path —
@@ -4621,6 +4744,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 voiceControl,
                 // Daily Ops persistence outcome — null if no plan was emitted.
                 dailyOps: dailyOpsResult,
+                dailyOpsOverrides,
                 // Junior safety events captured pre-LLM (see non-streaming
                 // payload above for context). Mirrored here so SSE + non-SSE
                 // clients see the same shape.

@@ -82,6 +82,21 @@ const STATUS_COPY: Record<DailyOpsPlanShape['status'], string> = {
   rejected: 'REJECTED — REQUEST A NEW PLAN',
 };
 
+// PersonalRhythm shape — kept loose here since the surface only reads
+// the skip-rate map (the rest is consumed server-side by Gunny's prompt).
+interface RhythmShape {
+  blockSkipRates?: Record<string, number>;
+  feedbackSampleCount?: number;
+}
+
+const HIGH_SKIP_THRESHOLD = 0.6;
+
+function dateOffsetISO(daysOffset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysOffset);
+  return d.toISOString().slice(0, 10);
+}
+
 // ---------------------------------------------------------------------------
 // Block card — vertical timeline row with 3-tap feedback.
 // ---------------------------------------------------------------------------
@@ -91,14 +106,28 @@ interface BlockCardProps {
   feedback: BlockFeedback | undefined;
   onFeedback: (followed: BlockFeedback['followed']) => void;
   disabled: boolean;
+  /** 0..1 — fraction of recent occurrences the operator skipped this category. */
+  skipRate?: number;
 }
 
-const BlockCard: React.FC<BlockCardProps> = ({ block, feedback, onFeedback, disabled }) => {
+const BlockCard: React.FC<BlockCardProps> = ({
+  block,
+  feedback,
+  onFeedback,
+  disabled,
+  skipRate,
+}) => {
   const meta = blockMeta(block.category);
   const followed = feedback?.followed;
+  const dimmed = (skipRate ?? 0) >= HIGH_SKIP_THRESHOLD;
+  const isUserOverride = block.source === 'user_override';
 
   return (
-    <div className={`flex gap-3 py-3 border-l-2 pl-3 ${meta.ring}`}>
+    <div
+      className={`flex gap-3 py-3 border-l-2 pl-3 ${meta.ring} ${
+        dimmed ? 'opacity-50' : ''
+      }`}
+    >
       <div className="flex-shrink-0 w-16">
         <div className="text-sm font-mono text-neutral-100">{block.startTime}</div>
         {block.endTime && (
@@ -106,13 +135,23 @@ const BlockCard: React.FC<BlockCardProps> = ({ block, feedback, onFeedback, disa
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
+        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
           <span className={`text-[10px] font-bold tracking-wider ${meta.tint}`}>
             {meta.label}
           </span>
           {block.flexibility !== 'fixed' && (
             <span className="text-[9px] text-neutral-500 font-mono">
               ±{block.flexibility === 'flex_30' ? '30m' : '2h'}
+            </span>
+          )}
+          {isUserOverride && (
+            <span className="text-[9px] font-bold tracking-wider text-amber-300 bg-amber-950/40 border border-amber-700/40 rounded px-1">
+              YOU MOVED THIS
+            </span>
+          )}
+          {dimmed && (
+            <span className="text-[9px] font-bold tracking-wider text-neutral-500 bg-neutral-900/60 border border-neutral-700 rounded px-1">
+              OFTEN SKIPPED
             </span>
           )}
         </div>
@@ -163,12 +202,149 @@ const BlockCard: React.FC<BlockCardProps> = ({ block, feedback, onFeedback, disa
 };
 
 // ---------------------------------------------------------------------------
+// Week view — 7-column grid showing the rhythm pattern at a glance.
+// Columns are oldest → today (left → right). Each cell shows the day's
+// blocks as compact time chips colored by category. Adherence dots
+// summarize the day's feedback.
+// ---------------------------------------------------------------------------
+
+interface WeekViewProps {
+  plans: DailyOpsPlanShape[];
+  rhythm: RhythmShape | null;
+  todayISO: string;
+}
+
+function dayLabel(iso: string, todayISO: string): string {
+  if (iso === todayISO) return 'TODAY';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase();
+}
+
+function adherenceSummary(plan: DailyOpsPlanShape | undefined): {
+  yes: number;
+  partial: number;
+  no: number;
+  total: number;
+} {
+  if (!plan)
+    return { yes: 0, partial: 0, no: 0, total: 0 };
+  let yes = 0;
+  let partial = 0;
+  let no = 0;
+  for (const fb of Object.values(plan.feedback ?? {})) {
+    if (fb.followed === 'yes') yes++;
+    else if (fb.followed === 'partial') partial++;
+    else if (fb.followed === 'no') no++;
+  }
+  return { yes, partial, no, total: yes + partial + no };
+}
+
+const WeekView: React.FC<WeekViewProps> = ({ plans, rhythm, todayISO }) => {
+  // Build a 7-day window ending today.
+  const days: { iso: string; plan: DailyOpsPlanShape | undefined }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const iso = dateOffsetISO(-i);
+    days.push({ iso, plan: plans.find((p) => p.date === iso) });
+  }
+
+  return (
+    <div className="grid grid-cols-7 gap-1">
+      {days.map(({ iso, plan }) => {
+        const adherence = adherenceSummary(plan);
+        const isToday = iso === todayISO;
+        const sortedBlocks = plan ? sortBlocks(plan.blocks) : [];
+        return (
+          <div
+            key={iso}
+            className={`border rounded p-1.5 min-h-[180px] ${
+              isToday
+                ? 'border-amber-700/60 bg-amber-950/10'
+                : 'border-neutral-800 bg-neutral-900/30'
+            }`}
+          >
+            <div
+              className={`text-[10px] font-bold tracking-widest text-center mb-1 ${
+                isToday ? 'text-amber-300' : 'text-neutral-500'
+              }`}
+            >
+              {dayLabel(iso, todayISO)}
+            </div>
+            <div className="text-[9px] text-neutral-600 font-mono text-center mb-2">
+              {iso.slice(5)}
+            </div>
+            {!plan && (
+              <div className="text-[10px] text-neutral-700 italic text-center pt-2">
+                no plan
+              </div>
+            )}
+            {plan && (
+              <>
+                {/* Adherence pips */}
+                {adherence.total > 0 && (
+                  <div className="flex gap-0.5 justify-center mb-2">
+                    {Array.from({ length: adherence.yes }).map((_, i) => (
+                      <span
+                        key={`y${i}`}
+                        className="w-1.5 h-1.5 rounded-full bg-emerald-500"
+                      />
+                    ))}
+                    {Array.from({ length: adherence.partial }).map((_, i) => (
+                      <span
+                        key={`p${i}`}
+                        className="w-1.5 h-1.5 rounded-full bg-amber-500"
+                      />
+                    ))}
+                    {Array.from({ length: adherence.no }).map((_, i) => (
+                      <span
+                        key={`n${i}`}
+                        className="w-1.5 h-1.5 rounded-full bg-rose-500"
+                      />
+                    ))}
+                  </div>
+                )}
+                {/* Block chips */}
+                <div className="space-y-0.5">
+                  {sortedBlocks.map((b) => {
+                    const meta = blockMeta(b.category);
+                    const skipRate = rhythm?.blockSkipRates?.[b.category] ?? 0;
+                    const dimmed = skipRate >= HIGH_SKIP_THRESHOLD;
+                    return (
+                      <div
+                        key={b.id}
+                        className={`flex items-center gap-1 ${dimmed ? 'opacity-40' : ''}`}
+                        title={`${b.label}${b.rationale ? ' — ' + b.rationale : ''}`}
+                      >
+                        <span className="text-[8px] font-mono text-neutral-500 w-7 flex-shrink-0">
+                          {b.startTime}
+                        </span>
+                        <span className={`text-[9px] font-bold ${meta.tint} truncate`}>
+                          {meta.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Main DailyOps surface
 // ---------------------------------------------------------------------------
 
+type ViewMode = 'today' | 'week';
+
 const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => {
   const { t } = useLanguage();
+  const [mode, setMode] = useState<ViewMode>('today');
   const [plan, setPlan] = useState<DailyOpsPlanShape | null>(null);
+  const [weekPlans, setWeekPlans] = useState<DailyOpsPlanShape[]>([]);
+  const [rhythm, setRhythm] = useState<RhythmShape | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -198,16 +374,18 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
   // there's no parent on file at Commander tier. We don't fetch the
   // parents here — we just trust the server's 200 vs 4xx response. If
   // the server returns 403 we surface the upgrade message.
-  const fetchPlan = useCallback(async () => {
+  const fetchToday = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(
-        `/api/daily-ops?date=${today}&operatorId=${encodeURIComponent(operator.id)}`,
+        `/api/daily-ops?date=${today}&operatorId=${encodeURIComponent(operator.id)}&include=rhythm`,
         { credentials: 'include' },
       );
       if (res.status === 402) {
-        setError('Daily Ops is a Commander-tier feature. Upgrade to enable Gunny\'s daily schedule planner.');
+        setError(
+          'Daily Ops is a Commander-tier feature. Upgrade to enable Gunny\'s daily schedule planner.',
+        );
         setPlan(null);
         return;
       }
@@ -218,6 +396,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
       }
       const data = await res.json();
       setPlan(data.plan ?? null);
+      setRhythm(data.rhythm ?? null);
     } catch (err) {
       console.error('[daily-ops] fetch failed', err);
       setError('Network error loading plan.');
@@ -226,9 +405,43 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     }
   }, [operator.id, today]);
 
+  const fetchWeek = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const from = dateOffsetISO(-6);
+      const to = today;
+      const res = await fetch(
+        `/api/daily-ops?from=${from}&to=${to}&operatorId=${encodeURIComponent(operator.id)}&include=rhythm`,
+        { credentials: 'include' },
+      );
+      if (res.status === 402) {
+        setError(
+          'Daily Ops is a Commander-tier feature. Upgrade to enable Gunny\'s daily schedule planner.',
+        );
+        setWeekPlans([]);
+        return;
+      }
+      if (!res.ok) {
+        setError('Could not load week of daily ops plans.');
+        setWeekPlans([]);
+        return;
+      }
+      const data = await res.json();
+      setWeekPlans(Array.isArray(data.plans) ? data.plans : []);
+      setRhythm(data.rhythm ?? null);
+    } catch (err) {
+      console.error('[daily-ops] week fetch failed', err);
+      setError('Network error loading week.');
+    } finally {
+      setLoading(false);
+    }
+  }, [operator.id, today]);
+
   useEffect(() => {
-    void fetchPlan();
-  }, [fetchPlan]);
+    if (mode === 'today') void fetchToday();
+    else void fetchWeek();
+  }, [mode, fetchToday, fetchWeek]);
 
   const submitFeedback = useCallback(
     async (blockId: string, followed: BlockFeedback['followed']) => {
@@ -252,13 +465,13 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
         });
         if (!res.ok) {
           // Roll back optimistic update on failure.
-          await fetchPlan();
+          await fetchToday();
         }
       } catch {
-        await fetchPlan();
+        await fetchToday();
       }
     },
-    [plan, fetchPlan],
+    [plan, fetchToday],
   );
 
   const askGunnyForPlan = useCallback(() => {
@@ -304,20 +517,49 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     plan.status === 'pending_parent_approval' ||
     plan.status === 'rejected';
 
+  // Container max-width depends on mode — week needs more horizontal
+  // room than the single-day stack.
+  const containerWidthClass = mode === 'week' ? 'max-w-5xl' : 'max-w-2xl';
+
   return (
-    <div className="p-4 max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+    <div className={`p-4 ${containerWidthClass} mx-auto`}>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <Icon.Clock size={20} className="text-amber-300" />
           <h1 className="text-amber-300 font-bold tracking-wider text-lg">
             {t('daily_ops.title') || 'DAILY OPS'}
           </h1>
         </div>
+        {/* Today / Week toggle */}
+        <div className="flex border border-neutral-800 rounded overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setMode('today')}
+            className={`px-3 py-1 text-[10px] font-bold tracking-wider transition-colors ${
+              mode === 'today'
+                ? 'bg-amber-600 text-neutral-950'
+                : 'bg-neutral-900 text-neutral-400 hover:text-amber-300'
+            }`}
+          >
+            TODAY
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('week')}
+            className={`px-3 py-1 text-[10px] font-bold tracking-wider transition-colors ${
+              mode === 'week'
+                ? 'bg-amber-600 text-neutral-950'
+                : 'bg-neutral-900 text-neutral-400 hover:text-amber-300'
+            }`}
+          >
+            WEEK
+          </button>
+        </div>
         <div className="text-xs text-neutral-400 font-mono">{today}</div>
       </div>
 
       {loading && (
-        <div className="text-center text-neutral-500 text-sm py-8">Loading plan…</div>
+        <div className="text-center text-neutral-500 text-sm py-8">Loading…</div>
       )}
 
       {error && !loading && (
@@ -326,7 +568,41 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
         </div>
       )}
 
-      {!loading && !plan && !error && (
+      {/* WEEK MODE */}
+      {mode === 'week' && !loading && !error && (
+        <>
+          {weekPlans.length === 0 ? (
+            <div className="border border-neutral-800 bg-neutral-900/40 rounded-lg p-5 text-center">
+              <p className="text-sm text-neutral-300 mb-3">
+                No plans in the last 7 days yet. Ask Gunny to build today&apos;s plan to start the rhythm.
+              </p>
+              <button
+                type="button"
+                onClick={askGunnyForPlan}
+                disabled={!onSendGunnyMessage}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-neutral-700 disabled:text-neutral-500 text-neutral-950 font-bold tracking-wider text-sm rounded transition-colors"
+              >
+                GENERATE TODAY&apos;S PLAN
+              </button>
+            </div>
+          ) : (
+            <>
+              <WeekView plans={weekPlans} rhythm={rhythm} todayISO={today} />
+              {rhythm && (rhythm.feedbackSampleCount ?? 0) >= 3 && (
+                <p className="text-[10px] text-neutral-500 italic text-center mt-3">
+                  Adherence pips: <span className="text-emerald-400">●</span> on time •{' '}
+                  <span className="text-amber-400">●</span> shifted •{' '}
+                  <span className="text-rose-400">●</span> skipped. Dimmed blocks =
+                  often skipped (60%+ skip rate over 14 days).
+                </p>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* TODAY MODE */}
+      {mode === 'today' && !loading && !plan && !error && (
         <div className="border border-neutral-800 bg-neutral-900/40 rounded-lg p-5 text-center">
           <p className="text-sm text-neutral-300 mb-3">
             No plan for today yet. Ask Gunny to build one.
@@ -342,7 +618,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
         </div>
       )}
 
-      {plan && (
+      {mode === 'today' && plan && (
         <>
           {/* Status banner */}
           <div className="mb-3 flex items-center justify-between">
@@ -399,6 +675,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
                 feedback={plan.feedback?.[b.id]}
                 onFeedback={(followed) => submitFeedback(b.id, followed)}
                 disabled={feedbackDisabled}
+                skipRate={rhythm?.blockSkipRates?.[b.category]}
               />
             ))}
           </div>

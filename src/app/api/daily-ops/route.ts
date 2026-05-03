@@ -27,7 +27,7 @@ import type { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/requireAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
-import { planRowToShape } from '@/lib/dailyOpsPersistence';
+import { planRowToShape, applyBlockOverride } from '@/lib/dailyOpsPersistence';
 import type { BlockFeedback } from '@/lib/dailyOpsTypes';
 
 // NOTE: don't re-export upsertDailyOpsPlan from here — Next.js route
@@ -145,9 +145,50 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const date = url.searchParams.get('date');
   const operatorId = url.searchParams.get('operatorId') || auth.operatorId;
+  const includeRhythm = url.searchParams.get('include') === 'rhythm';
+  const fromParam = url.searchParams.get('from');
+  const toParam = url.searchParams.get('to');
+  const date = url.searchParams.get('date');
 
+  // Range query — Phase 2B Week view. Returns up to 14 days of plans.
+  if (fromParam && toParam) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fromParam) || !/^\d{4}-\d{2}-\d{2}$/.test(toParam)) {
+      return NextResponse.json(
+        { error: 'from / to must be YYYY-MM-DD' },
+        { status: 400 },
+      );
+    }
+    if (fromParam > toParam) {
+      return NextResponse.json({ error: 'from must be <= to' }, { status: 400 });
+    }
+
+    const accessResult = await authorizeAccess(req, operatorId);
+    if (accessResult instanceof NextResponse) return accessResult;
+
+    const plans = await prisma.dailyOpsPlan.findMany({
+      where: {
+        operatorId,
+        date: { gte: fromParam, lte: toParam },
+      },
+      orderBy: { date: 'asc' },
+      take: 14,
+    });
+
+    let rhythm = null;
+    if (includeRhythm) {
+      const { getPersonalRhythm } = await import('@/lib/personalRhythm');
+      rhythm = await getPersonalRhythm(operatorId).catch(() => null);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      plans: plans.map((p) => planRowToShape(p)),
+      rhythm,
+    });
+  }
+
+  // Single-day query (default).
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: 'date=YYYY-MM-DD required' }, { status: 400 });
   }
@@ -159,9 +200,16 @@ export async function GET(req: NextRequest) {
     where: { operatorId_date: { operatorId, date } },
   });
 
+  let rhythm = null;
+  if (includeRhythm) {
+    const { getPersonalRhythm } = await import('@/lib/personalRhythm');
+    rhythm = await getPersonalRhythm(operatorId).catch(() => null);
+  }
+
   return NextResponse.json({
     ok: true,
     plan: plan ? planRowToShape(plan) : null,
+    rhythm,
   });
 }
 
@@ -176,6 +224,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as
     | { action: 'feedback'; planId: string; blockId?: string; followed: 'yes' | 'partial' | 'no'; perceivedFit?: 'too_early' | 'right' | 'too_late' | 'na'; notes?: string }
     | { action: 'approve'; planId: string; approved: boolean; notes?: string }
+    | { action: 'block_override'; planId: string; blockId: string; newStartTime?: string; newEndTime?: string; perceivedFit?: 'too_early' | 'right' | 'too_late' | 'na' }
     | null;
 
   if (!body || typeof body !== 'object' || !('action' in body)) {
@@ -243,6 +292,26 @@ export async function POST(req: NextRequest) {
       },
     });
     return NextResponse.json({ ok: true, plan: planRowToShape(updated) });
+  }
+
+  if (body.action === 'block_override') {
+    // Phase 2B — surgical single-block edit (e.g. tap-edit a time
+    // chip in the UI). Delegates to applyBlockOverride() in
+    // dailyOpsPersistence.ts which is shared with the Gunny
+    // <daily_ops_block_override> channel — same code path either way.
+    const result = await applyBlockOverride({
+      operatorId: plan.operatorId,
+      date: plan.date,
+      blockId: body.blockId,
+      newStartTime: body.newStartTime,
+      newEndTime: body.newEndTime,
+      perceivedFit: body.perceivedFit,
+      feedbackSource: 'tap',
+    });
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, plan: result.plan });
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
