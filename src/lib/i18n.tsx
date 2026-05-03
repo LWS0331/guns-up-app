@@ -30,6 +30,11 @@ export const translations = {
     'nav.parent_hub': 'PARENT HUB',
     'nav.parent_hub_short': 'PARENT',
     'nav.ops': 'OPS',
+    'nav.daily_ops': 'DAILY OPS',
+    'nav.daily_ops_short': 'DAY OPS',
+    'daily_ops.title': 'DAILY OPS',
+    'daily_ops.upgrade_blurb': 'The Daily Ops Planner is a Commander-tier feature. Gunny generates your full daily schedule — wake, caffeine timing, meal cadence, workout window, wind-down, sleep — fully personalized from the corpus and continuously tuned by your feedback.',
+    'parent.daily_ops_pending': 'DAILY OPS — PENDING APPROVAL',
 
     // ─── Login Screen ───────────────────────────────────────────────
     'login.enter_pin': 'ENTER ACCESS CODE',
@@ -1505,6 +1510,11 @@ export const translations = {
     'nav.parent_hub': 'CENTRO DE PADRES',
     'nav.parent_hub_short': 'PADRES',
     'nav.ops': 'OPS',
+    'nav.daily_ops': 'OPS DIARIAS',
+    'nav.daily_ops_short': 'OPS DÍA',
+    'daily_ops.title': 'OPS DIARIAS',
+    'daily_ops.upgrade_blurb': 'El Planificador de Ops Diarias es una función de nivel Comandante. Gunny genera tu horario diario completo — despertar, momento de cafeína, ritmo de comidas, ventana de entrenamiento, desconexión, sueño — totalmente personalizado del corpus y ajustado continuamente con tus comentarios.',
+    'parent.daily_ops_pending': 'OPS DIARIAS — PENDIENTE DE APROBACIÓN',
 
     // ─── Login Screen ───────────────────────────────────────────────
     'login.enter_pin': 'INGRESA PIN DE ACCESO',

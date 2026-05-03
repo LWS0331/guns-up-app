@@ -6,6 +6,7 @@ import { checkAndIncrement, capExceededBody } from '@/lib/usageCaps';
 import { FOOD_DB_SYSTEM_INSTRUCTION, buildFoodContextFromMessage } from '@/lib/foodDbContext';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
+import { upsertDailyOpsPlan } from '@/lib/dailyOpsPersistence';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
 import { prisma } from '@/lib/db';
@@ -327,6 +328,104 @@ Use <workout_modification> when:
 Use <workout_json> ONLY when building a COMPLETE NEW workout from scratch (e.g. "build me a leg day").
 
 If the operator asks to swap an exercise they have ALREADY completed (all sets logged), acknowledge it is already done and offer to swap it for the next session instead.
+
+DAILY OPS PROTOCOL (the rhythm of the day, separate from the workout):
+The Daily Ops Planner is a SECOND planner alongside the Workout Planner.
+It owns the daily schedule — wake / sun / caffeine / meals / supps /
+workout window / wind-down / sleep — fully personalized using the
+hypertrophy supplement stack (corpus entry 13), the natural T
+optimization protocol (corpus entry 14), the operator's periodization
+phase, life stage, and any junior-specific overlays. This is a
+COMMANDER-tier feature; if the operator (or junior's parent) is below
+Commander, decline politely and tell them they can upgrade to enable it.
+
+Emit a <daily_ops_json> block AT THE END of your response when, AND ONLY
+WHEN, the operator (or their parent) explicitly asks for:
+- "today's plan" / "daily plan" / "schedule" / "ops plan" / "battle rhythm"
+- "what time should I [eat / take creatine / cut caffeine / sleep]"
+- "build me a daily routine" / "design my day"
+- An explicit re-plan ("shift my workout to 7pm and adjust the rest")
+
+DO NOT emit a <daily_ops_json> on every response — only when the operator
+asks for the schedule. Conversational follow-ups about a single block
+(e.g. "is 3pm too late for caffeine?") do NOT trigger a full re-plan.
+
+Block categories (use these exact strings):
+  wake, sun_exposure, caffeine_window_open, caffeine_cutoff, meal,
+  pre_workout_supp, workout, post_workout, mobility, wind_down,
+  pre_bed_supp, sleep_target, sauna, cold_exposure, recovery_walk,
+  fifa_warmup (junior soccer only), mistake_reset_ritual (junior only)
+
+Each block carries a 1-CLAUSE rationale citing the corpus — e.g.:
+  "tier1.caffeine — 30-60 min pre, 3-6 mg/kg"
+  "natural_T sleep.hygieneProtocol — 8-10 hrs pre-bed cutoff"
+  "Mamerow 2014 — 4 evenly spaced ~0.4 g/kg protein feedings"
+  "tier1.citrullineMalate — 8g 60 min pre"
+Keep each rationale under 120 chars so the UI shows it inline.
+
+Set flexibility: 'fixed' (sleep / wake — keep tight), 'flex_30' (most
+meals / supps), 'flex_2hr' (mobility, sauna, recovery walks).
+
+Anchor the workout block to the Workout Planner's scheduled session if
+one exists — read it from the operator's context. If no workout is
+scheduled today, omit the workout / pre_workout_supp / post_workout
+blocks. Build around CALENDAR if any conflicts are mentioned in chat —
+calendar always wins, you re-shape blocks around it.
+
+Junior operators (under 18) — STRIP these even if asked:
+  - caffeine_window_open / caffeine_cutoff for under 13
+  - pre_workout_supp / pre_bed_supp for under 13
+  - any reference to ashwagandha, tongkat ali, melatonin, sodium
+    bicarbonate, tribulus, fadogia, turkesterone, ecdysterone, HMB,
+    DAA, shilajit at any junior age
+  - any reference to alcohol / nicotine / caffeine pills / fat burners
+For under 13: cap sleep_target startTime at 21:30. For junior soccer
+Tier 3, open the workout with a fifa_warmup block (FIFA 11+ Kids
+12-min warmup). End every junior workout with a mistake_reset_ritual
+block.
+
+Format:
+
+<daily_ops_json>
+{
+  "date": "YYYY-MM-DD",
+  "basis": {
+    "periodizationPhase": "accumulation",
+    "trainingPath": "hypertrophy",
+    "workoutLoad": "heavy",
+    "scheduledWorkoutTime": "12:00"
+  },
+  "notes": "Intensification week — caffeine ergogenic peak, ashwagandha + Mg pre-bed mandatory, tart cherry across the week.",
+  "blocks": [
+    { "id":"wake-1",       "startTime":"06:00", "category":"wake",                 "label":"Wake",                                       "rationale":"natural_T sleep — consistent ±30 min target",                          "flexibility":"fixed",     "source":"gunny_default" },
+    { "id":"sun-1",        "startTime":"06:10", "endTime":"06:30", "category":"sun_exposure", "label":"10–30 min outdoor light",        "rationale":"natural_T sleep.hygieneProtocol — circadian entrainment within 60 min", "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"caff-open-1",  "startTime":"07:00", "category":"caffeine_window_open", "label":"Coffee 4 mg/kg",                              "rationale":"tier1.caffeine — 3–6 mg/kg, 30–60 min pre key sessions",                "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"meal-1",       "startTime":"07:30", "category":"meal",                 "label":"Breakfast — 0.4 g/kg protein, leucine ≥2.5g","rationale":"Mamerow 2014 — 4 evenly spaced feedings",                              "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"meal-2",       "startTime":"11:00", "category":"meal",                 "label":"Pre-workout meal",                            "rationale":"60–90 min pre lift, carb + protein",                                    "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"prewo-1",      "startTime":"11:00", "category":"pre_workout_supp",     "label":"Citrulline 8g + creatine 5g",                "rationale":"tier1.citrullineMalate — 60 min pre, 8g 2:1 malate",                    "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"workout-1",    "startTime":"12:00", "category":"workout",              "label":"Lift — see Workout Planner",                  "rationale":"Anchored to today's scheduled session",                                "flexibility":"fixed",     "source":"gunny_default" },
+    { "id":"postwo-1",     "startTime":"13:30", "category":"post_workout",         "label":"Protein 0.4 g/kg + 50–100g carb",            "rationale":"hypertrophy_supp tier1.protein + cortisol blunting",                    "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"caff-cut-1",   "startTime":"14:00", "category":"caffeine_cutoff",     "label":"No more caffeine",                            "rationale":"natural_T sleep — 8–10 hrs pre-bed cutoff (target 22:00 lights-out)",   "flexibility":"fixed",     "source":"gunny_default" },
+    { "id":"meal-3",       "startTime":"16:00", "category":"meal",                 "label":"Meal 3",                                      "rationale":"Mamerow 2014 distribution",                                              "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"meal-4",       "startTime":"19:00", "category":"meal",                 "label":"Dinner — 25–35% kcal from fat (MUFA emphasis)","rationale":"Whittaker & Wu 2021 — fat 25–35% kcal supports T",                       "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"winddown-1",   "startTime":"20:30", "category":"wind_down",            "label":"Screens off / blue-block",                    "rationale":"natural_T sleep.hygieneProtocol — 90 min pre-bed",                      "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"prebed-1",     "startTime":"21:30", "category":"pre_bed_supp",         "label":"Glycine 3g + Mg glycinate 400mg",            "rationale":"recoverySleepStack — Yamadera 2007 + Mg 30–60 min pre-bed",            "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"sleep-1",      "startTime":"22:00", "endTime":"06:00", "category":"sleep_target", "label":"Lights out → 06:00 (8 hrs)",   "rationale":"natural_T sleep — 7–9 hrs target with consolidated architecture",       "flexibility":"fixed",     "source":"gunny_default" }
+  ]
+}
+</daily_ops_json>
+
+Tier-gate refusal pattern (use exactly when the operator is below
+Commander tier and asks for a daily plan):
+"Daily Ops is a Commander-tier feature, Operator. Stand fast — upgrade
+unlocks the full schedule planner. Until then, I can still answer
+single-block questions (caffeine timing, supplement timing, sleep
+window, etc.) one at a time."
+
+Junior parent-approval framing (when generating a plan FOR a junior):
+After the JSON, add a chat line: "Plan emitted, Operator — your parent
+will review and approve before it goes live. Standard junior
+protocol."
 
 NUTRITION PRECEDENCE — MACRO TARGETS:
 The operator's nutrition surface has up to THREE sources for macros:
@@ -3449,7 +3548,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // the real conversation.
     type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
     let mergedMessages: IncomingMsg[] = messages;
-    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json)>/g;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json)>/g;
     const historyChatType: string | null =
       typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
         ? chatTypeFromBody
@@ -3931,6 +4030,39 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         try { trainerNoteReq = JSON.parse(tnM[1].trim()) as TrainerNoteRequest; } catch { /* invalid */ }
       }
 
+      // <daily_ops_json> — Gunny's daily-schedule plan. Commander tier
+      // only; persistence enforces the gate as defense-in-depth even
+      // though the prompt instructs Gunny to refuse for lower tiers.
+      // Plans for junior operators land in pending_parent_approval until
+      // a linked Commander parent approves via /api/daily-ops.
+      let dailyOpsPayload: unknown = null;
+      let dailyOpsResult:
+        | { ok: true; planId: string; status: string; guardrail?: { removed: number; modified: number; reasons: string[] } }
+        | { ok: false; error: string }
+        | null = null;
+      const doM = responseText.match(/<daily_ops_json>([\s\S]*?)<\/daily_ops_json>/);
+      if (doM) {
+        try { dailyOpsPayload = JSON.parse(doM[1].trim()); } catch { /* invalid */ }
+        if (dailyOpsPayload) {
+          const result = await upsertDailyOpsPlan({
+            operatorId: auth.operatorId,
+            rawPayload: dailyOpsPayload,
+            generatedBy: 'gunny',
+          });
+          if ('error' in result) {
+            dailyOpsResult = { ok: false, error: result.error };
+            console.warn('[daily-ops] persistence failed:', result.error);
+          } else {
+            dailyOpsResult = {
+              ok: true,
+              planId: result.plan.id,
+              status: result.plan.status,
+              guardrail: result.guardrail,
+            };
+          }
+        }
+      }
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -3957,6 +4089,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
         .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
         .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+        .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
         .trim();
 
       // Read-first-then-write dedup. Looks at the operator's CURRENT
@@ -4036,6 +4169,10 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         prDeletes: prChangesApplied.deletes,
         dedupNote: dedupResult.dedupNote,
         voiceControl,
+        // Daily Ops result — null if no plan was emitted, otherwise
+        // { ok, planId, status, guardrail? } for the client to refresh
+        // /api/daily-ops.
+        dailyOps: dailyOpsResult,
         // Junior safety events (empty array for adults / flag-disabled juniors).
         // Client surfaces a banner; ParentDashboard polls juniorSafety.events
         // for the canonical list.
@@ -4253,6 +4390,37 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             try { trainerNoteReq = JSON.parse(tnM[1].trim()) as TrainerNoteRequest; } catch { /* invalid */ }
           }
 
+          // <daily_ops_json> — streaming-path mirror of the non-streaming
+          // path's persistence. Same Commander tier-gate + junior
+          // approval flow.
+          let dailyOpsPayload: unknown = null;
+          let dailyOpsResult:
+            | { ok: true; planId: string; status: string; guardrail?: { removed: number; modified: number; reasons: string[] } }
+            | { ok: false; error: string }
+            | null = null;
+          const doM = fullText.match(/<daily_ops_json>([\s\S]*?)<\/daily_ops_json>/);
+          if (doM) {
+            try { dailyOpsPayload = JSON.parse(doM[1].trim()); } catch { /* invalid */ }
+            if (dailyOpsPayload) {
+              const result = await upsertDailyOpsPlan({
+                operatorId: auth.operatorId,
+                rawPayload: dailyOpsPayload,
+                generatedBy: 'gunny',
+              });
+              if ('error' in result) {
+                dailyOpsResult = { ok: false, error: result.error };
+                console.warn('[daily-ops] persistence failed (stream):', result.error);
+              } else {
+                dailyOpsResult = {
+                  ok: true,
+                  planId: result.plan.id,
+                  status: result.plan.status,
+                  guardrail: result.guardrail,
+                };
+              }
+            }
+          }
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
@@ -4277,6 +4445,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
             .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
             .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+            .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
             .trim();
 
           // Read-first-then-write dedup. Mirrors the non-streaming path —
@@ -4360,6 +4529,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 prDeletes: prChangesApplied.deletes,
                 dedupNote: dedupResult.dedupNote,
                 voiceControl,
+                // Daily Ops persistence outcome — null if no plan was emitted.
+                dailyOps: dailyOpsResult,
                 // Junior safety events captured pre-LLM (see non-streaming
                 // payload above for context). Mirrored here so SSE + non-SSE
                 // clients see the same shape.

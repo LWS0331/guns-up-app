@@ -21,6 +21,8 @@ import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
 import JuniorIntakeForm from '@/components/JuniorIntakeForm';
 import ParentDashboard from '@/components/ParentDashboard';
+import DailyOps from '@/components/DailyOps';
+import { hasCommanderAccess } from '@/lib/tierGates';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { getParentJuniors } from '@/data/operators';
 import SitrepView from '@/components/SitrepView';
@@ -1692,8 +1694,26 @@ const AppShell: React.FC<AppShellProps> = ({
   // Conditionally add OPS tab for trainers and admins.
   const isTrainerOrAdmin = OPS_CENTER_ACCESS.includes(currentUser.id) || currentUser.role === 'trainer';
 
+  // Daily Ops tab — Commander-tier (opus / white_glove) feature.
+  // For junior operators viewing their own surface we surface it
+  // anyway and let the DailyOps component handle the "awaiting parent"
+  // state; for adult viewers it surfaces only when they themselves
+  // hold Commander access. Trainers/admins see it for any operator
+  // they're viewing because they sit above the tier gate.
+  const showDailyOps =
+    isTrainerOrAdmin ||
+    currentSelectedOp.isJunior ||
+    hasCommanderAccess({
+      id: currentSelectedOp.id,
+      tier: currentSelectedOp.tier ?? undefined,
+      role: currentSelectedOp.role,
+    });
+
   const tabs: typeof baseTabs = [
     ...baseTabs,
+    ...(showDailyOps
+      ? [{ id: 'daily_ops' as AppTab, label: t('nav.daily_ops_short') || 'OPS DAY', labelKey: 'nav.daily_ops_short', icon: <Icon.Clock /> }]
+      : []),
     ...(showParentHub
       ? [{ id: 'parent_hub' as AppTab, label: t('nav.parent_hub_short'), labelKey: 'nav.parent_hub_short', icon: <Icon.Target /> }]
       : []),
@@ -1846,6 +1866,20 @@ const AppShell: React.FC<AppShellProps> = ({
         );
       case 'planner':
         return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setActiveTab('gunny')} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} onWorkoutSaved={() => setActiveTab('planner')} />;
+      case 'daily_ops':
+        // Daily Ops Planner — Gunny's prescribed daily-schedule.
+        // Sister surface to Planner; bridges to GunnyChat via
+        // onSendGunnyMessage so "Generate today's plan" tap routes
+        // through the chat channel that owns the LLM call.
+        return (
+          <DailyOps
+            operator={currentSelectedOp}
+            onSendGunnyMessage={(prompt) => {
+              setActiveTab('gunny');
+              sendGunnyVoiceMessage(prompt);
+            }}
+          />
+        );
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'radio':
