@@ -124,15 +124,31 @@ export async function ensurePushSubscription(
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
     // Fetch the VAPID public key from the server (allows rotation
-    // without rebuilding the static bundle).
+    // without rebuilding the static bundle). The server-side route
+    // now validates the key shape before returning it (decoded
+    // length, P-256 prefix byte) so a malformed env var fails here
+    // with a useful message instead of bubbling up as the browser's
+    // opaque "applicationServerKey must contain a valid P-256
+    // public key" error.
     let publicKey = '';
     try {
       const res = await fetch('/api/push/public-key', { credentials: 'include' });
       if (!res.ok) {
+        // Try to read the structured error from the server validation.
+        let serverHint = '';
+        try {
+          const errBody = (await res.json()) as { error?: string; hint?: string };
+          serverHint =
+            (errBody.error || '') + (errBody.hint ? ` ${errBody.hint}` : '');
+        } catch {
+          /* ignore */
+        }
         return {
           state: 'granted',
           subscribed: false,
-          message: `VAPID key fetch failed (${res.status})`,
+          message:
+            serverHint ||
+            `VAPID key fetch failed (${res.status})`,
         };
       }
       const data = await res.json();
