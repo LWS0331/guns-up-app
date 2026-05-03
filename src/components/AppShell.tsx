@@ -685,7 +685,10 @@ const AppShell: React.FC<AppShellProps> = ({
             body: JSON.stringify({ operatorId: opId, chatType: CANONICAL_TYPE, messages: canonical }),
           }).catch(() => {});
           // Clear legacy thread so a stale client can't pull it again.
-          fetch('/api/chat', {
+          // ?force=true bypasses the shrink-guard added May 2026 — this
+          // is an INTENTIONAL clear (legacy thread already merged into
+          // canonical above), not the wipe pattern the guard prevents.
+          fetch('/api/chat?force=true', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
             body: JSON.stringify({ operatorId: opId, chatType: LEGACY_TYPE, messages: [] }),
