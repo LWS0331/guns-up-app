@@ -89,9 +89,14 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
       if (res.ok) {
         const data = await res.json();
         setConnections(data.connections || []);
+      } else {
+        console.warn('[WearableConnect:load] /api/wearables non-ok:', res.status);
       }
-    } catch {
-      // Silently fail — wearables are optional
+    } catch (err) {
+      // Wearables UI is optional — non-fatal — but log so 500/network errors
+      // are debuggable instead of producing an empty connection list with
+      // no signal. Operator still sees "no wearables connected" UI.
+      console.warn('[WearableConnect:load] /api/wearables fetch failed:', err);
     }
     setLoading(false);
   }, [operator.id]);
