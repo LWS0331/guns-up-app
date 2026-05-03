@@ -1547,6 +1547,13 @@ ${mealSuggestion}`;
           .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
           .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
           .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+          // Daily Ops: <daily_ops_json> = full plan, <daily_ops_block_override>
+          // = single-block edit. Both ship as structured-data tags Gunny
+          // emits at the END of a reply (server saves to DailyOpsPlan via
+          // /api/daily-ops). Without these strips, the raw JSON +
+          // closing tag leak into the chat bubble. Reported May 2026.
+          .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+          .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
           .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, ''),
         ...(m.image ? { image: m.image } : {}),
       }));
@@ -1699,6 +1706,15 @@ ${mealSuggestion}`;
                 .replace(/<notification_json>[\s\S]*$/, '')
                 .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
                 .replace(/<trainer_note_json>[\s\S]*$/, '')
+                // Daily Ops: full-plan + per-block override tags. The
+                // half-streamed `[\s\S]*$` variant is critical — the
+                // daily_ops_json payload is hundreds of lines, so until
+                // the closing tag arrives, the raw JSON streams visibly
+                // into the chat bubble (the original reported bug).
+                .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+                .replace(/<daily_ops_json>[\s\S]*$/, '')
+                .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
+                .replace(/<daily_ops_block_override>[\s\S]*$/, '')
                 .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
                 .replace(/<voice_control>[\s\S]*$/, '')
                 // Strip trailing half-streamed markdown table row (pipe-led line missing its closing pipe)
