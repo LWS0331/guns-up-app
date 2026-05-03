@@ -1349,7 +1349,14 @@ const AppShell: React.FC<AppShellProps> = ({
                 .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
-                .replace(/<meal_json>[\s\S]*$/, '');
+                .replace(/<meal_json>[\s\S]*$/, '')
+                // Daily Ops: side-panel chat needs the same strips as the
+                // main GunnyChat surface. Without these the raw JSON +
+                // closing tag leak into the side-panel bubble.
+                .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+                .replace(/<daily_ops_json>[\s\S]*$/, '')
+                .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
+                .replace(/<daily_ops_block_override>[\s\S]*$/, '');
               // Hide thinking indicator once we have content
               if (visible.length > 0) {
                 setGunnyLoading(false);
