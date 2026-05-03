@@ -26,6 +26,7 @@ import styles from './landing.module.css';
 import FounderRotator, { RUBEN_SLIDES, BRITNEY_SLIDES } from './FounderRotator';
 import { trackEvent } from '@/lib/analytics';
 import { useLanguage } from '@/lib/i18n';
+import { LanguageToggle } from '@/components/LanguageToggle';
 
 // Wrapper for landing-CTA analytics. We always emit the same event name with
 // a `cta` discriminator so the dashboards can group + filter without us
@@ -144,6 +145,14 @@ export default function LandingPage() {
           <div className={styles.navStatus}>
             <span className="dot" />
             <span>{t('landing.nav.sys_online')}</span>
+          </div>
+          {/* Language toggle — accessible on every breakpoint, including
+              mobile where .navLinks is hidden. Lives in its own slot so a
+              non-English speaker landing on the marketing site can switch
+              languages BEFORE encountering an English-only login flow.
+              Sized compact so it doesn't compete with the brand or CTA. */}
+          <div className={styles.navLang}>
+            <LanguageToggle compact />
           </div>
           <div className={styles.navLinks}>
             <a href="#arsenal">{t('landing.nav.arsenal')}</a>

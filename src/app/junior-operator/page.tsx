@@ -21,6 +21,7 @@ import Image from 'next/image';
 import type { Metadata } from 'next';
 import styles from './junior-operator.module.css';
 import JuniorBetaForm from './JuniorBetaForm';
+import { LanguageToggle } from '@/components/LanguageToggle';
 
 export const metadata: Metadata = {
   title: 'Junior Operator — Sport-specific training for ages 10-18 | Gunny AI',
@@ -64,6 +65,15 @@ export default function JuniorOperatorPage() {
           <div className={styles.navStatus}>
             <span className={styles.dot} />
             <span>BETA · WAVE 01</span>
+          </div>
+          {/* Language toggle — stays visible on mobile (where .navLinks
+              collapses) so a non-English visitor can flip languages
+              before reading anything else on the page. Inline-styled
+              wrapper rather than a CSS-module class because this
+              page's stylesheet doesn't have a navLang slot and a
+              one-property wrapper isn't worth a module entry. */}
+          <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <LanguageToggle compact />
           </div>
           <div className={styles.navLinks}>
             <a href="#how">HOW</a>
