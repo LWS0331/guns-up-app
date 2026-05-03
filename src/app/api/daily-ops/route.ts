@@ -30,8 +30,10 @@ import { OPS_CENTER_ACCESS } from '@/lib/types';
 import { planRowToShape } from '@/lib/dailyOpsPersistence';
 import type { BlockFeedback } from '@/lib/dailyOpsTypes';
 
-// Re-export so callers (Gunny route, tests) can import from the API route too.
-export { upsertDailyOpsPlan } from '@/lib/dailyOpsPersistence';
+// NOTE: don't re-export upsertDailyOpsPlan from here — Next.js route
+// files reject any non-handler export ("X is not a valid Route export
+// field"). Callers (e.g. /api/gunny) import directly from
+// '@/lib/dailyOpsPersistence'.
 
 // ---------------------------------------------------------------------------
 // Helpers
