@@ -22,6 +22,12 @@ import { Operator } from '@/lib/types';
 import { hasCommanderAccess } from '@/lib/tierGates';
 import { getLocalDateStr } from '@/lib/dateUtils';
 import * as Icon from '@/components/Icons';
+import {
+  ensurePushSubscription,
+  getPushPermissionState,
+  unsubscribePush,
+  type PushPermission,
+} from '@/lib/pushClient';
 import type {
   DailyOpsPlanShape,
   DailyBlock,
@@ -347,6 +353,8 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
   const [rhythm, setRhythm] = useState<RhythmShape | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pushState, setPushState] = useState<PushPermission>('default');
+  const [pushBusy, setPushBusy] = useState(false);
 
   // Today in local time. dateUtils.getLocalDateStr() already returns
   // the device-local YYYY-MM-DD which is what the planner uses for its
@@ -442,6 +450,45 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     if (mode === 'today') void fetchToday();
     else void fetchWeek();
   }, [mode, fetchToday, fetchWeek]);
+
+  // Phase 2C — default-on push notification subscribe.
+  // Fires once per Daily Ops mount. ensurePushSubscription() is
+  // idempotent + remembers the prompt state in localStorage so we
+  // don't re-prompt operators who declined or already accepted.
+  useEffect(() => {
+    let cancelled = false;
+    const init = async () => {
+      const state = getPushPermissionState();
+      if (cancelled) return;
+      setPushState(state);
+      if (state === 'unsupported' || state === 'denied') return;
+      // Default-on: prompt on first Daily Ops mount, auto-subscribe if granted.
+      const result = await ensurePushSubscription({ defaultOn: true });
+      if (cancelled) return;
+      setPushState(result.state);
+    };
+    void init();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const togglePushSubscription = useCallback(async () => {
+    setPushBusy(true);
+    try {
+      if (pushState === 'granted') {
+        await unsubscribePush();
+        // permission stays granted at OS level; we just dropped the
+        // server-side subscription. UI flips to "off" via state below.
+        setPushState('default');
+      } else {
+        const r = await ensurePushSubscription({ defaultOn: true });
+        setPushState(r.state);
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  }, [pushState]);
 
   const submitFeedback = useCallback(
     async (blockId: string, followed: BlockFeedback['followed']) => {
@@ -555,6 +602,35 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
             WEEK
           </button>
         </div>
+        {/* Push notification status + toggle. 'unsupported' = browser
+            doesn't support Web Push (Safari < 16, etc.) — hide the
+            chip entirely. */}
+        {pushState !== 'unsupported' && (
+          <button
+            type="button"
+            onClick={togglePushSubscription}
+            disabled={pushBusy}
+            title={
+              pushState === 'granted'
+                ? 'Notifications on for this device — tap to turn off'
+                : pushState === 'denied'
+                  ? 'Notifications blocked. Re-enable in your browser settings.'
+                  : 'Tap to turn notifications on'
+            }
+            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold tracking-wider rounded border transition-colors ${
+              pushState === 'granted'
+                ? 'border-emerald-700 text-emerald-300 hover:border-emerald-500'
+                : pushState === 'denied'
+                  ? 'border-rose-800 text-rose-400'
+                  : 'border-neutral-800 text-neutral-400 hover:border-amber-700 hover:text-amber-300'
+            } disabled:opacity-50`}
+          >
+            <span aria-hidden>
+              {pushState === 'granted' ? '🔔' : pushState === 'denied' ? '🚫' : '🔕'}
+            </span>
+            {pushState === 'granted' ? 'NOTIFY ON' : pushState === 'denied' ? 'BLOCKED' : 'NOTIFY OFF'}
+          </button>
+        )}
         <div className="text-xs text-neutral-400 font-mono">{today}</div>
       </div>
 

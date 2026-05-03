@@ -99,21 +99,69 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Handle notification clicks — focus app or open new window
+// Handle notification clicks — focus existing window if it's at the
+// target URL, else navigate the existing window, else open a new one.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const targetUrl =
+    (event.notification.data && event.notification.data.url) || '/';
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
-      // Look for an existing window
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url.includes('/') && 'focus' in client) {
-          return client.focus();
+        // If the window is already on the target URL, just focus it.
+        try {
+          const u = new URL(client.url);
+          if (u.pathname === new URL(targetUrl, self.location.origin).pathname) {
+            if ('focus' in client) return client.focus();
+          }
+        } catch {
+          // ignore URL-parse failures and fall through
         }
       }
-      // No window found, open a new one
-      if (clients.openWindow) {
-        return clients.openWindow('/');
+      // Otherwise focus the first window AND navigate it. If there's
+      // no window at all, open a fresh one.
+      if (clientList.length > 0 && 'navigate' in clientList[0]) {
+        return clientList[0].navigate(targetUrl).then(() => clientList[0].focus());
       }
-    })
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    }),
+  );
+});
+
+// Web Push receive — Phase 2C. The server's sendPush helper enveloped
+// a JSON payload via web-push; we decode and surface as a system
+// notification. Defensive: if the payload is malformed or empty, fall
+// back to a generic title/body so the operator still sees SOMETHING
+// rather than a silent push.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    if (event.data) {
+      data = event.data.json();
+    }
+  } catch {
+    try {
+      data = { body: event.data ? event.data.text() : '' };
+    } catch {
+      data = {};
+    }
+  }
+  const title = data.title || 'GUNS UP';
+  const body = data.body || 'Daily Ops update';
+  const tag = data.tag || undefined;
+  const url = data.url || '/plan';
+  const silent = data.silent === true;
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      tag,
+      silent,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url },
+    }),
   );
 });

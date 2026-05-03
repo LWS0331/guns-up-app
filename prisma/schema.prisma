@@ -307,6 +307,44 @@ model PersonalRhythm {
   updatedAt               DateTime @updatedAt
 }
 
+// PushSubscription — Web Push (RFC 8030) subscription rows. Phase 2C.
+// One row per (operatorId, endpoint). Endpoint uniqueness across
+// operators is enforced too — if a device's endpoint already exists
+// against another operator (rare, e.g. shared family iPad) we delete
+// the old row before inserting the new one.
+//
+// This is the targeting table the daily-ops notification cron + the
+// generic sendPush helper read from. p256dh + auth are the encryption
+// keys the browser handed us at subscribe time; web-push uses them to
+// envelope the payload before sending it through the FCM/APNs/Mozilla
+// push service.
+//
+// Lifecycle:
+//   - subscribe  → upserted from /api/push/subscribe
+//   - unsubscribe → deleted from /api/push/unsubscribe
+//   - 404 / 410 from push service on send → delete (the browser revoked
+//     it; sendPush handles this cleanup)
+model PushSubscription {
+  id               String   @id @default(cuid())
+  operatorId       String
+  endpoint         String   @unique
+  p256dh           String
+  auth             String
+  /// 'ios-pwa' | 'desktop' | 'android' | 'unknown' — used for diagnostics + per-platform tweaks if needed
+  platform         String   @default("unknown")
+  /// Operator-specific notification policy. Defaults are 'default-on' per
+  /// Phase 2C decision: every block category notifies unless the operator
+  /// mutes it. Future Phase 2D adds the per-block mute UI.
+  mutedCategories  String[] @default([])
+  notificationsOn  Boolean  @default(true)
+  lastSeenAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([operatorId])
+  @@index([operatorId, notificationsOn])
+}
+
 // Daily Ops — Gunny's prescribed daily schedule (separate from the
 // Workout Planner). Owns the rhythm of the day: wake, sun, caffeine
 // window, meal cadence, supplement timing, workout window, wind-down,
