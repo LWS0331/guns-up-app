@@ -325,6 +325,19 @@ const AppShell: React.FC<AppShellProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
+  // Tracks whether AppShell.gunnyMessages has been hydrated from the
+  // DB for the current operator. Critical for preventing the
+  // chat-history wipe bug: sendGunnyVoiceMessage (called from
+  // Planner / DailyOps / WorkoutMode) appends to gunnyMessages, then
+  // the persistence effect PUTs the result to /api/chat — which uses
+  // upsert and overwrites the entire `messages` field. If
+  // gunnyMessages is still [] (because the floating panel hasn't been
+  // opened yet to trigger hydration), the PUT replaces full history
+  // with a 1- or 2-message array.
+  // The hydration effect below populates gunnyMessages on operator
+  // mount regardless of panel state, and the persistence effect
+  // gates on this ref so saves only fire after we've loaded.
+  const gunnyMessagesHydratedRef = useRef<string>(''); // operator id we've hydrated for
 
   // Initialize mounted state and responsive detection
   useEffect(() => {
@@ -516,6 +529,58 @@ const AppShell: React.FC<AppShellProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [gunnyMessages, gunnyLoading]);
 
+  // ──────────────────────────────────────────────────────────────────────
+  // EARLY HYDRATION — populate gunnyMessages from DB on operator mount
+  // regardless of whether the floating panel is open. Phase 2 fix for
+  // the chat-history wipe bug surfaced by the Daily Ops "Generate
+  // today's plan" CTA: sendGunnyVoiceMessage appends to gunnyMessages
+  // and the persistence effect PUTs the result to /api/chat (which
+  // upserts and replaces the entire `messages` array). Without this
+  // hydration, sendGunnyVoiceMessage triggered from anywhere OTHER
+  // than the floating panel (Planner voice, DailyOps "Generate", etc.)
+  // appended to an empty array → the persistence PUT wiped all prior
+  // history.
+  // The panel-init effect below still runs for panel-specific setup
+  // (greeting fallback, gunnyGreeted flag) but gunnyMessages itself
+  // is already populated by this earlier effect.
+  // ──────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (gunnyMessagesHydratedRef.current === selectedOperator.id) return;
+    const opId = selectedOperator.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/chat?operatorId=${opId}&chatType=gunny-tab`,
+          { headers: { Authorization: `Bearer ${getAuthToken()}` } },
+        );
+        if (!res.ok) {
+          // Mark hydrated anyway so the persistence effect can run for
+          // truly-new operators (no chat history yet). Failing closed
+          // here would leave new operators unable to save their first
+          // message, which is worse than the original bug.
+          if (!cancelled) gunnyMessagesHydratedRef.current = opId;
+          return;
+        }
+        const data = await res.json();
+        const msgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
+        if (cancelled) return;
+        if (msgs.length > 0) {
+          // Set state ONLY when we have content. If the DB returned
+          // empty, leave gunnyMessages alone — the panel-init effect
+          // may set a greeting later.
+          setGunnyMessages(msgs);
+        }
+        gunnyMessagesHydratedRef.current = opId;
+      } catch {
+        if (!cancelled) gunnyMessagesHydratedRef.current = opId;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOperator.id]);
+
   // Load saved panel chat or generate greeting when panel opens.
   //
   // ─── ARCHITECTURE NOTE ────────────────────────────────────────────────
@@ -688,6 +753,16 @@ const AppShell: React.FC<AppShellProps> = ({
 
   useEffect(() => {
     if (gunnyMessages.length === 0) return;
+
+    // CRITICAL: never PUT to /api/chat before we've hydrated from the
+    // DB for this operator. Without this gate, the very first append
+    // to gunnyMessages (from sendGunnyVoiceMessage) would trigger a
+    // PUT that overwrites the entire messages JSON column with a
+    // 1- or 2-message array — wiping all prior history. The
+    // hydration ref is set by the EARLY HYDRATION effect above (or
+    // by a confirmed empty-fetch for new operators); until that
+    // ref matches the current operator, defer all persistence.
+    if (gunnyMessagesHydratedRef.current !== selectedOperator.id) return;
 
     // Content-aware signature catches text mutations, not just array length changes.
     const snapshot = gunnyMessages
