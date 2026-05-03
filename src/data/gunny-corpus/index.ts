@@ -35,7 +35,9 @@ export interface CorpusOverlay extends CorpusFile {
     | 'lifestage_pregnancy'
     | 'lifestage_postpartum'
     | 'fms_assessment'
-    | 'junior_soccer';
+    | 'junior_soccer'
+    | 'junior_soccer_female'
+    | 'junior_football';
 }
 
 // ---------------------------------------------------------------------------
@@ -104,12 +106,12 @@ const PERIODIZATION_POWERLIFTING: CorpusFile = {
 
 const PERIODIZATION_HYPERTROPHY: CorpusFile = {
   id: 'periodization-hypertrophy',
-  label: 'Hypertrophy / Bodybuilding Periodization Templates',
+  label: 'Hypertrophy / Bodybuilding Periodization Templates + Supplementation & Natural T Protocols',
   path: 'periodization/hypertrophy.md',
   format: 'md',
-  approxBytes: 15_139,
+  approxBytes: 74_163,
   description:
-    '5 templates spanning RP-style hypertrophy blocks, classical bodybuilding splits, and volume-progression schemes.',
+    '5 periodization templates (RP-style hypertrophy blocks, classical bodybuilding splits, volume-progression schemes) PLUS 2 supplementation/lifestyle protocols that integrate with all 5: (13) Operator Supplement Stack — evidence-tiered (A/B/C/D) creatine, protein, caffeine, beta-alanine, citrulline, vit D, omega-3, Mg, Zn, ashwagandha KSM-66, tongkat ali, sleep stack (glycine, melatonin 0.3-0.5mg, tart cherry); fadogia/turkesterone/tribulus/DAA explicitly EXCLUDED with reasoning; CYP1A2 caffeine stratification; phase dosing; third-party testing tier; bloodwork tracking; (14) Natural Testosterone Optimization Protocol — Endocrine Society 2018 + AUA 2018/2024 aligned, sleep/training/nutrition/body-comp/lifestyle/environmental/supplement pillars, debunks the acute-T-spike-→-hypertrophy myth (West & Phillips 2010-2012, Schoenfeld 2013), debunks the no-fap T-boost myth (Jiang 2003 retracted Dec 2021), TRT referral criteria, full bloodwork panel with LC-MS/MS preferences. Both protocols cite their evidence base verbatim.',
 };
 
 const PERIODIZATION_TACTICAL: CorpusFile = {
@@ -231,6 +233,34 @@ export const PATH_CORPUS: Record<TrainingPath, CorpusFile[]> = {
 // ---------------------------------------------------------------------------
 
 export const OVERLAYS: CorpusOverlay[] = [
+  // Nicotine pouches & oral health — always available so Gunny can
+  // answer pouch / dental questions accurately regardless of which
+  // training path the operator picked. The QA file is the primary
+  // response surface (Q&A pairs already in Gunny's voice). The KB
+  // file is structured fact citations behind it. Both load under
+  // standard paths; CrossFit's tight budget may truncate one or
+  // both — acceptable since CrossFit-specific corpus is higher
+  // priority for those operators.
+  {
+    id: 'nicotine-pouches-qa',
+    label: 'Nicotine Pouches Q&A (oral health)',
+    path: 'overlays/nicotine-pouches-qa.json',
+    format: 'json',
+    approxBytes: 31_381,
+    description:
+      'Q&A pairs covering staining, enamel, cavities, gum recession, leukoplakia, oral cancer, smoking-cessation framing, and pouch-specific harm reduction. Voice already matches Gunny.',
+    trigger: 'always',
+  },
+  {
+    id: 'nicotine-pouches-kb',
+    label: 'Nicotine Pouches Knowledge Base (oral health)',
+    path: 'overlays/nicotine-pouches-kb.json',
+    format: 'json',
+    approxBytes: 29_976,
+    description:
+      'Structured fact base with citations: pH chemistry, enamel staining studies (Dalrymple 2021, Liu 2025), nicotine-driven S. mutans virulence, snus epidemiology extrapolations, leukoplakia case reports, evidence-quality grading. Cite sources via [corpus_id: nicotine-pouches-kb].',
+    trigger: 'always',
+  },
   {
     id: 'fms',
     label: 'Functional Movement Screen Reference',
@@ -268,8 +298,38 @@ export const OVERLAYS: CorpusOverlay[] = [
     format: 'md',
     approxBytes: 45_090,
     description:
-      'Long-term athletic development, US Soccer PDI, heading restrictions, biological-age training caps. Already cited by SOCCER_YOUTH_PROMPT in route.ts.',
+      'Long-term athletic development, US Soccer PDI, heading restrictions, biological-age training caps. Already cited by SOCCER_YOUTH_PROMPT in route.ts. Targets the 10-18 age band.',
     trigger: 'junior_soccer',
+  },
+  {
+    id: 'youth-soccer-4-10',
+    label: 'Youth Soccer Drills Corpus (ages 4-10)',
+    path: 'overlays/youth-soccer-4-10.md',
+    format: 'md',
+    approxBytes: 380_440,
+    description:
+      'Parent-coached backyard / park drill corpus for ages 4-10. 267 fully-detailed nodes across 3 age tiers — Tier 1 (4-5, 35 universal nodes), Tier 2 (6-7, 96 nodes covering all 16 positions), Tier 3 (8-10, 136 position-specific nodes). Each node carries setup, instructions, progressions, coaching cues, common mistakes, success metrics, and a verbatim Gunny tactical-drill-sergeant parent script. Sources: US Soccer PDI, FA Youth Award, KNVB, FC Barcelona La Masia, Ajax TIPS, Coerver, Belgian FA, FIFA 11+ Kids, NSCA Youth, Canadian LTAD. Honors US Soccer no-heading-under-U11 policy (foam/beach-ball technique-intro only at age 10, max 6-8 reps) and NSCA Youth no-heavy-load rules. Loads alongside youth-soccer.md so Gunny has both the developmental-research synthesis (10-18) AND the drill-by-drill backyard playbook (4-10) for any soccer junior.',
+    trigger: 'junior_soccer',
+  },
+  {
+    id: 'female-youth-soccer-4-10',
+    label: 'Female Youth Soccer Drills Corpus (ages 4-10) — companion to youth-soccer-4-10',
+    path: 'overlays/female-youth-soccer-4-10.md',
+    format: 'md',
+    approxBytes: 345_921,
+    description:
+      'Female-specific companion volume to youth-soccer-4-10.md. 245 nodes — Tier 2 (6-7, 116 nodes across 16 positions) and Tier 3 (8-10, 129 nodes across 16 positions). Tier 1 (4-5) is shared with the male corpus per pre-pubertal parity evidence (Quatman 2008, Ford 2010, Hewett 2015, Roth 2021, Nuzzo 2025) — joint-laxity and neuromuscular sex differences emerge at PHV, not before. Female-specific adaptations integrated throughout: knee-over-toe alignment cues, quiet-landings as default, mistake-reset ritual baked into every drill, process praise > outcome praise, coached-self-awareness debriefs at session end, FIFA 11+ Kids 12-min warm-up opening every Tier 3 session, PEP-derived plyo with mandatory two-foot landings per <=12-yr protocol, Tuck Jump Assessment self-screen every 4 weeks. Voice guardrails: "squad" not "warriors", "battle buddy" not "rival", mastery climate language. Zero heading nodes (US Soccer policy). Sources: Mandelbaum 2005 PEP RCT (n=1,885; 88% Y1 ACL reduction), Rossler 2018 FIFA 11+ Kids RCT (n=3,895; 48-74% reduction), Sugimoto 2014 dose-response, LaBella 2011 cluster RCT, AAP / Brenner 2016 specialization, Smoll-Smith CET, PCA mastery-climate frameworks, Erica Suter (Mulholland) Strong Female Athlete / Total Youth Soccer Fitness / Female Athlete High Performance. Loads in addition to youth-soccer-4-10.md when juniorSoccerFemale is true; the female nodes are preferred over their male-corpus counterparts at Tier 2 and Tier 3.',
+    trigger: 'junior_soccer_female',
+  },
+  {
+    id: 'youth-football',
+    label: 'Youth Football (Junior Operator) Reference',
+    path: 'overlays/youth-football.md',
+    format: 'md',
+    approxBytes: 50_254,
+    description:
+      '34-position football corpus (15 offense / 13 defense / 6 special teams) split across three age bands (10-12 / 13-15 / 16-18). Each band covers drills, S&C programming, game IQ / film, key progressions, common mistakes, and position-specific safety. Coach persona layer (Gunny voice scaled per band) + do-not-do list (no 1RM under 14, no live OL/DL collisions at 10-12, head-injury / concussion protocols per CDC Heads Up). Sources: USA Football, NFHS, NSCA Youth, AAP, Mike Boyle, Eric Cressey, Driveline.',
+    trigger: 'junior_football',
   },
 ];
 
@@ -286,6 +346,19 @@ export interface CorpusSelectionInput {
   fmsRequested?: boolean;
   /** youth/junior operator on the soccer track */
   juniorSoccer?: boolean;
+  /**
+   * Female junior on the soccer track. When true, the female-specific
+   * companion corpus (female-youth-soccer-4-10.md) loads in addition
+   * to the default male / universal youth-soccer-4-10.md. Tier 1
+   * (ages 4-5) is shared via the male file per pre-pubertal parity
+   * evidence; Tier 2 / Tier 3 in the female file integrate ACL-protective
+   * cues, quiet-landings defaults, mistake-reset ritual, and process-
+   * praise voice patterns. Defaults to false when bio sex is unknown
+   * — no breakage if intake never captures the field.
+   */
+  juniorSoccerFemale?: boolean;
+  /** youth/junior operator on the football track */
+  juniorFootball?: boolean;
 }
 
 const KNOWN_PATHS: TrainingPath[] = [
@@ -307,10 +380,20 @@ function normalizePath(p: string | undefined | null): TrainingPath {
  * Returns the ordered corpus file list for an operator. Phase 2 loader is
  * responsible for reading file contents, applying token budget, and
  * formatting into the Gunny system prompt.
+ *
+ * Junior operators (juniorSoccer / juniorFootball === true) skip the
+ * adult PATH_CORPUS entirely — they don't have a training-path
+ * selection, and loading the full kitchen sink would push them past
+ * budget. They get ALWAYS_ON (operating manual + exercises) plus
+ * their sport-specific youth overlay plus any conditional overlays
+ * (injury, FMS) that still apply.
  */
 export function selectCorpus(input: CorpusSelectionInput): CorpusFile[] {
+  const isJunior = !!input.juniorSoccer || !!input.juniorFootball;
   const path = normalizePath(input.trainingPath);
-  const files: CorpusFile[] = [...ALWAYS_ON, ...PATH_CORPUS[path]];
+  const files: CorpusFile[] = isJunior
+    ? [...ALWAYS_ON]
+    : [...ALWAYS_ON, ...PATH_CORPUS[path]];
 
   for (const overlay of OVERLAYS) {
     let include = false;
@@ -332,6 +415,12 @@ export function selectCorpus(input: CorpusSelectionInput): CorpusFile[] {
         break;
       case 'junior_soccer':
         include = !!input.juniorSoccer;
+        break;
+      case 'junior_soccer_female':
+        include = !!input.juniorSoccerFemale;
+        break;
+      case 'junior_football':
+        include = !!input.juniorFootball;
         break;
     }
     if (include) files.push(overlay);

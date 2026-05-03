@@ -16,6 +16,7 @@
 import React, { useMemo, useState } from 'react';
 import type { Operator, JuniorSafetyEvent, JuniorSafetyFlags, JuniorConsent } from '@/lib/types';
 import { useLanguage } from '@/lib/i18n';
+import DailyOpsApprovalCard from '@/components/DailyOpsApprovalCard';
 
 interface ParentDashboardProps {
   parent: Operator;
@@ -223,6 +224,11 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
           </details>
         )}
       </div>
+
+      {/* DAILY OPS PENDING APPROVAL — surfaces only when there are
+          plans awaiting parent review across any linked junior. The
+          card hides itself when the queue is empty. */}
+      <DailyOpsApprovalCard />
 
       {/* COMPLIANCE / TRAINING SUMMARY */}
       <div style={s.card}>

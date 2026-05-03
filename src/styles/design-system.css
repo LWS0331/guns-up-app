@@ -827,6 +827,18 @@
   z-index: 200;
   padding: 8px 0 calc(env(safe-area-inset-bottom, 0px) + 6px);
 }
+/* 6-col variant — enables Daily Ops + a power tab (OPS / PARENT_HUB)
+   to coexist at thumb-reach for admins / trainers who are also
+   Commander-tier. Buttons compress narrower (5 → 6 cols on a 390px
+   iPhone width = ~65px → ~54px per cell), still legible. */
+.ds-tabbar.six-col {
+  grid-template-columns: repeat(6, 1fr);
+}
+.ds-tabbar.six-col .lbl {
+  /* Slightly tighter label letter-spacing so 6-letter labels like
+     'PLANNER' don't truncate at narrower cell width. */
+  letter-spacing: 1px;
+}
 .ds-tabbar button {
   background: none;
   border: none;

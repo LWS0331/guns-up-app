@@ -5,6 +5,8 @@ import { Operator, IntakeAssessment, FitnessLevel, calculateFitnessLevel, calcul
 import { getLocalDateStr } from '@/lib/dateUtils';
 import Icon from '@/components/Icons';
 import { useLanguage } from '@/lib/i18n';
+import PersonaPicker from '@/components/PersonaPicker';
+import type { PersonaId } from '@/lib/personas';
 
 interface IntakeFormProps {
   operator: Operator;
@@ -12,9 +14,9 @@ interface IntakeFormProps {
   onSkip: () => void;
 }
 
-type IntakeStep = 'welcome' | 'basics' | 'experience' | 'goals' | 'training_path' | 'health' | 'lifestyle' | 'nutrition' | 'equipment' | 'prs' | 'review';
+type IntakeStep = 'welcome' | 'basics' | 'experience' | 'goals' | 'training_path' | 'health' | 'lifestyle' | 'nutrition' | 'equipment' | 'prs' | 'persona' | 'review';
 
-const STEP_ORDER: IntakeStep[] = ['welcome', 'basics', 'experience', 'goals', 'training_path', 'health', 'lifestyle', 'nutrition', 'equipment', 'prs', 'review'];
+const STEP_ORDER: IntakeStep[] = ['welcome', 'basics', 'experience', 'goals', 'training_path', 'health', 'lifestyle', 'nutrition', 'equipment', 'prs', 'persona', 'review'];
 
 // i18n note: module-level constants store DB id/value strings. The
 // translation keys (`labelKey` / `descKey` on object arrays, and the
@@ -156,6 +158,13 @@ const PR_EXERCISE_LABEL_KEYS: Record<string, string> = {
 export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormProps) {
   const { t } = useLanguage();
   const [step, setStep] = useState<IntakeStep>('welcome');
+  // Persona selection is collected in the dedicated 'persona' step before
+  // 'review' and persisted onto operator.personaId on completion. Falls
+  // back to the operator's existing personaId (server-side default 'gunny'
+  // via resolvePersonaId for legacy operators that pre-date the picker).
+  const [personaId, setPersonaId] = useState<PersonaId>(
+    (operator.personaId as PersonaId) || 'gunny',
+  );
   const [intake, setIntake] = useState<Partial<IntakeAssessment>>({
     completed: false,
     fitnessLevel: 'beginner',
@@ -374,10 +383,13 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
         split: fullIntake.preferredSplit || 'No Preference',
         trainingPath: intake.trainingPath || 'gunny_pick',
       },
+      // Persisted from the 'persona' step. Read by /api/gunny/route.ts
+      // via getCoreIdentity(operatorContext.personaId) at every chat turn.
+      personaId,
     };
 
     onComplete(updated);
-  }, [intake, age, heightRaw, weight, bodyFat, operator, onComplete]);
+  }, [intake, age, heightRaw, weight, bodyFat, operator, onComplete, personaId]);
 
   const fitnessLevelLabel = (level: FitnessLevel) => {
     const labels: Record<FitnessLevel, { name: string; color: string; desc: string }> = {
@@ -918,6 +930,30 @@ export default function IntakeForm({ operator, onComplete, onSkip }: IntakeFormP
           <div style={s.navRow}>
             <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
             <button style={s.btnPrimary} onClick={nextStep}>{t('intake.prs.review_btn')}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Persona step — operator picks their AI coach voice. Recommendation
+          uses age + fitnessLevel from the intake state collected so far.
+          PersonaPicker handles the under-18 lockdown internally (only Coach
+          selectable for minors). */}
+      {step === 'persona' && (
+        <div>
+          <PersonaPicker
+            currentPersonaId={personaId}
+            operatorAge={age}
+            operatorFitnessLevel={intake.fitnessLevel}
+            onSelectPersona={(id) => {
+              setPersonaId(id);
+              // Auto-advance after pick — feels native vs forcing a Continue tap
+              nextStep();
+            }}
+            mode="onboarding"
+          />
+          <div style={s.navRow}>
+            <button style={s.btnSecondary} onClick={prevStep}>{t('common.back')}</button>
+            <button style={s.btnPrimary} onClick={nextStep}>{t('common.next') || 'NEXT'}</button>
           </div>
         </div>
       )}

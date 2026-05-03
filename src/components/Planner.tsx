@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
 import { hasCommanderAccess } from '@/lib/tierGates';
-import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
+import { EXERCISE_LIBRARY, getVideoUrl, resolveExerciseName } from '@/data/exercises';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
@@ -333,6 +333,30 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const fallbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string }>>({});
 
+  // REMOVE THIS — confirm-then-delete + undo toast.
+  //
+  // Old behavior: single tap = instant delete with no undo. Users
+  // were accidentally removing exercises mid-workout and asking
+  // Gunny to add them back (which was its own hit-or-miss path —
+  // see workoutModification.ts comments). New flow:
+  //   1. First tap → button label + style flips to confirm. 3-sec
+  //      timeout reverts back to the safe state.
+  //   2. Second tap (within 3 sec) → actually removes, snapshots
+  //      the removed block + its results into removedSnapshot, and
+  //      shows a 10-sec UNDO toast.
+  //   3. Tap UNDO on the toast → restore the block at its original
+  //      array position with its original results intact.
+  const [removeConfirmAt, setRemoveConfirmAt] = useState<number | null>(null);
+  const [removedSnapshot, setRemovedSnapshot] = useState<{
+    dateStr: string;
+    block: WorkoutBlock;
+    insertAt: number;
+    resultsForBlock: { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string } | null;
+    removedAt: number;
+  } | null>(null);
+  const removeConfirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Mission Complete overlay — shown after COMPLETE WORKOUT, before returning to day view
   const [showCompletionScreen, setShowCompletionScreen] = useState(false);
 
@@ -471,9 +495,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         const blockData = workoutResults[exerciseBlocks[i].id];
         if (!blockData || blockData.sets.some(s => !s.completed)) {
           setActiveBlockIdx(i);
-          const exName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName || 'Next exercise';
-          showVoiceFeedback(`NEXT: ${exName}`);
-          speak(`Moving to ${exName}.`);
+          // Resolve to ES name when the operator is on Spanish so
+          // both the on-screen banner and the TTS voice match the
+          // language they're using everywhere else.
+          const rawName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName;
+          const exName = rawName
+            ? resolveExerciseName(rawName, language)
+            : (language === 'es' ? 'Siguiente ejercicio' : 'Next exercise');
+          showVoiceFeedback(`${language === 'es' ? 'SIGUIENTE' : 'NEXT'}: ${exName}`);
+          speak(language === 'es' ? `Pasando a ${exName}.` : `Moving to ${exName}.`);
           break;
         }
       }
@@ -509,11 +539,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // HR Zone definitions based on max HR (220 - age)
   const maxHR = 220 - (operator.profile?.age || 30);
   const HR_ZONES = [
-    { zone: 1, name: 'RECOVERY', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
-    { zone: 2, name: 'FAT BURN', min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
-    { zone: 3, name: 'CARDIO', min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
-    { zone: 4, name: 'THRESHOLD', min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
-    { zone: 5, name: 'MAX EFFORT', min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
+    { zone: 1, name: t('planner.hr_zone_recovery'),  min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
+    { zone: 2, name: t('planner.hr_zone_fat_burn'),  min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
+    { zone: 3, name: t('planner.hr_zone_cardio'),    min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
+    { zone: 4, name: t('planner.hr_zone_threshold'), min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
+    { zone: 5, name: t('planner.hr_zone_max_effort'),min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
   ];
 
   const getCurrentZone = (hr: number) => {
@@ -1214,7 +1244,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             marginBottom: isMobile ? 2 : 4,
           }}
         >
-          {(isMobile ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']).map((day, i) => (
+          {(isMobile
+            ? [t('planner.day_min_mon'), t('planner.day_min_tue'), t('planner.day_min_wed'), t('planner.day_min_thu'), t('planner.day_min_fri'), t('planner.day_min_sat'), t('planner.day_min_sun')]
+            : [t('planner.day_short_mon'), t('planner.day_short_tue'), t('planner.day_short_wed'), t('planner.day_short_thu'), t('planner.day_short_fri'), t('planner.day_short_sat'), t('planner.day_short_sun')]
+          ).map((day, i) => (
             <div
               key={`${day}-${i}`}
               className="t-label"
@@ -1491,7 +1524,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                             const label = getBlockLabels(workout.blocks)[bi];
                             const isExercise = block.type === 'exercise';
                             const name = isExercise
-                              ? (block as ExerciseBlock).exerciseName
+                              ? resolveExerciseName((block as ExerciseBlock).exerciseName, language)
                               : (block as ConditioningBlock).format;
                             const rx = isExercise ? (block as ExerciseBlock).prescription : '';
                             // Pull just the sets-x-reps fragment out of
@@ -1674,7 +1707,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                           const label = getBlockLabels(workout.blocks)[bi];
                           const isExercise = block.type === 'exercise';
                           const name = isExercise
-                            ? (block as ExerciseBlock).exerciseName
+                            ? resolveExerciseName((block as ExerciseBlock).exerciseName, language)
                             : (block as ConditioningBlock).format;
                           const rx = isExercise ? (block as ExerciseBlock).prescription : '';
                           const setsReps = rx?.match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i)?.[0] || '';
@@ -1771,76 +1804,140 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     } catch { /* vibrate API unavailable — silent */ }
   };
 
-  // Rest timer countdown — ref-based interval that owns its lifecycle so
-  // the timer reliably stops at zero. The previous implementation
-  // depended on [restRunning, restTimer] which forced the effect to
-  // tear down + recreate the setInterval every second; under rapid
-  // state changes (auto-add, voice command, mid-rest set logging) it
-  // could leak intervals or fail to fire the stop branch.
+  // Rest timer countdown — wall-clock anchored.
   //
-  // New shape: effect runs only when restRunning toggles. The interval
-  // callback uses the setState updater form to read the latest tick
-  // value, hits its own stop branch when prev <= 1, and clears the
-  // interval from inside the callback (plus the cleanup). No more
-  // race between re-render and tick.
-  const restIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Why anchored to a wall-clock timestamp instead of a tick counter:
+  // setInterval(..., 1000) is NOT wall-clock-accurate. When the JS
+  // thread is blocked (Gunny chat fetch, big re-render, Markdown
+  // parse) or the mobile tab is backgrounded, ticks get throttled
+  // or batched. The previous implementation decremented `restTimer`
+  // once per tick, so any missed tick = countdown drifted out of
+  // sync with the user's actual perception of time. Worse: when a
+  // backgrounded tab returned, the browser sometimes fired multiple
+  // ticks in a burst, blowing past the prev<=1 threshold and
+  // sometimes triggering the completion alarm at the wrong wall-
+  // clock moment. That's the "fires off randomly" symptom.
+  //
+  // New shape: store the END TIMESTAMP. Each tick recomputes
+  // secondsLeft from `now`. Drift-proof and burst-proof.
+  //
+  // Side effects (alarm + TTS + beeps) moved to a separate effect
+  // that watches secondsLeft transitions. Putting side effects
+  // inside the setState updater (the old shape) was the second bug:
+  // React can invoke an updater multiple times (StrictMode in dev,
+  // concurrent rendering in prod) — each invocation re-fired the
+  // alarm, double-played the TTS, and queued duplicate haptics.
+  // Updaters must be pure; the effect handles the impure work and
+  // uses a ref to fire each side-effect exactly once per cycle.
+  const restEndTimeRef = useRef<number | null>(null);
+  const restAlarmedAtRef = useRef<number | null>(null); // timestamp the cycle ended; idempotency guard
+  const lastBeepSecondRef = useRef<number | null>(null); // dedupe the 3-2-1 beeps so each second beeps once
+  const beepCtxRef = useRef<AudioContext | null>(null); // single shared AudioContext for the per-second beeps
+
+  // Lifecycle: when the user starts/restarts the timer (or adds 30s),
+  // recompute the end timestamp from the CURRENT restTimer value.
+  // setRestTimer + setRestRunning(true) is the only entry point;
+  // pause sets restRunning=false; reset clears restTimer and stops.
   useEffect(() => {
-    const clearRest = () => {
-      if (restIntervalRef.current) {
-        clearInterval(restIntervalRef.current);
-        restIntervalRef.current = null;
-      }
-    };
     if (!restRunning) {
-      clearRest();
+      // Cleared / paused — drop the anchor so the next start gets a
+      // fresh end timestamp.
+      restEndTimeRef.current = null;
+      lastBeepSecondRef.current = null;
+      restAlarmedAtRef.current = null;
       return;
     }
-    // Already running — guard against duplicate intervals (StrictMode
-    // double-invoke in dev).
-    if (restIntervalRef.current) return;
+    // (Re)anchor whenever the timer flips on or restTimer was changed
+    // externally (e.g. +30s tap during an active rest). Compute end
+    // from now + remaining.
+    restEndTimeRef.current = Date.now() + restTimer * 1000;
+    lastBeepSecondRef.current = null;
+    restAlarmedAtRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restRunning, restTimer]);
 
-    restIntervalRef.current = setInterval(() => {
-      setRestTimer(prev => {
-        // Hit zero: stop the interval, fire the completion alarm.
-        if (prev <= 1) {
-          clearRest();
-          setRestRunning(false);
-          playCompletionAlarm();
-          setTimerAlarm(true);
-          setTimeout(() => setTimerAlarm(false), 5000);
-          speak('Time. Next set.');
-          return 0;
-        }
-        // Final-3-second countdown beeps + short haptic.
-        if (prev <= 4) {
-          try {
-            const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-            const ctx = new AudioCtx();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'square';
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.frequency.value = 520;
-            gain.gain.setValueAtTime(0, ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.01);
-            gain.gain.setValueAtTime(0.6, ctx.currentTime + 0.22);
-            gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.25);
-          } catch { /* AudioContext unavailable */ }
-          try {
-            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-              navigator.vibrate(80);
-            }
-          } catch { /* vibrate API unavailable */ }
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return clearRest;
+  // Tick — pure: reads the wall clock, derives secondsLeft, writes
+  // it to state. No side effects beyond the state write. Runs at
+  // 250ms so the UI display is smoother than 1Hz; the alarm timing
+  // stays accurate because everything is wall-clock derived.
+  useEffect(() => {
+    if (!restRunning) return;
+    const tick = () => {
+      const endAt = restEndTimeRef.current;
+      if (endAt == null) return;
+      const remaining = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      setRestTimer((prev) => (prev === remaining ? prev : remaining));
+      if (remaining <= 0) {
+        setRestRunning(false);
+      }
+    };
+    // Tick immediately so a freshly-started 0-second timer doesn't
+    // wait 250ms to fire its alarm.
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
   }, [restRunning]);
+
+  // Side effects — single source of truth. Watches restTimer and
+  // fires beeps at 3/2/1 (deduped via lastBeepSecondRef so a burst
+  // tick pattern can't trigger the same second's beep twice) and
+  // the completion alarm + TTS exactly once per timer cycle (deduped
+  // via restAlarmedAtRef).
+  useEffect(() => {
+    // Beep on each of the final 3 seconds — once per second value.
+    if (restRunning && restTimer > 0 && restTimer <= 3) {
+      if (lastBeepSecondRef.current !== restTimer) {
+        lastBeepSecondRef.current = restTimer;
+        try {
+          const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          // Reuse a single shared context — creating one per beep
+          // exhausts the browser's per-page AudioContext quota
+          // (capped around 6 on Chromium). Lazily create on first
+          // beep so we don't pay the suspend/resume cost on every
+          // page load.
+          if (!beepCtxRef.current) beepCtxRef.current = new AudioCtx();
+          const ctx = beepCtxRef.current;
+          // Some browsers suspend the context after period of
+          // inactivity; resume() is a no-op if running.
+          if (ctx.state === 'suspended') void ctx.resume();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 520;
+          const t = ctx.currentTime;
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.6, t + 0.01);
+          gain.gain.setValueAtTime(0.6, t + 0.22);
+          gain.gain.linearRampToValueAtTime(0, t + 0.25);
+          osc.start(t);
+          osc.stop(t + 0.25);
+        } catch { /* AudioContext unavailable */ }
+        try {
+          if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            navigator.vibrate(80);
+          }
+        } catch { /* vibrate unavailable */ }
+      }
+    }
+
+    // Completion alarm + TTS — fire exactly once when the cycle
+    // ends. restAlarmedAtRef is set with the end-timestamp; a new
+    // timer cycle resets the ref so the next alarm can fire.
+    if (restTimer === 0 && restEndTimeRef.current != null) {
+      const cycleId = restEndTimeRef.current;
+      if (restAlarmedAtRef.current !== cycleId) {
+        restAlarmedAtRef.current = cycleId;
+        playCompletionAlarm();
+        setTimerAlarm(true);
+        const dismissId = window.setTimeout(() => setTimerAlarm(false), 5000);
+        speak('Time. Next set.');
+        return () => window.clearTimeout(dismissId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restTimer, restRunning]);
 
   // Wake lock — keep screen awake during rest timer and workout mode
   useEffect(() => {
@@ -2691,7 +2788,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               >
                 <span className="bl" /><span className="br" />
                 <div className="row-between" style={{ marginBottom: 8 }}>
-                  <span className="t-eyebrow amber">GO TIME</span>
+                  <span className="t-eyebrow amber">{t('planner.go_time')}</span>
                   <span className="t-mono-data" style={{ color: 'var(--amber)' }}>
                     {condBlock.format}
                   </span>
@@ -2860,7 +2957,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     marginBottom: 12,
                   }}
                 >
-                  ✓ ALL SETS COMPLETE
+                  ✓ {t('planner.all_sets_complete')}
                 </div>
               )}
 
@@ -2871,15 +2968,43 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                       got malformed), show "Exercise N" so the user can
                       still see what set they're on. Without this, the
                       title slot collapses to 0 height and the user has
-                      no idea which exercise they're doing. */}
-                  {block.exerciseName?.trim() || `Exercise ${idx + 1}`}
+                      no idea which exercise they're doing.
+                      Phase B i18n: resolveExerciseName looks up the ES
+                      form from EXERCISE_LIBRARY when the operator's
+                      language is 'es' and the name matches a library
+                      entry. AI-generated or freeform names that don't
+                      match the library fall through to the EN string
+                      (workout JSON stores the EN name canonically). */}
+                  {block.exerciseName?.trim()
+                    ? resolveExerciseName(block.exerciseName, language)
+                    : `Exercise ${idx + 1}`}
                 </div>
-                {/* Notes / Form Demo / Form Check icon — single tap
-                    opens the NotesFormPopover holding the legacy
-                    inline notes field, the demo-video trigger, and
-                    the new "upload form check photo to Gunny" path.
-                    Putting these behind one icon keeps the active
-                    set card focused on WEIGHT / REPS / RPE / LOG. */}
+                {/* Form Demo button — surfaced in the card header next
+                    to the exercise name so beginners see it at first
+                    glance instead of hunting inside the Notes popover.
+                    Beta feedback Apr 2026 (VALKYRIE): "should be more
+                    visible on the name of the movement rather than
+                    under Notes section. Should be first look." Kept
+                    conditional on an actual demo URL existing so cards
+                    without a video don't render an inert button. The
+                    popover still has its own demo trigger as a backup
+                    for users who already learned the Notes path. */}
+                {isActive && (block.videoUrl || getVideoUrl(block.exerciseName)) && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
+                    className="btn btn-ghost btn-sm"
+                    aria-label={`Watch form demo for ${block.exerciseName}`}
+                    style={{ padding: '6px 10px', flexShrink: 0 }}
+                  >
+                    <Icon.Play size={11} /> DEMO
+                  </button>
+                )}
+                {/* Notes / Form Check icon — single tap opens the
+                    NotesFormPopover holding the legacy inline notes
+                    field and the "upload form check photo to Gunny"
+                    path. Form Demo is now in the header above (was
+                    also in this popover; kept there as a backup). */}
                 {isActive && (
                   <button
                     type="button"
@@ -2908,10 +3033,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
-                  className="btn btn-amber btn-sm"
+                  className="btn btn-ghost btn-sm"
                   style={{ marginBottom: 8, padding: '6px 10px' }}
                 >
-                  <Icon.Play size={11} /> Form Demo
+                  <Icon.Play size={11} /> DEMO
                 </button>
               )}
 
@@ -2930,15 +3055,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     }}
                   >
                     {[
-                      { label: 'WEIGHT', placeholder: 'lbs', value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
-                      { label: 'REPS',   placeholder: 'reps', value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
+                      { label: t('planner.weight'), placeholder: t('planner.weight_input_placeholder'), value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
+                      { label: t('planner.reps'),   placeholder: t('planner.reps_input_placeholder'), value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
                         const bd = { ...(prev[block.id] || { sets: [] }) };
                         const ss = [...bd.sets];
                         while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
                         ss[nowSetIdx] = { ...ss[nowSetIdx], reps: v };
                         return { ...prev, [block.id]: { ...bd, sets: ss } };
                       }) },
-                      { label: 'RPE',    placeholder: '0-10', value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
+                      { label: t('planner.rpe'),    placeholder: t('planner.rpe_input_placeholder'), value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
                         const bd = { ...(prev[block.id] || { sets: [] }) };
                         const ss = [...bd.sets];
                         while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
@@ -3094,9 +3219,68 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         {/* Mid-workout edit controls — secondary affordances styled
             as ghost (add) and danger-outline (remove) buttons. Only
             rendered on exercise steps so warmup/cooldown screens
-            stay focused on the movement list. */}
-        {currentStep.kind === 'exercise' && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 4 }}>
+            stay focused on the movement list.
+            Move Up / Move Down let users reorder the current exercise
+            within the blocks array. Disabled at the array edges. */}
+        {currentStep.kind === 'exercise' && (() => {
+          // Shared swap helper for the Up / Down buttons. Pulled out
+          // of the inline onClick handlers so the swap + sortOrder
+          // normalization + cursor-shift logic only lives in one
+          // place. sortOrder is reset after every reorder to match
+          // the convention in src/lib/workoutModification.ts (which
+          // does `blocks = blocks.map((b, i) => ({ ...b, sortOrder: i }))`
+          // after every move). Nothing currently reads sortOrder
+          // for display ordering — array position is canonical — but
+          // keeping the field consistent means a future feature that
+          // sorts by it (e.g. an undo log, an analytics by-position
+          // chart, a Gunny analysis) can trust the value.
+          const swapBlocks = (direction: -1 | 1) => {
+            if (currentStep.kind !== 'exercise') return;
+            const targetIdx = currentStep.blockIdx;
+            const swapWith = targetIdx + direction;
+            if (swapWith < 0 || swapWith >= workout.blocks.length) return;
+            const dateStr = selectedDate || formatDate(currentDate);
+            const next = [...workout.blocks];
+            [next[targetIdx], next[swapWith]] = [next[swapWith], next[targetIdx]];
+            // Renumber sortOrder so it mirrors array position. Same
+            // pattern workoutModification.ts uses after a reorder.
+            const normalized = next.map((b, i) => ({ ...b, sortOrder: i }));
+            const updated = { ...operator };
+            updated.workouts = { ...updated.workouts };
+            updated.workouts[dateStr] = { ...workout, blocks: normalized };
+            onUpdateOperator(updated);
+            // Cursor follows the block so the user keeps viewing the
+            // same exercise, now in its new position.
+            setStepIdx(prev => Math.max(0, prev + direction));
+          };
+
+          const isFirstExercise = currentStep.blockIdx <= 0;
+          const isLastExercise = currentStep.blockIdx >= workout.blocks.length - 1;
+
+          return (
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => swapBlocks(-1)}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
+            disabled={isFirstExercise}
+            aria-label="Move exercise up"
+            title={isFirstExercise ? 'Already first' : 'Shift this exercise earlier in the workout'}
+          >
+            ↑ Up
+          </button>
+          <button
+            type="button"
+            onClick={() => swapBlocks(1)}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
+            disabled={isLastExercise}
+            aria-label="Move exercise down"
+            title={isLastExercise ? 'Already last' : 'Shift this exercise later in the workout'}
+          >
+            ↓ Down
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -3119,27 +3303,54 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               setWorkoutResults(prev => ({ ...prev, [newBlock.id]: { sets: [{ weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }], notes: '' } }));
             }}
             className="btn btn-ghost btn-sm"
-            style={{ flex: 1, borderStyle: 'dashed' }}
+            style={{ flex: '1 1 100px', borderStyle: 'dashed' }}
           >
             + Add Exercise
           </button>
+          {/* REMOVE THIS — two-tap confirm to prevent accidental
+              deletes mid-workout. The first tap arms the button;
+              a second tap within 3 sec actually removes. After
+              removal, an UNDO toast appears below for 10 sec. */}
           <button
             type="button"
             onClick={() => {
-              // Remove the EXERCISE THE USER IS CURRENTLY VIEWING.
-              // The legacy "Remove Last" semantics (pop the tail of
-              // the blocks array) silently failed in the stepped
-              // flow because the user only ever sees one block at a
-              // time — clicking the button while on exercise 1 of 5
-              // removed exercise 5, which was off-screen, so nothing
-              // visible changed. Now operates on currentStep.blockIdx
-              // so removal always corresponds to what's on screen.
               if (workout.blocks.length <= 1) return;
               if (currentStep.kind !== 'exercise') return;
+
+              // FIRST TAP — arm the button, set 3-sec auto-revert.
+              if (removeConfirmAt === null) {
+                setRemoveConfirmAt(Date.now());
+                if (removeConfirmTimeoutRef.current) {
+                  clearTimeout(removeConfirmTimeoutRef.current);
+                }
+                removeConfirmTimeoutRef.current = setTimeout(() => {
+                  setRemoveConfirmAt(null);
+                  removeConfirmTimeoutRef.current = null;
+                }, 3000);
+                return;
+              }
+
+              // SECOND TAP — actually remove. Snapshot the block +
+              // its results so the user can undo within 10 sec.
               const targetIdx = currentStep.blockIdx;
               const dateStr = selectedDate || formatDate(currentDate);
-              const removedId = workout.blocks[targetIdx]?.id;
-              if (!removedId) return;
+              const removedBlock = workout.blocks[targetIdx];
+              if (!removedBlock) return;
+
+              if (removeConfirmTimeoutRef.current) {
+                clearTimeout(removeConfirmTimeoutRef.current);
+                removeConfirmTimeoutRef.current = null;
+              }
+              setRemoveConfirmAt(null);
+
+              setRemovedSnapshot({
+                dateStr,
+                block: removedBlock,
+                insertAt: targetIdx,
+                resultsForBlock: workoutResults[removedBlock.id] || null,
+                removedAt: Date.now(),
+              });
+
               const updated = { ...operator };
               updated.workouts = { ...updated.workouts };
               updated.workouts[dateStr] = {
@@ -3149,29 +3360,49 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               onUpdateOperator(updated);
               setWorkoutResults(prev => {
                 const next = { ...prev };
-                delete next[removedId];
+                delete next[removedBlock.id];
                 return next;
               });
+
+              // Auto-clear the undo toast after 10 sec.
+              if (undoToastTimeoutRef.current) {
+                clearTimeout(undoToastTimeoutRef.current);
+              }
+              undoToastTimeoutRef.current = setTimeout(() => {
+                setRemovedSnapshot(null);
+                undoToastTimeoutRef.current = null;
+              }, 10_000);
+
               // safeStepIdx in render clamps automatically when the
               // removed block was the tail, but if the removed block
-              // was mid-list and was also the last step (e.g. the
-              // workout has no cooldown), defensively decrement so
-              // the user sees the previous exercise instead of
-              // jumping straight to the cooldown / Complete state.
+              // was mid-list and was also the last step, defensively
+              // decrement so the user sees the previous exercise
+              // instead of jumping straight to the cooldown.
               const wasTailExercise = targetIdx === workout.blocks.length - 1;
               if (wasTailExercise) {
                 setStepIdx(prev => Math.max(0, prev - 1));
               }
             }}
-            className="btn btn-danger-outline btn-sm"
-            style={{ borderStyle: 'dashed' }}
+            className={removeConfirmAt !== null ? 'btn btn-danger btn-sm' : 'btn btn-danger-outline btn-sm'}
+            style={{
+              flex: '1 1 100px',
+              borderStyle: removeConfirmAt !== null ? 'solid' : 'dashed',
+              animation: removeConfirmAt !== null ? 'workoutCardGlow 1.5s ease-in-out infinite' : undefined,
+            }}
             disabled={workout.blocks.length <= 1}
-            title={workout.blocks.length <= 1 ? 'At least one exercise must remain' : 'Remove this exercise'}
+            title={
+              workout.blocks.length <= 1
+                ? 'At least one exercise must remain'
+                : removeConfirmAt !== null
+                  ? 'Tap again to confirm — auto-cancels in 3s'
+                  : 'Remove this exercise'
+            }
           >
-            − Remove This
+            {removeConfirmAt !== null ? '✕ TAP AGAIN TO CONFIRM' : '− Remove This'}
           </button>
         </div>
-        )}
+          );
+        })()}
 
         {/* ═══ COOLDOWN — single amber bracket card per the stepped
             flow spec. Only renders when the cursor is on the
@@ -3381,10 +3612,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               {[
-                { label: 'DURATION', value: `${completionData.duration} MIN`, color: '#00ff41' },
-                { label: 'EXERCISES', value: String(completionData.exerciseCount), color: '#00ff41' },
-                { label: 'VOLUME', value: `${completionData.totalVolume.toLocaleString()} LBS`, color: '#FFB800' },
-                { label: 'COMPLETION', value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
+                { label: t('planner.stat_duration'), value: `${completionData.duration} ${t('planner.unit_min')}`, color: '#00ff41' },
+                { label: t('planner.stat_exercises'), value: String(completionData.exerciseCount), color: '#00ff41' },
+                { label: t('planner.stat_volume'), value: `${completionData.totalVolume.toLocaleString()} ${t('planner.unit_lbs')}`, color: '#FFB800' },
+                { label: t('planner.stat_completion'), value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
               ].map((stat) => (
                 <div
                   key={stat.label}
@@ -3459,7 +3690,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 textAlign: 'left',
               }}
             >
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>GUNNY SAYS</div>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>{t('planner.gunny_says')}</div>
               {completionData.gunnyMessage}
             </div>
 
@@ -3474,7 +3705,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               marginBottom: 24,
             }}>
               <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 12, textAlign: 'center' }}>
-                SESSION RPE — HOW HARD WAS THAT?
+                {t('planner.session_rpe_question')}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4, marginBottom: 8 }}>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
@@ -3551,6 +3782,118 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               DEBRIEF COMPLETE
+            </button>
+          </div>
+        )}
+
+        {/* UNDO toast for accidental REMOVE THIS taps. Fixed-position
+            overlay so it's visible regardless of scroll. Auto-dismisses
+            after 10 sec; tapping UNDO restores the block at its
+            original index with logged results intact. */}
+        {removedSnapshot && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              position: 'fixed',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+              zIndex: 10_000,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              maxWidth: 'calc(100vw - 32px)',
+              padding: '12px 14px 12px 18px',
+              background: 'rgba(10, 10, 10, 0.96)',
+              border: '1px solid rgba(0,255,65,0.35)',
+              boxShadow: '0 0 32px rgba(0,255,65,0.18), 0 8px 24px rgba(0,0,0,0.5)',
+              borderRadius: 4,
+              fontFamily: 'var(--mono)',
+              fontSize: 13,
+              color: 'var(--text-primary)',
+              animation: 'msgSlideIn 0.25s ease-out',
+            }}
+          >
+            <span style={{ color: 'var(--text-secondary)' }}>
+              Removed{' '}
+              <span style={{ color: '#fff', fontWeight: 600 }}>
+                {removedSnapshot.block.type === 'exercise'
+                  ? (removedSnapshot.block as ExerciseBlock).exerciseName
+                  : (removedSnapshot.block as ConditioningBlock).format || 'conditioning block'}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (!removedSnapshot) return;
+                if (undoToastTimeoutRef.current) {
+                  clearTimeout(undoToastTimeoutRef.current);
+                  undoToastTimeoutRef.current = null;
+                }
+                // Restore block at its original position. operator
+                // may have changed since removal (other tabs, etc.) —
+                // re-clamp the insert index to current bounds.
+                const ds = removedSnapshot.dateStr;
+                const updated = { ...operator };
+                updated.workouts = { ...updated.workouts };
+                const liveDayWorkout = updated.workouts[ds] as Workout | undefined;
+                if (liveDayWorkout) {
+                  const next = [...liveDayWorkout.blocks];
+                  const insertIdx = Math.min(removedSnapshot.insertAt, next.length);
+                  next.splice(insertIdx, 0, removedSnapshot.block);
+                  updated.workouts[ds] = {
+                    ...liveDayWorkout,
+                    blocks: next.map((b, i) => ({ ...b, sortOrder: i })),
+                  };
+                  onUpdateOperator(updated);
+                }
+                // Restore logged results too if there were any.
+                if (removedSnapshot.resultsForBlock) {
+                  setWorkoutResults((prev) => ({
+                    ...prev,
+                    [removedSnapshot.block.id]: removedSnapshot.resultsForBlock!,
+                  }));
+                }
+                setRemovedSnapshot(null);
+              }}
+              style={{
+                padding: '6px 14px',
+                background: 'rgba(0,255,65,0.18)',
+                border: '1px solid var(--green)',
+                color: 'var(--green)',
+                fontFamily: 'var(--display)',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                cursor: 'pointer',
+                borderRadius: 2,
+                textTransform: 'uppercase',
+              }}
+            >
+              ↶ Undo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (undoToastTimeoutRef.current) {
+                  clearTimeout(undoToastTimeoutRef.current);
+                  undoToastTimeoutRef.current = null;
+                }
+                setRemovedSnapshot(null);
+              }}
+              aria-label="Dismiss"
+              style={{
+                padding: '6px 8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-tertiary)',
+                fontSize: 16,
+                cursor: 'pointer',
+                lineHeight: 1,
+              }}
+            >
+              ×
             </button>
           </div>
         )}
@@ -3706,17 +4049,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                               className="t-body-sm"
                               style={{ color: 'var(--text-primary)', fontWeight: 600, flex: '1 1 auto' }}
                             >
-                              {block.exerciseName}
+                              {resolveExerciseName(block.exerciseName, language)}
                             </span>
                             {vidUrl && (
                               <a
                                 href={vidUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="btn btn-amber btn-sm"
+                                className="btn btn-ghost btn-sm"
                                 style={{ padding: '4px 8px', fontSize: 9, flexShrink: 0 }}
                               >
-                                ▶ Demo
+                                <Icon.Play size={10} /> DEMO
                               </a>
                             )}
                           </div>
@@ -4485,7 +4828,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           aria-label={t('common.previous')}
           style={{ padding: '9px 12px' }}
         >
-          ◀
+          <Icon.ChevronLeft size={14} />
         </button>
 
         <div className="segmented">
@@ -4522,7 +4865,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           aria-label={t('common.next')}
           style={{ padding: '9px 12px' }}
         >
-          ▶
+          <Icon.ChevronRight size={14} />
         </button>
       </div>
 

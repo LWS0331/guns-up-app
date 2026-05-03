@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
+import { Operator, Meal, Workout, WorkoutBlock, ExerciseBlock, TIER_CONFIGS } from '@/lib/types';
 import Icon from './Icons';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
-import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
+import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext, speak as gunnySpeak, stopSpeaking, onSpeechDone, offSpeechDone } from '@/lib/tts';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
@@ -18,6 +18,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getAuthToken } from '@/lib/authClient';
 import { loadNotificationPrefs, saveNotificationPrefs, type NotificationPreferences } from '@/lib/notifications';
+import { compressImageForVision } from '@/lib/imageCompress';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -527,6 +528,70 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     const unsub = onTtsEnabledChange((enabled) => setTtsOn(enabled));
     return unsub;
   }, []);
+
+  // Track which Gunny message is currently being read aloud so we can
+  // (a) toggle the per-bubble play/stop affordance icon, and (b) cancel
+  // the previous message's playback when the user taps a different one.
+  // Null when nothing is playing.
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+
+  // Subscribe to lib/tts's queue-empty signal. Fires when the audio
+  // finishes naturally OR when stopSpeaking() runs — either way the
+  // HEAR IT button needs to flip back from STOP. Replaces the earlier
+  // 600ms DOM polling which was unreliable (Audio elements created
+  // via `new Audio(url)` aren't attached to the DOM, so the poll
+  // immediately decided playback was done while the audio kept
+  // playing).
+  useEffect(() => {
+    const cb = () => setSpeakingMessageId(null);
+    onSpeechDone(cb);
+    return () => offSpeechDone(cb);
+  }, []);
+
+  // Per-message play handler. Routes through the shared lib/tts speak()
+  // pipeline (OpenAI TTS → browser speechSynthesis fallback). ALWAYS
+  // user-initiated, which is critical: iOS Safari blocks any
+  // audio.play() that doesn't trace back to a tap, so per-message
+  // buttons survive autoplay restrictions even when the auto-speak
+  // path is silently blocked.
+  //
+  // Bypasses the global TTS-mute flag because the user explicitly
+  // asked to hear THIS message — muting was about not getting auto-
+  // spoken bombarded, not about disabling on-demand playback. We
+  // temporarily re-enable around the speak() call so isTtsEnabled()
+  // inside speak() doesn't short-circuit, then restore the prior
+  // state. Restore happens after the audio finishes (onSpeechDone),
+  // not just after speak() returns — speak() resolves once the
+  // request is queued, not when playback ends.
+  const playMessage = useCallback((id: string, text: string) => {
+    if (!text || !text.trim()) return;
+    // If THIS message is already playing → tap acts as stop.
+    if (speakingMessageId === id) {
+      stopSpeaking();
+      // setSpeakingMessageId(null) gets fired by the onSpeechDone
+      // subscription above when stopSpeaking() emits the empty event.
+      return;
+    }
+    // Otherwise switch playback to this message — cancel any prior.
+    stopSpeaking();
+    unlockAudioContext();
+    const wasMuted = !isTtsEnabled();
+    if (wasMuted) setTtsEnabled(true);
+    setSpeakingMessageId(id);
+    gunnySpeak(text)
+      .catch((err) => console.warn('[gunny-chat] play-message failed:', err));
+    // Restore muted state once the audio actually finishes (not when
+    // gunnySpeak() returns). The onSpeechDone callback above already
+    // clears the button state; we hook in here just for the mute
+    // restore. One-shot subscription so we don't restore twice.
+    if (wasMuted) {
+      const restore = () => {
+        setTtsEnabled(false);
+        offSpeechDone(restore);
+      };
+      onSpeechDone(restore);
+    }
+  }, [speakingMessageId]);
 
   const toggleTts = () => {
     const next = !ttsOn;
@@ -2214,28 +2279,100 @@ ${mealSuggestion}`;
         const today = getLocalDateStr();
         let workingOp = operator;
         let touched = false;
+        // Track silent-no-op modifications so we can surface them to
+        // the user. Without this, Gunny's confirmation text in the
+        // chat ("done, added it back!") would lie when the actual
+        // apply path matched nothing — see workoutModification.ts
+        // ApplyWorkoutModificationResult.changed for why this matters.
+        const silentlyDropped: string[] = [];
         for (const mod of mods) {
           if (!mod || typeof mod !== 'object') continue;
           if (mod.type === 'prefill_weights') {
-            // Live prefill of workout-mode inputs — Planner's listener handles
-            // it. Does not mutate the persisted workout.
             dispatchPrefillWeights(mod as PrefillWeightsMod);
             wasModification = true;
             continue;
           }
-          // Block-shape mods write to the persisted workout.
-          const current = workingOp.workouts?.[today];
-          if (!current) continue;
+          // Block-shape mods write to the persisted workout. Look at
+          // today FIRST (the common case for mid-workout asks); fall
+          // back to scanning recent dates so a request like "add
+          // curls back to my last workout" doesn't silently drop.
+          let targetDate = today;
+          let current = workingOp.workouts?.[today];
+          if (!current) {
+            // Walk back up to 14 days searching for the most recent
+            // workout that has the block this mod targets. This makes
+            // "add it back" / "swap that exercise" requests work even
+            // when the user is browsing an older day or the request
+            // came in well after the workout completed.
+            const wantedName = (mod as { targetExerciseName?: string; afterExerciseName?: string }).targetExerciseName
+              ?? (mod as { afterExerciseName?: string }).afterExerciseName
+              ?? '';
+            const lowered = wantedName.toLowerCase().trim();
+            const allDates = Object.keys(workingOp.workouts || {}).sort().reverse();
+            for (const d of allDates.slice(0, 14)) {
+              const w = workingOp.workouts?.[d];
+              if (!w?.blocks?.length) continue;
+              if (mod.type === 'add_block') {
+                // For adds, the most recent workout is usually right.
+                targetDate = d;
+                current = w;
+                break;
+              }
+              // For swap/remove/update, prefer a workout that
+              // actually contains the named block.
+              const hit = w.blocks.some((b) =>
+                b.type === 'exercise' &&
+                lowered.length > 0 &&
+                (b as ExerciseBlock).exerciseName?.toLowerCase().trim() === lowered,
+              );
+              if (hit) {
+                targetDate = d;
+                current = w;
+                break;
+              }
+            }
+          }
+          if (!current) {
+            console.warn('[gunny-mod] no target workout found for', mod);
+            silentlyDropped.push(`No workout to target (Gunny tried ${mod.type})`);
+            continue;
+          }
           try {
-            const modified = applyWorkoutModification(current, mod);
-            workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-            touched = true;
-            wasModification = true;
+            const result = applyWorkoutModification(current, mod);
+            if (result.changed) {
+              workingOp = {
+                ...workingOp,
+                workouts: { ...workingOp.workouts, [targetDate]: result.workout },
+              };
+              touched = true;
+              wasModification = true;
+            } else {
+              // Gunny's apply was a no-op (block name didn't match,
+              // empty payload, etc.). Log the reason and queue a
+              // user-visible warning so the chat doesn't lie.
+              console.warn('[gunny-mod] apply was a no-op:', result.reason, mod);
+              silentlyDropped.push(result.reason || 'modification did not match anything in your workout');
+            }
           } catch (e) {
             console.error('applyWorkoutModification failed:', e);
+            silentlyDropped.push('applyWorkoutModification threw — see console');
           }
         }
         if (touched && onUpdateOperator) onUpdateOperator(workingOp);
+        // If Gunny acknowledged but the apply silently failed, append
+        // a clarifying note to the chat so the user knows to retry
+        // with a more specific name. Without this, the user sees
+        // Gunny's confirmation, looks at the workout, sees nothing
+        // changed, and thinks the feature is broken.
+        if (silentlyDropped.length > 0 && !touched) {
+          const note = silentlyDropped[0];
+          setMessages(prev => [...prev, {
+            id: 'gunny-mod-note-' + Date.now(),
+            role: 'gunny',
+            text: `⚠ Heads up — I tried to apply that change but couldn't find the right exercise to act on. ${note}. Try naming the exercise exactly as it appears in your workout, or open the workout and tell me which one.`,
+            timestamp: new Date(),
+          }]);
+        }
       }
 
       // Store workout data if AI generated a NEW complete workout
@@ -2402,9 +2539,25 @@ ${mealSuggestion}`;
 
       // If the API returned nothing at all, show the fallback
       if (!apiResult) {
-        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
-          ? formatOwnerDiagnostic(errorInfo)
-          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        // Build a more useful fallback message. RAMPAGE (admin) gets the
+        // full diagnostic dump for debugging. Everyone else gets a hint
+        // about the failure type when we can — image uploads in
+        // particular benefit from "try a smaller photo" guidance because
+        // the most common failure mode is the Anthropic vision payload
+        // limit. The actual error.message is logged server-side
+        // (Railway) so we can correlate; we don't surface it raw to
+        // users because it can include internal details.
+        const hadImage = !!pendingImage;
+        let fallbackText: string;
+        if (operator.callsign === 'RAMPAGE' && errorInfo) {
+          fallbackText = formatOwnerDiagnostic(errorInfo);
+        } else if (errorInfo?.errorType === 'stream_error') {
+          fallbackText = hadImage
+            ? `⚠ The image couldn't be processed. Try a smaller photo (under 5MB) or retry without the image, ${operator.callsign}.`
+            : `⚠ Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
+        } else {
+          fallbackText = `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        }
         setMessages((prev) =>
           prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
@@ -2758,10 +2911,19 @@ ${mealSuggestion}`;
           const current = workingOp.workouts?.[today];
           if (!current) continue;
           try {
-            const modified = applyWorkoutModification(current, mod);
-            workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-            touched = true;
-            wasModification = true;
+            // Quick-action path mirrors the chat-handler updates above:
+            // unwrap the result + log/skip silent no-ops.
+            const result = applyWorkoutModification(current, mod);
+            if (result.changed) {
+              workingOp = {
+                ...workingOp,
+                workouts: { ...workingOp.workouts, [today]: result.workout },
+              };
+              touched = true;
+              wasModification = true;
+            } else {
+              console.warn('[gunny-mod:quick-action] no-op:', result.reason, mod);
+            }
           } catch (e) {
             console.error('applyWorkoutModification (quick action) failed:', e);
           }
@@ -2807,9 +2969,17 @@ ${mealSuggestion}`;
         );
       }
       if (!apiResult) {
-        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
-          ? formatOwnerDiagnostic(errorInfo)
-          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        // Quick-action path (no image attach surface) — same fallback
+        // tiering as the main-message path. Stream errors get a more
+        // specific hint; pure network drops keep the generic message.
+        let fallbackText: string;
+        if (operator.callsign === 'RAMPAGE' && errorInfo) {
+          fallbackText = formatOwnerDiagnostic(errorInfo);
+        } else if (errorInfo?.errorType === 'stream_error') {
+          fallbackText = `⚠ Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
+        } else {
+          fallbackText = `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        }
         setMessages((prev) =>
           prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
@@ -2819,7 +2989,14 @@ ${mealSuggestion}`;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter inserts a newline so users can build multi-paragraph
+    // messages (Apr 30 beta note: "Currently you can only send a
+    // paragraph at time"). Sending requires the SEND button or
+    // Cmd/Ctrl+Enter for desktop power users — same convention as
+    // most modern chat composers (Slack, Discord with the right pref,
+    // etc.). The textarea's default behavior already handles plain
+    // Enter as newline, so we only intercept the modifier shortcut.
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -3361,17 +3538,75 @@ ${mealSuggestion}`;
                   </span>
                 </div>
               )}
-              {/* Timestamp — small mono caption pinned right for
-                  user, left for gunny per the handoff bubble layout. */}
+              {/* Timestamp + per-message play button (Gunny only).
+                  The play button gives users an explicit way to hear
+                  the message — works even when the global TTS mute
+                  is on and (more importantly) survives iOS Safari's
+                  autoplay block because it's a direct user gesture.
+                  Tapping the same button while playing acts as stop;
+                  tapping a different message stops the prior one and
+                  starts the new one. */}
               <div
                 className="t-mono-sm"
                 style={{
                   marginTop: 6,
-                  textAlign: isUser ? 'right' : 'left',
+                  display: 'flex',
+                  justifyContent: isUser ? 'flex-end' : 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
                   color: 'var(--text-tertiary)',
                 }}
               >
-                {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                <span>
+                  {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                {!isUser && message.text && message.text.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playMessage(message.id, message.text);
+                    }}
+                    aria-label={
+                      speakingMessageId === message.id
+                        ? 'Stop reading message'
+                        : 'Read message aloud'
+                    }
+                    title={
+                      speakingMessageId === message.id
+                        ? 'Stop'
+                        : 'Hear Gunny say this'
+                    }
+                    style={{
+                      background: speakingMessageId === message.id
+                        ? 'rgba(0,255,65,0.18)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${
+                        speakingMessageId === message.id
+                          ? 'rgba(0,255,65,0.6)'
+                          : 'rgba(0,255,65,0.2)'
+                      }`,
+                      color: speakingMessageId === message.id
+                        ? '#00ff41'
+                        : 'var(--text-secondary)',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      padding: '3px 8px',
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      transition: 'all 0.15s ease',
+                      boxShadow: speakingMessageId === message.id
+                        ? '0 0 8px rgba(0,255,65,0.25)'
+                        : 'none',
+                    }}
+                  >
+                    {speakingMessageId === message.id ? '◼ STOP' : '▶ HEAR IT'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -3522,13 +3757,25 @@ ${mealSuggestion}`;
             type="file"
             accept="image/*"
             style={{ display: 'none' }}
-            onChange={(e) => {
+            onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
-              if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return; }
-              const reader = new FileReader();
-              reader.onload = () => setPendingImage(reader.result as string);
-              reader.readAsDataURL(file);
+              // Hard cap at 25 MB raw — beyond that, decoding the image
+              // into a canvas can OOM mobile Safari. Below that, we
+              // resize + recompress so the base64 payload fits the
+              // Anthropic 5 MB API limit. See compressImageForVision.
+              if (file.size > 25 * 1024 * 1024) {
+                alert('Image is too large (max 25 MB raw). Try a smaller photo.');
+                e.target.value = '';
+                return;
+              }
+              try {
+                const dataUrl = await compressImageForVision(file);
+                setPendingImage(dataUrl);
+              } catch (err) {
+                console.error('[GunnyChat:imageAttach] failed:', err);
+                alert("Couldn't process that image. Try a different photo.");
+              }
               e.target.value = '';
             }}
           />

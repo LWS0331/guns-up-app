@@ -92,15 +92,47 @@ function findBlockIndex(
 }
 
 /**
+ * Result of applying a workout modification.
+ *
+ * `changed` is the truthful "did this actually do anything?" flag.
+ * Callers should branch on it to surface failures — Gunny may have
+ * acknowledged the modification in the chat ("done, added it back!")
+ * while the targeted block didn't exist, in which case the user sees
+ * confirmation but no actual change. Without this flag those failures
+ * were silently dropped.
+ *
+ * `reason` (when changed === false) carries a short developer-facing
+ * label for logs / toasts: "block_not_found" | "no_op_for_type" |
+ * "empty_payload".
+ */
+export interface ApplyWorkoutModificationResult {
+  workout: Workout;
+  changed: boolean;
+  reason?: string;
+}
+
+/**
  * Apply a surgical modification to a workout.
- * Returns a NEW workout object. Caller must persist the result.
+ *
+ * Returns { workout, changed, reason } so callers can detect silent
+ * no-ops (e.g. Gunny emitted remove_block for "Bicep Curl" but the
+ * workout has "Bicep Curls" — case-sensitive trim won't match, the
+ * workout is returned unchanged, and without `changed === false` the
+ * caller would persist an unchanged workout and Gunny's "done!" reply
+ * would lie to the user).
+ *
+ * The legacy single-return-value signature is preserved via
+ * applyWorkoutModificationLegacy for any callers that haven't been
+ * updated yet, but the new shape is the canonical one — use it.
  */
 export function applyWorkoutModification(
   workout: Workout,
   mod: WorkoutModification
-): Workout {
+): ApplyWorkoutModificationResult {
   const updated: Workout = { ...workout };
   let blocks: WorkoutBlock[] = [...(updated.blocks || [])];
+  let changed = false;
+  let reason: string | undefined;
 
   switch (mod.type) {
     case 'swap_exercise': {
@@ -118,6 +150,9 @@ export function applyWorkoutModification(
           type: 'exercise',
         };
         blocks[idx] = merged;
+        changed = true;
+      } else {
+        reason = `swap_exercise: no block matched id="${mod.targetBlockId ?? ''}" name="${mod.targetExerciseName ?? ''}"`;
       }
       break;
     }
@@ -161,13 +196,25 @@ export function applyWorkoutModification(
           isLinkedToNext: false,
         };
       }
+      // add_block ALWAYS results in a change — even if afterIdx
+      // matched nothing, we appended at the tail. So `changed` is
+      // unconditionally true here. The afterIdx miss is logged as
+      // info because it might not be what the operator expected.
       blocks.splice(insertAt, 0, newBlock);
-      // Recompute sortOrder so UI ordering stays consistent
       blocks = blocks.map((b, i) => ({ ...b, sortOrder: i }));
+      changed = true;
+      if (afterIdx === -1 && (mod.afterBlockId || mod.afterExerciseName)) {
+        // Note we matched nothing on the anchor, even though the
+        // insert succeeded at the tail — log so the caller can
+        // optionally surface this as "added at the end" instead
+        // of in the place the user expected.
+        reason = `add_block: anchor not matched (afterBlockId="${mod.afterBlockId ?? ''}" afterExerciseName="${mod.afterExerciseName ?? ''}"); inserted at end of workout`;
+      }
       break;
     }
 
     case 'remove_block': {
+      const before = blocks.length;
       const lowered = mod.targetExerciseName?.toLowerCase().trim();
       blocks = blocks.filter(b => {
         if (mod.targetBlockId && b.id === mod.targetBlockId) return false;
@@ -175,7 +222,12 @@ export function applyWorkoutModification(
             (b as ExerciseBlock).exerciseName?.toLowerCase().trim() === lowered) return false;
         return true;
       });
-      blocks = blocks.map((b, i) => ({ ...b, sortOrder: i }));
+      if (blocks.length !== before) {
+        blocks = blocks.map((b, i) => ({ ...b, sortOrder: i }));
+        changed = true;
+      } else {
+        reason = `remove_block: no match for id="${mod.targetBlockId ?? ''}" name="${mod.targetExerciseName ?? ''}"`;
+      }
       break;
     }
 
@@ -188,6 +240,9 @@ export function applyWorkoutModification(
           prescription: mod.changes.prescription ?? old.prescription,
           exerciseName: mod.changes.exerciseName ?? old.exerciseName,
         };
+        changed = true;
+      } else {
+        reason = `update_prescription: no block matched id="${mod.targetBlockId ?? ''}" name="${mod.targetExerciseName ?? ''}"`;
       }
       break;
     }
@@ -202,23 +257,32 @@ export function applyWorkoutModification(
       // Append any blocks not referenced in the new order at the end
       byId.forEach(b => reordered.push(b));
       blocks = reordered.map((b, i) => ({ ...b, sortOrder: i }));
+      changed = true;
       break;
     }
 
     case 'prefill_weights': {
-      // Not this function's job — the live results state is owned by Planner,
-      // not the persisted Workout. Callers must route prefill_weights via
-      // workoutEvents.dispatchPrefillWeights() and let Planner's listener
-      // patch workoutResults directly. Returning the workout unchanged here
-      // just means we're a no-op for this mod type at the workout level.
-      return workout;
+      // Not this function's job — the live results state is owned by
+      // Planner, not the persisted Workout. Callers must route
+      // prefill_weights via workoutEvents.dispatchPrefillWeights().
+      // Returning unchanged here, with `changed: false`, communicates
+      // that nothing was applied at the workout level — but in this
+      // case "no change" is correct, not a failure.
+      return { workout, changed: false, reason: 'prefill_weights handled by workoutEvents bridge, not this function' };
     }
 
     default:
-      return workout;
+      return { workout, changed: false, reason: 'unknown modification type' };
+  }
+
+  if (!changed) {
+    // Safety net: if we got here without flipping `changed`, return
+    // the original workout reference so React can shallow-compare and
+    // skip a re-render.
+    return { workout, changed: false, reason };
   }
 
   updated.blocks = blocks;
   // CRITICAL: do NOT touch updated.results — preserve logged data
-  return updated;
+  return { workout: updated, changed: true, reason };
 }

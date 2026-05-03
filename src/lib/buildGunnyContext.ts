@@ -156,20 +156,31 @@ export function buildFullGunnyContext(
   })();
 
   const recentMealHistory = (() => {
+    // 7 days of nutrition is the canonical "this week" window beta users
+    // ask about. Was 3 days; that left "yesterday" workable but anything
+    // earlier was invisible — Gunny would hallucinate totals when asked.
+    // Includes per-meal name + calories so Gunny can answer "what did I
+    // eat for X" without guessing.
     const meals = (operator.nutrition as AnyRec | undefined)?.meals || {};
-    const dates = Object.keys(meals).sort().reverse().slice(0, 3);
+    const dates = Object.keys(meals).sort().reverse().slice(0, 7);
     if (!dates.length) return 'No meals logged';
     return dates
       .map(date => {
         const dm = (meals as AnyRec)[date] || [];
         const t = dm.reduce(
-          (a: { calories: number; protein: number }, m: { calories?: number; protein?: number }) => ({
+          (a: { calories: number; protein: number; carbs: number; fat: number }, m: { calories?: number; protein?: number; carbs?: number; fat?: number }) => ({
             calories: a.calories + (m.calories || 0),
             protein: a.protein + (m.protein || 0),
+            carbs: a.carbs + (m.carbs || 0),
+            fat: a.fat + (m.fat || 0),
           }),
-          { calories: 0, protein: 0 }
+          { calories: 0, protein: 0, carbs: 0, fat: 0 }
         );
-        return `${date}: ${dm.length} meals — ${t.calories}cal, ${t.protein}g P`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const itemList = (dm as Array<{ name?: string; calories?: number }>)
+          .map(m => `${m.name || 'meal'} (${m.calories || 0}cal)`)
+          .join(', ');
+        return `${date}: ${dm.length} meals — ${t.calories}cal, ${t.protein}g P / ${t.carbs}g C / ${t.fat}g F\n  · ${itemList}`;
       })
       .join('\n');
   })();

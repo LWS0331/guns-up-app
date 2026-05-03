@@ -26,11 +26,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Text required' }, { status: 400 });
     }
 
-    // Truncate long text for TTS (keep it punchy — Gunny doesn't ramble)
-    const truncated = text.length > 300 ? text.slice(0, 300) + '...' : text;
-
-    // Clean text for speech — strip formatting chars and markdown tables before synthesis
-    const clean = truncated
+    // Clean text FIRST, truncate AFTER. Order matters: a Gunny
+    // workout response can be 1500+ chars of mostly markdown table
+    // and code fences. Truncating raw text at 300 chars then
+    // stripping markdown leaves ~80 speakable chars, which the user
+    // hears as a 4-6 second cutoff mid-sentence ("starts speaking
+    // but cuts off"). Strip first, then truncate the SPEAKABLE
+    // text — that way the cap reflects actual speech length, not
+    // raw markdown bytes.
+    const clean = text
       // Drop markdown table rows (pipe-delimited lines) so Gunny doesn't read ' pipe pipe pipe '
       .replace(/^\|.*\|$/gm, '')
       // Drop table divider rows like |---|---|
@@ -39,10 +43,22 @@ export async function POST(req: NextRequest) {
       .replace(/[*_#━═]{2,}/g, '')
       // Strip inline code backticks
       .replace(/`+/g, '')
+      // Drop fenced code blocks entirely (workout JSON, exercise
+      // tables, etc.) — Gunny shouldn't recite JSON aloud.
+      .replace(/```[\s\S]*?```/g, '')
       // Collapse newlines into sentence breaks
       .replace(/\n+/g, '. ')
       .replace(/\s{2,}/g, ' ')
       .trim();
+
+    // Cap at 3500 chars (~4 minutes of speech). OpenAI's hard limit
+    // is 4096; staying under leaves room for the cleanup regexes
+    // adding "..." or sentence breaks. 300 was too aggressive — a
+    // typical Gunny response is 600-1200 chars of speakable text.
+    const TTS_MAX_CHARS = 3500;
+    const truncated = clean.length > TTS_MAX_CHARS
+      ? clean.slice(0, TTS_MAX_CHARS) + '…'
+      : clean;
 
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
@@ -51,8 +67,8 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'tts-1',        // tts-1 for speed, tts-1-hd for quality
-        input: clean,
+        model: 'tts-1',         // tts-1 for speed, tts-1-hd for quality
+        input: truncated,       // cleaned + length-capped above
         voice: voice,           // onyx = deep authoritative male
         speed: speed,           // 1.1 = slightly fast, military cadence
         response_format: 'mp3',

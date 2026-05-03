@@ -47,6 +47,7 @@ interface DbMetrics {
       promoActive: boolean;
       trainerId: string | null;
       betaUser: boolean;
+      billingStatus: string | null;
       workoutCount: number;
       mealCount: number;
       prCount: number;
@@ -99,9 +100,38 @@ const MARKETING_PLATFORMS: MarketingPlatform[] = [
   { name: 'LinkedIn', slug: 'linkedin', color: '#0077B5', connected: false, apiEndpoint: null, description: 'Post professional content' },
 ];
 
+/** Feedback entry shape mirrored from /api/beta-feedback. The DB stores a
+ *  String[] of JSON strings, so each `betaFeedback` slot here is the parsed
+ *  form of one of those strings. resolutionNote/resolvedAt/resolvedBy are
+ *  set when an admin updates status to FIXED/WONTFIX (Apr 2026, PR #100). */
+type FeedbackStatus = 'NEW' | 'REVIEWING' | 'FIXED' | 'WONTFIX';
+interface ParsedFeedback {
+  id: string;
+  operatorId: string;
+  callsign: string;
+  type: 'BUG' | 'RECOMMENDATION' | 'UI/UX' | 'PERFORMANCE';
+  category: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  description: string;
+  screenshot?: string;
+  timestamp: string;
+  status: FeedbackStatus;
+  resolutionNote?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+const STATUS_COLOR: Record<FeedbackStatus, string> = {
+  NEW: '#ff4444',
+  REVIEWING: '#ffb800',
+  FIXED: '#00ff41',
+  WONTFIX: '#888',
+};
+
 const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const [activeTab, setActiveTab] = useState<OpsTab>('REVENUE');
   const [metrics, setMetrics] = useState<DbMetrics | null>(null);
+  /** Optimistic overrides for feedback status. Keyed by feedback id; merged
+   *  on top of the operator-prop snapshot until the parent re-fetches. */
+  const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, FeedbackStatus>>({});
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<string>('');
   const [selectedOperatorForPromo, setSelectedOperatorForPromo] = useState<string | null>(null);
@@ -178,6 +208,12 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     email?: string | null; tierLocked?: boolean; isVanguard?: boolean;
     betaUser?: boolean; trainerId?: string | null; promoActive?: boolean;
     googleId?: string | null;
+    /**
+     * Stripe billing status from operator.billing.status. Only 'active'
+     * counts as paying revenue. NULL / 'beta' / 'cancelled' / 'past_due'
+     * all evaluate to non-paying. Source of truth for the Revenue tab.
+     */
+    billingStatus?: string | null;
   };
   const displayOperators: DisplayOp[] = opStats.length > 0
     ? opStats
@@ -188,21 +224,51 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
 
   // ═══════════════════════════════════════
   // REVENUE CALCULATIONS (DB-fresh via displayOperators + TIER_CONFIGS)
+  //
+  // Paying status is gated on a positive Stripe signal:
+  // billing.status === 'active'. The previous version inferred PAID
+  // by the absence of exemption flags (no betaUser / no vanguard / no
+  // promo → PAID) which let any operator missing all three flags
+  // through, even when there was no Stripe subscription. Closed beta
+  // had several operators that didn't have betaUser=true set yet but
+  // weren't paying either — those rows showed up as PAID.
+  //
+  // The forecast endpoint at /api/financials/forecast already uses
+  // billing.status === 'active' as the gate — this brings the Revenue
+  // tab in line with that single source of truth.
+  //
+  // Why split paid vs total:
+  //   - MRR / ARR / Trainer Payout / Platform Revenue / Stripe Fees
+  //     come from money the platform actually receives → paid count.
+  //   - API Cost / Infra Cost hit on usage regardless of payment
+  //     status (we still pay Anthropic when a beta user chats with
+  //     Gunny) → total count.
   // ═══════════════════════════════════════
+  const isPayingClient = (op: DisplayOp): boolean => {
+    if (op.role !== 'client') return false;
+    return op.billingStatus === 'active';
+  };
+
   const revenueByTier = (Object.keys(TIER_CONFIGS) as AiTier[]).reduce((acc, tier) => {
-    const count = displayOperators.filter(c => c.role === 'client' && c.tier === tier).length;
+    const allOnTier = displayOperators.filter(c => c.role === 'client' && c.tier === tier);
+    const paidOnTier = allOnTier.filter(isPayingClient);
+    const totalCount = allOnTier.length;
+    const paidCount = paidOnTier.length;
     const config = TIER_CONFIGS[tier];
     acc[tier] = {
-      count,
-      mrr: count * config.monthlyPrice,
-      trainerPayout: count * config.trainerShare,
-      platformRevenue: count * config.platformShare,
-      apiCost: count * config.apiCostEstimate,
-      stripeFees: count * config.stripeFee,
-      infraCost: count * config.infraCost,
+      count: totalCount,
+      paidCount,
+      // Revenue lines: paid only.
+      mrr: paidCount * config.monthlyPrice,
+      trainerPayout: paidCount * config.trainerShare,
+      platformRevenue: paidCount * config.platformShare,
+      stripeFees: paidCount * config.stripeFee,
+      // Cost lines: every user hits the API, infra scales with totals.
+      apiCost: totalCount * config.apiCostEstimate,
+      infraCost: totalCount * config.infraCost,
     };
     return acc;
-  }, {} as Record<AiTier, { count: number; mrr: number; trainerPayout: number; platformRevenue: number; apiCost: number; stripeFees: number; infraCost: number }>);
+  }, {} as Record<AiTier, { count: number; paidCount: number; mrr: number; trainerPayout: number; platformRevenue: number; apiCost: number; stripeFees: number; infraCost: number }>);
 
   const totalMRR = Object.values(revenueByTier).reduce((sum, t) => sum + t.mrr, 0);
   const totalTrainerPayout = Object.values(revenueByTier).reduce((sum, t) => sum + t.trainerPayout, 0);
@@ -212,6 +278,8 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const totalInfraCost = Object.values(revenueByTier).reduce((sum, t) => sum + t.infraCost, 0);
   const totalARR = totalMRR * 12;
   const netProfit = totalPlatformRevenue - totalApiCost - totalStripeFees - totalInfraCost;
+  const paidClientCount = clients.filter(isPayingClient).length;
+  const betaClientCount = clients.filter(c => c.betaUser && !c.tierLocked).length;
 
   // ═══════════════════════════════════════
   // LIVE DATA BADGE
@@ -400,13 +468,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       const estTokens = messages * 500;
       const estCost = (estTokens / 1000000) * 3;
 
-      let status = 'PAID';
-      if (op.betaUser && !op.tierLocked) {
+      // Status priority — only PAID when Stripe says so. Everything
+      // else falls through the descriptive flags. NOT ACTIVE is the
+      // catch-all for operators sitting in the DB without a billing
+      // status and without any of the exemption flags set yet.
+      const opAsDisplay = op as unknown as DisplayOp;
+      let status: 'PAID' | 'BETA FREE' | 'VANGUARD' | 'PROMO' | 'NOT ACTIVE';
+      if (opAsDisplay.billingStatus === 'active') {
+        status = 'PAID';
+      } else if (op.betaUser && !op.tierLocked) {
         status = 'BETA FREE';
       } else if (op.isVanguard) {
         status = 'VANGUARD';
       } else if (op.promoActive) {
         status = 'PROMO';
+      } else {
+        status = 'NOT ACTIVE';
       }
 
       return {
@@ -424,12 +501,19 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     return (
       <div style={{ padding: '20px' }}>
         <LiveBadge />
-        {/* Top-level KPIs */}
+        {/* Top-level KPIs.
+            MRR / ARR / Trainer Payout count PAID clients only — beta,
+            vanguard, and promo accounts are exempted. PAID CLIENTS is
+            shown alongside TOTAL CLIENTS so the gap is obvious at a
+            glance: if the cohort is 17 total / 0 paid, MRR is correctly
+            $0 instead of an inflated tier-mix theoretical. */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="MRR" value={`$${totalMRR.toFixed(2)}`} color="#00ff41" />
-          <KPICard label="ARR" value={`$${totalARR.toFixed(2)}`} color="#00ff41" />
+          <KPICard label="MRR (PAID)" value={`$${totalMRR.toFixed(2)}`} color={totalMRR > 0 ? '#00ff41' : '#555'} />
+          <KPICard label="ARR (PAID)" value={`$${totalARR.toFixed(2)}`} color={totalARR > 0 ? '#00ff41' : '#555'} />
           <KPICard label="NET PROFIT/MO" value={`$${netProfit.toFixed(2)}`} color={netProfit > 0 ? '#00ff41' : '#ff4444'} />
           <KPICard label="TOTAL CLIENTS" value={String(clients.length)} color="#00ff41" />
+          <KPICard label="PAID CLIENTS" value={`${paidClientCount} / ${clients.length}`} color={paidClientCount > 0 ? '#00ff41' : '#888'} />
+          <KPICard label="BETA (FREE)" value={String(betaClientCount)} color="#ff00ff" />
           <KPICard label="TRAINER PAYOUT" value={`$${totalTrainerPayout.toFixed(2)}/mo`} color="#ffb800" />
           <KPICard label="API COST" value={`$${totalApiCost.toFixed(2)}/mo`} color="#ff4444" />
         </div>
@@ -440,7 +524,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
-                {['TIER', 'USERS', 'PRICE', 'MRR', 'TRAINER $', 'PLATFORM $', 'API COST', 'STRIPE', 'MARGIN'].map(h => (
+                {['TIER', 'USERS', 'PAID', 'PRICE', 'MRR', 'TRAINER $', 'PLATFORM $', 'API COST', 'STRIPE', 'MARGIN'].map(h => (
                   <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
                 ))}
               </tr>
@@ -450,17 +534,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                 const config = TIER_CONFIGS[tier];
                 const data = revenueByTier[tier];
                 const margin = data.mrr > 0 ? ((data.platformRevenue - data.apiCost - data.stripeFees - data.infraCost) / data.mrr * 100) : 0;
+                // Dim the all-zero rows so the eye lands on whichever tier
+                // has actual paid users (none today, but ready for when
+                // beta lifts).
+                const dim = data.paidCount === 0;
                 return (
-                  <tr key={tier} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <tr key={tier} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: dim ? 0.6 : 1 }}>
                     <td style={{ padding: '10px 8px', color: tierColor(tier), fontWeight: 700 }}>{config.codename}</td>
                     <td style={{ padding: '10px 8px', color: '#ddd' }}>{data.count}</td>
+                    <td style={{ padding: '10px 8px', color: data.paidCount > 0 ? '#00ff41' : '#555' }}>{data.paidCount}</td>
                     <td style={{ padding: '10px 8px', color: '#888' }}>${config.monthlyPrice}</td>
-                    <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.mrr.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#ffb800' }}>${data.trainerPayout.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.platformRevenue.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#ff4444' }}>${data.apiCost.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.mrr > 0 ? '#00ff41' : '#555' }}>${data.mrr.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.trainerPayout > 0 ? '#ffb800' : '#555' }}>${data.trainerPayout.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.platformRevenue > 0 ? '#00ff41' : '#555' }}>${data.platformRevenue.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.apiCost > 0 ? '#ff4444' : '#555' }}>${data.apiCost.toFixed(2)}</td>
                     <td style={{ padding: '10px 8px', color: '#888' }}>${data.stripeFees.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{margin.toFixed(1)}%</td>
+                    <td style={{ padding: '10px 8px', color: data.mrr === 0 ? '#555' : margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{data.mrr === 0 ? '—' : `${margin.toFixed(1)}%`}</td>
                   </tr>
                 );
               })}
@@ -488,18 +577,36 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                   <td style={{ padding: '10px 8px', color: '#888' }}>{row.messages}</td>
                   <td style={{ padding: '10px 8px', color: '#00ff41' }}>{row.estTokens.toLocaleString()}</td>
                   <td style={{ padding: '10px 8px', color: row.estCost > 10 ? '#ff4444' : '#00ff41' }}>${row.estCost.toFixed(2)}</td>
-                  <td style={{ padding: '10px 8px', color: row.status === 'VANGUARD' ? '#ff00ff' : row.status === 'BETA FREE' ? '#00ff41' : row.status === 'PROMO' ? '#ffb800' : '#888' }}>{row.status}</td>
+                  <td style={{
+                    padding: '10px 8px',
+                    color:
+                      row.status === 'PAID'       ? '#00ff41' :
+                      row.status === 'VANGUARD'   ? '#ff00ff' :
+                      row.status === 'BETA FREE'  ? '#00ff41' :
+                      row.status === 'PROMO'      ? '#ffb800' :
+                      row.status === 'NOT ACTIVE' ? '#ff4444' :
+                      '#888',
+                  }}>{row.status}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Trainer Revenue Breakdown */}
+        {/* Trainer Revenue Breakdown — DB-fresh via displayOperators
+            (the previous version used the stale `operators` prop, so a
+            newly-assigned client wouldn't show in the trainer's row
+            until the parent re-fetched). Only PAID clients contribute
+            to trainerMRR; the chip shows "X clients (Y paid)" so the
+            gap between cohort size and active payout is visible. */}
         <SectionHeader title="TRAINER PAYOUT BREAKDOWN" />
-        {operators.filter(op => op.role === 'trainer').map(trainer => {
-          const trainerClients = operators.filter(op => op.trainerId === trainer.id);
-          const trainerMRR = trainerClients.reduce((sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0), 0);
+        {displayOperators.filter(op => op.role === 'trainer').map(trainer => {
+          const trainerClients = displayOperators.filter(op => op.trainerId === trainer.id);
+          const paidTrainerClients = trainerClients.filter(isPayingClient);
+          const trainerMRR = paidTrainerClients.reduce(
+            (sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0),
+            0,
+          );
           return (
             <div key={trainer.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -507,30 +614,72 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
             }}>
               <div>
                 <span style={{ color: '#ddd', fontFamily: '"Chakra Petch", sans-serif', fontSize: '14px' }}>{trainer.callsign}</span>
-                <span style={{ color: '#555', fontSize: '12px', marginLeft: '8px' }}>({trainerClients.length} clients)</span>
+                <span style={{ color: '#555', fontSize: '12px', marginLeft: '8px' }}>
+                  ({trainerClients.length} clients · {paidTrainerClients.length} paid)
+                </span>
               </div>
-              <span style={{ color: '#ffb800', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px' }}>${trainerMRR.toFixed(2)}/mo</span>
+              <span style={{ color: trainerMRR > 0 ? '#ffb800' : '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px' }}>
+                ${trainerMRR.toFixed(2)}/mo
+              </span>
             </div>
           );
         })}
 
-        {/* Projections */}
-        <SectionHeader title="GROWTH PROJECTIONS" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          {[25, 50, 100, 250, 500].map(count => {
-            const avgRevPerUser = clients.length > 0 ? totalMRR / clients.length : 5;
-            const projected = count * avgRevPerUser;
-            return (
-              <div key={count} style={{
-                padding: '12px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)',
+        {/* Projections.
+            Two ARPU sources, picked by data availability:
+              1. ACTUAL ARPU = totalMRR / paidClientCount.
+                 Used once we have any paid users — that's our real
+                 conversion picture.
+              2. THEORETICAL ARPU = sum(monthlyPrice for current tier
+                 mix) / clients.length.
+                 Used during closed beta when paidClientCount is 0.
+                 Answers: "if every current operator converted to paid
+                 at their assigned tier, what would the cohort look
+                 like?" — useful for sizing pricing decisions.
+            The header label tells you which one is feeding the math
+            so the projections aren't read as a forecast they're not. */}
+        {(() => {
+          const actualARPU = paidClientCount > 0 ? totalMRR / paidClientCount : 0;
+          const theoreticalARPU = clients.length > 0
+            ? clients.reduce(
+                (sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.monthlyPrice || 0),
+                0,
+              ) / clients.length
+            : 0;
+          const projectionARPU = actualARPU > 0 ? actualARPU : theoreticalARPU;
+          const arpuSource = actualARPU > 0
+            ? `ACTUAL ARPU $${actualARPU.toFixed(2)} (paid clients)`
+            : `THEORETICAL ARPU $${theoreticalARPU.toFixed(2)} (current tier mix at full price)`;
+          return (
+            <>
+              <SectionHeader title="GROWTH PROJECTIONS" />
+              <div style={{
+                fontFamily: '"Share Tech Mono", monospace',
+                fontSize: '11px',
+                color: '#666',
+                marginBottom: '8px',
+                letterSpacing: '0.5px',
               }}>
-                <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{count} USERS</div>
-                <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700 }}>${projected.toFixed(0)}/mo</div>
-                <div style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>${(projected * 12).toFixed(0)}/yr</div>
+                {arpuSource}
+                {actualARPU === 0 && ' — assumes 100% conversion if beta lifted today'}
               </div>
-            );
-          })}
-        </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                {[25, 50, 100, 250, 500].map(count => {
+                  const projected = count * projectionARPU;
+                  return (
+                    <div key={count} style={{
+                      padding: '12px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)',
+                    }}>
+                      <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{count} USERS</div>
+                      <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700 }}>${projected.toFixed(0)}/mo</div>
+                      <div style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>${(projected * 12).toFixed(0)}/yr</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </div>
     );
   };
@@ -711,14 +860,62 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     );
   };
 
+  /**
+   * Flip the status of a single beta-feedback entry via PATCH. Optimistic —
+   * merge the new status into local feedbackOverrides immediately so the
+   * row re-renders, then call the server. On failure, the override is
+   * rolled back and we surface a console error (no toast system here yet).
+   */
+  const handleFeedbackStatusChange = async (id: string, next: FeedbackStatus, resolutionNote?: string) => {
+    setFeedbackOverrides(prev => ({ ...prev, [id]: next }));
+    try {
+      const res = await fetch('/api/beta-feedback', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({ id, status: next, resolutionNote }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('[OpsCenter:feedbackStatus] PATCH failed', err);
+        setFeedbackOverrides(prev => {
+          const copy = { ...prev };
+          delete copy[id];
+          return copy;
+        });
+      }
+    } catch (e) {
+      console.error('[OpsCenter:feedbackStatus] network error', e);
+      setFeedbackOverrides(prev => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+    }
+  };
+
   const renderBeta = () => {
     const betaOps = operators.map(op => ({
       ...op, createdAt: '', updatedAt: '',
     })).filter(op => op.betaUser);
 
-    const allFeedback = operators.flatMap(op =>
-      (op.betaFeedback || []).map(fb => ({ callsign: op.callsign, feedback: fb, tier: op.tier }))
-    );
+    // Parse betaFeedback (array of JSON strings) into typed entries. Skip
+    // malformed rows so one bad write doesn't blank the whole list.
+    const allFeedback: Array<ParsedFeedback & { tier: string }> = [];
+    for (const op of operators) {
+      if (!Array.isArray(op.betaFeedback)) continue;
+      for (const raw of op.betaFeedback) {
+        try {
+          const parsed = JSON.parse(raw) as ParsedFeedback;
+          if (parsed && typeof parsed === 'object' && parsed.id) {
+            // Apply the in-flight optimistic override if any.
+            if (feedbackOverrides[parsed.id]) parsed.status = feedbackOverrides[parsed.id];
+            allFeedback.push({ ...parsed, tier: op.tier });
+          }
+        } catch { /* malformed — skip */ }
+      }
+    }
+    // Newest first.
+    allFeedback.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     const dbBeta = metrics?.operators;
 
@@ -811,15 +1008,67 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
             No feedback submitted yet.
           </div>
         ) : (
-          allFeedback.map((fb, i) => (
-            <div key={i} style={{
-              padding: '12px 16px', marginBottom: '6px',
+          allFeedback.map((fb) => (
+            <div key={fb.id} style={{
+              padding: '12px 16px', marginBottom: '8px',
               background: 'rgba(0,255,65,0.03)', border: '1px solid rgba(0,255,65,0.08)',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ color: tierColor(fb.tier as AiTier), fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', fontWeight: 600 }}>{fb.callsign}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ color: tierColor(fb.tier as AiTier), fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', fontWeight: 600 }}>{fb.callsign}</span>
+                  <span style={{ color: '#888', fontSize: '11px', fontFamily: '"Share Tech Mono", monospace' }}>{fb.type}</span>
+                  <span style={{ color: '#888', fontSize: '11px', fontFamily: '"Share Tech Mono", monospace' }}>{fb.category}</span>
+                </div>
+                <span style={{
+                  color: STATUS_COLOR[fb.status] || '#888',
+                  border: `1px solid ${STATUS_COLOR[fb.status] || '#888'}40`,
+                  padding: '2px 8px',
+                  fontSize: '10px',
+                  fontFamily: '"Share Tech Mono", monospace',
+                  letterSpacing: '1px',
+                }}>{fb.status}</span>
               </div>
-              <div style={{ color: '#aaa', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.5' }}>{fb.feedback}</div>
+              <div style={{ color: '#ddd', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{fb.description}</div>
+              {fb.resolutionNote && (
+                <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(0,255,65,0.04)', borderLeft: '2px solid #00ff41', color: '#aaa', fontSize: '12px', fontFamily: '"Chakra Petch", sans-serif' }}>
+                  Resolution: {fb.resolutionNote}
+                </div>
+              )}
+              <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '10px', marginTop: '6px' }}>
+                {new Date(fb.timestamp).toLocaleString()}
+                {fb.resolvedAt && ` · resolved ${new Date(fb.resolvedAt).toLocaleDateString()}`}
+              </div>
+              {/* Admin status controls. OpsCenter is already gated to OPS_CENTER_ACCESS
+                  in the parent so the buttons are safe to render unconditionally here. */}
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {(['NEW', 'REVIEWING', 'FIXED', 'WONTFIX'] as FeedbackStatus[]).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      if (s === fb.status) return;
+                      const note = (s === 'FIXED' || s === 'WONTFIX')
+                        ? (window.prompt(`Optional resolution note for ${fb.callsign}'s ${fb.type}:`) || undefined)
+                        : undefined;
+                      handleFeedbackStatusChange(fb.id, s, note);
+                    }}
+                    disabled={s === fb.status}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '10px',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      letterSpacing: '1px',
+                      background: s === fb.status ? `${STATUS_COLOR[s]}20` : 'transparent',
+                      color: STATUS_COLOR[s],
+                      border: `1px solid ${STATUS_COLOR[s]}60`,
+                      cursor: s === fb.status ? 'default' : 'pointer',
+                      opacity: s === fb.status ? 0.5 : 1,
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           ))
         )}
@@ -829,15 +1078,21 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
 
   const renderMarketing = () => (
     <div style={{ padding: '20px' }}>
+      {/* MANUAL-MODE BANNER (May 2026) — until paid revenue arrives,
+          marketing posting is human-driven. The provider integration
+          (Buffer / Hootsuite / Publer) costs ~$12-30/mo + dev time
+          and isn't justified during closed beta. The cards below
+          stay visible so we have a checklist of what's coming and a
+          place to paste links once we wire it. */}
       <div style={{
-        background: 'rgba(255,184,0,0.05)', border: '1px solid rgba(255,184,0,0.12)',
+        background: 'rgba(255,140,0,0.06)', border: '1px solid rgba(255,140,0,0.25)',
         padding: '16px 20px', marginBottom: '24px',
       }}>
-        <div style={{ color: '#ffb800', fontFamily: '"Orbitron", sans-serif', fontSize: '13px', fontWeight: 700, letterSpacing: '2px', marginBottom: '8px' }}>
-          MARKETING COMMAND CENTER
+        <div style={{ color: '#ff8c00', fontFamily: '"Orbitron", sans-serif', fontSize: '13px', fontWeight: 700, letterSpacing: '2px', marginBottom: '8px' }}>
+          MARKETING — MANUAL MODE
         </div>
-        <div style={{ color: '#888', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.6' }}>
-          Centralized hub for scheduling and pushing content across all social platforms. Connect platform APIs below — the marketing agent will use these endpoints to publish content on your behalf.
+        <div style={{ color: '#bbb', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.6' }}>
+          Posting is manual during the closed beta. Platform integrations (one provider covering all six channels) ship once paid revenue justifies the ~$12-30/mo provider fee + dev time. For now, post directly from each platform&apos;s native app and use the cards below as a reference of what&apos;s on the roadmap.
         </div>
       </div>
 
@@ -977,11 +1232,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         </div>
       </div>
 
-      {/* Sub-tabs */}
+      {/* Sub-tabs.
+          Six buttons wrap into 2 rows on narrow viewports instead of
+          overflow-scrolling and getting clipped at the right edge
+          (the previous version used overflowX:auto with no visible
+          scroll indicator, so on mobile the sixth tab — ROADMAP —
+          looked like a permanently-cut-off "ROADMA"). Each button
+          has flex: 1 1 30% so three fit per row at ≤375px and they
+          distribute evenly when the strip is wider. The icon is
+          dropped on narrow viewports so the labels stay legible. */}
       <div style={{
-        display: 'flex', gap: '4px', padding: '10px 20px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '6px',
+        padding: '10px 16px',
         borderBottom: '1px solid rgba(255,68,68,0.06)',
-        background: 'rgba(255,0,0,0.01)', overflowX: 'auto',
+        background: 'rgba(255,0,0,0.01)',
       }}>
         {tabConfig.map(tab => {
           const isActive = activeTab === tab.id;
@@ -990,20 +1256,27 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
-                padding: '8px 16px', fontSize: '12px',
+                flex: '1 1 30%',
+                minWidth: 90,
+                padding: '8px 10px',
+                fontSize: '11px',
                 fontFamily: '"Share Tech Mono", monospace',
                 fontWeight: isActive ? 700 : 400,
-                letterSpacing: '1.5px',
+                letterSpacing: '1px',
                 color: isActive ? '#ff4444' : '#555',
                 background: isActive ? 'rgba(255,68,68,0.08)' : 'transparent',
-                border: `1px solid ${isActive ? 'rgba(255,68,68,0.2)' : 'transparent'}`,
+                border: `1px solid ${isActive ? 'rgba(255,68,68,0.2)' : 'rgba(255,255,255,0.04)'}`,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
               }}
             >
-              <span style={{ marginRight: 6, opacity: 0.7, display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}>
-                {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 13 })}
+              <span style={{ opacity: 0.7, display: 'inline-flex', alignItems: 'center' }}>
+                {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 12 })}
               </span>
               {tab.label}
             </button>

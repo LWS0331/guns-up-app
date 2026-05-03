@@ -11,7 +11,8 @@ import Icon, { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
 import UserSwitcher from '@/components/UserSwitcher';
-import LanguageToggle from '@/components/LanguageToggle';
+// LanguageToggle removed from AppShell — language now locks at
+// signup. Picker still lives on LoginScreen.
 import { useLanguage } from '@/lib/i18n';
 import COCDashboard from '@/components/COCDashboard';
 import Planner, { WorkoutModeState } from '@/components/Planner';
@@ -20,11 +21,13 @@ import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
 import JuniorIntakeForm from '@/components/JuniorIntakeForm';
 import ParentDashboard from '@/components/ParentDashboard';
+import DailyOps from '@/components/DailyOps';
+import { hasCommanderAccess } from '@/lib/tierGates';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { getParentJuniors } from '@/data/operators';
 import SitrepView from '@/components/SitrepView';
 import TacticalRadio from '@/components/TacticalRadio';
-import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
+import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext, stopSpeaking, onSpeechDone, offSpeechDone } from '@/lib/tts';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
 import { getAuthToken } from '@/lib/authClient';
@@ -37,6 +40,10 @@ import SocialFeed from '@/components/SocialFeed';
 import BetaFeedback from '@/components/BetaFeedback';
 import TrainerDashboard from '@/components/TrainerDashboard';
 import { TermsOfService, PrivacyPolicy } from '@/components/LegalPages';
+import WhatsNewModal from '@/components/WhatsNewModal';
+import PersonaPicker from '@/components/PersonaPicker';
+import type { Announcement, AnnouncementAction } from '@/data/announcements';
+import type { PersonaId } from '@/lib/personas';
 import { trackEvent, EVENTS } from '@/lib/analytics';
 import {
   requestNotificationPermission,
@@ -183,7 +190,61 @@ const AppShell: React.FC<AppShellProps> = ({
   onUpdateOperator,
   onLogout,
 }) => {
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
+
+  // ─── Language lock (May 2026) ───────────────────────────────────────
+  // Operators pick EN or ES at signup, and that choice is stored in
+  // operator.preferences.language. The in-app LanguageToggle has been
+  // hidden — switches require a support request.
+  //
+  // Three layers of resolution, in order of trust:
+  //   1. operator.preferences.language (server, source of truth)
+  //   2. localStorage (legacy beta operators who toggled via the old UI)
+  //   3. default 'en'
+  //
+  // For (2): we backfill the localStorage value into the operator
+  // record one time, so going forward the server is canonical and
+  // they survive device changes / cache wipes.
+  useEffect(() => {
+    const prefs = (currentUser.preferences || {}) as Record<string, unknown>;
+    const serverLang = prefs.language;
+    if (serverLang === 'en' || serverLang === 'es') {
+      if (serverLang !== language) setLanguage(serverLang);
+      return;
+    }
+    // No server preference yet — backfill from localStorage if present.
+    let lsLang: 'en' | 'es' | null = null;
+    try {
+      const v = localStorage.getItem('gunsup-language');
+      if (v === 'en' || v === 'es') lsLang = v;
+    } catch { /* localStorage unavailable */ }
+    const resolved: 'en' | 'es' = lsLang ?? 'en';
+    if (resolved !== language) setLanguage(resolved);
+    // Persist back to the operator record so future logins on any
+    // device honor this choice. Best-effort; silent failure is fine
+    // because localStorage continues to keep the client consistent.
+    (async () => {
+      try {
+        const token = getAuthToken();
+        await fetch(`/api/operators/${currentUser.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            preferences: { ...(currentUser.preferences || {}), language: resolved },
+          }),
+        });
+      } catch {
+        // Silent — backfill will retry on next login.
+      }
+    })();
+    // We intentionally only depend on operator id — preferences object
+    // identity changes on every render and would loop the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser.id]);
+
   // Check if intake is completed — 3-layer check: intake column, profile flag, localStorage backup
   const lsIntakeDone = (() => { try { return localStorage.getItem(`guns-up-intake-done-${currentUser.id}`) === 'true'; } catch { return false; } })();
   const intakeCompleted = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true || lsIntakeDone;
@@ -233,6 +294,14 @@ const AppShell: React.FC<AppShellProps> = ({
   const [pendingSitrep, setPendingSitrep] = useState<import('@/lib/types').Sitrep | null>(null);
   const [showNewPlanConfirm, setShowNewPlanConfirm] = useState(false);
 
+  // ─── What's New (standing shipping order) ────────────────────────────
+  // Fetch /api/announcements/current on mount. If an unseen entry comes
+  // back, render WhatsNewModal. CTA actions route through
+  // handleAnnouncementAction below — that's how `open_persona_picker`
+  // surfaces a full-screen PersonaPicker without modal nesting.
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [showStandalonePersonaPicker, setShowStandalonePersonaPicker] = useState(false);
+
   // Gunny AI panel state
   const [showGunnyPanel, setShowGunnyPanel] = useState(false);
   const [gunnyMessages, setGunnyMessages] = useState<ChatMessage[]>([]);
@@ -248,10 +317,27 @@ const AppShell: React.FC<AppShellProps> = ({
     if (typeof window === 'undefined') return true;
     return isTtsEnabled();
   });
+  // Index of the Gunny message in the side-panel chat that is
+  // currently being read aloud (or null if nothing is speaking).
+  // Drives the per-message HEAR IT / STOP button state.
+  const [panelSpeakingIdx, setPanelSpeakingIdx] = useState<number | null>(null);
   const [workoutModeState, setWorkoutModeState] = useState<WorkoutModeState>({ active: false, workoutTitle: '', exercises: [] });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
+  // Tracks whether AppShell.gunnyMessages has been hydrated from the
+  // DB for the current operator. Critical for preventing the
+  // chat-history wipe bug: sendGunnyVoiceMessage (called from
+  // Planner / DailyOps / WorkoutMode) appends to gunnyMessages, then
+  // the persistence effect PUTs the result to /api/chat — which uses
+  // upsert and overwrites the entire `messages` field. If
+  // gunnyMessages is still [] (because the floating panel hasn't been
+  // opened yet to trigger hydration), the PUT replaces full history
+  // with a 1- or 2-message array.
+  // The hydration effect below populates gunnyMessages on operator
+  // mount regardless of panel state, and the persistence effect
+  // gates on this ref so saves only fire after we've loaded.
+  const gunnyMessagesHydratedRef = useRef<string>(''); // operator id we've hydrated for
 
   // Initialize mounted state and responsive detection
   useEffect(() => {
@@ -268,6 +354,60 @@ const AppShell: React.FC<AppShellProps> = ({
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  // ─── What's New fetch on mount ──────────────────────────────────────
+  // Skip while intake is in progress so we don't stack a modal over a
+  // brand-new operator onboarding. Once intake clears, this runs.
+  useEffect(() => {
+    if (showIntake) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = getAuthToken();
+        const res = await fetch('/api/announcements/current', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.announcement) {
+          setAnnouncement(data.announcement as Announcement);
+        }
+      } catch {
+        // Silent — announcements are nice-to-have, not critical path.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showIntake, currentUser.id]);
+
+  // CTA action router. Keys must match the AnnouncementAction union in
+  // src/data/announcements.ts. WhatsNewModal already POSTs the dismiss
+  // before invoking this, so we just route to the right surface.
+  const handleAnnouncementAction = useCallback((action: AnnouncementAction) => {
+    switch (action) {
+      case 'open_persona_picker':
+        setShowStandalonePersonaPicker(true);
+        break;
+      case 'open_intake':
+        setShowIntake(true);
+        break;
+      case 'open_billing':
+        // Billing tab lives under ops center for now — drop into ops if
+        // this operator has access. OPS_CENTER_ACCESS is keyed by op id,
+        // not role. Non-admins fall through to dismiss-only.
+        if (OPS_CENTER_ACCESS.includes(currentUser.id)) {
+          setActiveTab('ops');
+        }
+        break;
+      case 'open_wearable_connect':
+        // Wearable hub is reached from Intel Center. Route there.
+        setActiveTab('intel');
+        break;
+      case 'dismiss_only':
+      default:
+        break;
+    }
+  }, [currentUser.id]);
 
   // ═══ Compliance Notification Engine ═══
   useEffect(() => {
@@ -389,6 +529,58 @@ const AppShell: React.FC<AppShellProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [gunnyMessages, gunnyLoading]);
 
+  // ──────────────────────────────────────────────────────────────────────
+  // EARLY HYDRATION — populate gunnyMessages from DB on operator mount
+  // regardless of whether the floating panel is open. Phase 2 fix for
+  // the chat-history wipe bug surfaced by the Daily Ops "Generate
+  // today's plan" CTA: sendGunnyVoiceMessage appends to gunnyMessages
+  // and the persistence effect PUTs the result to /api/chat (which
+  // upserts and replaces the entire `messages` array). Without this
+  // hydration, sendGunnyVoiceMessage triggered from anywhere OTHER
+  // than the floating panel (Planner voice, DailyOps "Generate", etc.)
+  // appended to an empty array → the persistence PUT wiped all prior
+  // history.
+  // The panel-init effect below still runs for panel-specific setup
+  // (greeting fallback, gunnyGreeted flag) but gunnyMessages itself
+  // is already populated by this earlier effect.
+  // ──────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (gunnyMessagesHydratedRef.current === selectedOperator.id) return;
+    const opId = selectedOperator.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/chat?operatorId=${opId}&chatType=gunny-tab`,
+          { headers: { Authorization: `Bearer ${getAuthToken()}` } },
+        );
+        if (!res.ok) {
+          // Mark hydrated anyway so the persistence effect can run for
+          // truly-new operators (no chat history yet). Failing closed
+          // here would leave new operators unable to save their first
+          // message, which is worse than the original bug.
+          if (!cancelled) gunnyMessagesHydratedRef.current = opId;
+          return;
+        }
+        const data = await res.json();
+        const msgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
+        if (cancelled) return;
+        if (msgs.length > 0) {
+          // Set state ONLY when we have content. If the DB returned
+          // empty, leave gunnyMessages alone — the panel-init effect
+          // may set a greeting later.
+          setGunnyMessages(msgs);
+        }
+        gunnyMessagesHydratedRef.current = opId;
+      } catch {
+        if (!cancelled) gunnyMessagesHydratedRef.current = opId;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOperator.id]);
+
   // Load saved panel chat or generate greeting when panel opens.
   //
   // ─── ARCHITECTURE NOTE ────────────────────────────────────────────────
@@ -493,7 +685,10 @@ const AppShell: React.FC<AppShellProps> = ({
             body: JSON.stringify({ operatorId: opId, chatType: CANONICAL_TYPE, messages: canonical }),
           }).catch(() => {});
           // Clear legacy thread so a stale client can't pull it again.
-          fetch('/api/chat', {
+          // ?force=true bypasses the shrink-guard added May 2026 — this
+          // is an INTENTIONAL clear (legacy thread already merged into
+          // canonical above), not the wipe pattern the guard prevents.
+          fetch('/api/chat?force=true', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
             body: JSON.stringify({ operatorId: opId, chatType: LEGACY_TYPE, messages: [] }),
@@ -561,6 +756,16 @@ const AppShell: React.FC<AppShellProps> = ({
 
   useEffect(() => {
     if (gunnyMessages.length === 0) return;
+
+    // CRITICAL: never PUT to /api/chat before we've hydrated from the
+    // DB for this operator. Without this gate, the very first append
+    // to gunnyMessages (from sendGunnyVoiceMessage) would trigger a
+    // PUT that overwrites the entire messages JSON column with a
+    // 1- or 2-message array — wiping all prior history. The
+    // hydration ref is set by the EARLY HYDRATION effect above (or
+    // by a confirmed empty-fetch for new operators); until that
+    // ref matches the current operator, defer all persistence.
+    if (gunnyMessagesHydratedRef.current !== selectedOperator.id) return;
 
     // Content-aware signature catches text mutations, not just array length changes.
     const snapshot = gunnyMessages
@@ -939,6 +1144,50 @@ const AppShell: React.FC<AppShellProps> = ({
     if (gunnyTtsEnabled) gunnySpeak(text);
   };
 
+  // Subscribe to lib/tts queue-empty so the panel HEAR IT button
+  // flips back from STOP when audio finishes naturally OR when
+  // stopSpeaking() runs. Replaces the prior 600ms DOM polling
+  // which was unreliable for OpenAI TTS audio (those Audio
+  // elements aren't attached to the DOM, so the poll thought
+  // playback was done while the audio kept playing).
+  useEffect(() => {
+    const cb = () => setPanelSpeakingIdx(null);
+    onSpeechDone(cb);
+    return () => offSpeechDone(cb);
+  }, []);
+
+  // Per-message playback for the side-panel chat. Tap once → Gunny
+  // reads it aloud; tap the SAME button again → stop. Tapping a
+  // different message stops the prior one and starts the new one.
+  // Bypasses the global TTS-mute flag (the user explicitly asked to
+  // hear THIS message). Always user-initiated, so it survives iOS
+  // Safari's autoplay block.
+  const playPanelMessage = useCallback((idx: number, text: string) => {
+    if (!text || !text.trim()) return;
+    if (panelSpeakingIdx === idx) {
+      stopSpeaking();
+      // setPanelSpeakingIdx(null) fires via the onSpeechDone hook above.
+      return;
+    }
+    stopSpeaking();
+    unlockAudioContext();
+    const wasMuted = !isTtsEnabled();
+    if (wasMuted) setTtsEnabledGlobal(true);
+    setPanelSpeakingIdx(idx);
+    gunnySpeak(text).catch((err) =>
+      console.warn('[appshell] panel play-message failed:', err),
+    );
+    if (wasMuted) {
+      // Restore mute once playback actually finishes (not when
+      // gunnySpeak resolves — that happens at request-queue time).
+      const restore = () => {
+        setTtsEnabledGlobal(false);
+        offSpeechDone(restore);
+      };
+      onSpeechDone(restore);
+    }
+  }, [panelSpeakingIdx]);
+
   const toggleGunnyTts = () => {
     const next = !gunnyTtsEnabled;
     setTtsEnabledGlobal(next); // persists + broadcasts via onTtsEnabledChange
@@ -1233,9 +1482,21 @@ const AppShell: React.FC<AppShellProps> = ({
       const current = workingOp.workouts?.[today];
       if (!current) continue;
       try {
-        const modified = applyWorkoutModification(current, mod);
-        workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-        touched = true;
+        // Unwrap the new return shape — silent no-ops are surfaced
+        // via result.changed so the caller can decide whether to
+        // persist anything. Without this branch we'd persist the
+        // unchanged workout reference, which is harmless but
+        // generates noise re-renders.
+        const result = applyWorkoutModification(current, mod);
+        if (result.changed) {
+          workingOp = {
+            ...workingOp,
+            workouts: { ...workingOp.workouts, [today]: result.workout },
+          };
+          touched = true;
+        } else {
+          console.warn('[gunny-mod:appshell] no-op:', result.reason, mod);
+        }
       } catch (e) {
         console.error('applyWorkoutModification failed:', e);
       }
@@ -1511,8 +1772,26 @@ const AppShell: React.FC<AppShellProps> = ({
   // Conditionally add OPS tab for trainers and admins.
   const isTrainerOrAdmin = OPS_CENTER_ACCESS.includes(currentUser.id) || currentUser.role === 'trainer';
 
+  // Daily Ops tab — Commander-tier (opus / white_glove) feature.
+  // For junior operators viewing their own surface we surface it
+  // anyway and let the DailyOps component handle the "awaiting parent"
+  // state; for adult viewers it surfaces only when they themselves
+  // hold Commander access. Trainers/admins see it for any operator
+  // they're viewing because they sit above the tier gate.
+  const showDailyOps =
+    isTrainerOrAdmin ||
+    currentSelectedOp.isJunior ||
+    hasCommanderAccess({
+      id: currentSelectedOp.id,
+      tier: currentSelectedOp.tier ?? undefined,
+      role: currentSelectedOp.role,
+    });
+
   const tabs: typeof baseTabs = [
     ...baseTabs,
+    ...(showDailyOps
+      ? [{ id: 'daily_ops' as AppTab, label: t('nav.daily_ops_short') || 'OPS DAY', labelKey: 'nav.daily_ops_short', icon: <Icon.Clock /> }]
+      : []),
     ...(showParentHub
       ? [{ id: 'parent_hub' as AppTab, label: t('nav.parent_hub_short'), labelKey: 'nav.parent_hub_short', icon: <Icon.Target /> }]
       : []),
@@ -1665,6 +1944,20 @@ const AppShell: React.FC<AppShellProps> = ({
         );
       case 'planner':
         return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setActiveTab('gunny')} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} onWorkoutSaved={() => setActiveTab('planner')} />;
+      case 'daily_ops':
+        // Daily Ops Planner — Gunny's prescribed daily-schedule.
+        // Sister surface to Planner; bridges to GunnyChat via
+        // onSendGunnyMessage so "Generate today's plan" tap routes
+        // through the chat channel that owns the LLM call.
+        return (
+          <DailyOps
+            operator={currentSelectedOp}
+            onSendGunnyMessage={(prompt) => {
+              setActiveTab('gunny');
+              sendGunnyVoiceMessage(prompt);
+            }}
+          />
+        );
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'radio':
@@ -1690,35 +1983,47 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'ops':
         // Trainer-specific view
         if (currentUser.role === 'trainer') {
+          // The two-button toggle (MY CLIENTS / COMMAND CENTER) was
+          // clipping behind the topbar on mobile because the buttons
+          // were sized as full bracket-card chrome (.btn-primary /
+          // .btn-ghost render at ~44px tall with 14px+ padding) and
+          // the row sat flush against the AppShell header.
+          //
+          // Mobile fix: smaller pill segmented control, equal-width
+          // splits, tighter padding. Desktop keeps the spacious
+          // version. The toggle is also Command-Center-only (admins),
+          // so non-admins skip the toggle entirely.
+          const hasCommandCenter = OPS_CENTER_ACCESS.includes(currentUser.id);
           return (
             <div>
-              {/* Sub-tab toggle for trainers */}
-              <div style={{
-                display: 'flex',
-                gap: '10px',
-                padding: '14px 18px',
-                borderBottom: '1px solid var(--border-green-soft)',
-                background: 'var(--bg-card)',
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowTrainerDashboard(false)}
-                  className={`btn btn-sm ${!showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
-                >
-                  My Clients
-                </button>
-                {OPS_CENTER_ACCESS.includes(currentUser.id) && (
+              {hasCommandCenter && (
+                <div style={{
+                  display: 'flex',
+                  gap: isMobile ? '6px' : '10px',
+                  padding: isMobile ? '8px 12px' : '14px 18px',
+                  borderBottom: '1px solid var(--border-green-soft)',
+                  background: 'var(--bg-card)',
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowTrainerDashboard(false)}
+                    className={`btn ${isMobile ? 'btn-xs' : 'btn-sm'} ${!showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ flex: 1, minHeight: isMobile ? 32 : 40, fontSize: isMobile ? 11 : 13 }}
+                  >
+                    {isMobile ? 'CLIENTS' : 'My Clients'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setShowTrainerDashboard(true)}
-                    className={`btn btn-sm ${showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    className={`btn ${isMobile ? 'btn-xs' : 'btn-sm'} ${showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ flex: 1, minHeight: isMobile ? 32 : 40, fontSize: isMobile ? 11 : 13 }}
                   >
-                    Command Center
+                    {isMobile ? 'COMMAND' : 'Command Center'}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
               {/* Content */}
-              {showTrainerDashboard && OPS_CENTER_ACCESS.includes(currentUser.id) ? (
+              {showTrainerDashboard && hasCommandCenter ? (
                 <OpsCenter currentUser={currentUser} operators={operators} />
               ) : (
                 <TrainerDashboard trainer={currentUser} allOperators={operators} onUpdateOperator={onUpdateOperator} />
@@ -1805,6 +2110,33 @@ const AppShell: React.FC<AppShellProps> = ({
               </div>
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Standalone PersonaPicker takeover ──────────────────────────────
+  // Triggered by the What's New modal CTA `open_persona_picker`. Renders
+  // as a full-screen page that writes the operator's choice and exits.
+  // Intentionally placed BEFORE the intake check so a mid-onboarding
+  // takeover doesn't happen — intake always wins.
+  if (showStandalonePersonaPicker && !showIntake) {
+    return (
+      <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
+        <DataRain />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <PersonaPicker
+            currentPersonaId={(currentUser.personaId as PersonaId | undefined) ?? 'gunny'}
+            operatorAge={currentUser.profile?.age}
+            operatorFitnessLevel={currentUser.intake?.fitnessLevel}
+            mode="standalone"
+            onBack={() => setShowStandalonePersonaPicker(false)}
+            onSelectPersona={(id) => {
+              const updated: Operator = { ...currentUser, personaId: id };
+              onUpdateOperator(updated, true);
+              setShowStandalonePersonaPicker(false);
+            }}
+          />
         </div>
       </div>
     );
@@ -2316,9 +2648,11 @@ const AppShell: React.FC<AppShellProps> = ({
           })}
         </nav>
 
-        {/* Right: Language Toggle + User Switcher (desktop) */}
+        {/* Right: User Switcher (desktop). The EN/ES toggle was
+            removed in May 2026 — language is now locked at signup
+            and switches require a support request. The picker still
+            lives on the LoginScreen. */}
         <div className="desktop-user-switcher" style={{ minWidth: '280px', display: 'flex', justifyContent: 'flex-end', gap: '16px', alignItems: 'center' }}>
-          <LanguageToggle compact={true} />
           <UserSwitcher
             currentUser={currentUser}
             accessibleUsers={accessibleUsers}
@@ -2328,16 +2662,13 @@ const AppShell: React.FC<AppShellProps> = ({
           />
         </div>
 
-        {/* Mobile: compact language toggle + user switcher.
-            Previously only the user switcher rendered here, so the
-            EN/ES toggle was invisible on mobile (hidden inside the
-            desktop-only block above). That made the bilingual claim
-            literally invisible on the surface where 80%+ of operators
-            actually use the app. Toggle is small (compact={true})
-            and sits flush-right next to the callsign chip. */}
+        {/* Mobile: user switcher only.
+            The compact EN/ES toggle that used to live here was
+            removed in May 2026 (language locks at signup; switches
+            go through support). LoginScreen still surfaces the
+            picker pre-signup. */}
         {isMobile && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <LanguageToggle compact={true} />
             <UserSwitcher
               currentUser={currentUser}
               accessibleUsers={accessibleUsers}
@@ -2396,26 +2727,51 @@ const AppShell: React.FC<AppShellProps> = ({
           and the active top-pip indicator all live in CSS now. We keep the
           icon glyph + label structure but reorder so Gunny sits in the
           center with the special halo treatment per the handoff. */}
-      <nav className="ds-tabbar bottom-nav">
+      <nav className={`ds-tabbar bottom-nav${(() => {
+        // Compute six-column flag synchronously so the parent gets the
+        // right grid template before children render. Six columns
+        // appear when the operator has BOTH a power-tab (ops or
+        // parent_hub) AND daily_ops — typical for admins/trainers who
+        // are also Commander-tier (e.g. founders testing the feature).
+        const ids = new Set(tabs.map(t => t.id));
+        const hasPowerTab = ids.has('ops') || ids.has('parent_hub');
+        const hasDailyOps = ids.has('daily_ops');
+        return hasPowerTab && hasDailyOps ? ' six-col' : '';
+      })()}`}>
         {(() => {
-          // Reorder for the 5-slot mobile grid: Gunny lives in the
-          // visually-anchored center slot. Build the row dynamically so
-          // 4-tab (regular user) and 5-tab (admin/trainer) cases both
-          // produce a 5-col grid with Gunny centered.
+          // Reorder for the mobile grid: Gunny stays in the
+          // visually-anchored center slot. We build a 5-slot row for
+          // the common case and a 6-slot row when both Daily Ops AND
+          // a power tab (OPS / PARENT_HUB) need to coexist — e.g. a
+          // founder/admin who's also Commander-tier and wants both
+          // surfaces at thumb-reach.
           //
-          // Layout target: [coc] [planner] [GUNNY] [intel] [ops?|parent_hub?]
-          // For 4-tab users, the 5th slot stays empty; the grid keeps
-          // Gunny visually centered. The 5th slot is OPS for trainers/admins
-          // OR PARENT HUB for parents with linked juniors (mutually
-          // exclusive in practice — trainers with juniors see OPS).
+          // Layout (5-col):  [coc] [planner] [GUNNY] [intel] [daily_ops|ops|parent_hub]
+          // Layout (6-col):  [coc] [planner] [GUNNY] [intel] [daily_ops] [ops|parent_hub]
           const byId = new Map(tabs.map(t => [t.id, t] as const));
-          const slots: (typeof tabs[number] | null)[] = [
-            byId.get('coc') ?? null,
-            byId.get('planner') ?? null,
-            byId.get('gunny') ?? null,
-            byId.get('intel') ?? null,
-            byId.get('ops') ?? byId.get('parent_hub') ?? null,
-          ];
+          const dailyOps = byId.get('daily_ops') ?? null;
+          const powerTab = byId.get('ops') ?? byId.get('parent_hub') ?? null;
+          const sixCol = !!dailyOps && !!powerTab;
+          const slots: (typeof tabs[number] | null)[] = sixCol
+            ? [
+                byId.get('coc') ?? null,
+                byId.get('planner') ?? null,
+                byId.get('gunny') ?? null,
+                byId.get('intel') ?? null,
+                dailyOps,
+                powerTab,
+              ]
+            : [
+                byId.get('coc') ?? null,
+                byId.get('planner') ?? null,
+                byId.get('gunny') ?? null,
+                byId.get('intel') ?? null,
+                // 5-col fallback priority: daily_ops first (the
+                // user-facing daily-rhythm surface), then power tabs.
+                // Non-admin Commanders get Daily Ops here. Non-Commander
+                // trainers/admins (no Daily Ops in tabs) get OPS here.
+                dailyOps ?? powerTab,
+              ];
           return slots.map((tab, idx) => {
             if (!tab) {
               // Empty grid cell — preserves 5-col layout for 4-tab users.
@@ -2543,6 +2899,57 @@ const AppShell: React.FC<AppShellProps> = ({
                 className={`gunny-message ${msg.role}`}
               >
                 {msg.role === 'gunny' ? <GunnyMarkdown text={msg.text} accent="#ffb800" /> : msg.text}
+                {/* Per-message HEAR IT button — Gunny messages only.
+                    User-initiated playback bypasses iOS autoplay
+                    blocks AND the global TTS mute (so users who
+                    silenced auto-speak can still hear specific
+                    responses on demand). */}
+                {msg.role === 'gunny' && msg.text && msg.text.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playPanelMessage(idx, msg.text);
+                    }}
+                    aria-label={
+                      panelSpeakingIdx === idx
+                        ? 'Stop reading message'
+                        : 'Read message aloud'
+                    }
+                    title={
+                      panelSpeakingIdx === idx
+                        ? 'Stop'
+                        : 'Hear Gunny say this'
+                    }
+                    style={{
+                      marginTop: 8,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      background: panelSpeakingIdx === idx
+                        ? 'rgba(255,140,0,0.18)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${
+                        panelSpeakingIdx === idx
+                          ? 'rgba(255,140,0,0.6)'
+                          : 'rgba(255,140,0,0.2)'
+                      }`,
+                      color: panelSpeakingIdx === idx ? '#ffb800' : 'rgba(255,184,0,0.7)',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      padding: '3px 8px',
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      transition: 'all 0.15s ease',
+                      boxShadow: panelSpeakingIdx === idx
+                        ? '0 0 8px rgba(255,140,0,0.25)'
+                        : 'none',
+                    }}
+                  >
+                    {panelSpeakingIdx === idx ? '◼ STOP' : '▶ HEAR IT'}
+                  </button>
+                )}
               </div>
             ))}
             {gunnyLoading && (
@@ -2591,6 +2998,18 @@ const AppShell: React.FC<AppShellProps> = ({
       {/* Legal Pages Overlays */}
       {showTOS && <TermsOfService onClose={() => setShowTOS(false)} />}
       {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
+
+      {/* What's New — first-login alert per the standing shipping order.
+          The modal fires server-side dismiss before close, then routes
+          the CTA action through handleAnnouncementAction (which can
+          surface the standalone PersonaPicker, intake flow, etc.). */}
+      {announcement && (
+        <WhatsNewModal
+          announcement={announcement}
+          onClose={() => setAnnouncement(null)}
+          onActionClick={handleAnnouncementAction}
+        />
+      )}
 
       {/* Classification Bar */}
       <div className="classification-bar" style={{ pointerEvents: 'auto', justifyContent: 'space-between', padding: '0 12px' }}>

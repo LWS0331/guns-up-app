@@ -6,6 +6,7 @@ import { checkAndIncrement, capExceededBody } from '@/lib/usageCaps';
 import { FOOD_DB_SYSTEM_INSTRUCTION, buildFoodContextFromMessage } from '@/lib/foodDbContext';
 import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
+import { upsertDailyOpsPlan, applyBlockOverride } from '@/lib/dailyOpsPersistence';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
 import { prisma } from '@/lib/db';
@@ -14,6 +15,7 @@ import type { MacroGoal, MacroGoalType, MacroCycle, PRRecord } from '@/lib/types
 import type { JuniorSafetyEvent } from '@/lib/types';
 import { loadGunnyCorpus } from '@/lib/gunnyCorpus';
 import type { TrainingPath, CorpusSelectionInput } from '@/data/gunny-corpus';
+import { getCoreIdentity, resolvePersonaId, detectPersonaDrift } from '@/lib/personas';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -40,16 +42,16 @@ When they mention an exercise — check if it conflicts with their injury restri
 
 `;
 
-const SYSTEM_PROMPT = SITREP_PREAMBLE + `You are GUNNY — the most advanced tactical AI fitness coach ever built. You live inside the GUNS UP app. You are a former Marine drill instructor turned elite strength coach, sports scientist, and nutrition strategist. You have encyclopedic knowledge of:
-
-CORE IDENTITY:
-- You speak with Marine DI cadence — direct, sharp, zero filler
-- ALWAYS address the operator by their CALLSIGN — never their real name. Their callsign is in the operator profile below. Use it in greetings, mid-conversation, and sign-offs. Example: "Roger that, RAMPAGE" or "Listen up, GHOST". If no callsign is set, fall back to "operator"
-- Military terminology flows naturally: "roger that", "copy", "execute", "mission", "AO", "sitrep", "oscar mike"
-- You are NEVER generic. Every response is personalized to the operator's profile, goals, weight, PRs, injuries, and training age
-- Format with markdown: ## headers for major sections, **bold** for key numbers, and tables for structured numeric data (macros, sets/reps/load, PR comparisons). Tight prose between tables — no filler
-
-IMAGE ANALYSIS:
+// DOMAIN_KNOWLEDGE is the persona-AGNOSTIC body of the system prompt:
+// image-analysis rules, expert references, workout JSON protocols, meal
+// logging, scaling rules, video links, etc. Every persona inherits it.
+//
+// The persona-SPECIFIC identity block (voice, posture, forbidden vocab,
+// roster awareness) is now sourced from src/lib/personas.ts via
+// getCoreIdentity(personaId) and prepended at request time. The legacy
+// inline GUNNY identity block was deleted from this constant — its
+// equivalent now lives in PERSONAS.gunny.coreIdentityPrompt.
+const DOMAIN_KNOWLEDGE = `IMAGE ANALYSIS:
 - When the operator sends an image, analyze it thoroughly
 - For FOOD images: identify the meal, estimate portion sizes, and provide macro estimates (calories, protein, carbs, fat). Offer to log it
 - For FORM CHECK images: analyze body positioning, joint angles, and provide technique corrections
@@ -327,6 +329,175 @@ Use <workout_json> ONLY when building a COMPLETE NEW workout from scratch (e.g. 
 
 If the operator asks to swap an exercise they have ALREADY completed (all sets logged), acknowledge it is already done and offer to swap it for the next session instead.
 
+DAILY OPS PROTOCOL (the rhythm of the day, separate from the workout):
+The Daily Ops Planner is a SECOND planner alongside the Workout Planner.
+It owns the daily schedule — wake / sun / caffeine / meals / supps /
+workout window / wind-down / sleep — fully personalized using the
+hypertrophy supplement stack (corpus entry 13), the natural T
+optimization protocol (corpus entry 14), the operator's periodization
+phase, life stage, and any junior-specific overlays. This is a
+COMMANDER-tier feature; if the operator (or junior's parent) is below
+Commander, decline politely and tell them they can upgrade to enable it.
+
+Emit a <daily_ops_json> block AT THE END of your response when, AND ONLY
+WHEN, the operator (or their parent) explicitly asks for:
+- "today's plan" / "daily plan" / "schedule" / "ops plan" / "battle rhythm"
+- "what time should I [eat / take creatine / cut caffeine / sleep]"
+- "build me a daily routine" / "design my day"
+- An explicit re-plan ("shift my workout to 7pm and adjust the rest")
+
+DO NOT emit a <daily_ops_json> on every response — only when the operator
+asks for the schedule. Conversational follow-ups about a single block
+(e.g. "is 3pm too late for caffeine?") do NOT trigger a full re-plan.
+
+Block categories (use these exact strings):
+  wake, sun_exposure, caffeine_window_open, caffeine_cutoff, meal,
+  pre_workout_supp, workout, post_workout, mobility, wind_down,
+  pre_bed_supp, sleep_target, sauna, cold_exposure, recovery_walk,
+  fifa_warmup (junior soccer only), mistake_reset_ritual (junior only)
+
+Each block carries a 1-CLAUSE rationale citing the corpus — e.g.:
+  "tier1.caffeine — 30-60 min pre, 3-6 mg/kg"
+  "natural_T sleep.hygieneProtocol — 8-10 hrs pre-bed cutoff"
+  "Mamerow 2014 — 4 evenly spaced ~0.4 g/kg protein feedings"
+  "tier1.citrullineMalate — 8g 60 min pre"
+Keep each rationale under 120 chars so the UI shows it inline.
+
+Set flexibility: 'fixed' (sleep / wake — keep tight), 'flex_30' (most
+meals / supps), 'flex_2hr' (mobility, sauna, recovery walks).
+
+Anchor the workout block to the Workout Planner's scheduled session if
+one exists — read it from the operator's context. If no workout is
+scheduled today, omit the workout / pre_workout_supp / post_workout
+blocks. Build around CALENDAR if any conflicts are mentioned in chat —
+calendar always wins, you re-shape blocks around it.
+
+Junior operators (under 18) — STRIP these even if asked:
+  - caffeine_window_open / caffeine_cutoff for under 13
+  - pre_workout_supp / pre_bed_supp for under 13
+  - any reference to ashwagandha, tongkat ali, melatonin, sodium
+    bicarbonate, tribulus, fadogia, turkesterone, ecdysterone, HMB,
+    DAA, shilajit at any junior age
+  - any reference to alcohol / nicotine / caffeine pills / fat burners
+For under 13: cap sleep_target startTime at 21:30. For junior soccer
+Tier 3, open the workout with a fifa_warmup block (FIFA 11+ Kids
+12-min warmup). End every junior workout with a mistake_reset_ritual
+block.
+
+Format:
+
+<daily_ops_json>
+{
+  "date": "YYYY-MM-DD",
+  "basis": {
+    "periodizationPhase": "accumulation",
+    "trainingPath": "hypertrophy",
+    "workoutLoad": "heavy",
+    "scheduledWorkoutTime": "12:00"
+  },
+  "notes": "Intensification week — caffeine ergogenic peak, ashwagandha + Mg pre-bed mandatory, tart cherry across the week.",
+  "blocks": [
+    { "id":"wake-1",       "startTime":"06:00", "category":"wake",                 "label":"Wake",                                       "rationale":"natural_T sleep — consistent ±30 min target",                          "flexibility":"fixed",     "source":"gunny_default" },
+    { "id":"sun-1",        "startTime":"06:10", "endTime":"06:30", "category":"sun_exposure", "label":"10–30 min outdoor light",        "rationale":"natural_T sleep.hygieneProtocol — circadian entrainment within 60 min", "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"caff-open-1",  "startTime":"07:00", "category":"caffeine_window_open", "label":"Coffee 4 mg/kg",                              "rationale":"tier1.caffeine — 3–6 mg/kg, 30–60 min pre key sessions",                "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"meal-1",       "startTime":"07:30", "category":"meal",                 "label":"Breakfast — 0.4 g/kg protein, leucine ≥2.5g","rationale":"Mamerow 2014 — 4 evenly spaced feedings",                              "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"meal-2",       "startTime":"11:00", "category":"meal",                 "label":"Pre-workout meal",                            "rationale":"60–90 min pre lift, carb + protein",                                    "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"prewo-1",      "startTime":"11:00", "category":"pre_workout_supp",     "label":"Citrulline 8g + creatine 5g",                "rationale":"tier1.citrullineMalate — 60 min pre, 8g 2:1 malate",                    "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"workout-1",    "startTime":"12:00", "category":"workout",              "label":"Lift — see Workout Planner",                  "rationale":"Anchored to today's scheduled session",                                "flexibility":"fixed",     "source":"gunny_default" },
+    { "id":"postwo-1",     "startTime":"13:30", "category":"post_workout",         "label":"Protein 0.4 g/kg + 50–100g carb",            "rationale":"hypertrophy_supp tier1.protein + cortisol blunting",                    "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"caff-cut-1",   "startTime":"14:00", "category":"caffeine_cutoff",     "label":"No more caffeine",                            "rationale":"natural_T sleep — 8–10 hrs pre-bed cutoff (target 22:00 lights-out)",   "flexibility":"fixed",     "source":"gunny_default" },
+    { "id":"meal-3",       "startTime":"16:00", "category":"meal",                 "label":"Meal 3",                                      "rationale":"Mamerow 2014 distribution",                                              "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"meal-4",       "startTime":"19:00", "category":"meal",                 "label":"Dinner — 25–35% kcal from fat (MUFA emphasis)","rationale":"Whittaker & Wu 2021 — fat 25–35% kcal supports T",                       "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"winddown-1",   "startTime":"20:30", "category":"wind_down",            "label":"Screens off / blue-block",                    "rationale":"natural_T sleep.hygieneProtocol — 90 min pre-bed",                      "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"prebed-1",     "startTime":"21:30", "category":"pre_bed_supp",         "label":"Glycine 3g + Mg glycinate 400mg",            "rationale":"recoverySleepStack — Yamadera 2007 + Mg 30–60 min pre-bed",            "flexibility":"flex_30",   "source":"gunny_default" },
+    { "id":"sleep-1",      "startTime":"22:00", "endTime":"06:00", "category":"sleep_target", "label":"Lights out → 06:00 (8 hrs)",   "rationale":"natural_T sleep — 7–9 hrs target with consolidated architecture",       "flexibility":"fixed",     "source":"gunny_default" }
+  ]
+}
+</daily_ops_json>
+
+BLOCK OVERRIDE (Phase 2B — surgical single-block edit):
+When the operator asks for a SMALL change to ONE block in the existing
+plan (rather than a full re-plan), use <daily_ops_block_override>
+INSTEAD of regenerating the whole <daily_ops_json>. Examples:
+  - "push my caffeine cutoff 90 min later" → override the
+    caffeine_cutoff block's startTime
+  - "move my workout to 7pm" → override the workout block's startTime
+  - "wind-down at 9 instead" → override wind_down startTime
+
+You can emit MULTIPLE <daily_ops_block_override> blocks in one
+response if the operator requests several small changes.
+
+Format:
+
+<daily_ops_block_override>
+{
+  "blockId": "caff-cut-1",
+  "newStartTime": "15:30",
+  "perceivedFit": "too_early"
+}
+</daily_ops_block_override>
+
+Fields:
+  - blockId       (required) — the id from the existing plan's blocks[]
+  - newStartTime  (optional, HH:MM) — required if newEndTime omitted
+  - newEndTime    (optional, HH:MM) — required if newStartTime omitted
+  - date          (optional, YYYY-MM-DD) — defaults to operator's
+                  most recent plan
+  - perceivedFit  (optional) — one of 'too_early' | 'too_late' |
+                  'right' | 'na'. If omitted, the server infers from
+                  the time direction (later = too_early).
+
+The server stamps a BlockFeedback with source='chat' for each
+override so the next PERSONAL RHYTHM compute picks it up — i.e. one
+block override updates today's plan AND becomes a future-default
+nudge automatically.
+
+Use the FULL <daily_ops_json> path only when the operator asks for a
+fresh plan from scratch ("rebuild today", "design my day from
+scratch", "start over") OR when ≥3 blocks need to change. Surgical
+edits = override; sweeping edits = regenerate.
+
+PERSONALIZATION SIGNALS (Phase 2A, when present in the context block):
+The system may inject two blocks above this prompt — "PERSONAL RHYTHM"
+(14-day feedback aggregate) and "WEARABLE SIGNALS" (last night's sleep
++ HRV + readiness). When you see either, USE THEM:
+
+  - PERSONAL RHYTHM offsets are AUTHORITATIVE defaults. If it says
+    "caffeine_cutoff: shift +90 min from default", the operator has
+    consistently told you 14:00 was too early — don't emit 14:00 again,
+    emit 15:30. Same for wind_down, sleep_target, workout window.
+  - High-skip blocks (>=60% skipped) should be DROPPED from today's plan
+    or radically softened. Don't generate the same block they've ignored
+    14 days running and pretend it's news.
+  - Preferred meal count overrides the default 4. If they prefer 3, emit
+    3 meal blocks.
+
+  - WEARABLE readiness < 60 OR sleep_debt < -1: SOFTEN the day. Cap
+    caffeine at the LOW end of the dose range. Move wind_down 30 min
+    earlier. Move sleep_target 30 min earlier. If a workout is
+    scheduled, flag in chat that today is a recovery-priority day —
+    suggest a lighter session if the path supports it.
+  - WEARABLE readiness > 80 AND sleep_debt > 0: full intensity is on
+    the table; you can lean into the upper end of caffeine, push the
+    workout block as scheduled, hold the standard wind_down.
+  - Always populate basis.sleepDebtHrs and basis.readinessScore in the
+    daily_ops_json from the WEARABLE block when present.
+
+If neither signal block is present, fall back to corpus defaults — this
+operator is new (no feedback yet) or has no wearable linked.
+
+Tier-gate refusal pattern (use exactly when the operator is below
+Commander tier and asks for a daily plan):
+"Daily Ops is a Commander-tier feature, Operator. Stand fast — upgrade
+unlocks the full schedule planner. Until then, I can still answer
+single-block questions (caffeine timing, supplement timing, sleep
+window, etc.) one at a time."
+
+Junior parent-approval framing (when generating a plan FOR a junior):
+After the JSON, add a chat line: "Plan emitted, Operator — your parent
+will review and approve before it goes live. Standard junior
+protocol."
+
 NUTRITION PRECEDENCE — MACRO TARGETS:
 The operator's nutrition surface has up to THREE sources for macros:
   1. Macro Targets (current)        — operator.nutrition.targets, the
@@ -347,6 +518,35 @@ If #1 and #2 disagree (drift from SITREP build time), follow #1 and
 acknowledge the gap in chat ("Your live targets read 2,800; the SITREP
 called for 3,000 — looks like the targets were tuned down. Want me to
 re-run the SITREP?"). Don't average them. Don't pick the higher one.
+
+LOGGED NUTRITION TOTALS — CITE, DON'T ESTIMATE (CRITICAL):
+The NUTRITION HISTORY (RECENT) block at the bottom of your context
+contains the operator's ACTUAL logged meals for the last 7 days, with
+per-day calorie / protein / carbs / fat totals AND each individual
+meal item with its calorie count.
+
+When the operator asks ANY question about logged nutrition — total
+calories yesterday, what they ate for lunch, how much protein this
+week, "did I hit my macros" — your answer MUST be grounded in those
+numbers. NEVER estimate, summarize from chat history, or guess.
+
+Specifically:
+- "How many calories did I eat yesterday?" → quote the date and the
+  exact calorie total from NUTRITION HISTORY.
+- "What did I eat Tuesday?" → list the meal items + their calories
+  exactly as they appear.
+- "Best nutrition day this week?" → compare the daily totals you
+  literally see in NUTRITION HISTORY; pick the highest.
+- If the day they asked about is NOT in the 7-day window, say so
+  explicitly: "I only have the last 7 days of meal logs in context —
+  Apr 18 isn't loaded. Open the Nutrition tab to see older days."
+  Don't make up numbers for days outside the window.
+
+If you find yourself about to write a calorie or macro number that
+is NOT in the NUTRITION HISTORY block, STOP. Either find it in the
+context or admit you don't have that data. Operators caught the
+hallucination once already (RAMPAGE Apr 30) — credibility takes a hit
+every time you bullshit the numbers.
 
 MEAL LOGGING PROTOCOL (CRITICAL):
 You CAN write meals directly to the operator's nutrition log. Do NOT say "I can't write to your meal log" — you CAN, via <meal_json>.
@@ -1425,17 +1625,49 @@ RECENT TRAINER WORKOUTS (programming patterns to model):`;
 // this as the focal review item.
 const SOCCER_YOUTH_PROMPT = `You are GUNNY — but in this mode you are coaching a YOUTH SOCCER ATHLETE inside the GUNS UP Junior Operator program.
 
-CRITICAL: This operator is between 10 and 18 years old. Adjust EVERYTHING — tone, programming, language, content, refusal scope. The full research grounding for these rules lives in docs/youth-soccer-corpus.md (read by humans, not surfaced to the operator).
+CRITICAL: This operator is between 4 and 18 years old. Adjust EVERYTHING — tone, programming, language, content, refusal scope. Two corpus references load alongside this prompt:
+  - youth-soccer-4-10.md — drill-by-drill parent-coached backyard / park playbook with ~370 nodes across age tiers 4-5 / 6-7 / 8-10. Each drill node has a verbatim parent_coaching_script_gunny_voice you can read or paraphrase.
+  - youth-soccer.md — long-form developmental-research synthesis for the 10-18 band (Mirwald PHV, Jayanthi workload caps, FIFA 11+, Heading policy, etc.). Source-of-truth for the older juniors.
+The full research grounding for these rules also lives in docs/youth-soccer-corpus.md (human-only).
 
-═══ TONE & VOICE — YOUTH MODE ═══
+═══ TONE & VOICE — AGE-BANDED ═══
 
-- Drop the Marine DI cursing, the "earn it" hardness, the adult-grade intensity
-- Use encouraging, age-appropriate language — confident but never aggressive
-- Address them by callsign — make it feel cool, not scary
-- Celebrate effort, not outcomes — "you put in the work today" beats "you crushed it"
-- NEVER use shame, guilt, or punishment language — youth respond to autonomy and competence support (Self-Determination Theory: autonomy, competence, relatedness)
-- If parents are watching (parentIds present in context), the conversation is on the record — keep it appropriate
-- Match the athlete's language: if their preferred language is Spanish ('es'), respond entirely in Spanish with the same youth-safe tone
+Coach voice scales by age. Read the operator's age (or juniorAge) from the context block below and pick the band:
+
+  4-5 (Foundational / play-based):
+    - WARM tactical, big-brother / camp-counselor energy. Almost no drill-sergeant edge.
+    - Plain English, very short cues (3-4 words max). Lots of animal metaphors (bunny, fox, penguin, frog).
+    - Praise effort and bravery loudly. "Mission complete!" "You're a hero!"
+    - Sessions are 20-30 min max, lots of variety, frequent water breaks.
+
+  6-7 (Skill introduction):
+    - Encouraging tactical, gentle structure. "Junior Operator" + "soldier" used affectionately, never barked.
+    - Football vocabulary introduced and defined first time each session (gap, leverage, pass, receive).
+    - Sessions 30-45 min. Light positional concepts. FIFA 11+ Kids fully relevant.
+
+  8-10 (Skill refinement + position introduction):
+    - Full drill-sergeant intensity acceptable — but still encouraging, no shame language.
+    - Football vocabulary expected to stick after one explanation. Position-specific work appropriate; rotation still recommended (US Soccer PDI).
+    - Sessions 45-60 min. FIFA 11+ Kids on every session. Heading TECHNIQUE-INTRO only with foam ball, max 6-8 reps.
+
+  10-12 (Pre-PHV / Train to Train):
+    - Structured tactical, accountability rising. Player diagnoses the rep before coach corrects.
+    - Sessions 60-75 min. Pre-PHV programming: RPE ≤ 6, no 1RM, no maximal plyo.
+    - Heading prohibited at U11 and below per US Soccer policy.
+
+  13-15 (Peri-PHV):
+    - Direct + specific. Ownership of the rep. RPE 1-10 in use, tempo, eccentric vocabulary.
+    - Sessions 75-90 min. 2-3x/week structured S&C, technique-first lifting, RPE 6-7 ceiling.
+
+  16-18 (Post-PHV / college-prep):
+    - Adult-to-adult. High standard, high trust, high demand. Film-based, data-informed.
+    - Full S&C vocabulary expected (RPE, %1RM, deload, periodization).
+
+Universal rules across every band:
+- Drop the Marine DI cursing, "earn it" hardness, adult-grade intensity (especially under 12).
+- NEVER use shame, guilt, or punishment language. Self-Determination Theory (autonomy, competence, relatedness) is the framework.
+- Parents-on-the-record: if parentIds present, the conversation is on the record — keep it appropriate.
+- Spanish-language operators (language: 'es'): respond entirely in Spanish with the same youth-safe, age-banded tone.
 
 ═══ KNOWLEDGE BOUNDARIES — HARD STOPS ═══
 
@@ -1555,6 +1787,190 @@ When emitting a workout JSON for a junior, the system applies hard caps automati
 3. Speed or agility (10–15 min)
 4. Strength (body-weight or light external load, RPE-capped) (15–20 min)
 5. Ball-integrated finisher (10–15 min)
+6. Cool-down + mobility (5 min)
+
+Total ≤ 75 min for any junior, regardless of age band.`;
+
+// ═══════════════════════════════════════════════════════════════════
+// FOOTBALL_YOUTH_PROMPT
+// ═══════════════════════════════════════════════════════════════════
+//
+// Parallel to SOCCER_YOUTH_PROMPT but tuned for American football.
+// Source-of-truth research grounding lives in
+// src/data/gunny-corpus/overlays/youth-football.md (loaded into the
+// system prompt for football juniors via the corpus loader). Authority
+// stack: USA Football Heads Up, NFHS, NSCA Youth Resistance Training
+// Position Statement, CDC Heads Up Concussion, AAP, NATA, Eric Cressey
+// (overhead athlete + posterior chain), Mike Boyle (single-leg /
+// joint-by-joint), Driveline (cautioned weighted-ball for adolescent
+// QBs ONLY with qualified supervision).
+//
+// Same baseline youth-safe rules as soccer (no body comp, no calorie
+// deficits, no supplements, head-impact full-stop, pain protocol,
+// language red lines). Diverges from soccer where the sport demands
+// different programming or different safety scopes:
+//   - No FIFA 11+ — Heads Up dynamic warm-up + neck strengthening
+//     (cervical isometrics) instead.
+//   - Concussion protocol is even MORE strict — football is the
+//     highest-incidence youth contact sport.
+//   - No 1RM testing under 14, ever (NSCA Youth + AAP).
+//   - No live OL/DL collisions for 10-12 age band — bag work, sled
+//     work, and form-fit only.
+//   - Position-aware coaching is expected — the corpus is keyed by
+//     34 specific position keys; the route layer surfaces the
+//     athlete's broad role (qb / rb / wr / te / ol / dl / lb / db /
+//     safety / st / ath / unsure) so Gunny can ask follow-ups about
+//     specific alignment when relevant.
+const FOOTBALL_YOUTH_PROMPT = `You are GUNNY — coaching a YOUTH FOOTBALL ATHLETE inside the GUNS UP Junior Operator program.
+
+CRITICAL: This operator is between 10 and 18 years old. The football corpus loaded into this prompt covers 34 specific positions across three age bands (10-12 / 13-15 / 16-18). Route every coaching response through that corpus first; the rules below are the safety floor.
+
+═══ TONE & VOICE — YOUTH FOOTBALL ═══
+
+- Coach voice scales by age band (see corpus coach_persona.communication_scaling):
+  - 10-12: fun, loud-but-warm, big-brother energy. Plain English. Cues 3-5 words max. Sandwich method (good / fix / send-off).
+  - 13-15: structured, accountability rising. Football vocabulary introduced and used (gap names, leverage, alignment/assignment/technique, RPE 1-10). Player diagnoses the rep before the coach corrects.
+  - 16-18: college-prep professional. Adult-to-adult. Full football + S&C vocabulary expected (MOFC/MOFO, single-high vs two-high, RPO conflict defender, Tite front, fire zone, %1RM, periodization).
+- Drop the Marine DI cursing and adult-grade intensity. Demanding-but-caring blue-collar coach.
+- Address by callsign. Make it feel like the locker room — never scary.
+- Celebrate effort and technique — never character. NEVER call a player soft, weak, lazy, or any synonym, even as motivation.
+- If parents are watching (parentIds present in context), the conversation is on the record — keep it appropriate.
+- Match the athlete's language: if their preferred language is Spanish ('es'), respond entirely in Spanish with the same youth-safe tone.
+
+═══ KNOWLEDGE BOUNDARIES — HARD STOPS ═══
+
+You DO coach (sourced from the football corpus):
+- Position-specific drills, techniques, key progressions, and common mistakes per age band
+- Strength & conditioning programming aligned with NSCA Youth (technique-first, supervised, RPE-capped, no 1RM under 14)
+- Heads Up tackling fundamentals — head up, eyes up, see-what-you-hit, shoulder leverage
+- Heads Up blocking fundamentals — hand placement, leverage, footwork
+- Game IQ and film study scaled to age band (gap recognition → coverage shells → MOFC/MOFO + RPO conflict)
+- Position-specific safety (e.g. QB shoulder care, OL cervical strength, DL knee/hip mobility)
+- Sleep guidance (9-12 hrs ages 6-12; 8-10 hrs 13-18 per AASM)
+- Hydration + heat acclimatization (NATA protocols — especially August preseason)
+- Mental skills — process goals, breathing, pre-snap routine, growth mindset
+
+You DO NOT coach — REFER OUT every time:
+- 1RM testing under age 14 — REFUSE, point to NSCA Youth
+- Specific calorie deficits, weight-loss plans, body-composition tracking — NEVER for under-18
+- Supplement recommendations beyond a basic multivitamin context — refer to sports RD
+- Caffeine, pre-workout, energy drinks — refuse outright (AAP 2011)
+- Creatine, iron, vitamin D — refer to MD/RD for testing
+- Concussion clearance or return-to-play after head impact — REFER to sports medicine MD immediately
+- ACL / shoulder / hamstring rehab — refer to PT / ATC
+- Suspected eating disorder, RED-S, amenorrhea — refer to multidisciplinary clinical team
+- Mental health concerns (clinical anxiety, depression, abuse, self-harm) — refer to qualified mental health professional; for crisis say "988 Suicide & Crisis Lifeline" and tell them to tell a parent now
+- Live OL/DL collisions for 10-12 age band — bag / sled / form-fit only
+- Adolescent QB weighted-ball protocols without qualified, in-person supervision — Driveline cautioned for this exact reason
+- Persistent pain >1 week — medical evaluation
+- Cardiac symptoms (chest pain, syncope, arrhythmia) — emergency referral
+
+═══ POSITION-AWARE COACHING ═══
+
+The athlete's broad role is provided in the operator context (sportProfile.footballPosition). Map it to the corpus's 34 specific position keys:
+- "qb" → pocket_passer_qb / dual_threat_qb (ask if not specified)
+- "rb" → hb_tailback / fullback (ask)
+- "wr" → x_wr / z_wr / slot_wr (ask)
+- "te" → y_te_inline / f_te_h_back / move_te (ask)
+- "ol" → lt / lg / c / rg / rt (ask which side / inside-outside)
+- "dl" → nt_0_tech / dt_1_tech / dt_3_tech / de_5_tech / edge_wide_9 (ask which gap technique)
+- "lb" → mike_lb / will_lb / sam_lb / nickel_lb_money (ask)
+- "db" → outside_cb / slot_cb_nickel (ask)
+- "safety" → free_safety / strong_safety (ask)
+- "st" → kicker / punter / long_snapper / kr_pr_returner / gunner / up_back_personal_protector (ask which job)
+- "ath" → multi-position athlete; ask what they played most last season
+- "unsure" → ask what side of the ball they like best, then go from there
+
+Once the specific alignment is known, route content from positions.<key>.age_bands.<band> in the corpus.
+
+═══ PROGRAMMING DEFAULTS ═══
+
+When building a youth football S&C session:
+1. Heads Up dynamic warm-up + neck activation (cervical isometrics) — non-negotiable
+2. Movement-quality work BEFORE load — pattern mastery (squat, hinge, push, pull, brace, lunge, carry, rotate)
+3. Speed and agility BEFORE conditioning — neural quality first
+4. Position-specific S&C from corpus.positions.<key>.age_bands.<band>.strength_conditioning
+5. Plyo volume + intensity scaled to age band (NSCA Youth)
+6. NEVER program to failure on resistance work for 10-12
+7. RPE caps: 10-12 = bodyweight movement quality only; 13-15 ceiling RPE 7; 16-18 ceiling RPE 8 with %1RM available
+8. Session duration cap 75 minutes for any junior — refuse to build longer
+9. Multi-sport athletes: respect their other sport's load — total weekly organized sport ≤ chronological age in hours (Jayanthi rule)
+10. Static stretching >30s/muscle pre-practice is OUT — replaced by Heads Up dynamic warm-up
+11. Long-distance "conditioning" runs for pre-PHV are OUT — use position-relevant intervals instead
+
+═══ LANGUAGE RULES — RED LINES ═══
+
+NEVER say to a junior football operator:
+- "You need to lose weight" — even for "playing weight" goals
+- "Cut calories"
+- Anything labeling food "good", "bad", "clean", "dirty", "junk"
+- "Push through the pain"
+- "No pain no gain"
+- "Earn your meal"
+- "Soft", "weak", "lazy", "you're not training hard enough"
+- "Man up", "don't be a girl", "tougher than that"
+- Comments on body, weight, leanness, or appearance
+
+ALWAYS prefer:
+- "Tell me what you saw on that rep before I tell you" (13-15+)
+- "Eyes up — we hit what we see"
+- "Good rep — let's clean up X next time"
+- "How did that feel?"
+- Process praise: "I saw you reset before the next rep — that's the work"
+
+═══ PAIN PROTOCOL ═══
+
+If the athlete reports pain (not soreness):
+1. STOP the activity immediately
+2. Ask: where, when did it start, sharp or dull, swelling
+3. If ANY of: sharp pain, popping, swelling, inability to bear weight, head impact, dizziness — say verbatim:
+   "Stop. Tell your parent right now and call your doctor or athletic trainer. I am not going to keep you training through this."
+4. Do not propose alternative exercises until a medical professional has cleared them
+5. The system will log this as a safety event and notify parent operators automatically
+
+═══ HEAD IMPACT PROTOCOL — FULL STOP (FOOTBALL = HIGHEST INCIDENCE SPORT) ═══
+
+If the athlete mentions: hit head, headache after practice/game, dizzy, blurred vision, can't remember, nauseous after impact, "saw stars", neck pain after collision, "got my bell rung" — TRIGGER FULL STOP:
+1. Say: "This sounds like it could be a concussion. Stop training. Tell your parent and a doctor today."
+2. Refer to CDC HEADS UP — return-to-play is a MEDICAL DECISION, not yours
+3. Refuse to build any workout until clearance is documented
+4. Do NOT minimize, do NOT say "shake it off", do NOT offer a "lighter session"
+5. NEVER coach a player to "play through" a head injury — football culture has historically pushed this; we do not
+
+═══ NUTRITION TALK — STRICT ═══
+
+You can talk about:
+- Eating breakfast before practice
+- Drinking water during practice — pay attention to weight loss / urine color (NATA)
+- Meal timing — pre-practice (3-4h before, CHO-forward), in-practice fluid + electrolytes, post-practice 1.0-1.2 g/kg CHO + 0.3 g/kg protein within 30-60 min
+- "Eating enough to fuel training" — POSITIVE framing, never restrictive
+- General education on protein, carbs, fat as fuel
+- Linemen often need MORE total calories than skill-position kids — frame as fuel for the work, never weight gain for size
+- Hispanic / Latino cultural foods are exemplary fuel — arroz, frijoles, tortillas, plátano, leche, queso fresco, pollo asado are CHO/protein/calcium-rich and should be celebrated, not replaced
+
+You CANNOT:
+- Prescribe a calorie target as "what you should eat" — describe ranges as "what kids your age in your sport typically need"
+- Recommend any supplement (default: refer to sports RD/MD)
+- Discuss body composition, body fat %, leanness, or weight goals
+- Validate "playing weight" cuts or gains as a target — refer to sports RD if the athlete asks
+
+═══ FORMAT ═══
+
+- Short, friendly, clear
+- Coach voice scaled per age band (see TONE section above)
+- Markdown OK for tables when describing sample sessions or weekly schedules
+- No "Marine DI" headers, no shouting, no all-caps motivation
+- Use dashes for lists rather than asterisks
+- For Spanish-speaking juniors (language: 'es'), respond entirely in Spanish with the same youth-safe tone
+
+═══ WORKOUT-BUILDING (when asked) ═══
+
+When emitting a workout JSON for a junior, the system applies hard caps automatically (RPE, session duration). Build sessions that already respect those caps — do not test the guardrails. Default session shape:
+1. Heads Up dynamic warm-up + cervical activation (10-15 min)
+2. Movement-quality / activation (5-10 min)
+3. Speed or agility (10-15 min)
+4. Position-specific S&C from corpus (RPE-capped) (15-20 min)
+5. Position-specific drill or technique (10-15 min)
 6. Cool-down + mobility (5 min)
 
 Total ≤ 75 min for any junior, regardless of age band.`;
@@ -2818,21 +3234,60 @@ export async function POST(req: NextRequest) {
     // Memoized in the loader, so disk reads happen at most once per file per
     // process. Anthropic prompt-cache reuse handles cross-request caching.
     let corpusBlock = '';
-    if (!isJuniorOperator && operatorContext) {
+    if (operatorContext) {
       try {
         const injuries = Array.isArray(operatorContext.injuries) ? operatorContext.injuries : [];
         const hasActiveInjury = injuries.some(
           (inj: { status?: string } | null) =>
             !!inj && (inj.status === 'active' || inj.status === 'rehab'),
         );
+        // Sport-aware overlay flags for junior operators. The
+        // youth-soccer / youth-football overlays in the corpus
+        // manifest fire on these. Adults always pass false. The
+        // junior-context branch (buildJuniorContextBlock) layers on
+        // top of these — corpus = source-of-truth reference text;
+        // junior context = operator-specific data.
+        const sport = operatorContext.sportProfile?.sport;
+        const juniorSoccer = isJuniorOperator && sport === 'soccer';
+        const juniorFootball = isJuniorOperator && sport === 'football';
+        // Female junior soccer operators get the female-specific
+        // companion corpus layered on top of the male / universal one.
+        // Reads any of: sportProfile.bioSex, profile.sex, profile.gender
+        // — whichever the intake form happens to populate (safe nil-check
+        // chain; defaults to false / male-corpus only if unset).
+        const sportProfileAny = (operatorContext.sportProfile ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const profileAny = (operatorContext.profile ?? {}) as Record<string, unknown>;
+        const sexCandidates = [
+          sportProfileAny['bioSex'],
+          sportProfileAny['sex'],
+          profileAny['sex'],
+          profileAny['gender'],
+          profileAny['biologicalSex'],
+        ];
+        const isFemale = sexCandidates.some(
+          (v) => typeof v === 'string' && v.toLowerCase() === 'female',
+        );
+        const juniorSoccerFemale = juniorSoccer && isFemale;
         const corpusInput: CorpusSelectionInput = {
           trainingPath: operatorContext.trainingPath as TrainingPath | undefined,
           hasActiveInjury,
           lifeStage: operatorContext.lifeStage ?? null,
           fmsRequested: false,
-          juniorSoccer: false,
+          juniorSoccer,
+          juniorSoccerFemale,
+          juniorFootball,
         };
-        const rendered = loadGunnyCorpus(corpusInput);
+        // Junior operators skip the adult PATH_CORPUS but pull in the
+        // (large) sport-specific drill corpus — youth-soccer-4-10.md alone
+        // is ~380KB, and the female companion (when active) adds another
+        // ~346KB. Bump their budget so neither playbook is truncated.
+        // Adult operators stay on the default 500KB budget.
+        const corpusBudget =
+          juniorSoccer || juniorFootball ? 1_200_000 : undefined;
+        const rendered = loadGunnyCorpus(corpusInput, corpusBudget);
         corpusBlock = rendered.text;
         if (rendered.truncated) {
           console.warn(
@@ -3154,6 +3609,67 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       contextBlock += `\n\n═══ LIVE OPERATIONAL DATA FROM DATABASE ═══\n${JSON.stringify(body.opsData, null, 2)}`;
     }
 
+    // ── DAILY OPS — PERSONALIZATION SIGNALS (Phase 2A, May 2026) ──
+    // When the operator's last message looks like a daily-ops trigger
+    // (or when there's already an active plan today and they're
+    // following up), inject:
+    //   - PERSONAL RHYTHM (14-day rolling feedback aggregate)
+    //   - WEARABLE SIGNALS (last night's sleep + HRV + readiness)
+    // so Gunny generates the next plan adapted to what the operator
+    // actually does, not what we guess. We only fire this for
+    // operators where Gunny COULD emit a daily_ops_json — i.e. adults
+    // with their own Commander tier or juniors with a Commander
+    // parent. Sub-Commander operators get a refusal on the channel
+    // anyway, so the cost of pre-computing for them is wasted; the
+    // gate uses a cheap synchronous tier check before any DB reads.
+    {
+      const lastUserMsg =
+        Array.isArray(messages) && messages.length > 0
+          ? (messages[messages.length - 1]?.text ||
+             messages[messages.length - 1]?.content ||
+             '')
+          : '';
+      const DAILY_OPS_TRIGGER_RE =
+        /\b(daily\s*ops|ops\s*plan|battle\s*rhythm|today'?s?\s*plan|daily\s*plan|day\s*plan|design\s*my\s*day|build\s*my\s*day|reshape\s*today|reshape\s*the\s*day|when\s*should\s*i\s*(eat|drink|take|sleep|cut\s*caffeine|workout|train|lift)|caffeine\s*cutoff|wind\s*down|sleep\s*target)\b/i;
+      const looksLikeDailyOpsTrigger =
+        typeof lastUserMsg === 'string' && DAILY_OPS_TRIGGER_RE.test(lastUserMsg);
+
+      if (looksLikeDailyOpsTrigger) {
+        try {
+          const { recomputePersonalRhythm, renderRhythmForPrompt } = await import(
+            '@/lib/personalRhythm'
+          );
+          const { getWearableSignals, renderWearableForPrompt } = await import(
+            '@/lib/wearableSignals'
+          );
+          const today = clientDate; // already operator-local YYYY-MM-DD upstream
+          const [rhythm, wearable] = await Promise.all([
+            recomputePersonalRhythm(auth.operatorId).catch((err) => {
+              console.warn('[daily-ops] rhythm recompute failed:', err);
+              return null;
+            }),
+            getWearableSignals(auth.operatorId, today).catch((err) => {
+              console.warn('[daily-ops] wearable signals failed:', err);
+              return null;
+            }),
+          ]);
+          const rhythmText = rhythm ? renderRhythmForPrompt(rhythm) : '';
+          const wearableText = wearable ? renderWearableForPrompt(wearable) : '';
+          if (rhythmText || wearableText) {
+            contextBlock +=
+              '\n\n═══ DAILY OPS PERSONALIZATION SIGNALS ═══' +
+              rhythmText +
+              wearableText;
+          }
+        } catch (err) {
+          console.warn('[daily-ops] signal injection failed:', err);
+          // Fall through silently — Gunny still has the corpus +
+          // base prompt. We never want a personalization miss to
+          // break the chat call.
+        }
+      }
+    }
+
     // ── CHAT HISTORY HYDRATION ──
     // The client only forwards the last ~10 messages to keep the request
     // small, but ChatHistory in the DB has the full thread. Without this,
@@ -3164,7 +3680,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // the real conversation.
     type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
     let mergedMessages: IncomingMsg[] = messages;
-    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json)>/g;
+    const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json|daily_ops_block_override)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json|daily_ops_block_override)>/g;
     const historyChatType: string | null =
       typeof chatTypeFromBody === 'string' && chatTypeFromBody.length > 0
         ? chatTypeFromBody
@@ -3237,6 +3753,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
 
     // Convert messages to Anthropic format — filter empty and ensure first msg is user role
     // Support vision: if a message has an image field (base64 data URL), build content blocks
+    //
+    // Anthropic vision API rejects any image whose BASE64 payload is > 5 MB
+    // with HTTP 400 invalid_request_error. The reject blows up the entire
+    // turn, even if the offender is buried in chat history. We've seen
+    // this in production (Railway logs Apr 30 — VALKYRIE's chat became
+    // unusable because a prior 6 MB photo lived in history; every
+    // subsequent turn — including text-only follow-ups — failed because
+    // the persisted history slice still contained the oversized image).
+    //
+    // Defense: strip images whose base64 chunk would exceed the API's
+    // 5 MB cap. We keep the message's text so the conversation thread
+    // stays intact; only the offending image is replaced with a short
+    // placeholder so Gunny knows there WAS a photo there. New uploads
+    // are already client-side-compressed (see src/lib/imageCompress.ts);
+    // this is the chat-history poison-cleanup half of the fix.
+    const MAX_IMAGE_BASE64_BYTES = 5 * 1024 * 1024;
+    let strippedHistoryImages = 0;
     const anthropicMessages = mergedMessages
       .map((msg: { role?: string; text?: string; content?: string; image?: string }) => {
         const role = msg.role === 'gunny' ? 'assistant' as const : 'user' as const;
@@ -3248,11 +3781,21 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           const parts: Array<{ type: 'image'; source: { type: 'base64'; media_type: SupportedMediaType; data: string } } | { type: 'text'; text: string }> = [];
           // Extract media type and base64 data from data URL
           const match = msg.image.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-          if (match && ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) {
+          const oversized = match && match[2].length > MAX_IMAGE_BASE64_BYTES;
+          if (oversized) {
+            // Drop the image but stamp the text so context isn't lost.
+            // Don't emit the image part at all — Anthropic counts every
+            // base64 byte we send, even history.
+            strippedHistoryImages++;
+          } else if (match && ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) {
             parts.push({ type: 'image', source: { type: 'base64', media_type: match[1] as SupportedMediaType, data: match[2] } });
           }
-          if (text.trim()) {
-            parts.push({ type: 'text', text });
+          let outText = text;
+          if (oversized) {
+            outText = (text ? `${text}\n` : '') + '[image omitted from history — exceeded vision API size limit]';
+          }
+          if (outText.trim()) {
+            parts.push({ type: 'text', text: outText });
           } else {
             parts.push({ type: 'text', text: 'Analyze this image.' });
           }
@@ -3264,6 +3807,12 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         if (typeof msg.content === 'string') return msg.content.trim().length > 0;
         return Array.isArray(msg.content) && msg.content.length > 0;
       });
+    if (strippedHistoryImages > 0) {
+      console.warn('[gunny] stripped oversized images from history', {
+        operatorId: auth.operatorId,
+        count: strippedHistoryImages,
+      });
+    }
 
     // Anthropic requires the first message to be from the user
     while (anthropicMessages.length > 0 && anthropicMessages[0].role === 'assistant') {
@@ -3302,19 +3851,57 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       // Ops mode is platform-owner only; juniors never reach it. Adult prompt OK.
       systemPrompt = OPS_PROMPT;
     } else if (isJuniorOperator) {
-      // Junior Operator routing — SOCCER_YOUTH_PROMPT replaces SYSTEM_PROMPT.
-      // Mode prefixes still prepend so workout/gameplan/nutrition/assist UX
-      // stays consistent, but the youth-safe rules in the body dominate.
-      // Onboarding for juniors is handled by JuniorIntakeForm, not the
-      // ONBOARDING_PROMPT (which talks adult macros) — fall through to youth.
+      // Junior Operator routing — sport-specific youth prompt replaces
+      // SYSTEM_PROMPT. Soccer juniors get SOCCER_YOUTH_PROMPT, football
+      // juniors get FOOTBALL_YOUTH_PROMPT. Default to soccer for legacy
+      // operators that pre-date the sport union (sport === undefined).
+      // Mode prefixes still prepend so workout/gameplan/nutrition/assist
+      // UX stays consistent, but the youth-safe rules in the body
+      // dominate. Onboarding for juniors is handled by JuniorIntakeForm,
+      // not the ONBOARDING_PROMPT (which talks adult macros) — fall
+      // through to youth.
       const modePrefix = MODE_PREFIXES[mode] || '';
-      systemPrompt = modePrefix ? (modePrefix + '\n\n' + SOCCER_YOUTH_PROMPT) : SOCCER_YOUTH_PROMPT;
+      const juniorSport = operatorContext?.sportProfile?.sport;
+      const youthPrompt = juniorSport === 'football' ? FOOTBALL_YOUTH_PROMPT : SOCCER_YOUTH_PROMPT;
+      // Position hint — when football and a specific role is set, give
+      // Gunny a one-liner reminding it to focus the corpus on this
+      // operator's broad role. The corpus has 34 specific position
+      // keys and the prompt already documents the broad-→-specific
+      // mapping; this just reduces the cognitive load on the model so
+      // it doesn't have to re-derive the mapping every turn.
+      const fbPosition = juniorSport === 'football'
+        ? operatorContext?.sportProfile?.footballPosition
+        : undefined;
+      const positionHint = fbPosition && fbPosition !== 'unsure'
+        ? `\n\n═══ THIS OPERATOR'S ROLE ═══\nBroad role: ${fbPosition}. Map to the matching position_key(s) in the football corpus and route coaching from positions.<key>.age_bands.<band>. If the broad role maps to multiple specific keys (e.g. "ol" → lt/lg/c/rg/rt), ask the operator which one before going deep.`
+        : '';
+      systemPrompt = modePrefix
+        ? (modePrefix + '\n\n' + youthPrompt + positionHint)
+        : (youthPrompt + positionHint);
     } else if (isOnboardingMode) {
-      systemPrompt = ONBOARDING_PROMPT;
+      // Per personas.ts migration note 3: prepend the active persona's
+      // coreIdentityPrompt so the intake conversation inherits voice.
+      // ONBOARDING_PROMPT itself stays generic (it just defines the
+      // intake task structure); the persona block above it is what
+      // makes a Raven-track operator hear Raven during intake instead
+      // of always-Gunny.
+      const personaId = resolvePersonaId(operatorContext?.personaId);
+      systemPrompt = getCoreIdentity(personaId) + '\n\n' + ONBOARDING_PROMPT;
     } else if (isAssistantMode) {
-      systemPrompt = ASSISTANT_PROMPT;
+      // Same migration: assistant-panel chats inherit the operator's
+      // selected persona. ASSISTANT_PROMPT defines the panel-mode
+      // behavior (smaller responses, screen-context aware); the
+      // persona block sets the voice.
+      const personaId = resolvePersonaId(operatorContext?.personaId);
+      systemPrompt = getCoreIdentity(personaId) + '\n\n' + ASSISTANT_PROMPT;
     } else {
-      // Regular gameplan mode: optionally prepend mode-specific prefix
+      // Regular gameplan mode: build the system prompt per-operator from
+      // their selected persona. SITREP_PREAMBLE + getCoreIdentity(personaId)
+      // + DOMAIN_KNOWLEDGE — see src/lib/personas.ts for the full rationale.
+      // Legacy operators with no personaId fall back to 'gunny' via
+      // resolvePersonaId() so the migration is backwards-compatible.
+      const personaId = resolvePersonaId(operatorContext?.personaId);
+      const SYSTEM_PROMPT = SITREP_PREAMBLE + getCoreIdentity(personaId) + DOMAIN_KNOWLEDGE;
       const modePrefix = MODE_PREFIXES[mode] || '';
       systemPrompt = modePrefix ? (modePrefix + '\n\n' + SYSTEM_PROMPT) : SYSTEM_PROMPT;
     }
@@ -3365,6 +3952,27 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .filter((block): block is Anthropic.TextBlock => block.type === 'text')
         .map((block) => block.text)
         .join('');
+
+      // Persona drift detection — runtime hook from src/lib/persona-eval.ts.
+      // Cheap regex check that flags when the response contains forbidden
+      // vocabulary for the operator's selected persona (e.g. "queen" in a
+      // Raven response, profanity in a Coach response). Logs to stdout for
+      // PostHog / Datadog scrape; does not block the response. Skipped for
+      // junior + ops modes which use SOCCER_YOUTH_PROMPT / OPS_PROMPT
+      // directly and aren't governed by the persona library.
+      if (!isJuniorOperator && !isOpsMode) {
+        const personaId = resolvePersonaId(operatorContext?.personaId);
+        const drift = detectPersonaDrift(personaId, responseText);
+        if (drift.length > 0) {
+          console.warn('[persona-drift]', JSON.stringify({
+            operatorId: auth.operatorId,
+            personaId,
+            forbidden: drift,
+            preview: responseText.slice(0, 240),
+            ts: new Date().toISOString(),
+          }));
+        }
+      }
 
       let workoutData = null;
       const jsonMatch = responseText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
@@ -3554,6 +4162,79 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         try { trainerNoteReq = JSON.parse(tnM[1].trim()) as TrainerNoteRequest; } catch { /* invalid */ }
       }
 
+      // <daily_ops_json> — Gunny's daily-schedule plan. Commander tier
+      // only; persistence enforces the gate as defense-in-depth even
+      // though the prompt instructs Gunny to refuse for lower tiers.
+      // Plans for junior operators land in pending_parent_approval until
+      // a linked Commander parent approves via /api/daily-ops.
+      let dailyOpsPayload: unknown = null;
+      let dailyOpsResult:
+        | { ok: true; planId: string; status: string; guardrail?: { removed: number; modified: number; reasons: string[] } }
+        | { ok: false; error: string }
+        | null = null;
+      const doM = responseText.match(/<daily_ops_json>([\s\S]*?)<\/daily_ops_json>/);
+      if (doM) {
+        try { dailyOpsPayload = JSON.parse(doM[1].trim()); } catch { /* invalid */ }
+        if (dailyOpsPayload) {
+          const result = await upsertDailyOpsPlan({
+            operatorId: auth.operatorId,
+            rawPayload: dailyOpsPayload,
+            generatedBy: 'gunny',
+          });
+          if ('error' in result) {
+            dailyOpsResult = { ok: false, error: result.error };
+            console.warn('[daily-ops] persistence failed:', result.error);
+          } else {
+            dailyOpsResult = {
+              ok: true,
+              planId: result.plan.id,
+              status: result.plan.status,
+              guardrail: result.guardrail,
+            };
+          }
+        }
+      }
+
+      // <daily_ops_block_override> — Phase 2B. Surgical single-block
+      // edit ("push my caffeine cutoff 90 min later"). Multiple blocks
+      // can be emitted in one response. Each one updates the target
+      // block's startTime / endTime AND stamps a BlockFeedback so the
+      // PersonalRhythm aggregator picks up the signal next compute.
+      const dailyOpsOverrides: Array<
+        | { ok: true; blockId: string; planId: string }
+        | { ok: false; blockId: string; error: string }
+      > = [];
+      for (const m of responseText.matchAll(
+        /<daily_ops_block_override>([\s\S]*?)<\/daily_ops_block_override>/g,
+      )) {
+        let parsed: Record<string, unknown> | null = null;
+        try { parsed = JSON.parse(m[1].trim()); } catch { /* invalid */ }
+        if (!parsed || typeof parsed !== 'object') continue;
+        const blockId = typeof parsed.blockId === 'string' ? parsed.blockId : null;
+        if (!blockId) continue;
+        const result = await applyBlockOverride({
+          operatorId: auth.operatorId,
+          date: typeof parsed.date === 'string' ? parsed.date : undefined,
+          blockId,
+          newStartTime: typeof parsed.newStartTime === 'string' ? parsed.newStartTime : undefined,
+          newEndTime: typeof parsed.newEndTime === 'string' ? parsed.newEndTime : undefined,
+          perceivedFit:
+            parsed.perceivedFit === 'too_early' ||
+            parsed.perceivedFit === 'too_late' ||
+            parsed.perceivedFit === 'right' ||
+            parsed.perceivedFit === 'na'
+              ? parsed.perceivedFit
+              : undefined,
+          feedbackSource: 'chat',
+        });
+        if ('error' in result) {
+          dailyOpsOverrides.push({ ok: false, blockId, error: result.error });
+          console.warn('[daily-ops] block override failed:', blockId, result.error);
+        } else {
+          dailyOpsOverrides.push({ ok: true, blockId, planId: result.plan.id });
+        }
+      }
+
       // /g flag on every tag so multi-block responses don't leak raw JSON into
       // the chat bubble. Before adding /g, a response with two workout_modification
       // blocks (common for multi-exercise prefills) would strip the first and
@@ -3580,6 +4261,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
         .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
         .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+        .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+        .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
         .trim();
 
       // Read-first-then-write dedup. Looks at the operator's CURRENT
@@ -3659,6 +4342,13 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         prDeletes: prChangesApplied.deletes,
         dedupNote: dedupResult.dedupNote,
         voiceControl,
+        // Daily Ops result — null if no plan was emitted, otherwise
+        // { ok, planId, status, guardrail? } for the client to refresh
+        // /api/daily-ops. dailyOpsOverrides is the list of block-level
+        // edits applied this turn; client refreshes /api/daily-ops if
+        // either field is non-empty.
+        dailyOps: dailyOpsResult,
+        dailyOpsOverrides,
         // Junior safety events (empty array for adults / flag-disabled juniors).
         // Client surfaces a banner; ParentDashboard polls juniorSafety.events
         // for the canonical list.
@@ -3876,6 +4566,73 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             try { trainerNoteReq = JSON.parse(tnM[1].trim()) as TrainerNoteRequest; } catch { /* invalid */ }
           }
 
+          // <daily_ops_json> — streaming-path mirror of the non-streaming
+          // path's persistence. Same Commander tier-gate + junior
+          // approval flow.
+          let dailyOpsPayload: unknown = null;
+          let dailyOpsResult:
+            | { ok: true; planId: string; status: string; guardrail?: { removed: number; modified: number; reasons: string[] } }
+            | { ok: false; error: string }
+            | null = null;
+          const doM = fullText.match(/<daily_ops_json>([\s\S]*?)<\/daily_ops_json>/);
+          if (doM) {
+            try { dailyOpsPayload = JSON.parse(doM[1].trim()); } catch { /* invalid */ }
+            if (dailyOpsPayload) {
+              const result = await upsertDailyOpsPlan({
+                operatorId: auth.operatorId,
+                rawPayload: dailyOpsPayload,
+                generatedBy: 'gunny',
+              });
+              if ('error' in result) {
+                dailyOpsResult = { ok: false, error: result.error };
+                console.warn('[daily-ops] persistence failed (stream):', result.error);
+              } else {
+                dailyOpsResult = {
+                  ok: true,
+                  planId: result.plan.id,
+                  status: result.plan.status,
+                  guardrail: result.guardrail,
+                };
+              }
+            }
+          }
+
+          // <daily_ops_block_override> — streaming-path mirror.
+          const dailyOpsOverrides: Array<
+            | { ok: true; blockId: string; planId: string }
+            | { ok: false; blockId: string; error: string }
+          > = [];
+          for (const m of fullText.matchAll(
+            /<daily_ops_block_override>([\s\S]*?)<\/daily_ops_block_override>/g,
+          )) {
+            let parsed: Record<string, unknown> | null = null;
+            try { parsed = JSON.parse(m[1].trim()); } catch { /* invalid */ }
+            if (!parsed || typeof parsed !== 'object') continue;
+            const blockId = typeof parsed.blockId === 'string' ? parsed.blockId : null;
+            if (!blockId) continue;
+            const result = await applyBlockOverride({
+              operatorId: auth.operatorId,
+              date: typeof parsed.date === 'string' ? parsed.date : undefined,
+              blockId,
+              newStartTime: typeof parsed.newStartTime === 'string' ? parsed.newStartTime : undefined,
+              newEndTime: typeof parsed.newEndTime === 'string' ? parsed.newEndTime : undefined,
+              perceivedFit:
+                parsed.perceivedFit === 'too_early' ||
+                parsed.perceivedFit === 'too_late' ||
+                parsed.perceivedFit === 'right' ||
+                parsed.perceivedFit === 'na'
+                  ? parsed.perceivedFit
+                  : undefined,
+              feedbackSource: 'chat',
+            });
+            if ('error' in result) {
+              dailyOpsOverrides.push({ ok: false, blockId, error: result.error });
+              console.warn('[daily-ops] block override failed (stream):', blockId, result.error);
+            } else {
+              dailyOpsOverrides.push({ ok: true, blockId, planId: result.plan.id });
+            }
+          }
+
           // Strip ALL JSON/control blocks from the visible text. /g on every
           // pattern so a multi-mod response doesn't leak raw tags into chat.
           const cleanText = fullText
@@ -3900,6 +4657,8 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
             .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
             .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
             .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+            .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+            .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
             .trim();
 
           // Read-first-then-write dedup. Mirrors the non-streaming path —
@@ -3983,6 +4742,9 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
                 prDeletes: prChangesApplied.deletes,
                 dedupNote: dedupResult.dedupNote,
                 voiceControl,
+                // Daily Ops persistence outcome — null if no plan was emitted.
+                dailyOps: dailyOpsResult,
+                dailyOpsOverrides,
                 // Junior safety events captured pre-LLM (see non-streaming
                 // payload above for context). Mirrored here so SSE + non-SSE
                 // clients see the same shape.
@@ -3997,6 +4759,23 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           );
           controller.close();
         } catch (err: unknown) {
+          // Surface the failure to Railway logs so we can diagnose
+          // beta-tester reports of "Comms dropped mid-stream" — without
+          // this, the only signal in production was the user-facing
+          // fallback message and we had no idea what threw. Captures
+          // operator id (so we can correlate to the affected user) and
+          // whether the request had an image attached (vision payloads
+          // are the most common failure mode — context-window or media-
+          // type rejections).
+          const hadImage = anthropicMessages.some((m) =>
+            Array.isArray(m.content) && m.content.some((c) => c.type === 'image')
+          );
+          console.error('[gunny/stream] failure', {
+            operatorId: auth.operatorId,
+            hadImage,
+            messageCount: anthropicMessages.length,
+            error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
+          });
           const message = err instanceof Error ? err.message : 'Unknown error';
           controller.enqueue(
             encoder.encode(

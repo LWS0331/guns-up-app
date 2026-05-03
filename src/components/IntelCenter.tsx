@@ -16,10 +16,12 @@ import SupplementStack from '@/components/SupplementStack';
 import RecoveryReadout from '@/components/RecoveryReadout';
 import ReadinessPanel from '@/components/ReadinessPanel';
 import FormAnalysis from '@/components/FormAnalysis';
+import OperatingManual from '@/components/OperatingManual';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import { getAuthToken } from '@/lib/authClient';
+import { compressImageForVision } from '@/lib/imageCompress';
 
 /** Format a meal.time for display — handles ISO, legacy locale strings, and bare times. */
 const formatMealTime = (raw: string | undefined): string => {
@@ -46,7 +48,7 @@ interface IntelCenterProps {
   onRequestIntake?: () => void;
 }
 
-type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES' | 'FORM_CHECK' | 'MACROCYCLE';
+type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES' | 'FORM_CHECK' | 'MACROCYCLE' | 'MANUAL';
 
 interface LocalState {
   profile: {
@@ -280,6 +282,33 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     newWeakPoint: '',
     newMovementToAvoid: '',
   });
+
+  // Re-sync the mirrored mealLogs slice whenever the operator prop changes.
+  //
+  // state.nutrition.mealLogs was originally seeded once at mount from
+  // operator.nutrition.meals[today] and never refreshed. That stale-state
+  // window meant: if the operator logged meals via Gunny chat (or in
+  // another tab/device) while IntelCenter was mounted, the user could
+  // click "Save Changes" on the form and the handleSave write would
+  // overwrite operator.nutrition.meals[today] with the stale snapshot —
+  // silently deleting recently-added meals.
+  //
+  // Only update when the canonical bucket actually differs from local state
+  // (compare via JSON.stringify; meal arrays are tiny, max ~10 entries).
+  // The meal-add handlers below also setState mealLogs immediately after
+  // onUpdateOperator, so this effect is a no-op in the synchronous case;
+  // it only fires for the cross-tab / cross-channel scenario.
+  useEffect(() => {
+    const todayStr = getTodayStr();
+    const serverBucket = operator.nutrition?.meals?.[todayStr] || [];
+    const stateBucket = state.nutrition.mealLogs;
+    if (JSON.stringify(serverBucket) === JSON.stringify(stateBucket)) return;
+    setState(prev => ({
+      ...prev,
+      nutrition: { ...prev.nutrition, mealLogs: serverBucket },
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operator.nutrition?.meals]);
 
   const handleSave = useCallback(() => {
     // Convert Goal objects back to strings
@@ -1128,33 +1157,43 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Hard cap at 25 MB raw — beyond that, decoding into a canvas can
+    // OOM mobile Safari. Otherwise compressImageForVision resizes +
+    // recompresses to fit Anthropic's 5 MB base64-payload limit.
+    if (file.size > 25 * 1024 * 1024) {
+      alert('Image is too large (max 25 MB raw). Try a smaller photo.');
+      e.target.value = '';
+      return;
+    }
+
     setPhotoAnalyzing(true);
     setPhotoResult(null);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        const mimeType = file.type || 'image/jpeg';
+      const compressed = await compressImageForVision(file);
+      // compressImageForVision always returns a JPEG data URL when it
+      // re-encodes; for tiny / SVG passthroughs it preserves the
+      // original mime. Either way, parse the data URL to feed the
+      // analyze-photo endpoint with a matching mimeType.
+      const dataUrlMatch = compressed.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+      const base64 = dataUrlMatch ? dataUrlMatch[2] : compressed.split(',')[1];
+      const mimeType = dataUrlMatch ? dataUrlMatch[1] : (file.type || 'image/jpeg');
+      const res = await fetch('/api/nutrition/analyze-photo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ image: base64, mimeType }),
+      });
 
-        const res = await fetch('/api/nutrition/analyze-photo', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`,
-          },
-          body: JSON.stringify({ image: base64, mimeType }),
-        });
-
-        const data = await res.json();
-        if (data.success && data.data) {
-          setPhotoResult(data.data);
-        } else {
-          alert('Could not analyze photo. Try a clearer image.');
-        }
-        setPhotoAnalyzing(false);
-      };
-      reader.readAsDataURL(file);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setPhotoResult(data.data);
+      } else {
+        alert('Could not analyze photo. Try a clearer image.');
+      }
+      setPhotoAnalyzing(false);
     } catch (err) {
       console.error('[IntelCenter:analyzePhoto] Failed:', err);
       setPhotoAnalyzing(false);
@@ -3494,6 +3533,11 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </div>
           </div>
         );
+      case 'MANUAL':
+        // User-facing operating manual — every feature explained.
+        // Bilingual via internal language hook (no operator data
+        // needed). Mirrors the OpsCenter ROADMAP tab in chrome.
+        return <OperatingManual />;
       case 'FORM_CHECK':
         // AI Form Analysis (Video) — feature #47. Operator uploads a
         // short clip; client-side frame extraction + Claude vision
@@ -3521,6 +3565,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PREFERENCES: '◇',
     WEARABLES: '◎',
     FORM_CHECK: '◊',
+    MANUAL: '☰',
   };
 
   const getTabLabels = (): Record<SubTab, string> => ({
@@ -3533,6 +3578,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PREFERENCES: t('intel.preferences'),
     WEARABLES: 'WEARABLES',
     FORM_CHECK: 'FORM CHECK',
+    // MANUAL is the user-facing operating manual — every feature
+    // explained, parallel to OPS Center's ROADMAP tab. Translated
+    // inline by OperatingManual based on operator language.
+    MANUAL: t('intel.manual') || 'MANUAL',
   });
 
   const [isMobile, setIsMobile] = useState(false);
