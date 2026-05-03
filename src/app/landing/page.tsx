@@ -160,14 +160,14 @@ export default function LandingPage() {
             <a href="#tiers">{t('landing.nav.tiers')}</a>
             <a href="/junior-operator">{t('landing.nav.junior_operator')}</a>
             <a href="#founder">{t('landing.nav.founders')}</a>
-            {/* MEMBER LOGIN — distinct from the primary "Deploy" CTA. Members
-                returning to the site click here; the Deploy CTA is for new
-                signups (currently routes to the same /login page until a
-                separate /signup flow exists, but kept visually distinct so
-                the pattern is in place when it does). */}
+            {/* MEMBER LOGIN — for returning operators who already have an
+                account. Kept pointed at /login because that's still the
+                auth entry. Distinct from the primary Deploy CTA, which
+                routes new prospects to /early-access (manual founder-DM
+                onboarding for the founding cohort, May 2026). */}
             <Link href="/login" className={styles.navLoginLink}>{t('landing.nav.member_login')}</Link>
           </div>
-          <Link className={styles.navCta} href="/login">{t('landing.nav.deploy')}</Link>
+          <Link className={styles.navCta} href="/early-access">{t('landing.nav.deploy')}</Link>
         </div>
       </nav>
 
@@ -195,7 +195,7 @@ export default function LandingPage() {
             <div className={styles.heroCtas}>
               <Link
                 className={`${styles.btn} ${styles.btnPrimary}`}
-                href="/login"
+                href="/early-access"
                 onClick={() => trackLandingCta('hero_deploy')}
               >
                 {t('landing.hero.cta_deploy')} <span className={styles.arrow}>→</span>
@@ -445,12 +445,17 @@ export default function LandingPage() {
                   </ul>
                   <Link
                     className={styles.tierCta}
-                    // Tier CTA → /login carrying tier + cycle. After the user
-                    // authenticates, /login posts to /api/stripe/checkout with
-                    // these params and redirects to the Stripe-hosted checkout
-                    // session. If they're already logged in, /login auto-bounces
-                    // to / which honors the same params.
-                    href={`/login?tier=${tier.key}&cycle=monthly`}
+                    // Tier CTA → /early-access. The founding cohort is
+                    // onboarded manually via founder DM, so we route every
+                    // tier click to the same intake page (which has IG-DM
+                    // CTAs + the Gunny-Lite Q&A bot). The clicked tier is
+                    // captured in PostHog via trackLandingCta below — no
+                    // need to forward tier as a URL param since /early-
+                    // access doesn't deep-link by tier today. When public
+                    // self-serve checkout lands later, this can route back
+                    // to `/login?tier=${tier.key}&cycle=monthly` for the
+                    // pre-existing /login → Stripe Checkout forward.
+                    href="/early-access"
                     onClick={() => trackLandingCta('tier_select', { tier: tier.key })}
                   >
                     {t(`landing.tiers.${tier.nsKey}.cta`)}
@@ -705,7 +710,7 @@ export default function LandingPage() {
             <div className="btns">
               <Link
                 className={`${styles.btn} ${styles.btnPrimary}`}
-                href="/login"
+                href="/early-access"
                 onClick={() => trackLandingCta('final_deploy')}
               >
                 {t('landing.cta.deploy_now')} <span className={styles.arrow}>→</span>
