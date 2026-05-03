@@ -267,6 +267,46 @@ model TrainerApplication {
   @@index([email])
 }
 
+// PersonalRhythm — 14-day rolling aggregates derived from
+// DailyOpsPlan.feedback. Phase 2A (May 2026) of Daily Ops. Computed
+// lazily before each plan generation by src/lib/personalRhythm.ts;
+// injected into Gunny's system prompt so the next plan adapts to
+// what the operator actually does (vs what Gunny thinks they should
+// do). One row per operator. Pure derived state — safe to recompute
+// from history at any time, no manual edits.
+model PersonalRhythm {
+  operatorId              String   @id
+
+  // Time-shift signals — minutes the operator habitually moves a
+  // block from Gunny's default. Negative = earlier, positive = later.
+  // Aggregated from BlockFeedback.perceivedFit votes:
+  //   'too_early' → +60 min vote
+  //   'too_late'  → -30 min vote
+  //   'right'     → reinforce current
+  caffeineCutoffOffsetMin Int      @default(0)
+  workoutWindowDefault    String?  // 'HH:MM' — mode of workout block startTimes that scored 'right' or were followed
+  windDownOffsetMin       Int      @default(0)
+  bedtimeOffsetMin        Int      @default(0)
+
+  // Adherence by category (0..1). Categories with persistent low
+  // adherence get downgraded or removed from the next plan.
+  blockSkipRates          Json     @default("{}") // { [BlockCategory]: number }
+
+  // Meal preference learned from how many meal blocks land 'on time'
+  // vs get merged or skipped.
+  preferredMealCount      Int      @default(4)
+
+  // Wearable-derived multi-day comparison.
+  // Negative sleepGapMin = consistently sleeping less than the
+  // sleep_target.endTime - startTime delta (operator under-resting).
+  sleepGapMin             Int      @default(0)
+
+  // Diagnostics — surfaced in admin/parent views, not in the plan.
+  feedbackSampleCount     Int      @default(0)
+  lastComputedAt          DateTime?
+  updatedAt               DateTime @updatedAt
+}
+
 // Daily Ops — Gunny's prescribed daily schedule (separate from the
 // Workout Planner). Owns the rhythm of the day: wake, sun, caffeine
 // window, meal cadence, supplement timing, workout window, wind-down,

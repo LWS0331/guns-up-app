@@ -415,6 +415,35 @@ Format:
 }
 </daily_ops_json>
 
+PERSONALIZATION SIGNALS (Phase 2A, when present in the context block):
+The system may inject two blocks above this prompt — "PERSONAL RHYTHM"
+(14-day feedback aggregate) and "WEARABLE SIGNALS" (last night's sleep
++ HRV + readiness). When you see either, USE THEM:
+
+  - PERSONAL RHYTHM offsets are AUTHORITATIVE defaults. If it says
+    "caffeine_cutoff: shift +90 min from default", the operator has
+    consistently told you 14:00 was too early — don't emit 14:00 again,
+    emit 15:30. Same for wind_down, sleep_target, workout window.
+  - High-skip blocks (>=60% skipped) should be DROPPED from today's plan
+    or radically softened. Don't generate the same block they've ignored
+    14 days running and pretend it's news.
+  - Preferred meal count overrides the default 4. If they prefer 3, emit
+    3 meal blocks.
+
+  - WEARABLE readiness < 60 OR sleep_debt < -1: SOFTEN the day. Cap
+    caffeine at the LOW end of the dose range. Move wind_down 30 min
+    earlier. Move sleep_target 30 min earlier. If a workout is
+    scheduled, flag in chat that today is a recovery-priority day —
+    suggest a lighter session if the path supports it.
+  - WEARABLE readiness > 80 AND sleep_debt > 0: full intensity is on
+    the table; you can lean into the upper end of caffeine, push the
+    workout block as scheduled, hold the standard wind_down.
+  - Always populate basis.sleepDebtHrs and basis.readinessScore in the
+    daily_ops_json from the WEARABLE block when present.
+
+If neither signal block is present, fall back to corpus defaults — this
+operator is new (no feedback yet) or has no wearable linked.
+
 Tier-gate refusal pattern (use exactly when the operator is below
 Commander tier and asks for a daily plan):
 "Daily Ops is a Commander-tier feature, Operator. Stand fast — upgrade
@@ -3536,6 +3565,67 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // Add ops data for ops mode
     if (isOpsMode && body.opsData) {
       contextBlock += `\n\n═══ LIVE OPERATIONAL DATA FROM DATABASE ═══\n${JSON.stringify(body.opsData, null, 2)}`;
+    }
+
+    // ── DAILY OPS — PERSONALIZATION SIGNALS (Phase 2A, May 2026) ──
+    // When the operator's last message looks like a daily-ops trigger
+    // (or when there's already an active plan today and they're
+    // following up), inject:
+    //   - PERSONAL RHYTHM (14-day rolling feedback aggregate)
+    //   - WEARABLE SIGNALS (last night's sleep + HRV + readiness)
+    // so Gunny generates the next plan adapted to what the operator
+    // actually does, not what we guess. We only fire this for
+    // operators where Gunny COULD emit a daily_ops_json — i.e. adults
+    // with their own Commander tier or juniors with a Commander
+    // parent. Sub-Commander operators get a refusal on the channel
+    // anyway, so the cost of pre-computing for them is wasted; the
+    // gate uses a cheap synchronous tier check before any DB reads.
+    {
+      const lastUserMsg =
+        Array.isArray(messages) && messages.length > 0
+          ? (messages[messages.length - 1]?.text ||
+             messages[messages.length - 1]?.content ||
+             '')
+          : '';
+      const DAILY_OPS_TRIGGER_RE =
+        /\b(daily\s*ops|ops\s*plan|battle\s*rhythm|today'?s?\s*plan|daily\s*plan|day\s*plan|design\s*my\s*day|build\s*my\s*day|reshape\s*today|reshape\s*the\s*day|when\s*should\s*i\s*(eat|drink|take|sleep|cut\s*caffeine|workout|train|lift)|caffeine\s*cutoff|wind\s*down|sleep\s*target)\b/i;
+      const looksLikeDailyOpsTrigger =
+        typeof lastUserMsg === 'string' && DAILY_OPS_TRIGGER_RE.test(lastUserMsg);
+
+      if (looksLikeDailyOpsTrigger) {
+        try {
+          const { recomputePersonalRhythm, renderRhythmForPrompt } = await import(
+            '@/lib/personalRhythm'
+          );
+          const { getWearableSignals, renderWearableForPrompt } = await import(
+            '@/lib/wearableSignals'
+          );
+          const today = clientDate; // already operator-local YYYY-MM-DD upstream
+          const [rhythm, wearable] = await Promise.all([
+            recomputePersonalRhythm(auth.operatorId).catch((err) => {
+              console.warn('[daily-ops] rhythm recompute failed:', err);
+              return null;
+            }),
+            getWearableSignals(auth.operatorId, today).catch((err) => {
+              console.warn('[daily-ops] wearable signals failed:', err);
+              return null;
+            }),
+          ]);
+          const rhythmText = rhythm ? renderRhythmForPrompt(rhythm) : '';
+          const wearableText = wearable ? renderWearableForPrompt(wearable) : '';
+          if (rhythmText || wearableText) {
+            contextBlock +=
+              '\n\n═══ DAILY OPS PERSONALIZATION SIGNALS ═══' +
+              rhythmText +
+              wearableText;
+          }
+        } catch (err) {
+          console.warn('[daily-ops] signal injection failed:', err);
+          // Fall through silently — Gunny still has the corpus +
+          // base prompt. We never want a personalization miss to
+          // break the chat call.
+        }
+      }
     }
 
     // ── CHAT HISTORY HYDRATION ──
