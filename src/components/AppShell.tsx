@@ -2649,26 +2649,51 @@ const AppShell: React.FC<AppShellProps> = ({
           and the active top-pip indicator all live in CSS now. We keep the
           icon glyph + label structure but reorder so Gunny sits in the
           center with the special halo treatment per the handoff. */}
-      <nav className="ds-tabbar bottom-nav">
+      <nav className={`ds-tabbar bottom-nav${(() => {
+        // Compute six-column flag synchronously so the parent gets the
+        // right grid template before children render. Six columns
+        // appear when the operator has BOTH a power-tab (ops or
+        // parent_hub) AND daily_ops — typical for admins/trainers who
+        // are also Commander-tier (e.g. founders testing the feature).
+        const ids = new Set(tabs.map(t => t.id));
+        const hasPowerTab = ids.has('ops') || ids.has('parent_hub');
+        const hasDailyOps = ids.has('daily_ops');
+        return hasPowerTab && hasDailyOps ? ' six-col' : '';
+      })()}`}>
         {(() => {
-          // Reorder for the 5-slot mobile grid: Gunny lives in the
-          // visually-anchored center slot. Build the row dynamically so
-          // 4-tab (regular user) and 5-tab (admin/trainer) cases both
-          // produce a 5-col grid with Gunny centered.
+          // Reorder for the mobile grid: Gunny stays in the
+          // visually-anchored center slot. We build a 5-slot row for
+          // the common case and a 6-slot row when both Daily Ops AND
+          // a power tab (OPS / PARENT_HUB) need to coexist — e.g. a
+          // founder/admin who's also Commander-tier and wants both
+          // surfaces at thumb-reach.
           //
-          // Layout target: [coc] [planner] [GUNNY] [intel] [ops?|parent_hub?]
-          // For 4-tab users, the 5th slot stays empty; the grid keeps
-          // Gunny visually centered. The 5th slot is OPS for trainers/admins
-          // OR PARENT HUB for parents with linked juniors (mutually
-          // exclusive in practice — trainers with juniors see OPS).
+          // Layout (5-col):  [coc] [planner] [GUNNY] [intel] [daily_ops|ops|parent_hub]
+          // Layout (6-col):  [coc] [planner] [GUNNY] [intel] [daily_ops] [ops|parent_hub]
           const byId = new Map(tabs.map(t => [t.id, t] as const));
-          const slots: (typeof tabs[number] | null)[] = [
-            byId.get('coc') ?? null,
-            byId.get('planner') ?? null,
-            byId.get('gunny') ?? null,
-            byId.get('intel') ?? null,
-            byId.get('ops') ?? byId.get('parent_hub') ?? null,
-          ];
+          const dailyOps = byId.get('daily_ops') ?? null;
+          const powerTab = byId.get('ops') ?? byId.get('parent_hub') ?? null;
+          const sixCol = !!dailyOps && !!powerTab;
+          const slots: (typeof tabs[number] | null)[] = sixCol
+            ? [
+                byId.get('coc') ?? null,
+                byId.get('planner') ?? null,
+                byId.get('gunny') ?? null,
+                byId.get('intel') ?? null,
+                dailyOps,
+                powerTab,
+              ]
+            : [
+                byId.get('coc') ?? null,
+                byId.get('planner') ?? null,
+                byId.get('gunny') ?? null,
+                byId.get('intel') ?? null,
+                // 5-col fallback priority: daily_ops first (the
+                // user-facing daily-rhythm surface), then power tabs.
+                // Non-admin Commanders get Daily Ops here. Non-Commander
+                // trainers/admins (no Daily Ops in tabs) get OPS here.
+                dailyOps ?? powerTab,
+              ];
           return slots.map((tab, idx) => {
             if (!tab) {
               // Empty grid cell — preserves 5-col layout for 4-tab users.
