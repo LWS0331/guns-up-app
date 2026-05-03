@@ -992,13 +992,31 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             Arsenal grid in PREFERENCES so operators get a consistent
             multi-select pattern. 'None' clears the list. */}
         <div className="field" style={{ marginTop: 16, marginBottom: 0 }}>
-          <label>Health Conditions (select all that apply)</label>
+          <label>{t('intel.tracking_tiers.health_conditions_label')}</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-            {[
-              'High Blood Pressure', 'Diabetes', 'Heart Condition', 'Asthma',
-              'Joint Pain', 'Back Problems', 'Knee Issues', 'Shoulder Issues',
-              'Previous Surgery', 'Pregnancy/Postpartum', 'None',
-            ].map((c) => {
+            {/* DB-key array stays English (canonical persistence keys) —
+                CONDITION_LABEL_KEYS map handles the visible label
+                translation. Hybrid bug surfaced in May 2026 audit:
+                without the labelKey indirection, an ES operator
+                toggling "Presión Alta" would silently store Spanish
+                text into operator.intake.healthConditions, breaking
+                downstream injury / contraindication lookups that key
+                off the English values. The same labelKey map exists
+                in IntakeForm.tsx — kept inline here too rather than
+                exporting to avoid coupling the form's internal state. */}
+            {([
+              ['High Blood Pressure', 'intake.health.cond.high_bp'],
+              ['Diabetes', 'intake.health.cond.diabetes'],
+              ['Heart Condition', 'intake.health.cond.heart'],
+              ['Asthma', 'intake.health.cond.asthma'],
+              ['Joint Pain', 'intake.health.cond.joint_pain'],
+              ['Back Problems', 'intake.health.cond.back'],
+              ['Knee Issues', 'intake.health.cond.knee'],
+              ['Shoulder Issues', 'intake.health.cond.shoulder'],
+              ['Previous Surgery', 'intake.health.cond.surgery'],
+              ['Pregnancy/Postpartum', 'intake.health.cond.pregnancy'],
+              ['None', 'intake.health.cond.none'],
+            ] as const).map(([c, labelKey]) => {
               const active = (state.intakeFields.healthConditions || []).includes(c);
               return (
                 <button
@@ -1017,7 +1035,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  {c}
+                  {t(labelKey) || c}
                 </button>
               );
             })}
@@ -1299,37 +1317,41 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       <div className="ds-card bracket" style={{ marginBottom: 16, padding: 12 }}>
         <span className="bl" /><span className="br" />
         <span className="t-eyebrow" style={{ marginBottom: 8, display: 'inline-flex' }}>
-          Tracking Accuracy Tiers
+          {t('intel.tracking_tiers.heading')}
         </span>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {/* Map iteration variable renamed `t` → `tr` to avoid shadowing
+              the i18n `t` translator now that label / desc resolve via
+              t(). DB-key strings (`labelKey`, `descKey`) keep the row's
+              identity stable across language switches. */}
           {[
-            { tier: 1, label: 'MANUAL ENTRY', desc: 'You weigh + enter exact macros', color: '#00ff41', icon: '⚡', accuracy: '±1-3%' },
-            { tier: 2, label: 'USDA SEARCH', desc: 'FDA-verified database lookup', color: '#4ade80', icon: '🔬', accuracy: '±5-10%' },
-            { tier: 3, label: 'QUICK LOG', desc: 'AI text parsing from description', color: '#facc15', icon: '💬', accuracy: '±15-25%' },
-            { tier: 4, label: 'PHOTO SNAP', desc: 'AI vision analysis of plate photo', color: '#ff6b35', icon: '📸', accuracy: '±20-40%' },
-          ].map(t => (
+            { tier: 1, labelKey: 'intel.tracking_tiers.tier1.label', descKey: 'intel.tracking_tiers.tier1.desc', color: '#00ff41', icon: '⚡', accuracy: '±1-3%' },
+            { tier: 2, labelKey: 'intel.tracking_tiers.tier2.label', descKey: 'intel.tracking_tiers.tier2.desc', color: '#4ade80', icon: '🔬', accuracy: '±5-10%' },
+            { tier: 3, labelKey: 'intel.tracking_tiers.tier3.label', descKey: 'intel.tracking_tiers.tier3.desc', color: '#facc15', icon: '💬', accuracy: '±15-25%' },
+            { tier: 4, labelKey: 'intel.tracking_tiers.tier4.label', descKey: 'intel.tracking_tiers.tier4.desc', color: '#ff6b35', icon: '📸', accuracy: '±20-40%' },
+          ].map(tr => (
             <div
-              key={t.tier}
+              key={tr.tier}
               style={{
                 padding: '8px 10px',
-                background: `${t.color}08`,
-                border: `1px solid ${t.color}30`,
+                background: `${tr.color}08`,
+                border: `1px solid ${tr.color}30`,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
               }}
             >
-              <span style={{ fontSize: 16 }}>{t.icon}</span>
+              <span style={{ fontSize: 16 }}>{tr.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="t-display-m" style={{ color: t.color, fontSize: 9, letterSpacing: 1 }}>
-                  TIER {t.tier}: {t.label}
+                <div className="t-display-m" style={{ color: tr.color, fontSize: 9, letterSpacing: 1 }}>
+                  TIER {tr.tier}: {t(tr.labelKey)}
                 </div>
                 <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
-                  {t.desc}
+                  {t(tr.descKey)}
                 </div>
               </div>
-              <span className="t-mono-data" style={{ color: t.color, fontWeight: 700, fontSize: 10 }}>
-                {t.accuracy}
+              <span className="t-mono-data" style={{ color: tr.color, fontWeight: 700, fontSize: 10 }}>
+                {tr.accuracy}
               </span>
             </div>
           ))}
