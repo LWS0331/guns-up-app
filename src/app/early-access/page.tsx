@@ -18,6 +18,7 @@
 
 import styles from './early-access.module.css';
 import EarlyAccessChat from './EarlyAccessChat';
+import EarlyAccessIgCta from './EarlyAccessIgCta';
 
 // Toggle to false when the campaign closes or all 20 seats fill.
 const CAMPAIGN_OPEN = true;
@@ -147,12 +148,12 @@ export default function EarlyAccessPage() {
               </div>
 
               <div className={styles.ctaGrid}>
-                <a
+                <EarlyAccessIgCta
                   className={styles.ctaPrimary}
                   href={IG_DM_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Open Instagram DM and reserve a COMMANDER seat"
+                  cta="commander"
+                  tier="commander"
+                  ariaLabel="Open Instagram DM and reserve a COMMANDER seat"
                 >
                   <span className={styles.ctaTier}>
                     DM &ldquo;COMMANDER&rdquo;
@@ -161,13 +162,13 @@ export default function EarlyAccessPage() {
                   <span className={styles.ctaArrow} aria-hidden="true">
                     →
                   </span>
-                </a>
-                <a
+                </EarlyAccessIgCta>
+                <EarlyAccessIgCta
                   className={`${styles.ctaPrimary} ${styles.ctaPrimaryAccent}`}
                   href={IG_DM_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Open Instagram DM and reserve a WARFIGHTER seat"
+                  cta="warfighter"
+                  tier="warfighter"
+                  ariaLabel="Open Instagram DM and reserve a WARFIGHTER seat"
                 >
                   <span className={styles.ctaTier}>
                     DM &ldquo;WARFIGHTER&rdquo;
@@ -176,18 +177,14 @@ export default function EarlyAccessPage() {
                   <span className={styles.ctaArrow} aria-hidden="true">
                     →
                   </span>
-                </a>
+                </EarlyAccessIgCta>
               </div>
 
               <p className={styles.ctaHelper}>
                 Not sure which tier? DM <strong>&ldquo;OPS&rdquo;</strong> to{' '}
-                <a
-                  href={IG_PROFILE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <EarlyAccessIgCta href={IG_PROFILE_URL} cta="ops_helper">
                   @gunnyai_fit
-                </a>{' '}
+                </EarlyAccessIgCta>{' '}
                 — I&apos;ll help you pick.
               </p>
             </>
@@ -197,13 +194,9 @@ export default function EarlyAccessPage() {
               <p>
                 All 20 seats are reserved. The next intake window opens after
                 the v3 platform launch. Want a heads-up? DM{' '}
-                <a
-                  href={IG_PROFILE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <EarlyAccessIgCta href={IG_PROFILE_URL} cta="closed_box">
                   @gunnyai_fit
-                </a>
+                </EarlyAccessIgCta>
                 .
               </p>
             </div>

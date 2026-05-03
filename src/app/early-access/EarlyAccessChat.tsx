@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import styles from './early-access.module.css';
+import { initAnalytics, trackEvent, EVENTS } from '@/lib/analytics';
 
 interface Msg {
   role: 'user' | 'assistant';
@@ -38,6 +39,17 @@ export default function EarlyAccessChat() {
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
 
+  // Bootstrap PostHog on mount. The chat is always rendered on
+  // /early-access (it sits below the FAQ in the page tree), so this
+  // mount runs as soon as the visitor lands. By the time anyone can
+  // click an IG-DM CTA above, init has already completed and
+  // EarlyAccessIgCta's trackEvent calls fire successfully. initAnalytics
+  // is idempotent — calling it on every component mount across the app
+  // is safe.
+  useEffect(() => {
+    initAnalytics();
+  }, []);
+
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = input.trim();
@@ -47,6 +59,13 @@ export default function EarlyAccessChat() {
     setMessages(next);
     setInput('');
     setLoading(true);
+
+    // Fire BEFORE the API call so we capture intent even if Anthropic
+    // takes a slow path. msg_number is derived from the user-message
+    // count in `next` (which now includes the just-pushed turn) so the
+    // first send fires with msg_number=1, second with 2.
+    const userMsgCount = next.filter((m) => m.role === 'user').length;
+    trackEvent(EVENTS.EARLY_ACCESS_CHAT_MSG_SENT, { msg_number: userMsgCount });
 
     try {
       const res = await fetch('/api/early-access/chat', {
@@ -65,7 +84,16 @@ export default function EarlyAccessChat() {
         data.reply ||
         "Comms hiccup — DM @gunnyai_fit on Instagram and Ruben will get back to you.";
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
-      if (data.limitReached) setLimitReached(true);
+      if (data.limitReached) {
+        setLimitReached(true);
+        // The server flips limitReached when (a) the per-IP cap was
+        // exhausted by this turn, or (b) the Anthropic call failed
+        // and the fail-soft fallback kicked in. We can't tell from
+        // the response shape which path fired; default to 'cap_reached'
+        // since that's the success-path 99% case. The catch block
+        // below handles the network-error path explicitly.
+        trackEvent(EVENTS.EARLY_ACCESS_CHAT_LIMIT_HIT, { via: 'cap_reached' });
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -76,9 +104,17 @@ export default function EarlyAccessChat() {
         },
       ]);
       setLimitReached(true);
+      trackEvent(EVENTS.EARLY_ACCESS_CHAT_LIMIT_HIT, { via: 'network_error' });
     } finally {
       setLoading(false);
     }
+  };
+
+  // Click handler for the post-limit IG-DM CTA. The link still routes
+  // to ig.me/m/gunnyai_fit via the underlying <a>; this just captures
+  // that the user actually crossed the bridge from the chat.
+  const onFallbackClick = () => {
+    trackEvent(EVENTS.EARLY_ACCESS_CHAT_FALLBACK_CLICK);
   };
 
   return (
@@ -129,6 +165,7 @@ export default function EarlyAccessChat() {
             href={IG_DM_URL}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={onFallbackClick}
           >
             DM @gunnyai_fit for the rest →
           </a>
