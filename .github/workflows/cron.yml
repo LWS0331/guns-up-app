@@ -1,0 +1,199 @@
+# GUNS UP — scheduled cron jobs
+#
+# This workflow is the runtime trigger for every /api/cron/* endpoint
+# in the app. The endpoints themselves are auth-gated via
+# requireCronAuth() in src/lib/cronAuth.ts — they expect
+#   Authorization: Bearer ${{ secrets.CRON_SECRET }}
+#
+# Why GitHub Actions instead of in-app scheduler:
+#   - Source-controlled cadence (git diff shows schedule changes)
+#   - Multi-replica safe (only one worker fires regardless of how
+#     many Railway replicas are running)
+#   - Free for public + private repos at this volume
+#   - GitHub's reliability for cron triggers is excellent
+#   - Decouples scheduling from the app runtime (cron failure can't
+#     OOM the request handler, app restarts don't reset cadence)
+#
+# Setup REQUIRED before this works:
+#   1. Set repo secret CRON_SECRET to match the value in Railway env
+#      vars on the guns-up-app service. Repo → Settings → Secrets
+#      and variables → Actions → New repository secret.
+#   2. Set repo variable APP_BASE_URL to the production origin
+#      (https://gunnyai.fit). Repo → Settings → Secrets and variables
+#      → Actions → Variables tab → New repository variable.
+#   3. Merge this file to main. Within ~5 min the first scheduled
+#      runs appear in the Actions tab.
+#
+# Manual fire (for debugging) is supported via workflow_dispatch — go
+# to Actions → "Cron Jobs" → Run workflow → pick which job.
+#
+# Schedule notes:
+#   - GitHub cron syntax is UTC. We use UTC where the underlying
+#     route already converts to operator-local timezones internally
+#     (daily-ops-pregen, daily-ops-notify), and pick a sensible UTC
+#     hour for the once-daily routes (baselines, auth-token-cleanup).
+#   - GitHub queues cron triggers under load — they may run a few
+#     minutes late but never early. Our endpoints are idempotent or
+#     fire-once-per-event-window so this is safe.
+#   - The smallest cron interval on GitHub Actions is 5 minutes.
+#     `daily-ops-notify` runs at the floor, which matches the
+#     route's documented ±2.5 min tolerance window.
+
+name: Cron Jobs
+
+on:
+  schedule:
+    # Every 5 minutes — daily-ops-notify (block-start push notifications)
+    - cron: '*/5 * * * *'
+    # Every 30 minutes — activation-emails (PaywallSpec §9)
+    - cron: '0,30 * * * *'
+    # Hourly at :00 — daily-ops-pregen (timezone-aware per-operator
+    # filter handles the actual 21:00-local pickup)
+    - cron: '0 * * * *'
+    # Daily at 09:00 UTC — baselines recompute (early enough that
+    # readiness endpoints have fresh data before US morning traffic)
+    - cron: '0 9 * * *'
+    # Daily at 09:30 UTC — auth-token-cleanup (cheap; piggyback after
+    # baselines so they don't fight)
+    - cron: '30 9 * * *'
+
+  # Manual trigger for debugging / backfills.
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which cron to fire'
+        required: true
+        default: 'daily-ops-notify'
+        type: choice
+        options:
+          - daily-ops-notify
+          - daily-ops-pregen
+          - activation-emails
+          - baselines
+          - auth-token-cleanup
+
+permissions:
+  contents: read
+
+jobs:
+  # Each job is gated on its specific cron expression so a single
+  # cron event triggers exactly one job. The `if` conditions match
+  # github.event.schedule against the cron string above.
+  #
+  # Manual workflow_dispatch fires the job whose name matches the
+  # `job` input.
+
+  daily-ops-notify:
+    if: github.event.schedule == '*/5 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'daily-ops-notify')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/cron/daily-ops-notify
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+        run: |
+          set -e
+          : "${CRON_SECRET:?CRON_SECRET secret is not set}"
+          : "${APP_BASE_URL:?APP_BASE_URL variable is not set}"
+          response=$(curl -fsS -w '\n__HTTP_STATUS__:%{http_code}\n' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "User-Agent: github-actions-cron" \
+            "$APP_BASE_URL/api/cron/daily-ops-notify")
+          echo "$response"
+          status=$(echo "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9]*\).*/\1/p')
+          if [ "$status" != "200" ]; then
+            echo "::error::daily-ops-notify returned $status"
+            exit 1
+          fi
+
+  activation-emails:
+    if: github.event.schedule == '0,30 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'activation-emails')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/cron/activation-emails
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+        run: |
+          set -e
+          : "${CRON_SECRET:?CRON_SECRET secret is not set}"
+          : "${APP_BASE_URL:?APP_BASE_URL variable is not set}"
+          response=$(curl -fsS -w '\n__HTTP_STATUS__:%{http_code}\n' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "User-Agent: github-actions-cron" \
+            "$APP_BASE_URL/api/cron/activation-emails")
+          echo "$response"
+          status=$(echo "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9]*\).*/\1/p')
+          if [ "$status" != "200" ]; then
+            echo "::error::activation-emails returned $status"
+            exit 1
+          fi
+
+  daily-ops-pregen:
+    if: github.event.schedule == '0 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'daily-ops-pregen')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/cron/daily-ops-pregen
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+        run: |
+          set -e
+          : "${CRON_SECRET:?CRON_SECRET secret is not set}"
+          : "${APP_BASE_URL:?APP_BASE_URL variable is not set}"
+          response=$(curl -fsS -w '\n__HTTP_STATUS__:%{http_code}\n' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "User-Agent: github-actions-cron" \
+            "$APP_BASE_URL/api/cron/daily-ops-pregen")
+          echo "$response"
+          status=$(echo "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9]*\).*/\1/p')
+          if [ "$status" != "200" ]; then
+            echo "::error::daily-ops-pregen returned $status"
+            exit 1
+          fi
+
+  baselines:
+    if: github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'baselines')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/cron/baselines
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+        run: |
+          set -e
+          : "${CRON_SECRET:?CRON_SECRET secret is not set}"
+          : "${APP_BASE_URL:?APP_BASE_URL variable is not set}"
+          response=$(curl -fsS -w '\n__HTTP_STATUS__:%{http_code}\n' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "User-Agent: github-actions-cron" \
+            "$APP_BASE_URL/api/cron/baselines")
+          echo "$response"
+          status=$(echo "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9]*\).*/\1/p')
+          if [ "$status" != "200" ]; then
+            echo "::error::baselines returned $status"
+            exit 1
+          fi
+
+  auth-token-cleanup:
+    if: github.event.schedule == '30 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'auth-token-cleanup')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/cron/auth-token-cleanup
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+        run: |
+          set -e
+          : "${CRON_SECRET:?CRON_SECRET secret is not set}"
+          : "${APP_BASE_URL:?APP_BASE_URL variable is not set}"
+          response=$(curl -fsS -w '\n__HTTP_STATUS__:%{http_code}\n' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "User-Agent: github-actions-cron" \
+            "$APP_BASE_URL/api/cron/auth-token-cleanup")
+          echo "$response"
+          status=$(echo "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9]*\).*/\1/p')
+          if [ "$status" != "200" ]; then
+            echo "::error::auth-token-cleanup returned $status"
+            exit 1
+          fi
