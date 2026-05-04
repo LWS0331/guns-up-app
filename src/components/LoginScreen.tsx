@@ -563,6 +563,31 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
                 REGISTER
               </button>
             </div>
+
+            {/* Recovery escape hatch. Surfaced because Google OAuth on
+                iOS PWA can lose the state cookie between the redirect
+                round-trip, leaving the user stuck on "Sign-in session
+                expired" with no obvious way out. /recover is a
+                magic-link flow that mints a one-time token bound to
+                the email, bypassing both cookies and OAuth state. */}
+            <div style={{
+              fontFamily: 'Orbitron, monospace',
+              fontSize: '11px',
+              color: '#666',
+            }}>
+              Can&apos;t sign in?{' '}
+              <a
+                href="/recover"
+                style={{
+                  fontFamily: 'Orbitron, monospace',
+                  fontSize: '11px',
+                  color: '#00ff41',
+                  textDecoration: 'underline',
+                }}
+              >
+                EMAIL ME A LINK
+              </a>
+            </div>
           </form>
         ) : !success && loginMode === 'register' ? (
           <form onSubmit={handleRegister} style={{
