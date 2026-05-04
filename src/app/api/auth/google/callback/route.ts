@@ -4,11 +4,10 @@ import { generateToken } from '@/lib/auth';
 import { isOperatorAllowed } from '@/lib/allowlist';
 import { setAuthCookie } from '@/lib/authCookie';
 import {
-  compareStateNonce,
   decodeIdToken,
   exchangeCodeForTokens,
   getGoogleConfig,
-  OAUTH_STATE_COOKIE,
+  verifyOauthState,
 } from '@/lib/oauthGoogle';
 
 // GET /api/auth/google/callback
@@ -28,8 +27,13 @@ import {
 //      pre-assigned the email) — we link the googleId to that operator.
 // If neither match → reject with `not_authorized` so the user gets a
 // clean "contact Ruben" message instead of a half-created shell account.
-
-const NEXT_COOKIE = 'gunsup_oauth_next';
+//
+// Apr 2026: state verification migrated from cookie-pairing to
+// HMAC-signed self-validating tokens (lib/oauthGoogle.ts:signOauthState).
+// iOS PWA was dropping the state cookie between Google's redirect and
+// our callback, producing chronic "Sign-in session expired" errors.
+// The signed state carries its own proof + the post-login destination
+// in the same value, so no cookies are read here anymore.
 
 function safeNext(value: string | null | undefined): string {
   if (!value) return '/';
@@ -41,11 +45,7 @@ function failureRedirect(req: NextRequest, reason: string): NextResponse {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${new URL(req.url).origin}`;
   const target = new URL('/login', baseUrl);
   target.searchParams.set('oauth_error', reason);
-  const res = NextResponse.redirect(target, { status: 302 });
-  // Clear the dance cookies — they're single-use.
-  res.cookies.delete(OAUTH_STATE_COOKIE);
-  res.cookies.delete(NEXT_COOKIE);
-  return res;
+  return NextResponse.redirect(target, { status: 302 });
 }
 
 export async function GET(req: NextRequest) {
@@ -62,15 +62,21 @@ export async function GET(req: NextRequest) {
     return failureRedirect(req, 'missing_code_or_state');
   }
 
-  // Verify CSRF state against the cookie set by /start
-  const stateFromCookie = req.cookies.get(OAUTH_STATE_COOKIE)?.value;
-  if (!stateFromCookie || !compareStateNonce(stateFromCookie, stateFromGoogle)) {
-    console.warn('[api/auth/google/callback] state mismatch');
+  // Verify CSRF state via HMAC signature embedded in the state value
+  // itself. No cookie read — the state is self-contained, so iOS PWA
+  // cookie loss between the redirect and the callback no longer
+  // breaks the flow.
+  const verified = verifyOauthState(stateFromGoogle);
+  if (verified.ok !== true) {
+    console.warn(
+      '[api/auth/google/callback] state verify failed:',
+      verified.reason,
+    );
     return failureRedirect(req, 'state_mismatch');
   }
 
-  // Pull the post-login destination set at /start. Defaults to "/".
-  const next = safeNext(req.cookies.get(NEXT_COOKIE)?.value);
+  // Post-login destination travels inside the signed state payload.
+  const next = safeNext(verified.next);
 
   let config;
   try {
@@ -142,8 +148,6 @@ export async function GET(req: NextRequest) {
   dest.searchParams.set('next', next);
 
   const res = NextResponse.redirect(dest, { status: 302 });
-  res.cookies.delete(OAUTH_STATE_COOKIE);
-  res.cookies.delete(NEXT_COOKIE);
   // Apr 2026 fix: set the persistent httpOnly auth cookie alongside the
   // URL-token (which the /auth/oauth-callback page stashes in localStorage).
   // The cookie is what survives iOS PWA close/reopen when localStorage
