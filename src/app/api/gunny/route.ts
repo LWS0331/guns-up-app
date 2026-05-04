@@ -8,7 +8,8 @@ import { OWNER_OVERRIDE_MODEL, resolveTierModel } from '@/lib/models';
 import { applyJuniorGuardrailsToWorkoutJson } from '@/lib/juniorGuardrails';
 import { upsertDailyOpsPlan, applyBlockOverride } from '@/lib/dailyOpsPersistence';
 import { computeAnthropicCost, type AnthropicUsage } from '@/lib/anthropicCost';
-import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
+import { isJuniorOperatorEnabledServer, isModelAutorouteEnabledServer } from '@/lib/featureFlags';
+import { classifyQueryComplexity, pickModelForQuery, type RoutingDecision } from '@/lib/modelRouter';
 import { detectAndLogSafety } from '@/lib/juniorSafetyLogger';
 import { prisma } from '@/lib/db';
 import { buildMacroCycle, recomputeOnGoalDateChange } from '@/lib/macrocycle';
@@ -3191,11 +3192,53 @@ export async function POST(req: NextRequest) {
     const isAssistantMode = mode === 'assistant';
     const isOnboardingMode = mode === 'onboarding';
     const isOpsMode = mode === 'ops';
-    const model = resolveTierModel(tier);
 
     // Force Opus for platform owner (highest-quality responses for QA).
     const ownerOverride = operatorContext?.callsign === 'RAMPAGE';
-    const finalModel = ownerOverride ? OWNER_OVERRIDE_MODEL : model;
+    const baselineModel = ownerOverride ? OWNER_OVERRIDE_MODEL : resolveTierModel(tier);
+
+    // ── PER-QUERY MODEL ROUTING ──
+    // When MODEL_AUTOROUTE_ENABLED, classify the latest user message
+    // and pick the cheapest model that respects the tier ceiling. Hard
+    // guardrails inside pickModelForQuery: WARFIGHTER stays on Opus,
+    // RECON stays on Haiku (and short-circuits on vision so we don't
+    // burn tokens on a model that can't see images). Flag-off path
+    // preserves the existing tier→fixed-model behavior exactly.
+    let finalModel = baselineModel;
+    let routingDecision: RoutingDecision | null = null;
+
+    if (isModelAutorouteEnabledServer()) {
+      const lastUserMsg = [...messages].reverse().find(
+        (m: { role?: string; text?: string; content?: string; image?: string }) => m.role === 'user'
+      );
+      const userText: string = lastUserMsg?.text || lastUserMsg?.content || '';
+      const hasImage = !!lastUserMsg?.image;
+      const classification = classifyQueryComplexity(userText, hasImage, mode);
+      routingDecision = pickModelForQuery(tier, classification, ownerOverride);
+
+      if (routingDecision.model === null) {
+        // RECON + vision: don't call Anthropic. Reply with a structured
+        // upsell nudge so the operator knows image analysis is gated.
+        return NextResponse.json({
+          response:
+            "Image analysis is an OPERATOR-tier feature, champ. Bump up to OPERATOR and I'll read every label, every plate, every form check.",
+          gated: 'vision-recon',
+        });
+      }
+
+      finalModel = routingDecision.model;
+
+      // eslint-disable-next-line no-console
+      console.info('[gunny] model.routing', {
+        operatorId: auth.operatorId,
+        tier,
+        baselineModel,
+        finalModel,
+        classification: routingDecision.classification,
+        reason: routingDecision.reason,
+        routedDown: routingDecision.routedDown,
+      });
+    }
 
     // Junior Operator detection — flips the entire prompt + context shape.
     // When true, SYSTEM_PROMPT becomes SOCCER_YOUTH_PROMPT and the adult

@@ -46,6 +46,25 @@ export function isJuniorOperatorEnabledServer(): boolean {
 export const TRAINER_APPLICATIONS_OPEN: boolean =
   process.env.NEXT_PUBLIC_TRAINER_APPLICATIONS_OPEN === 'true';
 
+// ─── MODEL_AUTOROUTE_ENABLED ────────────────────────────────────────────
+//
+// Per-query model auto-routing in /api/gunny. When false (default), the
+// route uses the strict tier→fixed-model mapping in src/lib/models.ts.
+// When true, src/lib/modelRouter.ts classifies each user message and
+// picks the cheapest model that respects the operator's tier ceiling
+// (with a hard floor at Opus for WARFIGHTER and a hard pin at Haiku for
+// RECON).
+//
+// Server-only flag — the routing decision is made on the server and
+// the client is never told which model was chosen.
+//
+// Rollback is instant: unset MODEL_AUTOROUTE_ENABLED in env, redeploy
+// (or hot-reload). The route checks the flag per request, so flips take
+// effect on the next chat turn.
+export function isModelAutorouteEnabledServer(): boolean {
+  return process.env.MODEL_AUTOROUTE_ENABLED === 'true';
+}
+
 // ─── REGISTRATION_OPEN ──────────────────────────────────────────────────
 //
 // Public sign-up gate. When false, the LoginScreen REGISTER button
