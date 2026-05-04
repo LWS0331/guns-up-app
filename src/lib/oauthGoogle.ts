@@ -20,10 +20,13 @@ import * as crypto from 'crypto';
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
-// Cookie name carrying the signed CSRF state. httpOnly + sameSite=lax so it
-// survives the Google redirect back to us. Short TTL (10 min) — OAuth dance
-// shouldn't take longer than that.
-export const OAUTH_STATE_COOKIE = 'gunsup_oauth_state';
+// Cookie-based state was retired Apr 2026 — see signOauthState /
+// verifyOauthState below. iOS PWA cookie isolation between the OAuth
+// redirect to Google and the callback was dropping the state cookie,
+// producing a steady stream of `state_mismatch` rejections that
+// looked to users like "Sign-in session expired" with no recovery
+// path. The HMAC-signed self-validating state below carries its own
+// proof through the round-trip, so no cookies are needed.
 export const OAUTH_STATE_TTL_SEC = 600;
 
 export interface GoogleConfig {
@@ -67,23 +70,125 @@ export function buildAuthorizeUrl(config: GoogleConfig, state: string, nextPath?
   return `${GOOGLE_AUTHORIZE_URL}?${params.toString()}`;
 }
 
-/**
- * Generate a state token for CSRF protection. Returns the raw nonce — the
- * caller stores the same nonce in an httpOnly cookie and embeds it in the
- * OAuth `state` parameter. On callback we compare the cookie to the state
- * round-tripped through Google.
- */
-export function generateStateNonce(): string {
-  return crypto.randomBytes(24).toString('base64url');
+// ── HMAC-SIGNED OAUTH STATE (cookie-free) ──
+//
+// The state value sent through the OAuth dance is a self-validating
+// signed token: base64url(JSON{nonce, ts, next}) + '.' + HMAC-SHA256(body).
+// The callback re-derives the HMAC from the body and refuses any state
+// whose signature doesn't match or whose timestamp is older than
+// OAUTH_STATE_TTL_SEC. No cookie write/read is involved, so the iOS
+// PWA cookie-isolation issue between Google's redirect and our
+// callback can't drop the state.
+//
+// Replay window inside TTL is acceptable for closed-beta — the real
+// CSRF defense is HTTPS plus the closed-beta allowlist; the state is
+// belt-and-suspenders. If we ever need stricter single-use, drop in
+// an in-memory used-nonce set keyed by `n` with a 10-min sweep.
+
+interface OauthStatePayload {
+  n: string;       // random nonce (entropy / dedupe handle)
+  t: number;       // ms since epoch when minted
+  next: string;    // post-login destination (whitelisted by /start)
 }
 
-/** Constant-time comparison so timing attacks can't leak partial matches. */
-export function compareStateNonce(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ab, bb);
+function getStateSecret(): string {
+  // Reuse the JWT secret — already required by the rest of the auth
+  // surface, so OAuth state and JWT compromise/rotation move together.
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      'JWT_SECRET environment variable is required for OAuth state signing.',
+    );
+  }
+  return secret;
+}
+
+function hmacSig(body: string): string {
+  // 22 chars of base64url ≈ 132 bits of MAC strength — comfortably
+  // above the bar for a 10-minute-TTL CSRF token, while keeping the
+  // total state value short enough to pass cleanly through Google's
+  // 1024-byte state limit alongside the JSON payload.
+  return crypto
+    .createHmac('sha256', getStateSecret())
+    .update(body)
+    .digest('base64url')
+    .slice(0, 22);
+}
+
+/**
+ * Mint a signed OAuth state value. Pass the `next` destination so the
+ * callback can resume to the right place without needing a sibling
+ * cookie. The returned string is URL-safe (base64url + '.').
+ */
+export function signOauthState(opts: { next: string }): string {
+  const payload: OauthStatePayload = {
+    n: crypto.randomBytes(16).toString('base64url'),
+    t: Date.now(),
+    next: opts.next,
+  };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `${body}.${hmacSig(body)}`;
+}
+
+export type OauthStateVerifyResult =
+  | { ok: true; next: string; issuedAt: number; nonce: string }
+  | { ok: false; reason: string };
+
+/**
+ * Verify a state value round-tripped through Google. Returns the
+ * decoded payload on success, or a structured failure with a `reason`
+ * tag suitable for telemetry. Callers should always treat any failure
+ * as `state_mismatch` to the user.
+ */
+export function verifyOauthState(
+  state: string | null | undefined,
+): OauthStateVerifyResult {
+  if (!state) return { ok: false, reason: 'missing' };
+  const dot = state.lastIndexOf('.');
+  if (dot < 1 || dot >= state.length - 1) {
+    return { ok: false, reason: 'malformed' };
+  }
+  const body = state.slice(0, dot);
+  const sig = state.slice(dot + 1);
+  let expected: string;
+  try {
+    expected = hmacSig(body);
+  } catch {
+    return { ok: false, reason: 'sign_failed' };
+  }
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expected);
+  if (
+    sigBuf.length !== expBuf.length ||
+    !crypto.timingSafeEqual(sigBuf, expBuf)
+  ) {
+    return { ok: false, reason: 'bad_signature' };
+  }
+  let payload: OauthStatePayload;
+  try {
+    payload = JSON.parse(
+      Buffer.from(body, 'base64url').toString('utf8'),
+    ) as OauthStatePayload;
+  } catch {
+    return { ok: false, reason: 'bad_payload' };
+  }
+  if (
+    typeof payload.t !== 'number' ||
+    typeof payload.n !== 'string' ||
+    typeof payload.next !== 'string'
+  ) {
+    return { ok: false, reason: 'bad_payload_shape' };
+  }
+  const ageMs = Date.now() - payload.t;
+  if (ageMs < 0 || ageMs > OAUTH_STATE_TTL_SEC * 1000) {
+    return { ok: false, reason: 'expired' };
+  }
+  return {
+    ok: true,
+    next: payload.next,
+    issuedAt: payload.t,
+    nonce: payload.n,
+  };
 }
 
 export interface GoogleTokenResponse {
