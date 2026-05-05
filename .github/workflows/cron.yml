@@ -82,10 +82,23 @@ jobs:
   #
   # Manual workflow_dispatch fires the job whose name matches the
   # `job` input.
+  #
+  # FAST-FAIL POLICY: every job below sets timeout-minutes: 5. Each job
+  # is a single curl to a cron endpoint that should respond in under
+  # 30 seconds (most return in <5s). 5 minutes is therefore wildly
+  # generous AS A REQUEST TIMEOUT, but tight enough that when a hosted
+  # runner can't be acquired (May 5 2026 GitHub Actions partial outage,
+  # incident "Incident with Actions" — 10% of East US runs failed with
+  # "The job was not acquired by Runner of type hosted even after
+  # multiple attempts"), we burn 5 minutes of queue time instead of
+  # the default 360. The next 5/30/60-minute cron tick will retry
+  # automatically — these endpoints are idempotent or fire-once-per-
+  # event-window by design (see workflow header for cron cadence).
 
   daily-ops-notify:
     if: github.event.schedule == '*/5 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'daily-ops-notify')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Hit /api/cron/daily-ops-notify
         env:
@@ -109,6 +122,7 @@ jobs:
   activation-emails:
     if: github.event.schedule == '0,30 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'activation-emails')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Hit /api/cron/activation-emails
         env:
@@ -132,6 +146,7 @@ jobs:
   daily-ops-pregen:
     if: github.event.schedule == '0 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'daily-ops-pregen')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Hit /api/cron/daily-ops-pregen
         env:
@@ -155,6 +170,7 @@ jobs:
   baselines:
     if: github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'baselines')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Hit /api/cron/baselines
         env:
@@ -178,6 +194,7 @@ jobs:
   auth-token-cleanup:
     if: github.event.schedule == '30 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'auth-token-cleanup')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Hit /api/cron/auth-token-cleanup
         env:
