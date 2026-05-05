@@ -170,6 +170,14 @@
   font-weight: 600;
   letter-spacing: 2px;
 }
+/* Dedicated slot for the MEMBER LOGIN link so it survives the ≤700px
+   .navLinks hide. On desktop, .navLinks has margin-left:auto which
+   pushes itself + everything after it (this slot + .navCta) to the
+   right edge. On mobile, .navLinks collapses (display:none) so we
+   promote this slot's left margin to auto, preserving the right-push. */
+.navLogin {
+  flex-shrink: 0;
+}
 .navLinks a {
   color: var(--text-secondary);
   text-decoration: none;
@@ -1583,8 +1591,20 @@
   .faq { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
-  .navInner { padding: 12px 20px; }
+  /* Tighten the nav row so brand + lang + MEMBER LOGIN + DEPLOY all fit
+     without horizontal overflow on a ~390px iPhone viewport. Previously
+     the row already overflowed (DEPLOY clipped to "DE..."); adding the
+     mobile-visible MEMBER LOGIN slot would push it further off-screen
+     unless we (a) shrink horizontal padding/gap, (b) hide the decorative
+     SYS ONLINE status, and (c) drop the CTAs to compact pill sizes. */
+  .navInner { padding: 10px 14px; gap: 10px; }
   .navLinks { display: none; }
+  .navStatus { display: none; }
+  /* On mobile .navLinks (which owned margin-left:auto) is gone, so the
+     login slot inherits the right-push. */
+  .navLogin { margin-left: auto; }
+  .navLoginLink { padding: 5px 9px; font-size: 10px; letter-spacing: 1.5px; }
+  .navCta { padding: 7px 12px; font-size: 10px; letter-spacing: 1.5px; }
   .hero { padding: 48px 20px; }
   .sectionHead, .sectionWrap { padding-left: 20px; padding-right: 20px; }
   .pillars, .tiers { grid-template-columns: 1fr; }

@@ -160,13 +160,17 @@ export default function LandingPage() {
             <a href="#tiers">{t('landing.nav.tiers')}</a>
             <a href="/junior-operator">{t('landing.nav.junior_operator')}</a>
             <a href="#founder">{t('landing.nav.founders')}</a>
-            {/* MEMBER LOGIN — for returning operators who already have an
-                account. Kept pointed at /login because that's still the
-                auth entry. Distinct from the primary Deploy CTA, which
-                routes new prospects to /early-access (manual founder-DM
-                onboarding for the founding cohort, May 2026). */}
-            <Link href="/login" className={styles.navLoginLink}>{t('landing.nav.member_login')}</Link>
           </div>
+          {/* MEMBER LOGIN — for returning operators who already have an
+              account. Kept pointed at /login because that's still the
+              auth entry. Distinct from the primary Deploy CTA, which
+              routes new prospects to /early-access (manual founder-DM
+              onboarding for the founding cohort, May 2026). Lives in its
+              own slot (NOT inside .navLinks) so it survives the ≤700px
+              mobile hide rule that collapses the section-anchor cluster —
+              previously, members hitting the landing on a phone had no
+              path back to /login. */}
+          <Link href="/login" className={`${styles.navLogin} ${styles.navLoginLink}`}>{t('landing.nav.member_login')}</Link>
           <Link className={styles.navCta} href="/early-access">{t('landing.nav.deploy')}</Link>
         </div>
       </nav>
