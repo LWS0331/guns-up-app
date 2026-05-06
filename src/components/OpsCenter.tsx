@@ -5,6 +5,7 @@ import { Operator, TIER_CONFIGS, AiTier, OPS_CENTER_ACCESS } from '@/lib/types';
 import { getAuthToken } from '@/lib/authClient';
 import Icon from '@/components/Icons';
 import OpsRoadmap from '@/components/OpsRoadmap';
+import CallsignGenerator from '@/components/CallsignGenerator';
 
 type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'ONBOARDING' | 'MARKETING' | 'ROADMAP';
 
@@ -91,6 +92,11 @@ interface DbMetrics {
       trainerId: string | null;
       betaUser: boolean;
       billingStatus: string | null;
+      // Admin kill switch — surfaced so the USERS tab can render
+      // a DISABLED badge + the right action button (DISABLE / ENABLE).
+      disabled?: boolean | null;
+      disabledAt?: string | null;
+      disabledReason?: string | null;
       workoutCount: number;
       mealCount: number;
       prCount: number;
@@ -194,6 +200,17 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [onboardingResult, setOnboardingResult] = useState<OnboardingResult | null>(null);
 
+  // ═══════════════════════════════════════════════════
+  // ADMIN ACTIONS — disable / enable / delete
+  // ═══════════════════════════════════════════════════
+  // Tracks the operator currently in delete-confirmation state. The
+  // modal opens when this matches an operator id, and the delete
+  // POST only fires after the admin types the matching callsign.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [adminActionPending, setAdminActionPending] = useState<string | null>(null);
+  const [adminActionError, setAdminActionError] = useState<string | null>(null);
+
   // Verify access
   if (!OPS_CENTER_ACCESS.includes(currentUser.id)) {
     return (
@@ -283,6 +300,11 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
      * all evaluate to non-paying. Source of truth for the Revenue tab.
      */
     billingStatus?: string | null;
+    /** Admin kill switch — drives the DISABLE / ENABLE button toggle in
+     *  the USERS tab. */
+    disabled?: boolean | null;
+    disabledAt?: string | null;
+    disabledReason?: string | null;
   };
   const displayOperators: DisplayOp[] = opStats.length > 0
     ? opStats
@@ -642,6 +664,72 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   };
 
   // ═══════════════════════════════════════
+  // ADMIN ACTION HANDLERS — disable / enable / delete
+  // ═══════════════════════════════════════
+  //
+  // Both endpoints accept session auth (OPS_CENTER_ACCESS) so we just
+  // pass the standard Bearer token. The /api/ops fetch refresh after a
+  // successful action keeps the roster in sync (the row's `disabled`
+  // flips immediately, or the row vanishes for delete).
+  const handleSetOperatorStatus = async (operatorId: string, action: 'disable' | 'enable') => {
+    setAdminActionError(null);
+    setAdminActionPending(operatorId);
+    try {
+      const res = await fetch('/api/admin/operator-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ operatorId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setAdminActionError(data?.reason || data?.error || `HTTP ${res.status}`);
+        return;
+      }
+      fetchMetrics();
+    } catch (err) {
+      console.error('[OpsCenter:operator-status] failed', err);
+      setAdminActionError('Network error — see console');
+    } finally {
+      setAdminActionPending(null);
+    }
+  };
+
+  // Delete handler — only fires AFTER the admin typed the matching
+  // callsign. The endpoint enforces the same check server-side, so
+  // even if the modal is bypassed somehow the row stays safe.
+  const handleDeleteOperator = async (operatorId: string, confirmCallsign: string) => {
+    setAdminActionError(null);
+    setAdminActionPending(operatorId);
+    try {
+      const res = await fetch('/api/admin/delete-operator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ operatorId, confirmCallsign }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setAdminActionError(data?.reason || data?.error || `HTTP ${res.status}`);
+        return;
+      }
+      // Success — close the modal, reset confirmation text, refresh roster.
+      setPendingDeleteId(null);
+      setDeleteConfirmText('');
+      fetchMetrics();
+    } catch (err) {
+      console.error('[OpsCenter:delete-operator] failed', err);
+      setAdminActionError('Network error — see console');
+    } finally {
+      setAdminActionPending(null);
+    }
+  };
+
+  // ═══════════════════════════════════════
   // RENDER FUNCTIONS
   // ═══════════════════════════════════════
   const renderRevenue = () => {
@@ -996,18 +1084,84 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                     {op.tierLocked ? 'YES' : 'NO'}
                   </td>
                   <td style={{ padding: '10px 8px' }}>
-                    {op.betaUser && !op.isVanguard && (
-                      <button
-                        onClick={() => handleGrantVanguard(op.id)}
-                        style={{
-                          padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
-                          color: '#ff00ff', background: 'rgba(255,0,255,0.08)', border: '1px solid rgba(255,0,255,0.2)',
-                          cursor: 'pointer', whiteSpace: 'nowrap',
-                        }}
-                      >
-                        VANGUARD
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {op.betaUser && !op.isVanguard && (
+                        <button
+                          onClick={() => handleGrantVanguard(op.id)}
+                          disabled={adminActionPending === op.id}
+                          style={{
+                            padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                            color: '#ff00ff', background: 'rgba(255,0,255,0.08)', border: '1px solid rgba(255,0,255,0.2)',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          VANGUARD
+                        </button>
+                      )}
+                      {/* Disable / Enable. The admin's own row gets neither
+                          (server-side guard rejects self-disable, but we
+                          hide the button too so it's not confusing). The
+                          two co-founders can still disable each other. */}
+                      {op.id !== currentUser.id && (
+                        op.disabled ? (
+                          <button
+                            onClick={() => handleSetOperatorStatus(op.id, 'enable')}
+                            disabled={adminActionPending === op.id}
+                            title={op.disabledReason || ''}
+                            style={{
+                              padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                              color: '#00ff41', background: 'rgba(0,255,65,0.08)', border: '1px solid rgba(0,255,65,0.20)',
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {adminActionPending === op.id ? '…' : 'ENABLE'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleSetOperatorStatus(op.id, 'disable')}
+                            disabled={adminActionPending === op.id}
+                            style={{
+                              padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                              color: '#ffb800', background: 'rgba(255,184,0,0.08)', border: '1px solid rgba(255,184,0,0.20)',
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {adminActionPending === op.id ? '…' : 'DISABLE'}
+                          </button>
+                        )
+                      )}
+                      {/* Delete — opens the confirmation modal. Hidden for
+                          the current admin (server also rejects). Founders
+                          aren't blocked client-side because the static seed
+                          will resurrect them on next /api/seed run. */}
+                      {op.id !== currentUser.id && (
+                        <button
+                          onClick={() => {
+                            setPendingDeleteId(op.id);
+                            setDeleteConfirmText('');
+                            setAdminActionError(null);
+                          }}
+                          disabled={adminActionPending === op.id}
+                          style={{
+                            padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                            color: '#ff4444', background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.20)',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          DELETE
+                        </button>
+                      )}
+                      {op.disabled && (
+                        <span style={{
+                          padding: '2px 6px', fontSize: '9px', fontFamily: '"Share Tech Mono", monospace',
+                          color: '#888', background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          letterSpacing: '1px',
+                        }}>
+                          DISABLED
+                        </span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1427,7 +1581,7 @@ If anything jams up, DM me. — Ruben`
 
         <SectionHeader title="NEW OPERATOR" />
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', marginBottom: '20px',
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginBottom: '16px',
         }}>
           <FormField label="Name *">
             <input
@@ -1451,18 +1605,6 @@ If anything jams up, DM me. — Ruben`
             />
           </FormField>
 
-          <FormField label="Callsign (optional — auto-derived)">
-            <input
-              type="text"
-              value={onboardingForm.callsign}
-              onChange={(e) => setOnboardingForm({ ...onboardingForm, callsign: e.target.value.toUpperCase() })}
-              placeholder="AMMON"
-              maxLength={20}
-              style={inputStyle}
-              disabled={onboardingPending}
-            />
-          </FormField>
-
           <FormField label="Trainer">
             <select
               value={onboardingForm.trainerId}
@@ -1477,6 +1619,18 @@ If anything jams up, DM me. — Ruben`
               ))}
             </select>
           </FormField>
+        </div>
+
+        {/* CallsignGenerator: 2 rounds × 2 picks (4 options total),
+            then manual fallback. Optional — auto-derives from name on
+            the server when left empty. */}
+        <div style={{ marginBottom: '20px' }}>
+          <CallsignGenerator
+            value={onboardingForm.callsign}
+            onChange={(c) => setOnboardingForm({ ...onboardingForm, callsign: c })}
+            existingCallsigns={displayOperators.map((o) => o.callsign)}
+            disabled={onboardingPending}
+          />
         </div>
 
         <SectionHeader title="TIER" />
@@ -1742,6 +1896,132 @@ If anything jams up, DM me. — Ruben`
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {renderContent()}
       </div>
+
+      {/* Delete confirmation modal — overlay-style, blocks the surface
+          so an accidental click outside doesn't fire the delete. The
+          callsign-match field gates the actual POST: typing a
+          mismatched value disables the CONFIRM button, and even if
+          the request goes out the server-side check rejects it.
+          Mirrors the GitHub repo-delete + Stripe customer-delete UX. */}
+      {pendingDeleteId && (() => {
+        const target = displayOperators.find((o) => o.id === pendingDeleteId);
+        if (!target) return null;
+        const matches = deleteConfirmText.trim().toUpperCase() === target.callsign.toUpperCase();
+        const inFlight = adminActionPending === pendingDeleteId;
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-op-title"
+            style={{
+              position: 'fixed', inset: 0, zIndex: 1000,
+              background: 'rgba(0,0,0,0.80)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '20px',
+            }}
+            onClick={() => {
+              if (!inFlight) {
+                setPendingDeleteId(null);
+                setDeleteConfirmText('');
+                setAdminActionError(null);
+              }
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: 480,
+                background: '#0a0202',
+                border: '1px solid rgba(255,68,68,0.40)',
+                padding: '24px',
+                fontFamily: '"Chakra Petch", sans-serif',
+                color: '#ddd',
+              }}
+            >
+              <div id="delete-op-title" style={{
+                color: '#ff4444', fontFamily: '"Orbitron", sans-serif', fontSize: '16px',
+                fontWeight: 700, letterSpacing: '2px', marginBottom: '16px',
+              }}>
+                ⚠ DELETE {target.callsign}
+              </div>
+              <div style={{ marginBottom: '12px', fontSize: '13px', lineHeight: 1.5 }}>
+                This is <strong style={{ color: '#ff4444' }}>permanent</strong>. The operator row + every
+                child record (chat history, workouts, wearable data, daily-ops plans) will be deleted.
+                There is no undo. To soft-disable instead, cancel and use the DISABLE button.
+              </div>
+              <div style={{ marginBottom: '12px', fontSize: '12px', color: '#888' }}>
+                Type the callsign <strong style={{ color: '#ff4444' }}>{target.callsign}</strong> to confirm:
+              </div>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={target.callsign}
+                disabled={inFlight}
+                autoFocus
+                style={{
+                  width: '100%', padding: '10px 12px', marginBottom: '12px',
+                  background: 'rgba(0,0,0,0.40)',
+                  border: `1px solid ${matches ? 'rgba(0,255,65,0.40)' : 'rgba(255,255,255,0.10)'}`,
+                  color: '#ddd', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px',
+                  letterSpacing: '2px', textAlign: 'center', outline: 'none',
+                }}
+              />
+              {adminActionError && (
+                <div style={{
+                  padding: '8px 10px', marginBottom: '12px',
+                  background: 'rgba(255,68,68,0.10)',
+                  border: '1px solid rgba(255,68,68,0.30)',
+                  color: '#ff8888',
+                  fontFamily: '"Share Tech Mono", monospace', fontSize: '11px',
+                }}>
+                  ✕ {adminActionError}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!inFlight) {
+                      setPendingDeleteId(null);
+                      setDeleteConfirmText('');
+                      setAdminActionError(null);
+                    }
+                  }}
+                  disabled={inFlight}
+                  style={{
+                    padding: '10px 16px', background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    color: '#888', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
+                    letterSpacing: '1px', cursor: inFlight ? 'wait' : 'pointer',
+                  }}
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOperator(target.id, deleteConfirmText.trim())}
+                  disabled={!matches || inFlight}
+                  style={{
+                    padding: '10px 16px',
+                    background: matches
+                      ? 'linear-gradient(135deg, #ff4444 0%, #cc0000 100%)'
+                      : 'rgba(120,120,120,0.20)',
+                    border: 'none',
+                    color: '#fff', fontFamily: '"Orbitron", sans-serif', fontSize: '12px',
+                    fontWeight: 700, letterSpacing: '2px',
+                    cursor: matches && !inFlight ? 'pointer' : 'not-allowed',
+                    boxShadow: matches ? '0 0 12px rgba(255,68,68,0.30)' : 'none',
+                  }}
+                >
+                  {inFlight ? 'DELETING…' : 'CONFIRM DELETE'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

@@ -86,6 +86,12 @@ export async function GET(req: Request) {
         trainerId: op.trainerId,
         betaUser: op.betaUser,
         billingStatus,
+        // Admin kill switch — surfaced so the USERS tab can render
+        // a DISABLED badge + flip the action button between
+        // DISABLE and ENABLE without an extra fetch.
+        disabled: op.disabled,
+        disabledAt: op.disabledAt,
+        disabledReason: op.disabledReason,
         workoutCount,
         mealCount,
         prCount: prs.length,

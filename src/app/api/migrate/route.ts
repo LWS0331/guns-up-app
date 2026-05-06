@@ -86,6 +86,12 @@ export async function POST(req: NextRequest) {
       // check-ins from Gunny's <readiness_json> channel land here. Without
       // this column the channel writes silently fail at the DB layer.
       { name: 'dailyReadiness', type: "JSONB NOT NULL DEFAULT '{}'" },
+      // Admin hard kill switch (May 2026). When true, isOperatorAllowed()
+      // rejects the session on the next /api/auth/me call. Distinct from
+      // a row delete: disabled rows can be reactivated.
+      { name: 'disabled', type: 'BOOLEAN NOT NULL DEFAULT false' },
+      { name: 'disabledAt', type: 'TIMESTAMP(3)' },
+      { name: 'disabledReason', type: 'TEXT' },
     ];
     for (const col of newColumns) {
       await pool.query(`
