@@ -69,6 +69,38 @@ export async function GET(request: NextRequest) {
 
     const { passwordHash: _, ...operatorData } = operator;
 
+    // === Trial-expiry derivation ===
+    // The OpsCenter ONBOARDING tab provisions new operators with a
+    // promo trial (promoActive=true, promoType='trial_<tier>_<days>d',
+    // promoExpiry=<ISO date>). When the expiry date passes, surface
+    // a banner-driving flag here so AppShell can prompt the operator
+    // to pick a paid tier or drop to free RECON.
+    //
+    // Only trial promos (those whose promoType starts with 'trial_')
+    // gate UI here — legacy 'free_month_recon'-style promos stay
+    // dormant. trialDaysRemaining is intentionally signed: a negative
+    // value means "expired N days ago", which the banner uses to
+    // grow more insistent over time.
+    const isTrialPromo =
+      operator.promoActive === true &&
+      typeof operator.promoType === 'string' &&
+      operator.promoType.startsWith('trial_');
+    let trialExpired = false;
+    let trialDaysRemaining: number | null = null;
+    let trialTier: string | null = null;
+    if (isTrialPromo && operator.promoExpiry) {
+      // promoExpiry is stored YYYY-MM-DD; treat the boundary as end-of-day UTC.
+      const expiryMs = Date.parse(`${operator.promoExpiry}T23:59:59Z`);
+      if (Number.isFinite(expiryMs)) {
+        const nowMs = Date.now();
+        trialDaysRemaining = Math.ceil((expiryMs - nowMs) / 86_400_000);
+        trialExpired = nowMs > expiryMs;
+      }
+      // Pull tier slug out of 'trial_<tier>_<days>d' for the banner copy.
+      const m = operator.promoType?.match(/^trial_([a-z_]+?)_\d+d$/);
+      trialTier = m ? m[1] : null;
+    }
+
     // Apr 2026 fix (iOS PWA persistence): always issue a fresh token AND
     // refresh the cookie on /me. This serves two purposes:
     //   1. When localStorage was wiped between sessions but the cookie
@@ -91,6 +123,12 @@ export async function GET(request: NextRequest) {
         dayTags: operatorData.dayTags as Record<string, unknown>,
         sitrep: operatorData.sitrep as Record<string, unknown>,
         dailyBrief: operatorData.dailyBrief as Record<string, unknown>,
+      },
+      trial: {
+        active: isTrialPromo,
+        tier: trialTier,
+        daysRemaining: trialDaysRemaining,
+        expired: trialExpired,
       },
     });
     setAuthCookie(res, freshToken);
