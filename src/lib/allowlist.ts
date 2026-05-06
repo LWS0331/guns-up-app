@@ -25,13 +25,21 @@ import { OPS_CENTER_ACCESS } from '@/lib/types';
 interface OperatorAllowlistRow {
   id?: string;
   email?: string | null;
+  /** Admin-set hard kill switch. true = the operator is disabled and
+   *  cannot authenticate. Used by /api/admin/operator-status. */
+  disabled?: boolean | null;
 }
 
 /**
  * Returns true when the operator is allowed to authenticate.
  *
+ *   - `disabled === true` always rejects (admin hard kill switch).
  *   - Admins (OPS_CENTER_ACCESS) always pass — even with NULL email.
  *   - Otherwise the operator must have a non-empty `email`.
+ *
+ * The disabled-check runs FIRST so admins can lock themselves out of
+ * a different ops-center account if they need to (and so a disabled
+ * op-* row can't slip through via the OPS_CENTER_ACCESS bypass).
  *
  * Caller is responsible for surfacing the right error message
  * (we don't throw — we return false and let the caller pick the
@@ -39,6 +47,7 @@ interface OperatorAllowlistRow {
  */
 export function isOperatorAllowed(op: OperatorAllowlistRow | null | undefined): boolean {
   if (!op) return false;
+  if (op.disabled === true) return false;
   if (op.id && OPS_CENTER_ACCESS.includes(op.id)) return true;
   return typeof op.email === 'string' && op.email.trim().length > 0;
 }

@@ -33,6 +33,14 @@ model Operator {
   promoActive   Boolean  @default(false) // currently on promotional period
   promoType     String?               // e.g. "free_month_recon"
   promoExpiry   String?               // ISO date when promo expires
+  // Admin hard kill switch. When true, isOperatorAllowed() rejects the
+  // session on the next /api/auth/me call. Reversible — clearing the
+  // flag re-enables the account without losing data. Set via
+  // POST /api/admin/operator-status. Distinct from a row delete:
+  // disabled rows still exist in the DB and can be reactivated.
+  disabled      Boolean  @default(false)
+  disabledAt    DateTime?              // when the disable was applied
+  disabledReason String?               // optional admin note ("trial expired no-pay")
 
   // Complex nested data stored as JSONB
   intake      Json      @default("{}")  // IntakeAssessment (completed flag, goals, equipment, etc.)
