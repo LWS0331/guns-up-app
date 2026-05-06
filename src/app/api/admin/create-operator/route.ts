@@ -26,6 +26,10 @@
 //     trainerId?: string,          // default: 'op-ruben' (closed-beta default)
 //     pin?: string,                // 4 digits, default: random
 //     betaUser?: boolean,          // default: true
+//     trainerNotes?: string,       // long-form coach-supplied protocol /
+//                                  // notes (max 256KB). Surfaced in the
+//                                  // TrainerDashboard + included in
+//                                  // Gunny's prompt context.
 //   }
 //
 // Response (success):
@@ -56,6 +60,11 @@ const CALLSIGN_RE = /^[A-Z0-9-]{2,20}$/;
 const PIN_RE = /^\d{4}$/;
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 200;
+// 256 KB ceiling on trainerNotes — large enough for a full multi-month
+// hybrid programming protocol (the longest real-world payload we've seen
+// is ~22 KB), small enough that a single record stays well below
+// Postgres' practical TEXT row limits and any cron-driven export.
+const MAX_TRAINER_NOTES_LENGTH = 256 * 1024;
 
 function randomPin(): string {
   return String(Math.floor(1000 + Math.random() * 9000));
@@ -145,6 +154,26 @@ export async function POST(req: NextRequest) {
     }
     const betaUser = body?.betaUser !== false;  // default true
 
+    // === trainerNotes (optional long-form coach protocol) ===
+    let trainerNotes: string | null = null;
+    if (body?.trainerNotes != null) {
+      if (typeof body.trainerNotes !== 'string') {
+        return NextResponse.json({
+          ok: false,
+          error: 'invalid trainerNotes',
+          reason: 'trainerNotes must be a string',
+        }, { status: 400 });
+      }
+      if (body.trainerNotes.length > MAX_TRAINER_NOTES_LENGTH) {
+        return NextResponse.json({
+          ok: false,
+          error: 'trainerNotes too large',
+          reason: `trainerNotes must be ≤ ${MAX_TRAINER_NOTES_LENGTH} bytes (got ${body.trainerNotes.length})`,
+        }, { status: 400 });
+      }
+      trainerNotes = body.trainerNotes;
+    }
+
     // === Collision checks ===
     const idCollision = await prisma.operator.findUnique({ where: { id } });
     if (idCollision) {
@@ -207,6 +236,9 @@ export async function POST(req: NextRequest) {
         tier,
         trainerId,
         betaUser,
+        // Optional long-form coach protocol. Only set when caller passed
+        // a string; null lets Prisma use the schema default (NULL).
+        ...(trainerNotes !== null && { trainerNotes }),
         // Initialize all JSON columns to safe empties.
         intake: {},
         profile: {},
@@ -233,6 +265,7 @@ export async function POST(req: NextRequest) {
         tier: created.tier,
         trainerId: created.trainerId,
         betaUser: created.betaUser,
+        trainerNotesLength: created.trainerNotes?.length ?? 0,
       },
     });
   } catch (error) {
