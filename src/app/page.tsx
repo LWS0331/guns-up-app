@@ -5,6 +5,7 @@ import { Operator } from '@/lib/types';
 import { OPERATORS, getAccessibleOperators } from '@/data/operators';
 import AppShell from '@/components/AppShell';
 import ClientOnboarding from '@/components/ClientOnboarding';
+import TrialBanner, { TrialState } from '@/components/TrialBanner';
 // Marketing landing page is the public face of `/`. Members log in via
 // `/login` (which the landing's MEMBER LOGIN button links to). LoginScreen
 // is no longer rendered here — it lives at /login.
@@ -17,6 +18,11 @@ export default function Home() {
   const [operators, setOperators] = useState<Operator[]>(OPERATORS);
   const [isLoaded, setIsLoaded] = useState(false);
   const [dbReady, setDbReady] = useState(false);
+  // Trial-tier state surfaced by /api/auth/me. Drives the TrialBanner
+  // overlay (expired) and the soft "trial ending soon" warning when
+  // daysRemaining ≤ 3. Null means /me hasn't returned yet, OR the
+  // operator has no active trial promo.
+  const [trialState, setTrialState] = useState<TrialState | null>(null);
 
   // Debounce timer for save operations
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,6 +147,13 @@ export default function Home() {
         if (meRes && meRes.ok) {
           const meData = await meRes.json();
           setCurrentUser(meData.operator);
+          // Trial state lives next to currentUser. /me derives this
+          // from promoActive + promoType + promoExpiry (see
+          // src/app/api/auth/me/route.ts) so the client doesn't have
+          // to re-implement the date math.
+          if (meData.trial) {
+            setTrialState(meData.trial as TrialState);
+          }
           identifyUser(meData.operator.id, {
             role: meData.operator.role,
             tier: meData.operator.tier,
@@ -396,12 +409,24 @@ export default function Home() {
   const accessibleUsers = getAccessibleOperators(currentUser.id, operators);
 
   return (
-    <AppShell
-      currentUser={currentUser}
-      accessibleUsers={accessibleUsers}
-      operators={operators}
-      onUpdateOperator={handleUpdateOperator}
-      onLogout={handleLogout}
-    />
+    <>
+      <AppShell
+        currentUser={currentUser}
+        accessibleUsers={accessibleUsers}
+        operators={operators}
+        onUpdateOperator={handleUpdateOperator}
+        onLogout={handleLogout}
+      />
+      {/* Trial banner overlays AppShell when promo trial is active.
+          Self-suppresses if trialState is null or trial.active is false,
+          so this mount is a no-op for any operator without a trial. */}
+      {trialState && (
+        <TrialBanner
+          trial={trialState}
+          operatorId={currentUser.id}
+          stripePortalEnabled
+        />
+      )}
+    </>
   );
 }

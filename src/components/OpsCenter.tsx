@@ -6,7 +6,50 @@ import { getAuthToken } from '@/lib/authClient';
 import Icon from '@/components/Icons';
 import OpsRoadmap from '@/components/OpsRoadmap';
 
-type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'MARKETING' | 'ROADMAP';
+type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'ONBOARDING' | 'MARKETING' | 'ROADMAP';
+
+// ═══════════════════════════════════════════════════
+// ONBOARDING FORM
+// ═══════════════════════════════════════════════════
+//
+// Mirrors POST /api/admin/create-operator — every field below maps to
+// a body field on that endpoint. The form preset is "14-day COMMANDER
+// trial" which is the OpsCenter default for manually-onboarded clients
+// (Instagram-DM intake → Stripe link sent within 24 hours pattern).
+//
+// Tier picker semantics: TRIAL_COMMANDER_14D enrolls the operator in a
+// 14-day COMMANDER trial. After expiry, /api/auth/me flips trialExpired
+// and AppShell shows the "pick a tier" banner. The four other choices
+// skip the trial and place the operator directly on that tier.
+type OnboardingPreset =
+  | 'TRIAL_COMMANDER_14D'  // default: 14-day COMMANDER trial
+  | 'PAID_OPERATOR'
+  | 'PAID_COMMANDER'
+  | 'PAID_WARFIGHTER'
+  | 'FREE_RECON';
+
+interface OnboardingForm {
+  name: string;
+  email: string;
+  callsign: string;       // optional override; auto-derived if empty
+  trainerId: string;
+  preset: OnboardingPreset;
+  trainerNotes: string;
+}
+
+interface OnboardingResult {
+  id: string;
+  name: string;
+  callsign: string;
+  email: string;
+  tier: string;
+  trainerId: string | null;
+  promoActive: boolean;
+  promoType: string | null;
+  promoExpiry: string | null;
+  trainerNotesLength: number;
+  generatedPassword?: string;
+}
 
 // Hard-gated to the two founder operators ONLY. Even if OPS_CENTER_ACCESS
 // expands to include other admins later (env-configurable), the ROADMAP
@@ -135,6 +178,21 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<string>('');
   const [selectedOperatorForPromo, setSelectedOperatorForPromo] = useState<string | null>(null);
+
+  // ═══════════════════════════════════════════════════
+  // ONBOARDING STATE
+  // ═══════════════════════════════════════════════════
+  const [onboardingForm, setOnboardingForm] = useState<OnboardingForm>({
+    name: '',
+    email: '',
+    callsign: '',
+    trainerId: 'op-ruben',
+    preset: 'TRIAL_COMMANDER_14D',
+    trainerNotes: '',
+  });
+  const [onboardingPending, setOnboardingPending] = useState(false);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [onboardingResult, setOnboardingResult] = useState<OnboardingResult | null>(null);
 
   // Verify access
   if (!OPS_CENTER_ACCESS.includes(currentUser.id)) {
@@ -465,6 +523,121 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       fetchMetrics();
     } catch (err) {
       console.error('[OpsCenter:handleOfferPromo] Failed:', err);
+    }
+  };
+
+  // ═══════════════════════════════════════
+  // ONBOARDING — submit handler
+  // ═══════════════════════════════════════
+  //
+  // Translates the form preset into the body shape /api/admin/create-operator
+  // expects:
+  //   TRIAL_COMMANDER_14D → { trialDays: 14, trialTier: 'opus' }
+  //   PAID_OPERATOR       → { tier: 'sonnet' }
+  //   PAID_COMMANDER      → { tier: 'opus' }
+  //   PAID_WARFIGHTER     → { tier: 'white_glove' }
+  //   FREE_RECON          → { tier: 'haiku' }
+  //
+  // The endpoint accepts our session cookie (OPS_CENTER_ACCESS gate)
+  // so we don't need to prompt for ADMIN_SECRET. On success we leave
+  // the result on screen with a copy-paste IG-DM template; on failure
+  // the full reason from the API surfaces in the error pill so admins
+  // can self-correct (callsign collision, invalid email, etc.).
+  const handleOnboardingSubmit = async () => {
+    setOnboardingError(null);
+    setOnboardingResult(null);
+
+    if (!onboardingForm.name.trim()) {
+      setOnboardingError('Name is required');
+      return;
+    }
+    if (!onboardingForm.email.trim()) {
+      setOnboardingError('Email is required');
+      return;
+    }
+
+    // Build the request body from the preset.
+    type OnboardingBody = {
+      name: string;
+      email: string;
+      callsign?: string;
+      trainerId?: string;
+      tier?: 'haiku' | 'sonnet' | 'opus' | 'white_glove';
+      trialDays?: number;
+      trialTier?: 'sonnet' | 'opus' | 'white_glove';
+      trainerNotes?: string;
+    };
+    const body: OnboardingBody = {
+      name: onboardingForm.name.trim(),
+      email: onboardingForm.email.trim(),
+    };
+    if (onboardingForm.callsign.trim()) {
+      body.callsign = onboardingForm.callsign.trim().toUpperCase();
+    }
+    if (onboardingForm.trainerId) {
+      body.trainerId = onboardingForm.trainerId;
+    }
+    if (onboardingForm.trainerNotes.trim()) {
+      body.trainerNotes = onboardingForm.trainerNotes;
+    }
+    switch (onboardingForm.preset) {
+      case 'TRIAL_COMMANDER_14D':
+        body.trialDays = 14;
+        body.trialTier = 'opus';
+        break;
+      case 'PAID_OPERATOR':
+        body.tier = 'sonnet';
+        break;
+      case 'PAID_COMMANDER':
+        body.tier = 'opus';
+        break;
+      case 'PAID_WARFIGHTER':
+        body.tier = 'white_glove';
+        break;
+      case 'FREE_RECON':
+        body.tier = 'haiku';
+        break;
+    }
+
+    setOnboardingPending(true);
+    try {
+      const res = await fetch('/api/admin/create-operator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        // Surface the API's reason verbatim — it's already specific
+        // (e.g. "email collision: already owned by op-xyz").
+        setOnboardingError(
+          data?.reason || data?.error || `HTTP ${res.status}`,
+        );
+        return;
+      }
+      setOnboardingResult({
+        ...data.operator,
+        generatedPassword: data.generatedPassword,
+      });
+      // Clear name/email so a follow-up onboard doesn't double-write
+      // the same operator. Keep trainerId + preset selections.
+      setOnboardingForm((f) => ({
+        ...f,
+        name: '',
+        email: '',
+        callsign: '',
+        trainerNotes: '',
+      }));
+      // Refresh the roster so the new operator appears in USERS tab.
+      fetchMetrics();
+    } catch (err) {
+      console.error('[OpsCenter:onboarding] failed', err);
+      setOnboardingError('Network error — see console');
+    } finally {
+      setOnboardingPending(false);
     }
   };
 
@@ -1181,12 +1354,281 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     </div>
   );
 
+  // ═══════════════════════════════════════
+  // RENDER: ONBOARDING
+  // ═══════════════════════════════════════
+  //
+  // Two states stack vertically:
+  //   1. The form (always visible — admin can onboard back-to-back).
+  //   2. The most-recent result card (when a successful submit just
+  //      landed) with copy-to-clipboard for credentials + a pre-baked
+  //      Instagram DM template the admin can paste verbatim.
+  const renderOnboarding = () => {
+    const presetMeta: Record<OnboardingPreset, { label: string; subtitle: string; accent: string }> = {
+      TRIAL_COMMANDER_14D: {
+        label: '14-DAY COMMANDER TRIAL',
+        subtitle: 'Default. Full COMMANDER for 14 days, then they pick a tier.',
+        accent: '#ff4444',
+      },
+      PAID_OPERATOR: {
+        label: 'PAID — OPERATOR  $19.99/mo',
+        subtitle: 'Skip trial. Land on OPERATOR. Stripe checkout sent separately.',
+        accent: '#5af',
+      },
+      PAID_COMMANDER: {
+        label: 'PAID — COMMANDER  $39.99/mo',
+        subtitle: 'Skip trial. Land on COMMANDER. Stripe checkout sent separately.',
+        accent: '#ffb800',
+      },
+      PAID_WARFIGHTER: {
+        label: 'PAID — WARFIGHTER  $149/mo',
+        subtitle: 'Concierge tier — skip trial. Confirm seat availability first.',
+        accent: '#a855f7',
+      },
+      FREE_RECON: {
+        label: 'FREE — RECON',
+        subtitle: 'Free Haiku tier with usage caps. No trial, no Stripe.',
+        accent: '#666',
+      },
+    };
+    // Trainer roster is already computed at the component scope, but we
+    // rebind here so the closure uses the same shape regardless of
+    // future refactors moving the outer `trainers` derivation.
+    const trainerOptions = displayOperators.filter((op) => op.role === 'trainer');
+    const result = onboardingResult;
+    const dmTemplate = result
+      ? `Welcome to GUNS UP, ${result.name.split(' ')[0] || 'operator'}.
+
+Your account is locked in:
+- Login: ${result.email}
+- Password: ${result.generatedPassword || '(set during onboarding)'}
+- Callsign: ${result.callsign}
+- Tier: ${result.tier === 'opus' ? 'COMMANDER (14-day trial)' : result.tier.toUpperCase()}
+
+Open the app: https://gunnyai.fit
+First step: tap "BEGIN INTAKE" — Gunny needs your training history to build the protocol.
+
+If anything jams up, DM me. — Ruben`
+      : '';
+
+    return (
+      <div style={{ padding: '20px' }}>
+        <div style={{
+          background: 'rgba(255,68,68,0.05)', border: '1px solid rgba(255,68,68,0.20)',
+          padding: '16px 20px', marginBottom: '24px',
+        }}>
+          <div style={{ color: '#ff4444', fontFamily: '"Orbitron", sans-serif', fontSize: '13px', fontWeight: 700, letterSpacing: '2px', marginBottom: '8px' }}>
+            ONBOARDING — MANUAL CLIENT INTAKE
+          </div>
+          <div style={{ color: '#bbb', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.6' }}>
+            Create + activate a client in one shot. Default preset is a <strong>14-day COMMANDER trial</strong>: full Sonnet+Opus access for 14 days, then the AppShell prompts them to pay for OPERATOR / COMMANDER or drop to free RECON. Optional protocol textbox attaches a coach-supplied programming doc straight to the operator&apos;s <code>trainerNotes</code> field — Gunny pulls it into context on every chat.
+          </div>
+        </div>
+
+        <SectionHeader title="NEW OPERATOR" />
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', marginBottom: '20px',
+        }}>
+          <FormField label="Name *">
+            <input
+              type="text"
+              value={onboardingForm.name}
+              onChange={(e) => setOnboardingForm({ ...onboardingForm, name: e.target.value })}
+              placeholder="Ammon Morrison"
+              style={inputStyle}
+              disabled={onboardingPending}
+            />
+          </FormField>
+
+          <FormField label="Email *">
+            <input
+              type="email"
+              value={onboardingForm.email}
+              onChange={(e) => setOnboardingForm({ ...onboardingForm, email: e.target.value })}
+              placeholder="ammon1.morrison@gmail.com"
+              style={inputStyle}
+              disabled={onboardingPending}
+            />
+          </FormField>
+
+          <FormField label="Callsign (optional — auto-derived)">
+            <input
+              type="text"
+              value={onboardingForm.callsign}
+              onChange={(e) => setOnboardingForm({ ...onboardingForm, callsign: e.target.value.toUpperCase() })}
+              placeholder="AMMON"
+              maxLength={20}
+              style={inputStyle}
+              disabled={onboardingPending}
+            />
+          </FormField>
+
+          <FormField label="Trainer">
+            <select
+              value={onboardingForm.trainerId}
+              onChange={(e) => setOnboardingForm({ ...onboardingForm, trainerId: e.target.value })}
+              style={inputStyle}
+              disabled={onboardingPending}
+            >
+              {trainerOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.callsign} — {t.name}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        </div>
+
+        <SectionHeader title="TIER" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
+          {(Object.keys(presetMeta) as OnboardingPreset[]).map((preset) => {
+            const meta = presetMeta[preset];
+            const selected = onboardingForm.preset === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setOnboardingForm({ ...onboardingForm, preset })}
+                disabled={onboardingPending}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  background: selected ? `${meta.accent}10` : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${selected ? meta.accent + '50' : 'rgba(255,255,255,0.05)'}`,
+                  cursor: onboardingPending ? 'not-allowed' : 'pointer',
+                  fontFamily: '"Chakra Petch", sans-serif',
+                  color: '#ddd',
+                  display: 'flex', flexDirection: 'column', gap: '2px',
+                }}
+              >
+                <span style={{ color: meta.accent, fontWeight: 700, letterSpacing: '1px', fontSize: '13px' }}>
+                  {selected ? '● ' : '○ '}{meta.label}
+                </span>
+                <span style={{ color: '#888', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace' }}>
+                  {meta.subtitle}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <SectionHeader title="TRAINER NOTES / PROTOCOL (OPTIONAL)" />
+        <FormField label="">
+          <textarea
+            value={onboardingForm.trainerNotes}
+            onChange={(e) => setOnboardingForm({ ...onboardingForm, trainerNotes: e.target.value })}
+            placeholder="Paste the full programming protocol here — Gunny pulls it into context on every chat. Leave empty if no custom protocol yet (max 256KB)."
+            style={{ ...inputStyle, minHeight: 180, resize: 'vertical', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px', lineHeight: '1.5' }}
+            disabled={onboardingPending}
+          />
+        </FormField>
+        <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px', marginTop: '4px', marginBottom: '20px' }}>
+          {onboardingForm.trainerNotes.length.toLocaleString()} / {(256 * 1024).toLocaleString()} bytes
+        </div>
+
+        {onboardingError && (
+          <div style={{
+            padding: '12px 16px', marginBottom: '12px',
+            background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.30)',
+            color: '#ff8888', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
+          }}>
+            ✕ {onboardingError}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleOnboardingSubmit}
+          disabled={onboardingPending || !onboardingForm.name.trim() || !onboardingForm.email.trim()}
+          style={{
+            padding: '12px 24px', fontFamily: '"Orbitron", sans-serif', fontWeight: 700,
+            fontSize: '13px', letterSpacing: '2px', color: '#fff',
+            background: onboardingPending
+              ? 'rgba(120,120,120,0.5)'
+              : 'linear-gradient(135deg, #ff4444 0%, #cc0000 100%)',
+            border: 'none', cursor: onboardingPending ? 'wait' : 'pointer',
+            boxShadow: onboardingPending ? 'none' : '0 0 16px rgba(255,68,68,0.3)',
+          }}
+        >
+          {onboardingPending ? 'PROVISIONING…' : 'CREATE + ACTIVATE'}
+        </button>
+
+        {result && (
+          <div style={{
+            marginTop: '32px',
+            padding: '20px',
+            background: 'rgba(0,255,65,0.04)',
+            border: '1px solid rgba(0,255,65,0.30)',
+          }}>
+            <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '14px', fontWeight: 700, letterSpacing: '2px', marginBottom: '12px' }}>
+              ✓ OPERATOR ACTIVATED — {result.callsign}
+            </div>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px',
+              fontFamily: '"Share Tech Mono", monospace', fontSize: '12px', color: '#bbb',
+              marginBottom: '16px',
+            }}>
+              <CredRow label="ID" value={result.id} />
+              <CredRow label="EMAIL" value={result.email} />
+              <CredRow label="CALLSIGN" value={result.callsign} />
+              <CredRow label="TIER" value={result.tier.toUpperCase()} />
+              {result.generatedPassword && (
+                <CredRow label="PASSWORD" value={result.generatedPassword} mono />
+              )}
+              {result.promoActive && result.promoExpiry && (
+                <CredRow
+                  label="TRIAL EXPIRES"
+                  value={`${result.promoExpiry} (${result.promoType})`}
+                />
+              )}
+              {result.trainerNotesLength > 0 && (
+                <CredRow
+                  label="PROTOCOL"
+                  value={`${result.trainerNotesLength.toLocaleString()} bytes attached`}
+                />
+              )}
+            </div>
+            <div style={{ color: '#888', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px', marginBottom: '6px', letterSpacing: '1px' }}>
+              IG-DM TEMPLATE — copy + paste:
+            </div>
+            <textarea
+              readOnly
+              value={dmTemplate}
+              onFocus={(e) => e.currentTarget.select()}
+              style={{
+                ...inputStyle,
+                minHeight: 180, fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
+                lineHeight: '1.5', resize: 'vertical',
+                background: 'rgba(0,0,0,0.40)',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(dmTemplate).catch(() => {});
+              }}
+              style={{
+                marginTop: '8px', padding: '8px 16px',
+                background: 'rgba(0,255,65,0.10)', border: '1px solid rgba(0,255,65,0.30)',
+                color: '#00ff41', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
+                cursor: 'pointer', letterSpacing: '1px',
+              }}
+            >
+              COPY DM
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'REVENUE': return renderRevenue();
       case 'USERS': return renderUsers();
       case 'PLATFORM': return renderPlatform();
       case 'BETA': return renderBeta();
+      case 'ONBOARDING': return renderOnboarding();
       case 'MARKETING': return renderMarketing();
       case 'ROADMAP':
         // Defensive: even if activeTab is set to ROADMAP (state replay,
@@ -1211,6 +1653,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     { id: 'USERS', label: 'USERS', icon: <Icon.User /> },
     { id: 'PLATFORM', label: 'PLATFORM', icon: <Icon.Settings /> },
     { id: 'BETA', label: 'BETA', icon: <Icon.Bolt /> },
+    { id: 'ONBOARDING', label: 'ONBOARDING', icon: <Icon.Plus /> },
     { id: 'MARKETING', label: 'MARKETING', icon: <Icon.Send /> },
     ...(isFounder ? [{ id: 'ROADMAP' as OpsTab, label: 'ROADMAP', icon: <Icon.Target /> }] : []),
   ];
@@ -1323,6 +1766,58 @@ const SectionHeader: React.FC<{ title: string }> = ({ title }) => (
     borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: '12px',
   }}>
     {title}
+  </div>
+);
+
+// ═══════════════════════════════════════════════════
+// ONBOARDING — shared form primitives
+// ═══════════════════════════════════════════════════
+//
+// Standard input style. Reuses the OpsCenter chrome palette so the
+// form feels native to the surrounding admin UI rather than a bolt-on.
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  background: 'rgba(0,0,0,0.40)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  color: '#ddd',
+  fontFamily: '"Chakra Petch", sans-serif',
+  fontSize: '13px',
+  outline: 'none',
+};
+
+const FormField: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    {label && (
+      <label style={{
+        color: '#777', fontFamily: '"Share Tech Mono", monospace', fontSize: '10px',
+        letterSpacing: '2px', textTransform: 'uppercase',
+      }}>
+        {label}
+      </label>
+    )}
+    {children}
+  </div>
+);
+
+// Stamped key/value row used in the success card. `mono` flips the
+// value to a monospace font for credentials (passwords, tokens, IDs)
+// where character spacing matters more than typographic balance.
+const CredRow: React.FC<{ label: string; value: string; mono?: boolean }> = ({ label, value, mono }) => (
+  <div style={{
+    display: 'flex', flexDirection: 'column', gap: '2px',
+    padding: '8px 10px', background: 'rgba(0,0,0,0.35)',
+    border: '1px solid rgba(0,255,65,0.10)',
+  }}>
+    <span style={{ color: '#666', fontSize: '10px', letterSpacing: '2px' }}>{label}</span>
+    <span style={{
+      color: '#ddd',
+      fontFamily: mono ? '"Share Tech Mono", monospace' : '"Chakra Petch", sans-serif',
+      fontSize: '13px',
+      wordBreak: 'break-all',
+    }}>
+      {value}
+    </span>
   </div>
 );
 
