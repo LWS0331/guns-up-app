@@ -161,10 +161,27 @@ export function buildFullGunnyContext(
     // earlier was invisible — Gunny would hallucinate totals when asked.
     // Includes per-meal name + calories so Gunny can answer "what did I
     // eat for X" without guessing.
+    //
+    // ALWAYS prepend today's bucket explicitly, even when zero meals are
+    // logged. Otherwise dates with no entries are silently absent from
+    // the block, and the LLM has to *infer* "today is empty" from the
+    // absence of a row. RAMPAGE May 8 caught a duplicate-detection false
+    // positive from this: with no row for today, Opus pattern-matched a
+    // fresh Power Shake log against yesterday's identical Power Shake
+    // entry and refused to log, claiming "you already logged this today."
+    // Emitting "TODAY: 0 meals — 0cal" removes the ambiguity — Gunny can
+    // see, literally, that today has no entries yet.
     const meals = (operator.nutrition as AnyRec | undefined)?.meals || {};
     const dates = Object.keys(meals).sort().reverse().slice(0, 7);
-    if (!dates.length) return 'No meals logged';
-    return dates
+    const includesToday = dates[0] === today;
+    if (!dates.length && !includesToday) {
+      // No meals at all — but still call out today explicitly so the
+      // LLM doesn't fall back on chat-history pattern matching.
+      return `${today} (TODAY): 0 meals — 0cal, 0g P / 0g C / 0g F`;
+    }
+    // Cap at 7 buckets total so prepending today doesn't bloat the prompt.
+    const orderedDates = includesToday ? dates : [today, ...dates.slice(0, 6)];
+    return orderedDates
       .map(date => {
         const dm = (meals as AnyRec)[date] || [];
         const t = dm.reduce(
@@ -180,7 +197,9 @@ export function buildFullGunnyContext(
         const itemList = (dm as Array<{ name?: string; calories?: number }>)
           .map(m => `${m.name || 'meal'} (${m.calories || 0}cal)`)
           .join(', ');
-        return `${date}: ${dm.length} meals — ${t.calories}cal, ${t.protein}g P / ${t.carbs}g C / ${t.fat}g F\n  · ${itemList}`;
+        const todayTag = date === today ? ' (TODAY)' : '';
+        const itemLine = dm.length > 0 ? `\n  · ${itemList}` : '';
+        return `${date}${todayTag}: ${dm.length} meals — ${t.calories}cal, ${t.protein}g P / ${t.carbs}g C / ${t.fat}g F${itemLine}`;
       })
       .join('\n');
   })();
