@@ -6,6 +6,7 @@ import { OPERATORS, getAccessibleOperators } from '@/data/operators';
 import AppShell from '@/components/AppShell';
 import ClientOnboarding from '@/components/ClientOnboarding';
 import TrialBanner, { TrialState } from '@/components/TrialBanner';
+import VanguardBanner from '@/components/VanguardBanner';
 // Marketing landing page is the public face of `/`. Members log in via
 // `/login` (which the landing's MEMBER LOGIN button links to). LoginScreen
 // is no longer rendered here — it lives at /login.
@@ -485,6 +486,15 @@ export default function Home() {
           stripePortalEnabled
         />
       )}
+      {/* Vanguard banner — top-pinned recognition strip for founding
+          members (Operator.isVanguard = true, granted from OPS Center).
+          Self-suppresses for non-vanguard operators and remembers the
+          dismiss in localStorage. Lives at the top so it doesn't fight
+          TrialBanner for the bottom slot. */}
+      <VanguardBanner
+        operatorId={currentUser.id}
+        isVanguard={currentUser.isVanguard === true}
+      />
     </>
   );
 }
