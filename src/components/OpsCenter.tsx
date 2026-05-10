@@ -428,6 +428,30 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
+  // Per-row tier-lock toggle. handleLockAllTiers (below) bulk-locked
+  // everyone for the closed-beta freeze, but there was no per-row way
+  // to UNLOCK a single operator without going to curl. Without this,
+  // upgrading or downgrading any post-bulk-lock operator from the OPS
+  // tab is impossible — the tier dropdown is hidden when tierLocked is
+  // true. Same slim PATCH shape as handleTierChange.
+  const handleToggleTierLock = async (operatorId: string, nextLocked: boolean) => {
+    try {
+      const res = await fetch(`/api/operators/${operatorId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ tierLocked: nextLocked }),
+      });
+      if (res.ok) {
+        fetchMetrics();
+      }
+    } catch (err) {
+      console.error('[OpsCenter:handleToggleTierLock] Failed:', err);
+    }
+  };
+
   // Handle activate beta — slim PATCH per operator. Reads from
   // displayOperators (DB-fresh) so newly-created operators get the
   // beta flag too.
@@ -1060,11 +1084,14 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                     {op.googleId ? '✓' : '·'}
                   </td>
                   <td style={{ padding: '10px 8px' }}>
-                    {op.tierLocked ? (
-                      <span style={{ color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <Icon.Lock size={11} /> {op.tier}
-                      </span>
-                    ) : (
+                    {/* Admins editing in OPS always get the dropdown — the
+                        tierLocked flag is a self-edit guard, not an admin
+                        guard, and hiding the dropdown here meant no UI
+                        path existed to upgrade/downgrade a tier-locked
+                        operator. The lock-state toggle lives next to the
+                        dropdown so admins can flip lock + change tier in
+                        the same row without a separate trip. */}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <select
                         value={op.tier}
                         onChange={(e) => handleTierChange(op.id, e.target.value as AiTier)}
@@ -1078,7 +1105,25 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                           <option key={tier} value={tier}>{TIER_CONFIGS[tier].codename}</option>
                         ))}
                       </select>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTierLock(op.id, !op.tierLocked)}
+                        title={op.tierLocked ? 'Unlock tier (admin override)' : 'Lock tier'}
+                        aria-label={op.tierLocked ? 'Unlock tier' : 'Lock tier'}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          padding: '3px 5px',
+                          fontSize: '10px',
+                          fontFamily: '"Share Tech Mono", monospace',
+                          color: op.tierLocked ? '#ffb800' : 'var(--text-tertiary)',
+                          background: op.tierLocked ? 'rgba(255,184,0,0.08)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${op.tierLocked ? 'rgba(255,184,0,0.25)' : 'rgba(255,255,255,0.08)'}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Icon.Lock size={11} />
+                      </button>
+                    </div>
                   </td>
                   <td style={{ padding: '10px 8px', color: op.tierLocked ? '#ffb800' : '#555' }}>
                     {op.tierLocked ? 'YES' : 'NO'}
