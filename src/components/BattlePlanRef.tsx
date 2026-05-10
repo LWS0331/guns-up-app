@@ -81,33 +81,65 @@ export default function BattlePlanRef({
     </div>
   );
 
-  const renderExercise = (ex: SitrepExercise, i: number) => (
-    <div
-      key={i}
-      style={{
-        padding: '6px 10px',
-        borderBottom: '1px solid var(--border-green-soft)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: 10,
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span className="t-body-sm" style={{ color: 'var(--text-primary)' }}>
+  const renderExercise = (ex: SitrepExercise, i: number) => {
+    // Defensive layout against long content in any field. The schema
+    // (types.ts:550) calls for ex.weight to be a short label like
+    // "135 lbs" / "bodyweight" / "light", but the SITREP generator
+    // occasionally stuffs prescription guidance into it (e.g. "20 lb
+    // dumbbells to start. If 12 clean reps feel too easy with no
+    // lower back arch, note it — you'll progress next session."). The
+    // legacy two-column layout (name+notes left, prescription right)
+    // collapsed the left column to ~40px when the right span carried
+    // a long string, forcing notes to render word-per-line and the
+    // prescription to overlay them — reported by WARDOG May 9 viewing
+    // the daily planner from the COC tab.
+    //
+    // New shape: stack name → notes → prescription so neither field
+    // can squeeze another. word-break on each text node prevents a
+    // single super-long token from overflowing the row's width. Real
+    // fix for the malformed SITREP weight field is a separate concern
+    // (server-side schema clamp + prompt clarification), but THIS
+    // layout no longer breaks regardless of what the data carries.
+    const prescription = `${ex.sets}×${ex.reps}${ex.weight ? ` @ ${ex.weight}` : ''}`;
+    return (
+      <div
+        key={i}
+        style={{
+          padding: '6px 10px',
+          borderBottom: '1px solid var(--border-green-soft)',
+        }}
+      >
+        <div className="t-body-sm" style={{ color: 'var(--text-primary)', wordBreak: 'break-word' }}>
           {i + 1}. {ex.name}
-        </span>
+        </div>
         {ex.notes && (
-          <div className="t-mono-sm" style={{ color: 'var(--text-dim)', marginTop: 1 }}>
+          <div
+            className="t-mono-sm"
+            style={{
+              color: 'var(--text-dim)',
+              marginTop: 2,
+              wordBreak: 'break-word',
+              whiteSpace: 'normal',
+            }}
+          >
             {ex.notes}
           </div>
         )}
+        <div
+          className="t-mono-data"
+          style={{
+            color: 'var(--green)',
+            fontSize: 11,
+            marginTop: 4,
+            wordBreak: 'break-word',
+            whiteSpace: 'normal',
+          }}
+        >
+          {prescription}
+        </div>
       </div>
-      <span className="t-mono-data" style={{ color: 'var(--green)', fontSize: 11 }}>
-        {ex.sets}×{ex.reps}{ex.weight ? ` @ ${ex.weight}` : ''}
-      </span>
-    </div>
-  );
+    );
+  };
 
   const today = sitrep.today;
   const np = sitrep.nutritionPlan;
