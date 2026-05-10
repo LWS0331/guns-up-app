@@ -1536,8 +1536,24 @@ const AppShell: React.FC<AppShellProps> = ({
         continue;
       }
 
-      const current = workingOp.workouts?.[today];
-      if (!current) continue;
+      // Resolve target date: explicit mod.targetDate (Gunny emitted
+      // YYYY-MM-DD because the operator named a day) > today. Refuse
+      // to modify a completed workout — the May 1 bug routed an
+      // "add to Saturday" mod onto Friday's completed session because
+      // the panel resolver only ever looked at today, dropping silently
+      // when today was empty. Both arms now respect explicit date AND
+      // completed-guard.
+      const explicitDate = (mod as { targetDate?: string }).targetDate;
+      const targetDate = explicitDate || today;
+      const current = workingOp.workouts?.[targetDate];
+      if (!current) {
+        console.warn('[gunny-mod:appshell] no workout at target date:', targetDate, mod);
+        continue;
+      }
+      if (current.completed) {
+        console.warn('[gunny-mod:appshell] refusing to modify completed workout at', targetDate, mod);
+        continue;
+      }
       try {
         // Unwrap the new return shape — silent no-ops are surfaced
         // via result.changed so the caller can decide whether to
@@ -1548,7 +1564,7 @@ const AppShell: React.FC<AppShellProps> = ({
         if (result.changed) {
           workingOp = {
             ...workingOp,
-            workouts: { ...workingOp.workouts, [today]: result.workout },
+            workouts: { ...workingOp.workouts, [targetDate]: result.workout },
           };
           touched = true;
         } else {
