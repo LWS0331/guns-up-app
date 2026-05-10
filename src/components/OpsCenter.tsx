@@ -210,6 +210,11 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [adminActionPending, setAdminActionPending] = useState<string | null>(null);
   const [adminActionError, setAdminActionError] = useState<string | null>(null);
+  // Per-operator recovery link cache. When the admin clicks SEND LINK
+  // we mint a magic-link URL via /api/admin/operator-magic-link and
+  // stash it here so the row can reveal a copy-able URL inline. Cleared
+  // when the admin dismisses the reveal or navigates away.
+  const [recoveryLinkByOp, setRecoveryLinkByOp] = useState<Record<string, string>>({});
 
   // Verify access
   if (!OPS_CENTER_ACCESS.includes(currentUser.id)) {
@@ -721,6 +726,46 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
+  // Generate a one-shot recovery link for an operator. Email isn't
+  // wired in production yet (EMAIL_PROVIDER=console), so the admin
+  // can't expect the user to receive an automated email. Instead, the
+  // OPS button mints a magic-link URL, returns it inline, and the
+  // admin pastes it into Slack/SMS/DM. URL is good for 7 days; one
+  // tap signs the operator in and bounces them home.
+  const handleGenerateRecoveryLink = async (operatorId: string) => {
+    setAdminActionError(null);
+    setAdminActionPending(operatorId);
+    try {
+      const res = await fetch('/api/admin/operator-magic-link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ operatorId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok || !data?.url) {
+        setAdminActionError(data?.error || `HTTP ${res.status}`);
+        return;
+      }
+      setRecoveryLinkByOp((prev) => ({ ...prev, [operatorId]: data.url }));
+    } catch (err) {
+      console.error('[OpsCenter:operator-magic-link] failed', err);
+      setAdminActionError('Network error — see console');
+    } finally {
+      setAdminActionPending(null);
+    }
+  };
+
+  const handleDismissRecoveryLink = (operatorId: string) => {
+    setRecoveryLinkByOp((prev) => {
+      const copy = { ...prev };
+      delete copy[operatorId];
+      return copy;
+    });
+  };
+
   // Delete handler — only fires AFTER the admin typed the matching
   // callsign. The endpoint enforces the same check server-side, so
   // even if the modal is bypassed somehow the row stays safe.
@@ -1175,6 +1220,23 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                           </button>
                         )
                       )}
+                      {/* SEND LINK — mints a one-shot magic-link URL the
+                          admin can DM/SMS to the operator so they can
+                          unlock themselves without admin running curl.
+                          The URL renders inline below this row when
+                          generated; admin clicks again to refresh. */}
+                      <button
+                        onClick={() => handleGenerateRecoveryLink(op.id)}
+                        disabled={adminActionPending === op.id}
+                        title="Mint a magic-link URL to share with this operator"
+                        style={{
+                          padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                          color: '#22d3ee', background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)',
+                          cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {adminActionPending === op.id ? '…' : (recoveryLinkByOp[op.id] ? 'NEW LINK' : 'SEND LINK')}
+                      </button>
                       {/* Delete — opens the confirmation modal. Hidden for
                           the current admin (server also rejects). Founders
                           aren't blocked client-side because the static seed
@@ -1207,6 +1269,71 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                         </span>
                       )}
                     </div>
+                    {/* Recovery-link reveal. URL is selectable + copy-on-
+                        click; dismiss button clears the cache so the row
+                        collapses back to its normal height. */}
+                    {recoveryLinkByOp[op.id] && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          padding: '6px 8px',
+                          fontSize: '10px',
+                          fontFamily: '"Share Tech Mono", monospace',
+                          background: 'rgba(34,211,238,0.06)',
+                          border: '1px solid rgba(34,211,238,0.18)',
+                          color: '#22d3ee',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <input
+                          type="text"
+                          readOnly
+                          value={recoveryLinkByOp[op.id]}
+                          onFocus={(e) => e.currentTarget.select()}
+                          style={{
+                            flex: 1,
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#22d3ee',
+                            fontFamily: '"Share Tech Mono", monospace',
+                            fontSize: '10px',
+                            padding: 0,
+                            outline: 'none',
+                            minWidth: 0,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = recoveryLinkByOp[op.id];
+                            if (url && navigator.clipboard?.writeText) {
+                              navigator.clipboard.writeText(url).catch(() => { /* clipboard blocked — input is still selectable */ });
+                            }
+                          }}
+                          style={{
+                            padding: '2px 6px', fontSize: '9px', fontFamily: '"Share Tech Mono", monospace',
+                            color: '#22d3ee', background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          COPY
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDismissRecoveryLink(op.id)}
+                          aria-label="Dismiss recovery link"
+                          style={{
+                            padding: '2px 6px', fontSize: '9px', fontFamily: '"Share Tech Mono", monospace',
+                            color: '#888', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
