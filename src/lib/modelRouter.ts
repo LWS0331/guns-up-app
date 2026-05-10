@@ -44,6 +44,27 @@ const TRIVIAL_KEYWORDS = [
   'yes', 'no', 'next', 'skip', 'copy',
 ];
 
+// Data-lookup vocabulary. Short factual queries about logged data —
+// "did I hit macros", "calories today", "what's my protein" — score
+// as 'trivial' under the length-only heuristic (≤30 chars, no
+// complex/trivial keyword hits → score -2). On Sonnet tier, trivial
+// downgrades to Haiku, which hallucinates from the prompt-stuffed
+// NUTRITION HISTORY / WORKOUT HISTORY blocks. Reported May 5: Gunny
+// inventing meal totals on Sonnet-tier operators. Floor data-lookup
+// queries at 'routine' so they stay on Sonnet (the model the
+// nutrition system prompt was tuned against). Cost impact is small —
+// these are still short messages and Sonnet remains the ceiling for
+// the tier; we're just blocking the trivial→Haiku step-down for the
+// narrow class of asks that need to read context accurately.
+const DATA_LOOKUP_KEYWORDS = [
+  'calories', 'cal', 'kcal', 'macros', 'macro', 'protein', 'carbs', 'carb', 'fat',
+  'meals', 'meal', 'ate', 'eaten', 'eat', 'lunch', 'breakfast', 'dinner', 'snack',
+  'weight', 'lbs', 'kg', 'bf', 'bodyfat',
+  'pr', 'prs', '1rm', 'lifted', 'lift', 'sets', 'reps',
+  'workout', 'workouts', 'session', 'sessions', 'streak',
+  'how many', 'how much', 'how close', 'did i', 'have i', 'what did',
+];
+
 const COMPLEX_KEYWORDS = [
   'explain', 'why', 'compare', 'design',
   'macrocycle', 'mesocycle', 'microcycle',
@@ -62,6 +83,7 @@ function buildKeywordRegex(words: string[]): RegExp {
 
 const TRIVIAL_RE = buildKeywordRegex(TRIVIAL_KEYWORDS);
 const COMPLEX_RE = buildKeywordRegex(COMPLEX_KEYWORDS);
+const DATA_LOOKUP_RE = buildKeywordRegex(DATA_LOOKUP_KEYWORDS);
 
 /**
  * Score-based classifier. No LLM call — pure heuristic.
@@ -95,7 +117,14 @@ export function classifyQueryComplexity(
   else if (mode === 'onboarding') score += 1;
 
   if (score >= 3) return 'complex';
-  if (score <= -2) return 'trivial';
+  // Data-lookup floor: short factual questions about logged macros,
+  // calories, meals, PRs, workouts must stay at 'routine' so Sonnet-tier
+  // operators don't get downgraded to Haiku (which hallucinates from
+  // the prompt-stuffed NUTRITION HISTORY block). Punctuation-light
+  // mobile asks like "did I hit macros" or "calories today" otherwise
+  // land at score -2 → trivial → Haiku. See DATA_LOOKUP_KEYWORDS.
+  const hasDataLookup = (text.match(DATA_LOOKUP_RE) || []).length > 0;
+  if (score <= -2 && !hasDataLookup) return 'trivial';
   return 'routine';
 }
 
