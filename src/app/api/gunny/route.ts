@@ -739,6 +739,34 @@ Other types:
 - { "type": "update_prescription", "targetExerciseName": "Bench Press", "changes": { "prescription": "5x5 @ 225" } }
 - { "type": "prefill_weights", "targetExerciseName": "Bench Press", "sets": [{"weight": 185, "reps": 5}, {"weight": 195, "reps": 5}, {"weight": 205, "reps": 3}], "sourceLabel": "from last Monday's push day" }
 
+DATE SCOPING — "targetDate" (REQUIRED when the operator names a day):
+When the operator references a SPECIFIC day in the request — "add
+squats to Saturday's workout", "swap the bench on Monday", "remove
+curls from yesterday" — you MUST include a "targetDate" field on the
+modification, in YYYY-MM-DD in the operator's local timezone (pull
+from clientDate / clientDateLong in your context block; do NOT use
+UTC). Without "targetDate", the client falls back to today and may
+misroute the change onto an unrelated session.
+
+Example (operator says "add barbell squats to Saturday's workout"):
+<workout_modification>
+{ "type": "add_block",
+  "targetDate": "2026-05-09",
+  "afterExerciseName": "Romanian Deadlift",
+  "newBlock": { "type": "exercise", "exerciseName": "Barbell Back Squat", "prescription": "4x6 @ RPE 8" }
+}
+</workout_modification>
+
+OMIT "targetDate" ONLY for mid-workout requests where the operator is
+clearly referencing the active session ("swap that exercise", "drop the
+last block", "fill last week's weights"). Those default to today.
+
+NEVER target a date whose workout is already completed:true —
+modifications to completed sessions corrupt logged history. If the
+operator asks to change a completed workout (e.g. "add the squats I
+did yesterday"), they want a PR / meal log, not a modification —
+emit <pr_json> or confirm in plain text instead.
+
 PREFILL WEIGHTS PROTOCOL (workout-mode only):
 Use "prefill_weights" ONLY when the operator is IN active workout mode (check the
 ACTIVE WORKOUT EXECUTION block in their context — if it's absent, workout mode

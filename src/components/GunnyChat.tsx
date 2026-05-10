@@ -2308,18 +2308,30 @@ ${mealSuggestion}`;
             wasModification = true;
             continue;
           }
-          // Block-shape mods write to the persisted workout. Look at
-          // today FIRST (the common case for mid-workout asks); fall
-          // back to scanning recent dates so a request like "add
-          // curls back to my last workout" doesn't silently drop.
-          let targetDate = today;
-          let current = workingOp.workouts?.[today];
-          if (!current) {
-            // Walk back up to 14 days searching for the most recent
-            // workout that has the block this mod targets. This makes
-            // "add it back" / "swap that exercise" requests work even
-            // when the user is browsing an older day or the request
-            // came in well after the workout completed.
+          // Block-shape mods write to the persisted workout. Resolve
+          // which date to write to in this priority:
+          //   1. mod.targetDate explicit (Gunny emitted YYYY-MM-DD because
+          //      the operator named a specific day)
+          //   2. today
+          //   3. fallback walk-back across recent NON-COMPLETED workouts
+          //      (only when no explicit date — never when the operator
+          //      named a day, because the walk-back would silently land
+          //      on the wrong session)
+          //
+          // CRITICAL — never walk back into a completed workout. May 1
+          // bug: "add barbell squats to Saturday's workout" landed on
+          // Friday's COMPLETED workout because Saturday was empty and
+          // the walk-back grabbed the most recent workout-with-blocks.
+          // Modifying completed sessions corrupts logged history.
+          const explicitDate = (mod as { targetDate?: string }).targetDate;
+          let targetDate = explicitDate || today;
+          let current = workingOp.workouts?.[targetDate];
+
+          if (!current && !explicitDate) {
+            // No workout at the resolved date AND no explicit date hint —
+            // fall back to scanning recent dates so requests like
+            // "add curls back to my last workout" still work. Skip
+            // completed workouts: they're history, not edit targets.
             const wantedName = (mod as { targetExerciseName?: string; afterExerciseName?: string }).targetExerciseName
               ?? (mod as { afterExerciseName?: string }).afterExerciseName
               ?? '';
@@ -2328,8 +2340,9 @@ ${mealSuggestion}`;
             for (const d of allDates.slice(0, 14)) {
               const w = workingOp.workouts?.[d];
               if (!w?.blocks?.length) continue;
+              if (w.completed) continue;
               if (mod.type === 'add_block') {
-                // For adds, the most recent workout is usually right.
+                // For adds, the most recent non-completed workout.
                 targetDate = d;
                 current = w;
                 break;
@@ -2348,9 +2361,22 @@ ${mealSuggestion}`;
               }
             }
           }
+
+          if (current?.completed) {
+            // The resolved date IS a completed workout — refuse rather
+            // than corrupt logged history. Surface to the user so Gunny
+            // doesn't lie about applying the change.
+            console.warn('[gunny-mod] refusing to modify completed workout for', mod);
+            silentlyDropped.push(`${targetDate} workout is already completed — modifications would corrupt logged sets. Ask for a new workout instead.`);
+            continue;
+          }
           if (!current) {
             console.warn('[gunny-mod] no target workout found for', mod);
-            silentlyDropped.push(`No workout to target (Gunny tried ${mod.type})`);
+            silentlyDropped.push(
+              explicitDate
+                ? `No workout planned for ${explicitDate} — nothing to ${mod.type}.`
+                : `No workout to target (Gunny tried ${mod.type})`
+            );
             continue;
           }
           try {

@@ -13,7 +13,21 @@ export type WorkoutModification =
   | ReorderBlocksMod
   | PrefillWeightsMod;
 
-export interface SwapExerciseMod {
+// Optional explicit-date hint emitted by Gunny when the operator names
+// a specific day ("add squats to Saturday's workout", "swap that
+// exercise on Monday"). When present, callers MUST resolve the
+// modification against this date and MUST NOT walk back to "the most
+// recent workout" — that fallback was misrouting day-specific asks
+// onto unrelated completed sessions (May 1 bug: "add to Saturday"
+// landed on Friday's completed workout).
+//
+// YYYY-MM-DD in the operator's local timezone. Omit for mid-workout
+// asks ("swap that exercise") which default to today.
+export interface DateScopedMod {
+  targetDate?: string;
+}
+
+export interface SwapExerciseMod extends DateScopedMod {
   type: 'swap_exercise';
   targetBlockId?: string;
   targetExerciseName?: string;
@@ -24,27 +38,27 @@ export interface SwapExerciseMod {
   };
 }
 
-export interface AddBlockMod {
+export interface AddBlockMod extends DateScopedMod {
   type: 'add_block';
   afterBlockId?: string;
   afterExerciseName?: string;
   newBlock: Partial<WorkoutBlock> & { type: 'exercise' | 'conditioning' };
 }
 
-export interface RemoveBlockMod {
+export interface RemoveBlockMod extends DateScopedMod {
   type: 'remove_block';
   targetBlockId?: string;
   targetExerciseName?: string;
 }
 
-export interface UpdatePrescriptionMod {
+export interface UpdatePrescriptionMod extends DateScopedMod {
   type: 'update_prescription';
   targetBlockId?: string;
   targetExerciseName?: string;
   changes: { prescription?: string; exerciseName?: string };
 }
 
-export interface ReorderBlocksMod {
+export interface ReorderBlocksMod extends DateScopedMod {
   type: 'reorder_blocks';
   newOrder: string[];
 }
