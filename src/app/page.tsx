@@ -222,6 +222,64 @@ export default function Home() {
     loadFromDB();
   }, []);
 
+  // ── LIVE LEADERBOARD POLL ──
+  // The COC leaderboard derives its rows from `operators` state, which
+  // was previously set ONCE during loadFromDB() and never refreshed.
+  // Net effect: User A logs a workout or PR, User B's leaderboard sits
+  // frozen until a hard reload. This effect pings /api/operators on a
+  // 10s cadence after the initial load so cross-account leaderboard
+  // changes (workout completions, PRs, streaks, day-tags) surface
+  // without a manual refresh.
+  //
+  // Tab-aware: pauses while document is hidden so background tabs
+  // don't burn API budget. Re-fires immediately on visibilitychange
+  // when the tab regains focus, so a user returning to the app sees
+  // current standings within ~1 polling cycle.
+  //
+  // /me is not re-polled here — auth/trial/operator-profile drift is
+  // handled separately by the existing /me-on-boot path. This is
+  // strictly a leaderboard-data refresh.
+  useEffect(() => {
+    if (!isLoaded) return;
+    let cancelled = false;
+
+    const refetch = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const token = getAuthToken();
+      const headers: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+      try {
+        const res = await fetch('/api/operators', { headers });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data?.operators)) {
+          setOperators(data.operators as Operator[]);
+        }
+      } catch {
+        // Network blip — next tick will retry. Don't surface to UI.
+      }
+    };
+
+    const intervalMs = 10_000;
+    const interval = setInterval(refetch, intervalMs);
+
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) refetch();
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+    };
+  }, [isLoaded]);
+
   // Persist operator updates to database
   const persistOperator = useCallback(async (updated: Operator) => {
     // Always save intake completion to localStorage as bulletproof backup
