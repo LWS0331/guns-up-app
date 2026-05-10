@@ -3050,26 +3050,49 @@ ${mealSuggestion}`;
   // stays emoji-free per the canonical April 24 design — the
   // tactical military aesthetic doesn't tolerate emoji renders
   // that vary across iOS/Android/desktop.
+  // Preset set refreshed May 2026 to surface Gunny's deeper capabilities
+  // (battle plan / daily ops scheduling / readiness brief / form-check
+  // vision / recovery protocol). The original presets — MY CLIENTS,
+  // WEEKLY PLAN, TRAINER WOD, MACRO CHECK, COOL DOWN — were all
+  // pulling on a thin slice of what Gunny actually does. New set
+  // exposes the high-value pulls operators were missing because
+  // nothing in the UI hinted they existed.
+  //
+  // i18n keys for old labels are preserved in i18n.tsx so any
+  // out-of-tree references keep resolving; this surface no longer
+  // emits hardcoded English strings either.
   const quickActions: { id: string; label: string; icon: React.ReactNode }[] = operator.role === 'trainer'
     ? [
         { id: 'build_wod', label: t('gunny.build_wod'), icon: <Icon.Play size={12} /> },
-        { id: 'my_clients', label: 'MY CLIENTS', icon: <Icon.User size={12} /> },
+        { id: 'battle_plan', label: t('gunny.battle_plan'), icon: <Icon.Sword size={12} /> },
         { id: 'goal_paths', label: t('gunny.goal_paths'), icon: <Icon.Target size={12} /> },
-        { id: 'weekly_plan', label: t('gunny.weekly_plan'), icon: <Icon.Calendar size={12} /> },
-        { id: 'cool_down', label: 'COOL DOWN', icon: <Icon.Snowflake size={12} /> },
+        { id: 'daily_ops', label: t('gunny.daily_ops'), icon: <Icon.Calendar size={12} /> },
+        { id: 'readiness_brief', label: t('gunny.readiness_brief'), icon: <Icon.Stats size={12} /> },
       ]
     : [
         { id: 'build_wod', label: t('gunny.build_wod'), icon: <Icon.Play size={12} /> },
-        { id: 'trainer_wod', label: 'TRAINER WOD', icon: <Icon.Trophy size={12} /> },
-        { id: 'check_readiness', label: t('gunny.check_readiness'), icon: <Icon.Heart size={12} /> },
+        { id: 'daily_ops', label: t('gunny.daily_ops'), icon: <Icon.Calendar size={12} /> },
+        { id: 'readiness', label: t('gunny.readiness'), icon: <Icon.Heart size={12} /> },
         { id: 'goal_paths', label: t('gunny.goal_paths'), icon: <Icon.Target size={12} /> },
-        { id: 'macro_check', label: t('gunny.macro_check'), icon: <Icon.Food size={12} /> },
-        { id: 'cool_down', label: 'COOL DOWN', icon: <Icon.Snowflake size={12} /> },
+        { id: 'form_check', label: t('gunny.form_check'), icon: <Icon.Camera size={12} /> },
+        { id: 'recovery', label: t('gunny.recovery'), icon: <Icon.Snowflake size={12} /> },
       ];
 
   const handleQuickActionById = (actionId: string) => {
+    // Each preset maps to the literal message Gunny sees. New preset
+    // set (May 2026) leans on Gunny's deeper capabilities. Legacy IDs
+    // are still accepted in case a stale cached client posts them.
     let actionText = 'BUILD A WORKOUT';
+    // Refreshed presets
+    if (actionId === 'battle_plan') actionText = 'REVIEW MY BATTLE PLAN';
+    if (actionId === 'daily_ops') actionText = 'BUILD MY DAILY OPS SCHEDULE';
+    if (actionId === 'readiness_brief') actionText = "GIVE ME TODAY'S READINESS BRIEF";
+    if (actionId === 'readiness') actionText = 'CHECK MY READINESS';
+    if (actionId === 'form_check') actionText = 'ANALYZE MY FORM';
+    if (actionId === 'recovery') actionText = 'BUILD ME A RECOVERY PROTOCOL';
+    // Shared
     if (actionId === 'goal_paths') actionText = 'SHOW ME GOAL PATHS';
+    // Legacy IDs (kept so cached clients still work after the rollout)
     if (actionId === 'check_readiness') actionText = 'CHECK MY READINESS';
     if (actionId === 'weekly_plan') actionText = 'PLAN MY WEEK';
     if (actionId === 'macro_check') actionText = 'CHECK MACROS';
@@ -3310,6 +3333,7 @@ ${mealSuggestion}`;
               className="gunny-quick"
               onClick={() => handleQuickActionById(action.id)}
               disabled={isTyping}
+              aria-label={action.label}
               style={{ flexShrink: 0 }}
             >
               <span style={{ color: 'var(--green)', opacity: 0.7, marginRight: 6, display: 'inline-flex', verticalAlign: 'middle' }}>

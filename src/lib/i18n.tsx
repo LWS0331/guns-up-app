@@ -210,6 +210,16 @@ export const translations = {
     'gunny.macro_check': 'MACRO CHECK',
     'gunny.cool_down': 'COOL DOWN',
     'gunny.my_clients': 'MY CLIENTS',
+    // Refreshed preset set — surface Gunny's deeper capabilities
+    // (battle plan, daily ops scheduling, readiness brief, form-check
+    // vision, recovery protocol) instead of the original surface-level
+    // pulls. Old keys above kept for any out-of-tree references.
+    'gunny.battle_plan': 'BATTLE PLAN',
+    'gunny.daily_ops': 'DAILY OPS',
+    'gunny.readiness_brief': 'READINESS BRIEF',
+    'gunny.readiness': 'READINESS',
+    'gunny.form_check': 'FORM CHECK',
+    'gunny.recovery': 'RECOVERY',
     'gunny.online': 'ONLINE',
     'gunny.offline': 'OFFLINE',
     'gunny.opus': 'OPUS',
@@ -1667,6 +1677,12 @@ export const translations = {
     'gunny.macro_check': 'VERIFICAR MACROS',
     'gunny.cool_down': 'ENFRIAMIENTO',
     'gunny.my_clients': 'MIS CLIENTES',
+    'gunny.battle_plan': 'PLAN DE BATALLA',
+    'gunny.daily_ops': 'OPS DIARIO',
+    'gunny.readiness_brief': 'BRIEF DE PREPARACIÓN',
+    'gunny.readiness': 'PREPARACIÓN',
+    'gunny.form_check': 'REVISAR FORMA',
+    'gunny.recovery': 'RECUPERACIÓN',
     'gunny.online': 'EN LÍNEA',
     'gunny.offline': 'DESCONECTADO',
     'gunny.opus': 'OPUS',
