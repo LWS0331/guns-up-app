@@ -179,6 +179,38 @@ model WearableConnection {
   @@index([vitalUserId])
 }
 
+// CalendarConnection — operator-owned external-calendar link. Phase 1
+// (May 2026) supports Google Calendar read-only via OAuth so Daily Ops
+// can reshape blocks around real meetings ("you have a 9am call —
+// moving strength training to 11am"). Phase 2 will add provider="ical_url"
+// for Apple/Outlook via shared-feed URLs (no token storage needed).
+//
+// Tokens are encrypted at rest by src/lib/calendarTokens.ts using a key
+// derived from JWT_SECRET via HKDF. Storing them plaintext would make a
+// DB leak equivalent to a Google account compromise; encryption shifts
+// the threat model so JWT_SECRET must also leak before tokens are usable.
+//
+// active=false replaces hard-delete for disconnects so we keep the audit
+// trail (when, by what scopes, against which Google account).
+model CalendarConnection {
+  id                String    @id @default(cuid())
+  operatorId        String
+  provider          String    // "google" (Phase 1); "ical_url" (Phase 2)
+  providerAccountId String?   // Google account email — what the operator authorized as
+  externalCalId     String    @default("primary")  // Google calendarId, defaults to user's primary
+  accessTokenEnc    String?   // AES-GCM(iv|ciphertext|tag) base64url; null for ical_url provider
+  refreshTokenEnc   String?
+  tokenExpiresAt    DateTime?
+  scopes            String    @default("")  // space-separated, e.g. "https://www.googleapis.com/auth/calendar.readonly"
+  connectedAt       DateTime  @default(now())
+  lastSyncAt        DateTime?
+  syncData          Json      @default("{}") // { events: [{title,startISO,endISO,allDay,location?}], windowStart, windowEnd, eventCount }
+  active            Boolean   @default(true)
+
+  @@unique([operatorId, provider])
+  @@index([operatorId])
+}
+
 // WearableSnapshot — one row per operator per calendar day, written
 // by /api/wearables/webhook on each daily.data.* event (and by the
 // sync route's pull). Lets the baselines cron compute TRUE rolling

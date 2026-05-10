@@ -53,6 +53,65 @@ export function getGoogleConfig(): GoogleConfig {
   return { clientId, clientSecret, redirectUri };
 }
 
+// ── GOOGLE CALENDAR (PHASE 1, May 2026) ──
+//
+// Calendar integration uses a SEPARATE OAuth client + flow from
+// sign-in. Bundling calendar.readonly scope into sign-in would force
+// every new user through the Calendar consent screen even if they
+// don't want to connect, killing first-impression conversion.
+//
+// Two env shapes supported:
+//   1. GOOGLE_CALENDAR_CLIENT_ID / GOOGLE_CALENDAR_CLIENT_SECRET —
+//      separate OAuth client narrow-scoped to calendar.readonly.
+//      Recommended.
+//   2. Falls back to GOOGLE_CLIENT_ID / SECRET if calendar-specific
+//      vars are unset, so localhost dev with one OAuth client still
+//      works without env juggling.
+const CALENDAR_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'openid',
+  'email',
+] as const;
+export const GOOGLE_CALENDAR_SCOPE_STRING = CALENDAR_SCOPES.join(' ');
+
+export function getGoogleCalendarConfig(): GoogleConfig {
+  const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      'GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET are required (or GOOGLE_CLIENT_ID / SECRET as fallback). Provision in Google Cloud Console → OAuth client (web), enable Google Calendar API, set authorized redirect URI to ${APP_URL}/api/calendars/callback/google.',
+    );
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.HOST_URL;
+  if (!baseUrl) {
+    throw new Error(
+      'NEXT_PUBLIC_APP_URL (or HOST_URL) is required so we can build the OAuth redirect_uri.',
+    );
+  }
+  const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/calendars/callback/google`;
+  return { clientId, clientSecret, redirectUri };
+}
+
+/**
+ * Build the Google Calendar OAuth authorize URL. access_type=offline
+ * + prompt=consent forces Google to return a refresh_token even on
+ * re-authorize — without those flags, repeat connections get only an
+ * access_token and we can't sync after the first hour.
+ */
+export function buildCalendarAuthorizeUrl(config: GoogleConfig, state: string): string {
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: 'code',
+    scope: GOOGLE_CALENDAR_SCOPE_STRING,
+    state,
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+  });
+  return `${GOOGLE_AUTHORIZE_URL}?${params.toString()}`;
+}
+
 /** Build the Google authorize URL the browser should be redirected to. */
 export function buildAuthorizeUrl(config: GoogleConfig, state: string, nextPath?: string): string {
   const params = new URLSearchParams({
@@ -194,7 +253,12 @@ export function verifyOauthState(
 export interface GoogleTokenResponse {
   access_token: string;
   expires_in: number;
-  id_token: string;
+  // Sign-in flow always returns id_token; calendar refresh-grant does
+  // not. Kept optional so both flows share the type.
+  id_token?: string;
+  // Returned only when access_type=offline AND prompt=consent (calendar
+  // flow). The sign-in flow uses access_type=online and never gets one.
+  refresh_token?: string;
   scope: string;
   token_type: 'Bearer';
 }
@@ -221,6 +285,36 @@ export async function exchangeCodeForTokens(
     throw new Error(`Google token exchange failed: ${res.status} ${detail.slice(0, 200)}`);
   }
   return (await res.json()) as GoogleTokenResponse;
+}
+
+/**
+ * Refresh an expired access_token using a stored refresh_token. Returns
+ * the new access_token + expiry; caller is responsible for re-encrypting
+ * and persisting. Throws on Google-side failure (e.g. user revoked
+ * access in their Google account settings) — caller should mark the
+ * connection inactive in that case so the operator gets a clean
+ * "reconnect required" surface instead of repeated sync failures.
+ */
+export async function refreshAccessToken(
+  config: GoogleConfig,
+  refreshToken: string,
+): Promise<{ access_token: string; expires_in: number; scope: string; token_type: 'Bearer' }> {
+  const body = new URLSearchParams({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
+  });
+  const res = await fetch(GOOGLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Google refresh-token grant failed: ${res.status} ${detail.slice(0, 200)}`);
+  }
+  return (await res.json()) as { access_token: string; expires_in: number; scope: string; token_type: 'Bearer' };
 }
 
 export interface GoogleIdTokenClaims {

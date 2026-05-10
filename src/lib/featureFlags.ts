@@ -46,6 +46,26 @@ export function isJuniorOperatorEnabledServer(): boolean {
 export const TRAINER_APPLICATIONS_OPEN: boolean =
   process.env.NEXT_PUBLIC_TRAINER_APPLICATIONS_OPEN === 'true';
 
+// ─── GOOGLE_CALENDAR_OAUTH_ENABLED ──────────────────────────────────────
+//
+// Gates the Google Calendar integration (Phase 1 of the calendar
+// rollout). When false, the CalendarConnect UI hides the Google button
+// and /api/calendars/connect/google returns 503. This keeps the
+// feature inert in production until Google Cloud Console has the
+// calendar.readonly scope provisioned and verified, and until we're
+// ready to start charging encryption-key rotation against operator
+// reconnects.
+//
+// Server-only flag — the client surfaces (CalendarConnect) read it
+// indirectly via the /api/calendars/* endpoints' 503 response shape.
+// Rollback is instant: unset the env var.
+export function isGoogleCalendarOauthEnabledServer(): boolean {
+  return (
+    process.env.GOOGLE_CALENDAR_OAUTH_ENABLED === 'true' ||
+    process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_OAUTH_ENABLED === 'true'
+  );
+}
+
 // ─── MODEL_AUTOROUTE_ENABLED ────────────────────────────────────────────
 //
 // Per-query model auto-routing in /api/gunny. When false (default), the
