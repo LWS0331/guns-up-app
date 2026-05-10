@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, PRRecord, Injury, formatHeightInput, FitnessLevel, MilestoneGoal } from '@/lib/types';
 import WearableConnect from '@/components/WearableConnect';
+import CalendarConnect from '@/components/CalendarConnect';
 import ProgressCharts from '@/components/ProgressCharts';
 import BillingPanel from '@/components/BillingPanel';
 import { FOOD_DB } from '@/data/foods';
@@ -3536,6 +3537,18 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             <WearableConnect
               operator={operator}
               onUpdateOperator={onUpdateOperator}
+              currentUser={currentUser}
+              onOpenBilling={() => setActiveTab('PROFILE')}
+            />
+            {/* CalendarConnect — Phase 1 Google Calendar integration.
+                Mounted alongside WearableConnect because both feed the
+                same Daily Ops PERSONALIZATION SIGNALS context block;
+                pairing them in the UI mirrors that they're peer
+                integrations. Self-suppresses behind tier-gate +
+                feature-flag, so non-Commander or pre-rollout users see
+                the appropriate fallback (UpgradeCard / Coming Soon). */}
+            <CalendarConnect
+              operator={operator}
               currentUser={currentUser}
               onOpenBilling={() => setActiveTab('PROFILE')}
             />

@@ -3811,8 +3811,18 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           const { getWearableSignals, renderWearableForPrompt } = await import(
             '@/lib/wearableSignals'
           );
+          // Calendar signals (Phase 1, May 2026) — optional read of the
+          // operator's connected Google Calendar. Slots into the same
+          // PERSONALIZATION SIGNALS block as rhythm + wearable so Gunny
+          // can reshape Daily Ops blocks around real meetings without
+          // a separate prompt section. Falls through silently when no
+          // CalendarConnection row exists, so non-connected operators
+          // see zero behavior change.
+          const { getCalendarSignals, renderCalendarForPrompt } = await import(
+            '@/lib/calendarSignals'
+          );
           const today = clientDate; // already operator-local YYYY-MM-DD upstream
-          const [rhythm, wearable] = await Promise.all([
+          const [rhythm, wearable, calendar] = await Promise.all([
             recomputePersonalRhythm(auth.operatorId).catch((err) => {
               console.warn('[daily-ops] rhythm recompute failed:', err);
               return null;
@@ -3821,14 +3831,20 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
               console.warn('[daily-ops] wearable signals failed:', err);
               return null;
             }),
+            getCalendarSignals(auth.operatorId).catch((err) => {
+              console.warn('[daily-ops] calendar signals failed:', err);
+              return null;
+            }),
           ]);
           const rhythmText = rhythm ? renderRhythmForPrompt(rhythm) : '';
           const wearableText = wearable ? renderWearableForPrompt(wearable) : '';
-          if (rhythmText || wearableText) {
+          const calendarText = calendar ? renderCalendarForPrompt(calendar) : '';
+          if (rhythmText || wearableText || calendarText) {
             contextBlock +=
               '\n\n═══ DAILY OPS PERSONALIZATION SIGNALS ═══' +
               rhythmText +
-              wearableText;
+              wearableText +
+              calendarText;
           }
         } catch (err) {
           console.warn('[daily-ops] signal injection failed:', err);
