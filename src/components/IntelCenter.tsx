@@ -3611,7 +3611,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     INJURIES: t('intel.injuries'),
     MACROCYCLE: 'MACROCYCLE',
     PREFERENCES: t('intel.preferences'),
-    WEARABLES: 'WEARABLES',
+    WEARABLES: 'INTEGRATIONS',
     FORM_CHECK: 'FORM CHECK',
     // MANUAL is the user-facing operating manual — every feature
     // explained, parallel to OPS Center's ROADMAP tab. Translated
