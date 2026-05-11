@@ -22,6 +22,7 @@
     "dotenv": "^17.3.1",
     "jsonwebtoken": "^9.0.3",
     "next": "^14.2.35",
+    "node-ical": "^0.26.1",
     "pg": "^8.20.0",
     "posthog-js": "^1.363.1",
     "prisma": "^7.5.0",
