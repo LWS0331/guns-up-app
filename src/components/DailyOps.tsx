@@ -956,6 +956,40 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     }
   }, [onSendGunnyMessage, datePhrase]);
 
+  // Direct regenerate via the daily-ops API (calendar-aware generator).
+  // Use this instead of askGunnyForPlan when we want a PERSISTED plan,
+  // not just a chat response. Returns silently after refreshing local
+  // state so the surface reflects the new plan immediately.
+  const [regenerating, setRegenerating] = useState(false);
+  const regeneratePlan = useCallback(async () => {
+    setRegenerating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/daily-ops', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'regenerate',
+          operatorId: operator.id,
+          targetDate: viewDate,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error || `Regenerate failed (HTTP ${res.status}).`);
+        return;
+      }
+      const data = await res.json();
+      setPlan(data.plan ?? null);
+    } catch (err) {
+      console.error('[daily-ops] regenerate failed', err);
+      setError('Network error during regenerate.');
+    } finally {
+      setRegenerating(false);
+    }
+  }, [operator.id, viewDate]);
+
   const askGunnyForReshape = useCallback(() => {
     if (onSendGunnyMessage) {
       onSendGunnyMessage(`Reshape ${datePhrase}'s daily ops — what would you change?`);
@@ -1128,16 +1162,16 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
           {weekPlans.length === 0 ? (
             <div style={styles.emptyCard}>
               <p style={{ marginTop: 0, marginBottom: 12 }}>
-                No plans for the next 7 days yet. Ask Gunny to build today&apos;s plan
-                to start the rhythm — the overnight cron will fill in tomorrow.
+                No plans for the next 7 days yet. Generate today&apos;s plan to start
+                the rhythm — the overnight cron will fill in tomorrow.
               </p>
               <button
                 type="button"
                 className="btn btn-amber"
-                onClick={askGunnyForPlan}
-                disabled={!onSendGunnyMessage}
+                onClick={regeneratePlan}
+                disabled={regenerating}
               >
-                GENERATE TODAY&apos;S PLAN
+                {regenerating ? 'GENERATING…' : "GENERATE TODAY'S PLAN"}
               </button>
             </div>
           ) : (
@@ -1161,18 +1195,18 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
         <div style={styles.emptyCard}>
           <p style={{ marginTop: 0, marginBottom: 12 }}>
             {viewOffset === 0
-              ? "No plan for today yet. Ask Gunny to build one."
+              ? "No plan for today yet. Generate one now."
               : viewOffset > 0
-                ? `No plan for ${datePhrase} yet — the overnight cron builds D+1 plans, or ask Gunny to build it now.`
+                ? `No plan for ${datePhrase} yet — the overnight cron builds D+1 plans, or generate it now.`
                 : `No plan for ${datePhrase}. Past days don't auto-fill once missed.`}
           </p>
           <button
             type="button"
             className="btn btn-amber"
-            onClick={askGunnyForPlan}
-            disabled={!onSendGunnyMessage}
+            onClick={regeneratePlan}
+            disabled={regenerating}
           >
-            GENERATE {datePhrase.toUpperCase()}&apos;S PLAN
+            {regenerating ? 'GENERATING…' : `GENERATE ${datePhrase.toUpperCase()}'S PLAN`}
           </button>
         </div>
       )}
@@ -1230,10 +1264,10 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={askGunnyForPlan}
-              disabled={!onSendGunnyMessage}
+              onClick={regeneratePlan}
+              disabled={regenerating}
             >
-              REGENERATE
+              {regenerating ? 'REGENERATING…' : 'REGENERATE'}
             </button>
           </div>
         </>

@@ -225,10 +225,71 @@ export async function POST(req: NextRequest) {
     | { action: 'feedback'; planId: string; blockId?: string; followed: 'yes' | 'partial' | 'no'; perceivedFit?: 'too_early' | 'right' | 'too_late' | 'na'; notes?: string }
     | { action: 'approve'; planId: string; approved: boolean; notes?: string }
     | { action: 'block_override'; planId: string; blockId: string; newStartTime?: string; newEndTime?: string; perceivedFit?: 'too_early' | 'right' | 'too_late' | 'na' }
+    | { action: 'regenerate'; operatorId: string; targetDate: string }
     | null;
 
   if (!body || typeof body !== 'object' || !('action' in body)) {
     return NextResponse.json({ error: 'action required' }, { status: 400 });
+  }
+
+  // Regenerate doesn't take a planId — it takes operatorId + targetDate
+  // and rebuilds via the calendar-aware generator (upserts, replacing
+  // any existing plan for that date). Handled BEFORE the planId lookup
+  // below because regenerate may run when no plan exists yet.
+  if (body.action === 'regenerate') {
+    if (!body.operatorId || !body.targetDate || !/^\d{4}-\d{2}-\d{2}$/.test(body.targetDate)) {
+      return NextResponse.json(
+        { error: 'operatorId and targetDate=YYYY-MM-DD required' },
+        { status: 400 },
+      );
+    }
+    const accessResult = await authorizeAccess(req, body.operatorId);
+    if (accessResult instanceof NextResponse) return accessResult;
+
+    const op = await prisma.operator.findUnique({
+      where: { id: body.operatorId },
+      select: {
+        id: true,
+        callsign: true,
+        isJunior: true,
+        juniorAge: true,
+        profile: true,
+        intake: true,
+      },
+    });
+    if (!op) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
+
+    const profileAge =
+      typeof (op.profile as Record<string, unknown> | null)?.age === 'number'
+        ? ((op.profile as Record<string, unknown>).age as number)
+        : null;
+    const intakePath = (op.intake as Record<string, unknown> | null)?.trainingPath;
+    const trainingPath = typeof intakePath === 'string' ? intakePath : null;
+
+    const { generateDailyOpsPlan } = await import('@/lib/dailyOpsGenerator');
+    const result = await generateDailyOpsPlan({
+      operatorContext: {
+        operatorId: op.id,
+        isJunior: op.isJunior,
+        juniorAge: op.juniorAge,
+        trainingPath,
+        age: profileAge,
+        callsign: op.callsign,
+      },
+      targetDate: body.targetDate,
+      reason: 'manual_admin',
+    });
+
+    if (result.ok === false) {
+      return NextResponse.json({ error: result.error }, { status: 500 });
+    }
+    const fresh = await prisma.dailyOpsPlan.findUnique({
+      where: { operatorId_date: { operatorId: op.id, date: body.targetDate } },
+    });
+    return NextResponse.json({
+      ok: true,
+      plan: fresh ? planRowToShape(fresh) : null,
+    });
   }
 
   const plan = await prisma.dailyOpsPlan.findUnique({ where: { id: body.planId } });
