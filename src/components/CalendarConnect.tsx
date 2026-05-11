@@ -56,6 +56,12 @@ const CalendarConnect: React.FC<CalendarConnectProps> = ({ operator, currentUser
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(true);
+  // iCal flow is independent of Google — its own connect endpoint,
+  // its own enable flag, its own state. Operator can have both
+  // connected (e.g. work on Google, personal on Apple) or just one.
+  const [icalUrl, setIcalUrl] = useState('');
+  const [icalConnecting, setIcalConnecting] = useState(false);
+  const [icalDisconnecting, setIcalDisconnecting] = useState(false);
 
   const lastFetchRef = useRef(0);
   // One-shot guard so we don't loop a re-sync if loadConnections fires
@@ -194,6 +200,65 @@ const CalendarConnect: React.FC<CalendarConnectProps> = ({ operator, currentUser
     }
   };
 
+  const handleConnectIcal = async () => {
+    const url = icalUrl.trim();
+    if (!url) {
+      setError('Paste your published .ics URL first.');
+      return;
+    }
+    setIcalConnecting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/calendars/connect/ical', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error || `Connect failed (HTTP ${res.status}).`);
+        return;
+      }
+      setIcalUrl('');
+      await loadConnections();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setIcalConnecting(false);
+    }
+  };
+
+  const handleDisconnectIcal = async () => {
+    if (typeof window !== 'undefined' && !window.confirm('Disconnect iCal URL? Daily Ops will stop reshaping around its events.')) {
+      return;
+    }
+    setIcalDisconnecting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/calendars', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ operatorId: operator.id, provider: 'ical_url' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error || `Disconnect failed (HTTP ${res.status}).`);
+        return;
+      }
+      await loadConnections();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setIcalDisconnecting(false);
+    }
+  };
+
   if (!canAccess) {
     return (
       <div style={{ padding: 20 }}>
@@ -227,6 +292,7 @@ const CalendarConnect: React.FC<CalendarConnectProps> = ({ operator, currentUser
   }
 
   const googleConn = connections.find((c) => c.provider === 'google');
+  const icalConn = connections.find((c) => c.provider === 'ical_url');
 
   return (
     <div style={{ padding: 20 }}>
@@ -235,7 +301,7 @@ const CalendarConnect: React.FC<CalendarConnectProps> = ({ operator, currentUser
           EXTERNAL CALENDAR
         </div>
         <div style={{ color: '#888', fontFamily: '"Chakra Petch", sans-serif', fontSize: 13, marginTop: 4, lineHeight: 1.5 }}>
-          Connect Google Calendar so Daily Ops reshapes blocks around your real meetings. Read-only — Gunny never writes to your calendar.
+          Connect a calendar so Daily Ops reshapes blocks around your real meetings. Google uses OAuth; Apple Calendar / Outlook use a published .ics URL. Read-only — Gunny never writes to your calendar.
         </div>
       </div>
 
@@ -340,6 +406,114 @@ const CalendarConnect: React.FC<CalendarConnectProps> = ({ operator, currentUser
           <span>CONNECT GOOGLE CALENDAR</span>
         </button>
       )}
+
+      {/* ── iCal-URL section (Phase 2) ─────────────────────────────── */}
+      <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 14 }}>
+        <div style={{ color: '#00b8d4', fontFamily: '"Orbitron", sans-serif', fontSize: 12, fontWeight: 700, letterSpacing: 1.8, marginBottom: 6 }}>
+          APPLE / OUTLOOK · iCal URL
+        </div>
+        {icalConn ? (
+          <div style={{
+            background: 'rgba(0,184,212,0.04)',
+            border: '1px solid rgba(0,184,212,0.25)',
+            padding: '12px 14px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+          }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ color: '#00b8d4', fontFamily: '"Orbitron", sans-serif', fontSize: 12, fontWeight: 700, letterSpacing: 1.5 }}>
+                iCal · CONNECTED
+              </div>
+              <div style={{ color: '#bbb', fontFamily: '"Share Tech Mono", monospace', fontSize: 11, marginTop: 4, wordBreak: 'break-all' }}>
+                {icalConn.providerAccountId ?? 'feed'}
+              </div>
+              <div style={{ color: '#888', fontFamily: '"Share Tech Mono", monospace', fontSize: 11, marginTop: 2 }}>
+                Last sync: {icalConn.lastSyncAt ? new Date(icalConn.lastSyncAt).toLocaleString() : 'never'} · {icalConn.eventCount} upcoming event{icalConn.eventCount === 1 ? '' : 's'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={handleSync}
+                disabled={syncing || icalDisconnecting}
+                style={{
+                  padding: '6px 12px', fontSize: 11, fontFamily: '"Share Tech Mono", monospace',
+                  color: '#00b8d4', background: 'rgba(0,184,212,0.08)', border: '1px solid rgba(0,184,212,0.25)',
+                  cursor: syncing || icalDisconnecting ? 'not-allowed' : 'pointer',
+                  letterSpacing: 1.2,
+                }}
+              >
+                {syncing ? 'SYNCING…' : 'SYNC NOW'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDisconnectIcal}
+                disabled={syncing || icalDisconnecting}
+                style={{
+                  padding: '6px 12px', fontSize: 11, fontFamily: '"Share Tech Mono", monospace',
+                  color: '#ff8888', background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.25)',
+                  cursor: syncing || icalDisconnecting ? 'not-allowed' : 'pointer',
+                  letterSpacing: 1.2,
+                }}
+              >
+                {icalDisconnecting ? '…' : 'DISCONNECT'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ color: '#888', fontFamily: '"Chakra Petch", sans-serif', fontSize: 12, marginBottom: 8, lineHeight: 1.5 }}>
+              Paste a public .ics URL — Apple Calendar → Share → Public Calendar; Outlook → Calendar Settings → Publish.
+              Only events the URL publishes are visible to Gunny.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <input
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                placeholder="https://… or webcal://…"
+                value={icalUrl}
+                onChange={(e) => setIcalUrl(e.target.value)}
+                disabled={icalConnecting}
+                style={{
+                  flex: '1 1 240px',
+                  minWidth: 0,
+                  padding: '8px 10px',
+                  background: '#0a0a0a',
+                  border: '1px solid #2a2a2a',
+                  color: '#e0e0e0',
+                  fontFamily: '"Share Tech Mono", monospace',
+                  fontSize: 12,
+                  borderRadius: 3,
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleConnectIcal}
+                disabled={icalConnecting || !icalUrl.trim()}
+                style={{
+                  padding: '8px 14px',
+                  background: '#00b8d4',
+                  color: '#0a0a0a',
+                  border: 'none',
+                  borderRadius: 3,
+                  fontFamily: '"Orbitron", sans-serif',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1.5,
+                  cursor: icalConnecting || !icalUrl.trim() ? 'not-allowed' : 'pointer',
+                  opacity: icalConnecting || !icalUrl.trim() ? 0.5 : 1,
+                }}
+              >
+                {icalConnecting ? 'CONNECTING…' : 'CONNECT iCal'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

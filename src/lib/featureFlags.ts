@@ -66,6 +66,21 @@ export function isGoogleCalendarOauthEnabledServer(): boolean {
   );
 }
 
+// ─── ICAL_CALENDAR_ENABLED ──────────────────────────────────────────────
+//
+// Gates the Phase 2 iCal-URL fallback for operators on Apple Calendar,
+// Outlook, or anything else that exposes a public webcal/.ics URL. No
+// OAuth, no Google project — operator pastes their published calendar
+// URL and the server fetches + parses it on the same schedule as the
+// Google sync. Useful for the Apple ecosystem majority who don't want
+// to authorize a Google scope. Rollback: unset the env var.
+export function isIcalCalendarEnabledServer(): boolean {
+  return (
+    process.env.ICAL_CALENDAR_ENABLED === 'true' ||
+    process.env.NEXT_PUBLIC_ICAL_CALENDAR_ENABLED === 'true'
+  );
+}
+
 // ─── MODEL_AUTOROUTE_ENABLED ────────────────────────────────────────────
 //
 // Per-query model auto-routing in /api/gunny. When false (default), the
