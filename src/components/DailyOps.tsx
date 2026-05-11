@@ -604,9 +604,12 @@ function adherenceSummary(plan: DailyOpsPlanShape | undefined): {
 }
 
 const WeekView: React.FC<WeekViewProps> = ({ plans, rhythm, todayISO }) => {
+  // Forward-looking: today + next 6 days. Operators want to see the
+  // week AHEAD so they can plan around real calendar events; backward
+  // retrospection is rarely the trigger for opening this surface.
   const days: { iso: string; plan: DailyOpsPlanShape | undefined }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const iso = dateOffsetISO(-i);
+  for (let i = 0; i <= 6; i++) {
+    const iso = dateOffsetISO(i);
     days.push({ iso, plan: plans.find((p) => p.date === iso) });
   }
   return (
@@ -704,6 +707,35 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     }
   }, []);
 
+  // viewDate is the day the "TODAY" mode is currently showing. Defaults
+  // to actual today, but the operator can shift backward/forward to
+  // see past plans or upcoming pre-generated ones. Capped at ±7d
+  // (matches calendar sync window + pre-gen cron horizon).
+  const [viewDate, setViewDate] = useState<string>(today);
+  const viewOffset = useMemo(() => {
+    const t = new Date(today + 'T00:00:00');
+    const v = new Date(viewDate + 'T00:00:00');
+    return Math.round((v.getTime() - t.getTime()) / 86_400_000);
+  }, [today, viewDate]);
+  const isViewingToday = viewOffset === 0;
+  const canShiftBack = viewOffset > -7;
+  const canShiftForward = viewOffset < 7;
+  const shiftViewDay = useCallback(
+    (delta: number) => {
+      setViewDate((prev) => {
+        const d = new Date(prev + 'T00:00:00');
+        d.setDate(d.getDate() + delta);
+        return d.toISOString().slice(0, 10);
+      });
+    },
+    [],
+  );
+  // If 'today' rolls over (operator left app open past midnight) reset
+  // viewDate to follow the new today, but only if they were on today.
+  useEffect(() => {
+    setViewDate((prev) => (prev === '' ? today : prev));
+  }, [today]);
+
   const isCommander = useMemo(
     () =>
       hasCommanderAccess({
@@ -730,7 +762,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     setError(null);
     try {
       const res = await fetch(
-        `/api/daily-ops?date=${today}&operatorId=${encodeURIComponent(operator.id)}&include=rhythm`,
+        `/api/daily-ops?date=${viewDate}&operatorId=${encodeURIComponent(operator.id)}&include=rhythm`,
         { credentials: 'include' },
       );
       if (lastFetchRef.current !== myReq) return; // superseded — drop result
@@ -757,15 +789,18 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     } finally {
       if (lastFetchRef.current === myReq) setLoading(false);
     }
-  }, [operator.id, today]);
+  }, [operator.id, viewDate]);
 
   const fetchWeek = useCallback(async () => {
     const myReq = ++lastFetchRef.current;
     setLoading(true);
     setError(null);
     try {
-      const from = dateOffsetISO(-6);
-      const to = today;
+      // Forward week: today through today + 6 days. Pre-gen cron has
+      // tomorrow's plan; future days will populate as the cron runs or
+      // as the operator asks Gunny to build them ahead of time.
+      const from = today;
+      const to = dateOffsetISO(6);
       const res = await fetch(
         `/api/daily-ops?from=${from}&to=${to}&operatorId=${encodeURIComponent(operator.id)}&include=rhythm`,
         { credentials: 'include' },
@@ -903,19 +938,29 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     [plan, fetchToday],
   );
 
+  // Date phrasing for the Gunny prompts — "today", "tomorrow", or an
+  // explicit YYYY-MM-DD for further-out days. Keeps the prompts readable
+  // when the operator is navigating across days.
+  const datePhrase = useMemo(() => {
+    if (viewOffset === 0) return 'today';
+    if (viewOffset === 1) return 'tomorrow';
+    if (viewOffset === -1) return 'yesterday';
+    return viewDate;
+  }, [viewOffset, viewDate]);
+
   const askGunnyForPlan = useCallback(() => {
     if (onSendGunnyMessage) {
       onSendGunnyMessage(
-        'Build me today\'s daily ops plan — wake, sun, caffeine window, meals, pre/post workout, wind-down, sleep target. Anchor the workout block to my scheduled session.',
+        `Build me ${datePhrase}'s daily ops plan — wake, sun, caffeine window, meals, pre/post workout, wind-down, sleep target. Anchor the workout block to my scheduled session and respect any calendar events for that day.`,
       );
     }
-  }, [onSendGunnyMessage]);
+  }, [onSendGunnyMessage, datePhrase]);
 
   const askGunnyForReshape = useCallback(() => {
     if (onSendGunnyMessage) {
-      onSendGunnyMessage('Reshape today\'s daily ops — what would you change?');
+      onSendGunnyMessage(`Reshape ${datePhrase}'s daily ops — what would you change?`);
     }
-  }, [onSendGunnyMessage]);
+  }, [onSendGunnyMessage, datePhrase]);
 
   // Tier-gate at the UI layer
   if (!isCommander && !operator.isJunior) {
@@ -1016,7 +1061,57 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
           )}
         </div>
 
-        <span style={{ ...styles.dateChip, ...styles.headerDateSlot }}>{today}</span>
+        {mode === 'today' ? (
+          <div style={{ ...styles.headerDateSlot, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => shiftViewDay(-1)}
+              disabled={!canShiftBack}
+              aria-label="Previous day"
+              style={{
+                background: 'transparent',
+                border: '1px solid #2a2a2a',
+                color: canShiftBack ? '#c0c0c0' : '#3a3a3a',
+                cursor: canShiftBack ? 'pointer' : 'not-allowed',
+                width: 28,
+                height: 28,
+                borderRadius: 4,
+                fontSize: 14,
+                lineHeight: 1,
+                padding: 0,
+                fontFamily: 'inherit',
+              }}
+            >
+              ‹
+            </button>
+            <span style={styles.dateChip} title={isViewingToday ? 'Today' : datePhrase}>
+              {viewDate}
+            </span>
+            <button
+              type="button"
+              onClick={() => shiftViewDay(1)}
+              disabled={!canShiftForward}
+              aria-label="Next day"
+              style={{
+                background: 'transparent',
+                border: '1px solid #2a2a2a',
+                color: canShiftForward ? '#c0c0c0' : '#3a3a3a',
+                cursor: canShiftForward ? 'pointer' : 'not-allowed',
+                width: 28,
+                height: 28,
+                borderRadius: 4,
+                fontSize: 14,
+                lineHeight: 1,
+                padding: 0,
+                fontFamily: 'inherit',
+              }}
+            >
+              ›
+            </button>
+          </div>
+        ) : (
+          <span style={{ ...styles.dateChip, ...styles.headerDateSlot }}>{today}</span>
+        )}
       </div>
 
       {loading && (
@@ -1033,8 +1128,8 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
           {weekPlans.length === 0 ? (
             <div style={styles.emptyCard}>
               <p style={{ marginTop: 0, marginBottom: 12 }}>
-                No plans in the last 7 days yet. Ask Gunny to build today&apos;s plan to
-                start the rhythm.
+                No plans for the next 7 days yet. Ask Gunny to build today&apos;s plan
+                to start the rhythm — the overnight cron will fill in tomorrow.
               </p>
               <button
                 type="button"
@@ -1065,7 +1160,11 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
       {mode === 'today' && !loading && !plan && !error && (
         <div style={styles.emptyCard}>
           <p style={{ marginTop: 0, marginBottom: 12 }}>
-            No plan for today yet. Ask Gunny to build one.
+            {viewOffset === 0
+              ? "No plan for today yet. Ask Gunny to build one."
+              : viewOffset > 0
+                ? `No plan for ${datePhrase} yet — the overnight cron builds D+1 plans, or ask Gunny to build it now.`
+                : `No plan for ${datePhrase}. Past days don't auto-fill once missed.`}
           </p>
           <button
             type="button"
@@ -1073,7 +1172,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
             onClick={askGunnyForPlan}
             disabled={!onSendGunnyMessage}
           >
-            GENERATE TODAY&apos;S PLAN
+            GENERATE {datePhrase.toUpperCase()}&apos;S PLAN
           </button>
         </div>
       )}

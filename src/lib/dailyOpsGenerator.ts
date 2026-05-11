@@ -25,6 +25,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { recomputePersonalRhythm, renderRhythmForPrompt } from '@/lib/personalRhythm';
 import { getWearableSignals, renderWearableForPrompt } from '@/lib/wearableSignals';
+import { getCalendarSignals, renderCalendarForPrompt } from '@/lib/calendarSignals';
 import { upsertDailyOpsPlan } from '@/lib/dailyOpsPersistence';
 
 let _client: Anthropic | null = null;
@@ -145,16 +146,26 @@ export async function generateDailyOpsPlan(args: GenerateArgs): Promise<Generate
   const { operatorContext, targetDate, reason } = args;
 
   // Pull personalization signals — same code path as the chat surface.
-  const [rhythm, wearable] = await Promise.all([
+  // Calendar is included so the pre-generated plan reshapes blocks around
+  // real meetings (workouts move off 9am stand-ups, wind-down respects
+  // late dinners, etc.). Without it the cron-built plan was blind to the
+  // operator's actual day — chat-driven builds had this signal but
+  // unattended builds did not.
+  const [rhythm, wearable, calendar] = await Promise.all([
     recomputePersonalRhythm(operatorContext.operatorId).catch(() => null),
     getWearableSignals(operatorContext.operatorId, targetDate).catch(() => null),
+    getCalendarSignals(operatorContext.operatorId).catch(() => null),
   ]);
   const rhythmText = rhythm ? renderRhythmForPrompt(rhythm) : '';
   const wearableText = wearable ? renderWearableForPrompt(wearable) : '';
+  const calendarText = calendar ? renderCalendarForPrompt(calendar) : '';
 
   const signalsBlock =
-    rhythmText || wearableText
-      ? '\n\n═══ DAILY OPS PERSONALIZATION SIGNALS ═══' + rhythmText + wearableText
+    rhythmText || wearableText || calendarText
+      ? '\n\n═══ DAILY OPS PERSONALIZATION SIGNALS ═══' +
+        rhythmText +
+        wearableText +
+        calendarText
       : '';
 
   const systemPrompt = SYSTEM_PROMPT + signalsBlock;
