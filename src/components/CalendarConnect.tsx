@@ -58,6 +58,11 @@ const CalendarConnect: React.FC<CalendarConnectProps> = ({ operator, currentUser
   const [configured, setConfigured] = useState(true);
 
   const lastFetchRef = useRef(0);
+  // One-shot guard so we don't loop a re-sync if loadConnections fires
+  // multiple times (initial mount + query-param effect). Only auto-syncs
+  // when the row exists but has never synced — i.e. the operator just
+  // connected and the cache is empty.
+  const autoSyncedRef = useRef(false);
 
   const loadConnections = useCallback(async () => {
     const myReq = ++lastFetchRef.current;
@@ -116,7 +121,7 @@ const CalendarConnect: React.FC<CalendarConnectProps> = ({ operator, currentUser
     window.location.href = `/api/calendars/connect/google?next=${next}`;
   };
 
-  const handleSync = async () => {
+  const handleSync = useCallback(async () => {
     setSyncing(true);
     setError(null);
     try {
@@ -145,7 +150,21 @@ const CalendarConnect: React.FC<CalendarConnectProps> = ({ operator, currentUser
     } finally {
       setSyncing(false);
     }
-  };
+  }, [loadConnections]);
+
+  // Auto-sync the first time we see a connection with no lastSyncAt.
+  // The OAuth callback creates the row but doesn't pull events — that's
+  // an explicit Phase 1 boundary so the callback returns fast. We close
+  // the gap here so the operator sees their events without having to
+  // tap SYNC NOW. One-shot via autoSyncedRef.
+  useEffect(() => {
+    if (autoSyncedRef.current) return;
+    const conn = connections.find((c) => c.provider === 'google');
+    if (conn && !conn.lastSyncAt) {
+      autoSyncedRef.current = true;
+      void handleSync();
+    }
+  }, [connections, handleSync]);
 
   const handleDisconnect = async () => {
     if (typeof window !== 'undefined' && !window.confirm('Disconnect Google Calendar? Daily Ops will stop reshaping around external events.')) {
