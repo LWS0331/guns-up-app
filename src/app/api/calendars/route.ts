@@ -85,6 +85,22 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'provider required' }, { status: 400 });
   }
 
+  // Best-effort: tear down any Google push channel BEFORE we zero
+  // the access token, while we still have valid credentials. If we
+  // don't, the channel lingers on Google's side until it expires
+  // (harmless but untidy). Skipped for non-Google providers.
+  if (provider === 'google') {
+    try {
+      const { stopCalendarWatch } = await import('@/lib/calendarWatch');
+      const live = await prisma.calendarConnection.findFirst({
+        where: { operatorId: targetOperatorId, provider, active: true },
+      });
+      if (live) await stopCalendarWatch(live);
+    } catch (err) {
+      console.warn('[api/calendars] stopCalendarWatch failed:', err);
+    }
+  }
+
   // Soft-delete + zero tokens. Setting accessTokenEnc/refreshTokenEnc
   // to empty strings (not null — keeps the column shape predictable
   // for any future "list disconnected" admin tool) means a leaked DB
