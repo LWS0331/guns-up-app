@@ -117,8 +117,9 @@ export async function GET(req: NextRequest) {
   // so the sync route can do "if (now > tokenExpiresAt) refresh".
   const tokenExpiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
+  let upsertedConn;
   try {
-    await prisma.calendarConnection.upsert({
+    upsertedConn = await prisma.calendarConnection.upsert({
       where: {
         operatorId_provider: {
           operatorId: auth.operatorId,
@@ -153,6 +154,21 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error('[api/calendars/callback/google] DB upsert failed:', err);
     return failureRedirect(req, 'persist_failed');
+  }
+
+  // Register a push-notification channel so Google pings us on
+  // calendar changes. No-op when GOOGLE_CALENDAR_WEBHOOKS_ENABLED is
+  // off or APP_URL isn't configured — the periodic cron sync still
+  // keeps the cache fresh either way, so this is purely an
+  // optimization for change-latency.
+  try {
+    const { registerCalendarWatch } = await import('@/lib/calendarWatch');
+    const result = await registerCalendarWatch(upsertedConn);
+    if (result && result.ok === false) {
+      console.warn('[api/calendars/callback/google] watch registration failed:', result.error);
+    }
+  } catch (err) {
+    console.warn('[api/calendars/callback/google] watch registration threw:', err);
   }
 
   // Successful connect — bounce to the post-connect destination with
