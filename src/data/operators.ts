@@ -1304,15 +1304,15 @@ export const OPERATORS: Operator[] = [
     trainerId: 'op-ruben',
     teamId: 'team-wolf-pack',                        // same team as op-poppy + parents
     isJunior: true,
-    juniorAge: 7,
+    juniorAge: 4,
     parentIds: ['op-ruben', 'op-britney'],
 
     profile: {
-      age: 7,
-      height: '4\'2"',                               // placeholder — confirm at intake
-      weight: 55,                                    // placeholder — confirm at intake
+      age: 4,
+      height: '3\'5"',                               // placeholder — confirm at intake
+      weight: 36,                                    // placeholder — confirm at intake
       bodyFat: 0,                                    // sentinel: NEVER tracked for juniors
-      trainingAge: '2 years',                        // rec soccer experience
+      trainingAge: '6 months',                       // backyard play, not structured
       goals: [
         'have fun + build confidence',
         'fundamental movement skills (run / jump / land / change direction)',
@@ -1320,29 +1320,29 @@ export const OPERATORS: Operator[] = [
         'mastery climate — celebrate effort over outcome',
       ],
       readiness: 9,
-      sleep: 10,                                     // age-appropriate target 10-13 hrs
+      sleep: 11,                                     // age-appropriate target 10-13 hrs
       stress: 1,
     },
 
     sportProfile: {
       sport: 'soccer',
-      position: 'unsure',                            // young — position is flexible at Tier 1/2
-      level: 'recreational',                         // recreational team
-      yearsPlaying: 2,
-      trainingDaysPerWeek: 2,                        // FIFA 11+ Kids minimum effective dose
+      position: 'unsure',                            // age 4 = no positions per US Soccer PDI (4v4, no GK at U6)
+      level: 'recreational',
+      yearsPlaying: 1,
+      trainingDaysPerWeek: 1,                        // Tier 1 (4-5) = play-based, 1 short session/wk plenty
       gameDay: 'sat',
-      noTrainingDays: ['sun'],                       // one full rest day
-      trainingWindow: '5:30 PM',                     // post-school, pre-dinner
+      noTrainingDays: ['sun', 'mon', 'tue', 'thu'],  // play happens when she wants — explicit rest is most days
+      trainingWindow: '4:30 PM',                     // post-nap, pre-dinner
       multiSport: false,
       otherSports: [],
       focusAreas: [
         'fundamental movement skills',
-        'ball touches + first touch',
-        'lateral movement + change of direction (NMT base)',
-        'land mechanics (knees over toes, soft landings)',
+        'ball touches (with foot, hand-eye OK too)',
+        'fun — every session ends on a game',
+        'land mechanics (soft feet, balanced)',
       ],
       coachNotes:
-        'Female pre-PHV. Per Quatman 2008 / Ford 2010, neuromuscular sex differences emerge only at PHV — so this age band is shared programming with the male 4-10 corpus PLUS mastery-climate framing (Smith Smoll Cumming CET) and process-praise habits to build before adolescent body-image / confidence headwinds. NMT (FIFA 11+ Kids) 2x/wk minimum for ACL-protective movement habits per LaBella 2011 / Rossler 2018. Attention span ~10-15 min per block — short, varied, fun.',
+        'Age 4, female, Tier 1 (4-5) per the corpus = play-based programming. US Soccer PDI: 4v4 no GK at U6. NO structured FIFA 11+ Kids yet — that lights up at Tier 2 (6-7). Per Quatman 2008 / Ford 2010, neuromuscular sex differences only emerge at PHV, so programming is shared with the male 4-10 corpus PLUS mastery-climate framing (Smith Smoll Cumming CET) and process-praise habits. Attention span 5-10 min per drill — switch often, end on a game, never punitive conditioning. Refusal is data, not defiance.',
       maturationStage: 'pre_phv',
       estimatedPeakHeightVelocity: null,             // ~11-13 yo typical for girls
     },
@@ -1360,8 +1360,8 @@ export const OPERATORS: Operator[] = [
 
     nutrition: {
       // Age-appropriate range per IOM DRI 2005, NOT a deficit prescription.
-      // 7yo girl active: ~1700-2000 kcal.
-      targets: { calories: 1800, protein: 50, carbs: 250, fat: 65 },
+      // 4yo girl active: ~1200-1400 kcal.
+      targets: { calories: 1400, protein: 30, carbs: 200, fat: 50 },
       meals: {},
     },
 
@@ -1372,11 +1372,11 @@ export const OPERATORS: Operator[] = [
 
     preferences: {
       split: 'Youth Soccer (Parent-Led)',
-      equipment: ['cones', 'small ball', 'spot markers', 'pinnies'],
-      sessionDuration: 30,                            // age-appropriate session length cap
-      daysPerWeek: 2,
-      weakPoints: ['land mechanics', 'ball-foot coordination'],
-      avoidMovements: ['high-load resistance', 'plyo on hard surface', 'overhead pressing'],
+      equipment: ['cones', 'small ball', 'spot markers'],
+      sessionDuration: 20,                            // age 4 attention span — keep it under 20 min
+      daysPerWeek: 1,
+      weakPoints: ['none — building base motor patterns'],
+      avoidMovements: ['any structured resistance', 'plyo', 'overhead movements', 'long endurance'],
     },
   },
 ];
