@@ -25,10 +25,15 @@ interface MacrocyclePanelProps {
 }
 
 const GOAL_TYPE_OPTIONS: { value: MacroGoalType; labelKey: string; nominalWeeks: number }[] = [
-  { value: 'powerlifting_meet', labelKey: 'macrocycle.goal.powerlifting_meet', nominalWeeks: getTemplateNominalWeeks('powerlifting_meet') },
-  { value: 'hypertrophy_phase', labelKey: 'macrocycle.goal.hypertrophy_phase', nominalWeeks: getTemplateNominalWeeks('hypertrophy_phase') },
-  { value: 'season_prep',       labelKey: 'macrocycle.goal.season_prep',       nominalWeeks: getTemplateNominalWeeks('season_prep') },
-  { value: 'fat_loss',          labelKey: 'macrocycle.goal.fat_loss',          nominalWeeks: getTemplateNominalWeeks('fat_loss') },
+  { value: 'powerlifting_meet',    labelKey: 'macrocycle.goal.powerlifting_meet',    nominalWeeks: getTemplateNominalWeeks('powerlifting_meet') },
+  { value: 'hypertrophy_phase',    labelKey: 'macrocycle.goal.hypertrophy_phase',    nominalWeeks: getTemplateNominalWeeks('hypertrophy_phase') },
+  { value: 'olympic_meet',         labelKey: 'macrocycle.goal.olympic_meet',         nominalWeeks: getTemplateNominalWeeks('olympic_meet') },
+  { value: 'crossfit_comp',        labelKey: 'macrocycle.goal.crossfit_comp',        nominalWeeks: getTemplateNominalWeeks('crossfit_comp') },
+  { value: 'tactical_assessment',  labelKey: 'macrocycle.goal.tactical_assessment',  nominalWeeks: getTemplateNominalWeeks('tactical_assessment') },
+  { value: 'season_prep',          labelKey: 'macrocycle.goal.season_prep',          nominalWeeks: getTemplateNominalWeeks('season_prep') },
+  { value: 'fat_loss',             labelKey: 'macrocycle.goal.fat_loss',             nominalWeeks: getTemplateNominalWeeks('fat_loss') },
+  { value: 'pregnancy_postpartum', labelKey: 'macrocycle.goal.pregnancy_postpartum', nominalWeeks: getTemplateNominalWeeks('pregnancy_postpartum') },
+  { value: 'return_to_sport',      labelKey: 'macrocycle.goal.return_to_sport',      nominalWeeks: getTemplateNominalWeeks('return_to_sport') },
 ];
 
 const BLOCK_COLORS: Record<string, string> = {
