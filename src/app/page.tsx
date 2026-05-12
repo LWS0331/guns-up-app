@@ -343,6 +343,12 @@ export default function Home() {
       // Admin-only junior identity (toggle isJunior on, set parents)
       isJunior: updated.isJunior,
       parentIds: updated.parentIds,
+      // Macrocycle goals — periodization plans the operator builds via
+      // MacrocyclePanel. The server-side whitelist gates which fields
+      // get written; macroCycles is now allow-listed on the profile
+      // PATCH path. Without this line the goal lived in React state
+      // only, vanishing on the next page load.
+      macroCycles: updated.macroCycles ?? [],
     };
 
     try {

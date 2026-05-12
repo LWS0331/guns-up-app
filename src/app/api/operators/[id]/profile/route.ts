@@ -57,6 +57,13 @@ export async function PATCH(
         'name', 'callsign', 'intake', 'profile', 'nutrition', 'preferences',
         'sitrep', 'dailyBrief', 'trainerNotes',
         'sportProfile', 'juniorConsent', 'juniorSafety', 'juniorAge',
+        // macroCycles is a planning structure (MacroCycle[]) consumed by
+        // Gunny for periodization context. Belongs on the profile PATCH
+        // path because it's planning data, not training-history data
+        // (which goes through /workouts). Without it here, every save
+        // from MacrocyclePanel was silently dropped server-side and
+        // the goal vanished on reload.
+        'macroCycles',
       ] as const;
       for (const k of allowed) {
         if (body[k] !== undefined) data[k] = body[k];
