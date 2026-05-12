@@ -78,6 +78,14 @@ export async function GET(req: NextRequest) {
       sitrep: row.sitrep as Record<string, unknown>,
       dailyBrief: row.dailyBrief as Record<string, unknown>,
       billing: row.billing as Record<string, unknown>,
+      // Macrocycle goals — periodization plans built via MacrocyclePanel.
+      // Was missing from this projection, which silently stripped the
+      // field on every GET even though PR #153 had wired up the WRITE
+      // path correctly. Operator builds a goal, server writes it to
+      // the DB, GET strips it, client renders "no active goal" on
+      // next load — same silent-drop class as the original macrocycle
+      // persistence bug and the operator-provision junior-fields bug.
+      macroCycles: row.macroCycles as unknown[],
       // Junior Operator fields — required for getParentJuniors() to find
       // linked juniors and for ParentDashboard to render their data.
       // Without these on the response, isJunior is undefined client-side
