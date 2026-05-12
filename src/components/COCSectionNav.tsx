@@ -80,22 +80,28 @@ export default function COCSectionNav({ sections }: COCSectionNavProps) {
         aria-label="Command Center sections"
         style={{
           position: 'sticky',
-          // top is relative to the scrolling ancestor's viewport — and
-          // that's <main>, not window. <main> already starts below the
-          // app's top bar, so top: 0 here means "stick at the top of
-          // the scroll viewport." Using a non-zero offset would leave
-          // a dead band of content visible above the nav as the user
-          // scrolls.
+          // top: 0 — relative to the scrolling ancestor (<main>). The
+          // app top bar isn't inside main, so main's viewport starts
+          // right below it; top: 0 docks the nav directly under the
+          // bar with no dead-band gap.
           top: 0,
           zIndex: 30,
+          // Full bleed within <main>. The previous version used
+          // marginLeft/Right: -16 to extend past a presumed parent
+          // padding, but main has no horizontal padding — so the
+          // negative margin pushed the nav 16px past the viewport
+          // edges, which made it look "floating and not flowing."
           marginBottom: 16,
-          marginLeft: -16,
-          marginRight: -16,
-          padding: '8px 16px',
-          background: 'rgba(5, 10, 5, 0.85)',
+          padding: '8px 14px',
+          // Near-opaque background so the operator banner pixels
+          // behind don't bleed through and make the chips hard to
+          // read while sticky. Backdrop blur still helps when content
+          // scrolls under it.
+          background: '#0a0f0a',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-          borderBottom: '1px solid rgba(0, 255, 65, 0.18)',
+          borderBottom: '1px solid rgba(0, 255, 65, 0.25)',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
         }}
       >
         <div
