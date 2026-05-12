@@ -17,6 +17,7 @@ import React, { useMemo, useState } from 'react';
 import type { Operator, JuniorSafetyEvent, JuniorSafetyFlags, JuniorConsent, Workout } from '@/lib/types';
 import { useLanguage } from '@/lib/i18n';
 import DailyOpsApprovalCard from '@/components/DailyOpsApprovalCard';
+import ParentHubChat from '@/components/ParentHubChat';
 import { getLocalDateStr } from '@/lib/dateUtils';
 
 // Parent-Led Coaching Mode age band — kids 4-10 don't have app access,
@@ -394,6 +395,11 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
           </details>
         )}
       </div>
+
+      {/* GUNNY CHAT — scoped to this junior. Different persona from the
+          parent's own Gunny tab (Parent-Coach Mode in /api/gunny). One
+          thread per junior via chatType='gunny-parent-hub-{id}'. */}
+      <ParentHubChat parent={parent} junior={activeJunior} />
 
       {/* DAILY OPS PENDING APPROVAL — surfaces only when there are
           plans awaiting parent review across any linked junior. The
