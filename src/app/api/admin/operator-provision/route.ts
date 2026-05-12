@@ -82,6 +82,20 @@ export async function POST(req: NextRequest) {
   // Operator model — most JSON-column fields default to {} or [] in
   // the schema, so we only write the columns we have direct values
   // for and let Prisma's defaults handle the rest.
+  //
+  // Junior-operator fields (isJunior, juniorAge, parentIds, sportProfile,
+  // juniorConsent, juniorSafety) MUST be written from the seed when
+  // present — they don't get defaults that are correct for juniors, and
+  // omitting them creates a row that looks adult on the DB even though
+  // the seed declares a junior. The bug that surfaced as "BUMBLEBEE
+  // doesn't show in Parent Hub" was exactly this: row got written
+  // without isJunior=true and parentIds, so getParentJuniors() filtered
+  // her out for both linked parents.
+  //
+  // Same goes for tierLocked + intake + macroCycles — these are part of
+  // the seed shape, the schema has defaults that don't match a populated
+  // seed (e.g. tierLocked defaults false; intake defaults {} but a seed
+  // may carry a completed-flag).
   const created = await prisma.operator.create({
     data: {
       id: seed.id,
@@ -95,6 +109,12 @@ export async function POST(req: NextRequest) {
       trainerId: seed.trainerId ?? null,
       clientIds: seed.clientIds ?? [],
       betaUser: seed.betaUser ?? false,
+      tierLocked: seed.tierLocked ?? false,
+      // Junior-operator identity fields. parentIds is the discriminator
+      // the Parent Hub queries on — DO NOT omit when the seed sets it.
+      isJunior: seed.isJunior ?? false,
+      ...(typeof seed.juniorAge === 'number' ? { juniorAge: seed.juniorAge } : {}),
+      parentIds: seed.parentIds ?? [],
       // JSON columns from seed — cast through unknown to satisfy
       // Prisma's strict input types without losing shape.
       profile: (seed.profile ?? {}) as object,
@@ -106,6 +126,11 @@ export async function POST(req: NextRequest) {
       dayTags: (seed.dayTags ?? {}) as object,
       sitrep: (seed.sitrep ?? {}) as object,
       dailyBrief: (seed.dailyBrief ?? {}) as object,
+      intake: (seed.intake ?? {}) as object,
+      sportProfile: (seed.sportProfile ?? {}) as object,
+      juniorConsent: (seed.juniorConsent ?? {}) as object,
+      juniorSafety: (seed.juniorSafety ?? {}) as object,
+      macroCycles: (seed.macroCycles ?? []) as object,
       // Optional fields that the schema accepts but the seed may not have
       ...(seed.email ? { email: seed.email } : {}),
       ...(seed.trainerNotes ? { trainerNotes: seed.trainerNotes } : {}),
