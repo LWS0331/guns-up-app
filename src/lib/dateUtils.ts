@@ -72,6 +72,46 @@ export function getLocalDateLongStr(): string {
 }
 
 /**
+ * Local HH:MM (24h) — WS5 context personalization. Sent to /api/gunny
+ * so the context block knows what time it actually is for the operator,
+ * not just the date. Before WS5 the route had clientDate but not the
+ * hour, so any "what should I eat now?" / "should I lift now?" /
+ * "is it too late to start a workout?" question got an answer that
+ * couldn't account for the actual clock.
+ */
+export function getLocalHourMinute(): string {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/**
+ * Coarse time-of-day band for Gunny prompts. Picks one of six labels
+ * based on the operator's local clock:
+ *   05:00-08:59  early-morning
+ *   09:00-11:59  morning
+ *   12:00-14:59  midday
+ *   15:00-17:59  afternoon
+ *   18:00-21:59  evening
+ *   22:00-04:59  late-night
+ *
+ * Bands are intentionally coarse — the prompt also receives the exact
+ * HH:MM, so Gunny can refine; the band exists for fast pattern-matching
+ * in conditional system-prompt branches ("if late-night, suggest lighter
+ * meal options").
+ */
+export function getLocalTimeOfDayBand(): 'early-morning' | 'morning' | 'midday' | 'afternoon' | 'evening' | 'late-night' {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 9) return 'early-morning';
+  if (h >= 9 && h < 12) return 'morning';
+  if (h >= 12 && h < 15) return 'midday';
+  if (h >= 15 && h < 18) return 'afternoon';
+  if (h >= 18 && h < 22) return 'evening';
+  return 'late-night';
+}
+
+/**
  * Parse a YYYY-MM-DD date key into a Date anchored at LOCAL midnight.
  *
  * CRITICAL: `new Date('2026-04-22')` parses as UTC midnight, then any subsequent
