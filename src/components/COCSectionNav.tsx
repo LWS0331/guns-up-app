@@ -43,11 +43,53 @@ export default function COCSectionNav({ sections }: COCSectionNavProps) {
   const jumpTo = (id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
-    // Account for the sticky nav itself + app top bar when scrolling.
-    // 56 (top bar) + ~52 (this nav) = ~108px offset.
-    const y = el.getBoundingClientRect().top + window.pageYOffset - 116;
-    window.scrollTo({ top: y, behavior: 'smooth' });
-    // Brief amber pulse so the user's eye lands. Cleared after 1.2s.
+    // Third-attempt fix for "chips flicker but don't scroll." The
+    // previous attempts used window.scrollTo (wrong container) then
+    // scrollIntoView (was no-op'ing inside <main>, likely because
+    // gu-scalable applies CSS `zoom` and that confuses the browser's
+    // scroll API for that container in some engines).
+    //
+    // This walks up the DOM to find the nearest ancestor with
+    // overflow-y: auto|scroll AND actual overflowing content (some
+    // wrappers have overflow:auto but aren't scrolling). Then scrolls
+    // THAT container directly via scrollTo on a computed offset —
+    // works regardless of what scroll API quirks exist.
+    let parent: HTMLElement | null = el.parentElement;
+    let scrollContainer: HTMLElement | null = null;
+    while (parent && parent !== document.documentElement) {
+      const style = window.getComputedStyle(parent);
+      const oy = style.overflowY;
+      if (
+        (oy === 'auto' || oy === 'scroll') &&
+        parent.scrollHeight > parent.clientHeight
+      ) {
+        scrollContainer = parent;
+        break;
+      }
+      parent = parent.parentElement;
+    }
+
+    if (scrollContainer) {
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      // elRect.top is relative to viewport; containerRect.top tells us
+      // where the scroll container's viewport starts. Their delta is
+      // how far the element is from the container top in the current
+      // scroll position. Add scrollTop to get the absolute target,
+      // subtract 72 to clear the sticky nav.
+      const target = elRect.top - containerRect.top + scrollContainer.scrollTop - 72;
+      scrollContainer.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    } else {
+      // Fallback: try scrollIntoView, then window.scrollTo
+      try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {
+        const y = el.getBoundingClientRect().top + window.pageYOffset - 72;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }
+
+    // Brief green pulse so the user's eye lands. Cleared after 1.2s.
     el.classList.add('coc-section-flash');
     window.setTimeout(() => el.classList.remove('coc-section-flash'), 1200);
   };
@@ -75,16 +117,28 @@ export default function COCSectionNav({ sections }: COCSectionNavProps) {
         aria-label="Command Center sections"
         style={{
           position: 'sticky',
-          top: 56,
+          // top: 0 — relative to the scrolling ancestor (<main>). The
+          // app top bar isn't inside main, so main's viewport starts
+          // right below it; top: 0 docks the nav directly under the
+          // bar with no dead-band gap.
+          top: 0,
           zIndex: 30,
+          // Full bleed within <main>. The previous version used
+          // marginLeft/Right: -16 to extend past a presumed parent
+          // padding, but main has no horizontal padding — so the
+          // negative margin pushed the nav 16px past the viewport
+          // edges, which made it look "floating and not flowing."
           marginBottom: 16,
-          marginLeft: -16,
-          marginRight: -16,
-          padding: '8px 16px',
-          background: 'rgba(5, 10, 5, 0.85)',
+          padding: '8px 14px',
+          // Near-opaque background so the operator banner pixels
+          // behind don't bleed through and make the chips hard to
+          // read while sticky. Backdrop blur still helps when content
+          // scrolls under it.
+          background: '#0a0f0a',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-          borderBottom: '1px solid rgba(0, 255, 65, 0.18)',
+          borderBottom: '1px solid rgba(0, 255, 65, 0.25)',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
         }}
       >
         <div

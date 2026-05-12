@@ -1918,13 +1918,39 @@ const AppShell: React.FC<AppShellProps> = ({
       case 'coc':
         return (
           <>
-            {currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
-              <DailyBriefComponent
-                operator={currentSelectedOp}
-                onUpdateOperator={onUpdateOperator}
-                onViewPriorNutrition={() => setActiveTab('intel')}
-              />
-            )}
+            {/* WS1 — sticky section nav MUST be the first child of the
+                COC fragment so it docks against the top of <main>'s
+                scroll viewport. Previously it rendered below the
+                DailyBrief widget + battle-plan button, so it appeared
+                "floating in the middle" and never became sticky until
+                the operator scrolled past everything above it. */}
+            {(() => {
+              const navSections: COCNavSection[] = [];
+              if (currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0) {
+                navSections.push({ id: 'coc-daily-brief', labelKey: 'coc.nav.daily_brief', accent: '#FF8C00' });
+              }
+              if (currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate) {
+                navSections.push({ id: 'coc-battle-plan', labelKey: 'coc.nav.battle_plan', accent: '#00ff41' });
+              }
+              navSections.push({ id: 'coc-dashboard', labelKey: 'coc.nav.dashboard', accent: '#00ff41' });
+              navSections.push({ id: 'coc-leaderboard', labelKey: 'coc.nav.leaderboard', accent: '#FF8C00' });
+              navSections.push({ id: 'coc-achievements', labelKey: 'coc.nav.achievements', accent: '#FF8C00' });
+              navSections.push({ id: 'coc-squad', labelKey: 'coc.nav.squad', accent: '#00ff41' });
+              if (currentSelectedOp.betaUser) {
+                navSections.push({ id: 'coc-feedback', labelKey: 'coc.nav.feedback', accent: '#ff4444' });
+              }
+              return <COCSectionNav sections={navSections} />;
+            })()}
+
+            <div id="coc-daily-brief" style={{ scrollMarginTop: 72 }}>
+              {currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
+                <DailyBriefComponent
+                  operator={currentSelectedOp}
+                  onUpdateOperator={onUpdateOperator}
+                  onViewPriorNutrition={() => setActiveTab('intel')}
+                />
+              )}
+            </div>
 
             {/* New Battle Plan button — only shown on own profile
                 when a SITREP already exists. Uses .btn.btn-amber.btn-sm
@@ -1994,62 +2020,43 @@ const AppShell: React.FC<AppShellProps> = ({
               </div>
             )}
 
-            {/* WS1 — sticky section nav so leaderboard / achievements /
-                squad / feedback aren't buried below the fold. Sections
-                with conditional render (BATTLE_PLAN / DAILY_BRIEF /
-                FEEDBACK) are filtered out when absent so the chip row
-                only surfaces destinations the operator can actually
-                reach. */}
-            {(() => {
-              const navSections: COCNavSection[] = [];
-              if (currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate) {
-                navSections.push({ id: 'coc-battle-plan', labelKey: 'coc.nav.battle_plan', accent: '#00ff41' });
-              }
-              if (currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date) {
-                navSections.push({ id: 'coc-daily-brief', labelKey: 'coc.nav.daily_brief', accent: '#FF8C00' });
-              }
-              navSections.push({ id: 'coc-dashboard', labelKey: 'coc.nav.dashboard', accent: '#00ff41' });
-              navSections.push({ id: 'coc-leaderboard', labelKey: 'coc.nav.leaderboard', accent: '#FF8C00' });
-              navSections.push({ id: 'coc-achievements', labelKey: 'coc.nav.achievements', accent: '#FF8C00' });
-              navSections.push({ id: 'coc-squad', labelKey: 'coc.nav.squad', accent: '#00ff41' });
-              if (currentSelectedOp.betaUser) {
-                navSections.push({ id: 'coc-feedback', labelKey: 'coc.nav.feedback', accent: '#ff4444' });
-              }
-              return <COCSectionNav sections={navSections} />;
-            })()}
-
-            {/* Battle Plan Reference — dedicated section */}
+            {/* Battle Plan Reference — dedicated section.
+                Nav's BATTLE PLAN chip anchors here. The interactive
+                DailyBrief widget (top of the COC, before the nav was
+                introduced) keeps the canonical coc-daily-brief anchor;
+                DailyBriefRef below is just a compact re-render of the
+                same data so it doesn't need its own chip. */}
             {currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate && (
-              <div id="coc-battle-plan" style={{ scrollMarginTop: 116 }}>
+              <div id="coc-battle-plan" style={{ scrollMarginTop: 72 }}>
                 <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true}
                   operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
               </div>
             )}
 
-            {/* Daily Brief Reference — dedicated section */}
+            {/* Daily Brief Reference — dedicated section (compact form,
+                no anchor — the DAILY BRIEF chip points at the interactive
+                widget at the top of the tab) */}
             {currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date && (
-              <div id="coc-daily-brief" style={{ scrollMarginTop: 116 }}>
-                <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} />
-              </div>
+              <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} />
             )}
 
-            <div id="coc-dashboard" style={{ scrollMarginTop: 116 }}>
+            <div id="coc-dashboard" style={{ scrollMarginTop: 72 }}>
               <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
             </div>
 
-            <div id="coc-leaderboard" style={{ scrollMarginTop: 116 }}>
+            <div id="coc-leaderboard" style={{ scrollMarginTop: 72 }}>
               <Leaderboard operators={operators} currentUser={currentUser} />
             </div>
-            <div id="coc-achievements" style={{ marginTop: 20, scrollMarginTop: 116 }}>
+            <div id="coc-achievements" style={{ marginTop: 20, scrollMarginTop: 72 }}>
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.achievements')}</h3>
               <Achievements operator={currentSelectedOp} />
             </div>
-            <div id="coc-squad" style={{ marginTop: 20, scrollMarginTop: 116 }}>
+            <div id="coc-squad" style={{ marginTop: 20, scrollMarginTop: 72 }}>
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.squad_feed')}</h3>
               <SocialFeed operators={operators} currentOperator={currentSelectedOp} />
             </div>
             {currentSelectedOp.betaUser && (
-              <div id="coc-feedback" style={{ marginTop: 20, scrollMarginTop: 116 }}>
+              <div id="coc-feedback" style={{ marginTop: 20, scrollMarginTop: 72 }}>
                 <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff4444', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.beta_feedback')}</h3>
                 <BetaFeedback operatorId={currentSelectedOp.id} callsign={currentSelectedOp.callsign} />
               </div>
