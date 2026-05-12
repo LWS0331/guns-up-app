@@ -1275,6 +1275,110 @@ export const OPERATORS: Operator[] = [
       avoidMovements: [],
     },
   },
+  // ─── BRIELLE — Ruben + Britney's daughter, age 7, female-youth-soccer-4-10 corpus
+  //
+  // Parent-led training: she doesn't have app access at this age. The
+  // PARENT runs the session from the Parent Hub (ParentDashboard.tsx);
+  // Gunny scripts the cues, the parent reads them aloud, taps LOG
+  // SESSION when done. Both parents (op-ruben + op-britney) have full
+  // visibility per getParentJuniors().
+  //
+  // Age-band routing:
+  //   - juniorAge ∈ [4, 10] → Parent-Led Mode UI in ParentDashboard
+  //   - Corpus overlay: female-youth-soccer-4-10.md (mastery climate,
+  //     process praise, FIFA 11+ Kids warm-up, NMT 2x/wk min)
+  //   - Tier opus (Commander) — safety-critical age band gets the
+  //     strongest model just like op-poppy
+  //
+  // Provisioned in prod via POST /api/admin/operator-provision
+  // { operatorId: 'op-brielle' } after this PR merges.
+  {
+    id: 'op-brielle',
+    name: 'Brielle Rodriguez',
+    callsign: 'BUMBLEBEE',
+    pin: '4002',
+    role: 'client',
+    tier: 'opus',                                    // COMMANDER — junior safety floor (matches op-poppy)
+    tierLocked: true,                                // junior tiers are admin-controlled
+    coupleWith: null,
+    trainerId: 'op-ruben',
+    teamId: 'team-wolf-pack',                        // same team as op-poppy + parents
+    isJunior: true,
+    juniorAge: 4,
+    parentIds: ['op-ruben', 'op-britney'],
+
+    profile: {
+      age: 4,
+      height: '3\'5"',                               // placeholder — confirm at intake
+      weight: 36,                                    // placeholder — confirm at intake
+      bodyFat: 0,                                    // sentinel: NEVER tracked for juniors
+      trainingAge: '6 months',                       // backyard play, not structured
+      goals: [
+        'have fun + build confidence',
+        'fundamental movement skills (run / jump / land / change direction)',
+        'ball-touch foundation (juggling, passing, dribbling)',
+        'mastery climate — celebrate effort over outcome',
+      ],
+      readiness: 9,
+      sleep: 11,                                     // age-appropriate target 10-13 hrs
+      stress: 1,
+    },
+
+    sportProfile: {
+      sport: 'soccer',
+      position: 'unsure',                            // age 4 = no positions per US Soccer PDI (4v4, no GK at U6)
+      level: 'recreational',
+      yearsPlaying: 1,
+      trainingDaysPerWeek: 1,                        // Tier 1 (4-5) = play-based, 1 short session/wk plenty
+      gameDay: 'sat',
+      noTrainingDays: ['sun', 'mon', 'tue', 'thu'],  // play happens when she wants — explicit rest is most days
+      trainingWindow: '4:30 PM',                     // post-nap, pre-dinner
+      multiSport: false,
+      otherSports: [],
+      focusAreas: [
+        'fundamental movement skills',
+        'ball touches (with foot, hand-eye OK too)',
+        'fun — every session ends on a game',
+        'land mechanics (soft feet, balanced)',
+      ],
+      coachNotes:
+        'Age 4, female, Tier 1 (4-5) per the corpus = play-based programming. US Soccer PDI: 4v4 no GK at U6. NO structured FIFA 11+ Kids yet — that lights up at Tier 2 (6-7). Per Quatman 2008 / Ford 2010, neuromuscular sex differences only emerge at PHV, so programming is shared with the male 4-10 corpus PLUS mastery-climate framing (Smith Smoll Cumming CET) and process-praise habits. Attention span 5-10 min per drill — switch often, end on a game, never punitive conditioning. Refusal is data, not defiance.',
+      maturationStage: 'pre_phv',
+      estimatedPeakHeightVelocity: null,             // ~11-13 yo typical for girls
+    },
+
+    juniorConsent: {
+      parentSignatures: [],                          // populated at first parent login
+      participationConsent: false,
+      dataConsent: false,
+      emergencyContact: { name: '', relationship: '', phone: '' },
+      pediatricianClearance: false,
+      pediatricianClearanceDate: null,
+    },
+
+    juniorSafety: { events: [] },
+
+    nutrition: {
+      // Age-appropriate range per IOM DRI 2005, NOT a deficit prescription.
+      // 4yo girl active: ~1200-1400 kcal.
+      targets: { calories: 1400, protein: 30, carbs: 200, fat: 50 },
+      meals: {},
+    },
+
+    prs: [],                                         // Junior PR board: sport-performance only
+    injuries: [],
+    workouts: {},
+    dayTags: {},
+
+    preferences: {
+      split: 'Youth Soccer (Parent-Led)',
+      equipment: ['cones', 'small ball', 'spot markers'],
+      sessionDuration: 20,                            // age 4 attention span — keep it under 20 min
+      daysPerWeek: 1,
+      weakPoints: ['none — building base motor patterns'],
+      avoidMovements: ['any structured resistance', 'plyo', 'overhead movements', 'long endurance'],
+    },
+  },
 ];
 
 export function getAccessibleOperators(userId: string, ops?: Operator[]): Operator[] {

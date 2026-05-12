@@ -14,9 +14,19 @@
 // JuniorIntakeForm welcome screen).
 
 import React, { useMemo, useState } from 'react';
-import type { Operator, JuniorSafetyEvent, JuniorSafetyFlags, JuniorConsent } from '@/lib/types';
+import type { Operator, JuniorSafetyEvent, JuniorSafetyFlags, JuniorConsent, Workout } from '@/lib/types';
 import { useLanguage } from '@/lib/i18n';
 import DailyOpsApprovalCard from '@/components/DailyOpsApprovalCard';
+import { getLocalDateStr } from '@/lib/dateUtils';
+
+// Parent-Led Coaching Mode age band — kids 4-10 don't have app access,
+// the parent runs the session from this dashboard. See seed comment on
+// op-brielle for the corpus reference (female-youth-soccer-4-10.md).
+const PARENT_LED_MIN_AGE = 4;
+const PARENT_LED_MAX_AGE = 10;
+function isParentLedAge(age: number | null | undefined): boolean {
+  return typeof age === 'number' && age >= PARENT_LED_MIN_AGE && age <= PARENT_LED_MAX_AGE;
+}
 
 interface ParentDashboardProps {
   parent: Operator;
@@ -92,6 +102,30 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
     };
     onUpdateJunior(updated);
   };
+
+  // Parent-Led Mode bits — only meaningful when activeJunior is 4-10.
+  const parentLed = isParentLedAge(activeJunior.juniorAge);
+  const todayISO = getLocalDateStr();
+  const todayWorkout: Workout | undefined = activeJunior.workouts?.[todayISO];
+  // Big-tap "LOG SESSION" toggle. Marks today's workout completed (or
+  // un-completes if already done). When no workout exists for today,
+  // the card swaps to a "no session yet — ask coach" empty state and
+  // the button is disabled.
+  const handleLogSession = (markCompleted: boolean) => {
+    if (!todayWorkout) return;
+    const updated: Operator = {
+      ...activeJunior,
+      workouts: {
+        ...(activeJunior.workouts || {}),
+        [todayISO]: { ...todayWorkout, completed: markCompleted },
+      },
+    };
+    onUpdateJunior(updated);
+  };
+  // Collapsible coaching-tips card. Open by default for first session
+  // so a new parent reads the guidance once; subsequent renders honor
+  // the operator's toggle state in component-local state.
+  const [showTips, setShowTips] = useState(true);
 
   const handleUpdateEmergencyContact = (field: 'name' | 'relationship' | 'phone', value: string) => {
     const currentConsent: JuniorConsent = consent || {
@@ -172,6 +206,142 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
             </div>
           ))}
         </div>
+      )}
+
+      {/* ── PARENT-LED COACHING MODE (juniors 4-10) ───────────────────
+          Kids in this age band don't have app access. Parent runs
+          the session here. */}
+      {parentLed && (
+        <>
+          <div
+            style={{
+              padding: 14,
+              background: 'rgba(0,184,212,0.05)',
+              border: '1px solid rgba(0,184,212,0.30)',
+              borderLeft: '3px solid #00b8d4',
+              borderRadius: 4,
+              marginBottom: 14,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: 12,
+                color: '#00b8d4',
+                letterSpacing: 1.5,
+                marginBottom: 6,
+              }}
+            >
+              {t('parent.led.banner_title').replace('{callsign}', activeJunior.callsign)}
+            </div>
+            <div style={{ fontSize: 12, color: '#bbb', lineHeight: 1.5 }}>
+              {t('parent.led.banner_body')}
+            </div>
+          </div>
+
+          {/* Today's session card */}
+          <div style={s.card}>
+            <div style={s.cardTitle}>
+              {t('parent.led.todays_session')} · {todayISO}
+            </div>
+            {todayWorkout ? (
+              <>
+                <div style={{ fontSize: 13, color: '#e0e0e0', marginBottom: 6 }}>
+                  {todayWorkout.title || t('parent.untitled')}
+                </div>
+                {todayWorkout.warmup && (
+                  <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
+                    <strong style={{ color: '#aaa' }}>{t('parent.led.warmup')}:</strong>{' '}
+                    {todayWorkout.warmup}
+                  </div>
+                )}
+                {(todayWorkout.blocks || []).length > 0 && (
+                  <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
+                    <strong style={{ color: '#aaa' }}>{t('parent.led.blocks')}:</strong>{' '}
+                    {(todayWorkout.blocks || []).length} {t('parent.led.blocks_suffix')}
+                  </div>
+                )}
+                {todayWorkout.cooldown && (
+                  <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+                    <strong style={{ color: '#aaa' }}>{t('parent.led.cooldown')}:</strong>{' '}
+                    {todayWorkout.cooldown}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                  {todayWorkout.completed ? (
+                    <button
+                      type="button"
+                      onClick={() => handleLogSession(false)}
+                      style={{
+                        padding: '12px 20px',
+                        background: 'rgba(0,255,65,0.12)',
+                        border: '1px solid #00ff41',
+                        color: '#00ff41',
+                        fontFamily: 'Orbitron, sans-serif',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        letterSpacing: 1.5,
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ✓ {t('parent.led.session_done')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleLogSession(true)}
+                      style={{
+                        padding: '14px 28px',
+                        background: '#00b8d4',
+                        color: '#0a0a0a',
+                        border: 'none',
+                        fontFamily: 'Orbitron, sans-serif',
+                        fontSize: 14,
+                        fontWeight: 700,
+                        letterSpacing: 1.8,
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {t('parent.led.log_session')}
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div style={s.note}>{t('parent.led.no_session_today')}</div>
+            )}
+          </div>
+
+          {/* Coaching tips — collapsible. Default open for first read. */}
+          <div style={s.card}>
+            <div
+              style={{ ...s.cardTitle, cursor: 'pointer', userSelect: 'none' }}
+              onClick={() => setShowTips((s) => !s)}
+            >
+              {showTips ? '▼' : '▶'} {t('parent.led.tips_title')}
+            </div>
+            {showTips && (
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: 18,
+                  fontSize: 12,
+                  color: '#bbb',
+                  lineHeight: 1.6,
+                }}
+              >
+                <li>{t('parent.led.tip_attention')}</li>
+                <li>{t('parent.led.tip_praise')}</li>
+                <li>{t('parent.led.tip_water')}</li>
+                <li>{t('parent.led.tip_form')}</li>
+                <li>{t('parent.led.tip_refuse')}</li>
+                <li>{t('parent.led.tip_fun')}</li>
+              </ul>
+            )}
+          </div>
+        </>
       )}
 
       {/* SAFETY EVENTS — most important block, first */}

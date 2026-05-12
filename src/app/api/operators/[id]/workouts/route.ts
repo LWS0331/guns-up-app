@@ -19,14 +19,31 @@ export async function PATCH(
     const isSelf = auth.operatorId === id;
     const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
     let isTrainerOfTarget = false;
+    let isParentLedCoach = false;
     if (!isSelf && !isAdmin) {
+      // Pull the fields we need for all three privilege checks in one
+      // round-trip (trainer, parent-led, age gate).
       const target = await prisma.operator.findUnique({
         where: { id },
-        select: { trainerId: true },
+        select: { trainerId: true, isJunior: true, parentIds: true, juniorAge: true },
       });
       isTrainerOfTarget = !!target && target.trainerId === auth.operatorId;
+      // Parent-Led Coaching Mode (May 2026). Juniors aged 4-10 don't
+      // have app access — the parent IS the coach (per the
+      // female-youth-soccer-4-10.md / youth-soccer-4-10.md corpora).
+      // For that age band only, parents can write workouts (mark
+      // sessions complete, log sRPE) so the Parent Hub's LOG SESSION
+      // flow actually persists. Older juniors (11+) keep the original
+      // restriction: parents view but the kid (or trainer) writes.
+      const isParentOfTarget =
+        !!target?.isJunior && (target?.parentIds || []).includes(auth.operatorId);
+      const inParentLedAgeBand =
+        typeof target?.juniorAge === 'number' &&
+        target.juniorAge >= 4 &&
+        target.juniorAge <= 10;
+      isParentLedCoach = isParentOfTarget && inParentLedAgeBand;
     }
-    if (!isSelf && !isAdmin && !isTrainerOfTarget) {
+    if (!isSelf && !isAdmin && !isTrainerOfTarget && !isParentLedCoach) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
