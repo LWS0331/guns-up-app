@@ -11,6 +11,7 @@ import DailyBriefRef from '@/components/DailyBriefRef';
 import { VoiceCommand } from '@/components/VoiceInput';
 import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice } from '@/lib/tts';
 import { resolveRestSeconds } from '@/lib/restTimer';
+import PostWorkoutAnalysis from '@/components/PostWorkoutAnalysis';
 import VideoModal from '@/components/VideoModal';
 import WarmupMovementCard from '@/components/WarmupMovementCard';
 import HRZoneGauge from '@/components/HRZoneGauge';
@@ -3677,6 +3678,18 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   Saved to your PR Board automatically.
                 </div>
               </div>
+            )}
+
+            {/* WS4 — post-workout analysis. Renders per-exercise progress
+                vs the prior session + adherence breakdown. Reads from the
+                just-saved workout on operator.workouts[dateStr]; falls back
+                gracefully (component returns null) when no exercises had
+                completed sets. */}
+            {completionData.dateStr && operator.workouts[completionData.dateStr] && (
+              <PostWorkoutAnalysis
+                workout={operator.workouts[completionData.dateStr]}
+                operator={operator}
+              />
             )}
 
             <div
