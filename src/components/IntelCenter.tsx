@@ -94,6 +94,10 @@ interface LocalState {
     // preferredWorkoutTime which was also intake-only.
     trainingPath: string;
     preferredWorkoutTime: string;
+    /** WS2 (May 2026). Optional. When undefined the resolver falls
+     *  back to APP_DEFAULT_REST_SEC (120s). Set 0 to opt out of
+     *  auto-start. */
+    defaultRestSec?: number;
   };
   // ── intakeFields ───────────────────────────────────────────────────
   // Apr 2026 follow-up to PR #88. Audit found 7 more intake fields that
@@ -268,6 +272,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       // pattern as buildGunnyContext.
       trainingPath: operator.intake?.trainingPath || operator.preferences?.trainingPath || 'gunny_pick',
       preferredWorkoutTime: operator.intake?.preferredWorkoutTime || 'morning',
+      // WS2: read-through is intentional. Undefined stays undefined so
+      // the resolver falls back to APP_DEFAULT_REST_SEC. Number stays
+      // a number (including explicit 0 = opt out).
+      defaultRestSec: operator.preferences?.defaultRestSec,
     },
     intakeFields: {
       currentActivity: operator.intake?.currentActivity || 'sedentary',
@@ -363,6 +371,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         // fallback (intake → prefs) keeps working for legacy operators.
         // The intake write below is the canonical source.
         trainingPath: state.preferences.trainingPath,
+        // WS2: persist the rest-default preference. undefined stays
+        // undefined (operator never customized; resolver falls back
+        // to APP_DEFAULT_REST_SEC). Explicit 0 = opt out of auto-start.
+        defaultRestSec: state.preferences.defaultRestSec,
       },
       // Write trainingPath + preferredWorkoutTime + the residual 7
       // intakeFields into operator.intake. Intake is the canonical
@@ -3271,6 +3283,36 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           max={7}
           value={state.preferences.daysPerWeek}
           onChange={(e) => handlePreferencesChange('daysPerWeek', parseInt(e.target.value))}
+          className="ds-input"
+        />
+      </div>
+
+      {/* Default Rest Period (seconds) — WS2. When a workout's
+          prescription doesn't carry an explicit rest hint, the timer
+          auto-starts using this value after every set. Set to 0 to
+          opt out (manage rest manually). Empty string → undefined →
+          falls back to APP_DEFAULT_REST_SEC (120s in restTimer.ts). */}
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="prefs-rest">{t('intel.default_rest_sec') || 'Default rest (seconds)'}</label>
+        <input
+          id="prefs-rest"
+          type="number"
+          min={0}
+          max={600}
+          step={15}
+          placeholder="120"
+          value={
+            typeof state.preferences.defaultRestSec === 'number'
+              ? state.preferences.defaultRestSec
+              : ''
+          }
+          onChange={(e) => {
+            const v = e.target.value;
+            handlePreferencesChange(
+              'defaultRestSec',
+              v === '' ? undefined : Math.max(0, Math.min(600, parseInt(v) || 0)),
+            );
+          }}
           className="ds-input"
         />
       </div>

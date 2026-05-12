@@ -370,6 +370,11 @@ export interface TrainingPreferences {
   trainingPath?: string;
   weakPoints: string[];
   avoidMovements: string[];
+  /** Default rest-period (seconds) used when a prescription has no
+   *  explicit rest hint. Defaults to APP_DEFAULT_REST_SEC (120) in
+   *  src/lib/restTimer.ts when undefined. Set to 0 to opt out of
+   *  auto-start entirely (operator manages rest manually). */
+  defaultRestSec?: number;
   // Gunny path recommendation engine — populated by /api/gunny/recommend-path
   // when the operator picked "LET GUNNY DECIDE" during intake. The endpoint
   // analyzes intake answers and returns a concrete path key + rationale +
