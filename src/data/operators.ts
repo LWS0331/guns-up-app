@@ -1295,7 +1295,7 @@ export const OPERATORS: Operator[] = [
   {
     id: 'op-brielle',
     name: 'Brielle Rodriguez',
-    callsign: 'SPARROW',                             // tactical-but-age-appropriate (small, fast, watchful)
+    callsign: 'BUMBLEBEE',
     pin: '4002',
     role: 'client',
     tier: 'opus',                                    // COMMANDER — junior safety floor (matches op-poppy)
