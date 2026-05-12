@@ -12,7 +12,7 @@ import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
-import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, formatLocalDateKey } from '@/lib/dateUtils';
+import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, formatLocalDateKey, getLocalHourMinute, getLocalTimeOfDayBand } from '@/lib/dateUtils';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -808,6 +808,10 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
               clientDate: getLocalDateStr(),
               clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
               clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — current clock + coarse band so Gunny
+          // has time-of-day awareness in every response.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
               operatorContext: {
                 callsign: operator.callsign,
                 name: operator.name,
@@ -1417,6 +1421,10 @@ ${mealSuggestion}`;
           clientDate: getLocalDateStr(),
           clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
           clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — current clock + coarse band so Gunny
+          // has time-of-day awareness in every response.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
           ...(apiMode && { mode: apiMode }),
           ...(trainerData && { trainerData }),
         }),
@@ -1584,6 +1592,10 @@ ${mealSuggestion}`;
           clientDate: getLocalDateStr(),
           clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
           clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — current clock + coarse band so Gunny
+          // has time-of-day awareness in every response.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
           ...(apiMode && { mode: apiMode }),
           ...(trainerData && { trainerData }),
         }),

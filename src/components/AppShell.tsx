@@ -6,7 +6,7 @@ import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/work
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
-import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
+import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, getLocalHourMinute, getLocalTimeOfDayBand } from '@/lib/dateUtils';
 import Icon, { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
@@ -1267,6 +1267,11 @@ const AppShell: React.FC<AppShellProps> = ({
           clientDate: getLocalDateStr(),
           clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
           clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — actual clock so Gunny can answer
+          // "is it too late to lift?" / "what should I eat now?"
+          // without assuming a default hour.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
           ...(trainerData && { trainerData }),
         }),
       });
@@ -1734,6 +1739,11 @@ const AppShell: React.FC<AppShellProps> = ({
               clientDate: getLocalDateStr(),
               clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
               clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — actual clock so Gunny can answer
+          // "is it too late to lift?" / "what should I eat now?"
+          // without assuming a default hour.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
               ...(trainerData && { trainerData }),
             }),
           });

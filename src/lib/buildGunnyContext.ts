@@ -125,6 +125,37 @@ export interface GunnyOperatorContext {
   // route.ts can resolve them without a separate DB round-trip.
   trainingPath?: string;
   lifeStage?: 'pregnancy' | 'postpartum';
+
+  // ──── WS5 (May 2026) — context personalization ────
+  // Today's readiness check-in (sleep/stress/mood/readiness/energy on
+  // 1-10 scales). Gunny used to see only the static profile.readiness
+  // / profile.sleep / profile.stress (last-known values from intake),
+  // which made coaching deaf to "I slept like crap last night" without
+  // an explicit chat mention. Surfacing the dated check-in lets Gunny
+  // ratchet intensity recommendations on actual today-state.
+  todayReadiness: {
+    date: string;
+    sleep?: number;
+    stress?: number;
+    mood?: number;
+    readiness?: number;
+    energy?: number;
+    notes?: string;
+  } | null;
+
+  // Compliance signal — completed vs scheduled in the last 7 days.
+  // workoutStreak counts forward (consecutive completed days) and
+  // misses the "missed 3 of last 5" pattern. recentCompliance fills
+  // that gap so Gunny can downshift recommendations after a slacker
+  // week instead of blindly stacking volume.
+  recentCompliance: {
+    scheduledLast7d: number;
+    completedLast7d: number;
+    /** scheduled-but-not-completed-and-in-the-past */
+    missedLast7d: number;
+    /** 0-100; null when nothing was scheduled */
+    compliancePct: number | null;
+  };
 }
 
 export function buildFullGunnyContext(
@@ -264,6 +295,51 @@ export function buildFullGunnyContext(
       lines.push(row);
     });
     return lines.join('\n');
+  })();
+
+  // WS5 — today's readiness check-in.
+  const todayReadiness: GunnyOperatorContext['todayReadiness'] = (() => {
+    const dr = (operator.dailyReadiness || {}) as AnyRec;
+    const entry = dr[today];
+    if (!entry || typeof entry !== 'object') return null;
+    return {
+      date: today,
+      sleep: typeof entry.sleep === 'number' ? entry.sleep : undefined,
+      stress: typeof entry.stress === 'number' ? entry.stress : undefined,
+      mood: typeof entry.mood === 'number' ? entry.mood : undefined,
+      readiness: typeof entry.readiness === 'number' ? entry.readiness : undefined,
+      energy: typeof entry.energy === 'number' ? entry.energy : undefined,
+      notes: typeof entry.notes === 'string' ? entry.notes : undefined,
+    };
+  })();
+
+  // WS5 — 7-day compliance (scheduled vs completed vs missed-in-past).
+  const recentCompliance: GunnyOperatorContext['recentCompliance'] = (() => {
+    const todayMs = new Date(today + 'T12:00:00').getTime();
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    let scheduled = 0;
+    let completed = 0;
+    let missed = 0;
+    for (const [date, w] of Object.entries(workouts) as Array<[string, AnyRec]>) {
+      if (!w || typeof w !== 'object') continue;
+      const dayMs = new Date(date + 'T12:00:00').getTime();
+      if (Number.isNaN(dayMs)) continue;
+      const ageMs = todayMs - dayMs;
+      if (ageMs < 0 || ageMs > SEVEN_DAYS) continue;
+      // Only count days where a workout was actually scheduled (the
+      // operator opened a planner entry). Empty days don't count
+      // toward "missed" — they're just rest days.
+      scheduled++;
+      if (w.completed === true) {
+        completed++;
+      } else if (ageMs > 0) {
+        // Past day, not completed → missed
+        missed++;
+      }
+      // ageMs === 0 → today, scheduled but not yet attempted; not missed
+    }
+    const pct = scheduled > 0 ? Math.round((completed / scheduled) * 100) : null;
+    return { scheduledLast7d: scheduled, completedLast7d: completed, missedLast7d: missed, compliancePct: pct };
   })();
 
   return {
@@ -463,5 +539,7 @@ export function buildFullGunnyContext(
       intake?.lifeStage === 'pregnancy' || intake?.lifeStage === 'postpartum'
         ? intake.lifeStage
         : undefined,
+    todayReadiness,
+    recentCompliance,
   };
 }

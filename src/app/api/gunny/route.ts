@@ -3328,7 +3328,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { messages, tier, operatorContext, mode, screenContext, clientDate, clientDateLong, clientTimezone, chatType: chatTypeFromBody, juniorContext: juniorContextFromBody } = body;
+    const { messages, tier, operatorContext, mode, screenContext, clientDate, clientDateLong, clientTimezone, clientTime, clientTimeOfDay, chatType: chatTypeFromBody, juniorContext: juniorContextFromBody } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -3707,6 +3707,7 @@ ${operatorContext.injuryNotes ? `\nRAW INJURY NOTES FROM OPERATOR (verbatim — 
 Trainer Notes: ${operatorContext.trainerNotes || 'No special directives'}
 Preferred Language: ${operatorContext.language || 'en'}
 Today (operator's LOCAL timezone — use this, NOT server time): ${clientDateLong || new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}${clientDate ? ` (${clientDate})` : ''}${clientTimezone ? `\nOperator Timezone: ${clientTimezone}` : ''}
+Current Local Time: ${clientTime || '(unknown)'} (${clientTimeOfDay || 'unknown'}) — use this when the operator asks "should I do X now" or anything time-sensitive. Don't suggest a 7am workout at 11pm; don't suggest a big meal at 2am; don't say "go to sleep early" at 8am.
 Yesterday was: ${clientDate ? (() => { const d = new Date(clientDate + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; })() : 'one day ago'}
 
 ${operatorContext.sitrep ? `═══ ACTIVE BATTLE PLAN (SITREP) ═══
@@ -3750,6 +3751,22 @@ ${operatorContext.recentMealHistory || 'No meals logged yet.'}
 
 ${operatorContext.recentDayTags ? `═══ RECENT DAY TAGS ═══
 ${operatorContext.recentDayTags}
+` : ''}
+
+${operatorContext.todayReadiness ? `═══ TODAY'S READINESS CHECK-IN (operator-reported) ═══
+${[
+  operatorContext.todayReadiness.sleep != null && `Sleep: ${operatorContext.todayReadiness.sleep}/10`,
+  operatorContext.todayReadiness.stress != null && `Stress: ${operatorContext.todayReadiness.stress}/10`,
+  operatorContext.todayReadiness.mood != null && `Mood: ${operatorContext.todayReadiness.mood}/10`,
+  operatorContext.todayReadiness.readiness != null && `Readiness: ${operatorContext.todayReadiness.readiness}/10`,
+  operatorContext.todayReadiness.energy != null && `Energy: ${operatorContext.todayReadiness.energy}/10`,
+].filter(Boolean).join(' · ')}${operatorContext.todayReadiness.notes ? `\nNotes from operator: ${operatorContext.todayReadiness.notes}` : ''}
+USE THIS — adjust intensity recommendations against today's check-in, not just the static profile. Low readiness + low energy = soft today; high readiness = push.
+` : ''}
+
+${operatorContext.recentCompliance && operatorContext.recentCompliance.scheduledLast7d > 0 ? `═══ COMPLIANCE — LAST 7 DAYS ═══
+Scheduled: ${operatorContext.recentCompliance.scheduledLast7d} · Completed: ${operatorContext.recentCompliance.completedLast7d} · Missed: ${operatorContext.recentCompliance.missedLast7d}${operatorContext.recentCompliance.compliancePct != null ? ` (${operatorContext.recentCompliance.compliancePct}%)` : ''}
+${operatorContext.recentCompliance.missedLast7d >= 2 ? `⚠ Operator missed ${operatorContext.recentCompliance.missedLast7d} scheduled sessions in the last week. Acknowledge this BEFORE adding volume. If their next message is "build me a workout," check WHY they missed (life stress, injury, motivation, time) before just stacking another tough session on top.` : `Compliance is solid — operator is showing up.`}
 ` : ''}
 
 ${operatorContext.lastCompletedWorkout ? `${operatorContext.lastCompletedWorkout}
