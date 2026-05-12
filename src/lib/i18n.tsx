@@ -174,6 +174,9 @@ export const translations = {
     'intel.session_duration': 'Session Duration',
     'intel.days_per_week': 'Days Per Week',
     'intel.default_rest_sec': 'Default rest (sec, 0 = off)',
+    // Post-workout analysis (WS4) — completion-screen surfaces.
+    'post_workout.vs_last_time': 'VS LAST SESSION',
+    'post_workout.adherence': 'ADHERENCE',
     'intel.weak_points': 'Weak Points',
     'intel.movements_avoid': 'Movements to Avoid',
     'intel.macro_targets': 'MACRO TARGETS',
@@ -1671,6 +1674,9 @@ export const translations = {
     'intel.session_duration': 'Duración de Sesión',
     'intel.days_per_week': 'Días Por Semana',
     'intel.default_rest_sec': 'Descanso por defecto (seg, 0 = off)',
+    // Análisis post-entrenamiento (WS4).
+    'post_workout.vs_last_time': 'VS ÚLTIMA SESIÓN',
+    'post_workout.adherence': 'ADHERENCIA',
     'intel.weak_points': 'Puntos Débiles',
     'intel.movements_avoid': 'Movimientos a Evitar',
     'intel.macro_targets': 'OBJETIVOS DE MACROS',
