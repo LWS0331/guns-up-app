@@ -451,6 +451,143 @@ const CROSSFIT_COMP: BlockSpec[] = [
   },
 ];
 
+/** Pregnancy + postpartum — trimester-anchored macrocycle ending at birth.
+ *
+ *  Goal date = expected birth date. Engine walks BACKWARD from goal so
+ *  T3 lands in the last 13 weeks before birth, T2 in the 13 weeks
+ *  before that, etc. The preconception block is FLEXIBLE so operators
+ *  who connect mid-pregnancy can still build a partial macrocycle.
+ *
+ *  Postpartum is NOT in this template — Goom-Donnelly's 12-wk RTS
+ *  framework is a separate `return_to_sport` macrocycle the operator
+ *  chains after birth. Keeps each macrocycle focused on one peak.
+ *
+ *  Citations: overlays/pregnancy-postpartum.md
+ *    - ACOG Committee Opinion 804 (2020) — HR caps removed, RPE-based
+ *    - Mottola/Canadian Guideline (BJSM 2018) — 150 min/wk floor
+ *    - Goom-Donnelly-Brockwell (2019) — postpartum return framework */
+const PREGNANCY_POSTPARTUM: BlockSpec[] = [
+  {
+    kind: 'general_prep',
+    name: 'Preconception / Early T1',
+    durationWeeks: 13,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 1.00,
+    intensityMultiplier: 0.80,
+    description: 'Build base before pregnancy demand peaks. WHO 150-300 min/wk moderate + 2x strength. Install 360-degree breathing + PFMT. T1: hyperthermia avoidance (no hot yoga / saunas).',
+    flexible: true,
+    performanceMarker: {
+      label: 'Maintain RPE 13-14 ("somewhat hard") + talk test on aerobic work',
+      kind: 'compliance_rate',
+      threshold: 80,
+      advanceEarlyDaysAllowed: 0,
+    },
+  },
+  {
+    kind: 'specific_prep',
+    name: 'T2 — Strength Window',
+    durationWeeks: 14,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 0.95,
+    intensityMultiplier: 0.80,
+    description: 'Energy + comfort peak — best window for strength priority. Symptom-driven mods: stop on coning, heaviness, leaking. Avoid supine sets >2 min after wk 16.',
+    performanceMarker: {
+      label: 'Hit prescribed strength sessions without provocative symptoms',
+      kind: 'compliance_rate',
+      threshold: 75,
+      advanceEarlyDaysAllowed: 0,
+    },
+  },
+  {
+    kind: 'maintenance',
+    name: 'T3 — Mobility + PFMT',
+    durationWeeks: 13,
+    compatibility: 'concurrent_only',
+    volumeMultiplier: 0.70,
+    intensityMultiplier: 0.65,
+    description: 'Lateral movement avoidance, no Valsalva, no supine. Pelvic-floor + mobility priority. Walk + swim aerobic. Stop on contractions / bleeding / persistent dyspnea.',
+  },
+  {
+    kind: 'taper',
+    name: 'Final 2 Weeks',
+    durationWeeks: 2,
+    compatibility: 'exclusive',
+    volumeMultiplier: 0.40,
+    intensityMultiplier: 0.50,
+    description: 'Birth-prep mobility + breath work. Squats + bodyweight only. Listen to the body — many operators stop training entirely. That is fine.',
+  },
+];
+
+/** Return-to-sport rehab — 4-stage Cook/Stanish-pattern macrocycle.
+ *
+ *  Goal date = first competition or full-load training session.
+ *  Engine walks backward from goal; final taper is the "ready" check
+ *  before unrestricted return. Operator's PT / sports-med provider
+ *  signs off each stage transition — Gunny doesn't bypass that.
+ *
+ *  Citations: overlays/rehab-pt.md
+ *    - Cook & Purdam isometric → eccentric tendon framework
+ *    - Stanish eccentric protocols
+ *    - PEACE & LOVE acute injury management (BJSM 2019)
+ *    - Acute:Chronic Workload Ratio (Gabbett 2016) — 0.8-1.3 sweet spot */
+const RETURN_TO_SPORT: BlockSpec[] = [
+  {
+    kind: 'general_prep',
+    name: 'Stage 1 — Isometric / Analgesia',
+    durationWeeks: 3,
+    compatibility: 'exclusive',
+    volumeMultiplier: 0.40,
+    intensityMultiplier: 0.50,
+    description: 'PEACE protocol (acute) → isometric loading. 5x45-sec holds at 70% MVIC. Pain-modulating dose. NO eccentrics or plyos yet.',
+    flexible: true,
+    performanceMarker: {
+      label: 'Pain < 3/10 during + 24h after isometric session',
+      kind: 'compliance_rate',
+      threshold: 80,
+      advanceEarlyDaysAllowed: 0,
+    },
+  },
+  {
+    kind: 'accumulation',
+    name: 'Stage 2 — Isotonic / Eccentric',
+    durationWeeks: 6,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 0.80,
+    intensityMultiplier: 0.70,
+    description: 'Heavy slow resistance (Kongsgaard 3-sec ecc + 3-sec con, 6-15 RM) or Stanish eccentric protocol. ACWR cap 1.3 — no spikes.',
+    performanceMarker: {
+      label: 'Add load weekly without pain >3/10 24h post',
+      kind: 'pr_progression',
+      threshold: 5,
+      advanceEarlyDaysAllowed: 3,
+    },
+  },
+  {
+    kind: 'intensification',
+    name: 'Stage 3 — Plyometric / Energy Storage',
+    durationWeeks: 4,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 0.90,
+    intensityMultiplier: 0.85,
+    description: 'Reintroduce SSC: hops, jumps, bounds. Sub-maximal first (60-70% effort), progress weekly. Single-leg metrics must equal 90% of contralateral.',
+    performanceMarker: {
+      label: 'Single-leg hop, drop-jump, cross-over hop within 90% of uninjured side',
+      kind: 'intensity_target',
+      threshold: 90,
+      advanceEarlyDaysAllowed: 3,
+    },
+  },
+  {
+    kind: 'taper',
+    name: 'Stage 4 — Return to Sport',
+    durationWeeks: 3,
+    compatibility: 'exclusive',
+    volumeMultiplier: 0.85,
+    intensityMultiplier: 0.95,
+    description: 'Sport-specific load. Position-specific drills at game speed. Final clearance criteria: ≥90% LSI on all hop tests, full ROM, RTS questionnaire ≥9/10 confidence.',
+  },
+];
+
 /** Lookup — picks the canonical template for a goal type. */
 export function getTemplateForGoal(type: MacroGoalType): BlockSpec[] {
   switch (type) {
@@ -468,6 +605,10 @@ export function getTemplateForGoal(type: MacroGoalType): BlockSpec[] {
       return TACTICAL_ASSESSMENT;
     case 'crossfit_comp':
       return CROSSFIT_COMP;
+    case 'pregnancy_postpartum':
+      return PREGNANCY_POSTPARTUM;
+    case 'return_to_sport':
+      return RETURN_TO_SPORT;
   }
 }
 

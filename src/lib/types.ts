@@ -768,7 +768,14 @@ export type MacroGoalType =
   // periodization aligned with what Gunny's corpus actually teaches.
   | 'olympic_meet'           // Olympic Weightlifting competition (Hatch-anchored 12-wk peak)
   | 'tactical_assessment'    // PFT / selection / mil-LE assessment (MTI Fluid 7-wk)
-  | 'crossfit_comp';         // CrossFit Open / Sanctional peak (12-wk metcon peak)
+  | 'crossfit_comp'          // CrossFit Open / Sanctional peak (12-wk metcon peak)
+  // ---- 2026-05 corpus alignment (round 2) ----
+  // Maternal + rehab corpora carry their own staged frameworks
+  // (trimester-anchored for pregnancy; 4-stage rehab for return-to-sport)
+  // — adding them as proper macrocycle goals so the engine + UI can
+  // build them instead of force-fitting onto hypertrophy_phase.
+  | 'pregnancy_postpartum'   // Pregnancy peak at birth date (ACOG 804 / Mottola 2018 / Goom 2019)
+  | 'return_to_sport';       // Rehab return-to-sport (Cook isometric → eccentric → plyo → RTS)
 
 export type MacroBlockKind =
   | 'general_prep'      // GPP — base building, high volume, low specificity
