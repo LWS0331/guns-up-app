@@ -84,6 +84,11 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<string>('unsupported');
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  // WS1 (May 2026) — collapse the toggle wall by default. The settings
+  // block runs ~280px tall on mobile, and most operators don't need to
+  // touch it more than once during initial setup. Header stays clickable
+  // with an "(N active · TAP TO OPEN)" hint so it's still discoverable.
+  const [expanded, setExpanded] = useState(false);
 
   // Load preferences on mount
   useEffect(() => {
@@ -161,23 +166,48 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
         maxWidth: '100%',
       }}
     >
-      {/* Header */}
-      <div
+      {/* Header — clickable to toggle the collapsed body. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
         style={{
+          width: '100%',
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          marginBottom: expanded ? '16px' : 0,
           fontFamily: 'Orbitron, sans-serif',
           fontSize: '13px',
           letterSpacing: '2px',
           color: '#00ff41',
           textTransform: 'uppercase',
           fontWeight: 700,
-          marginBottom: '16px',
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'space-between',
           gap: '8px',
+          cursor: 'pointer',
+          textAlign: 'left',
         }}
+        aria-expanded={expanded}
       >
-        {t('notif.heading')}
-      </div>
+        <span>{expanded ? '▼' : '▶'} {t('notif.heading')}</span>
+        {!expanded && (
+          <span
+            style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: '10px',
+              color: '#888',
+              letterSpacing: '1px',
+              textTransform: 'none',
+            }}
+          >
+            {permissionStatus === 'granted' ? 'ON' : permissionStatus === 'denied' ? 'BLOCKED' : 'OFF'} · {t('notif.tap_to_open') || 'TAP TO OPEN'}
+          </span>
+        )}
+      </button>
+
+      {!expanded ? null : <>
 
       {/* Permission Status */}
       <div
@@ -364,6 +394,7 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
       >
         {t('notif.footer').replace('{callsign}', callsign)}
       </div>
+      </>}
     </div>
   );
 };
