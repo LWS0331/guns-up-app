@@ -15,6 +15,7 @@ import { prisma } from '@/lib/db';
 import { buildMacroCycle, recomputeOnGoalDateChange } from '@/lib/macrocycle';
 import type { MacroGoal, MacroGoalType, MacroCycle, PRRecord } from '@/lib/types';
 import type { JuniorSafetyEvent } from '@/lib/types';
+import { OPS_CENTER_ACCESS } from '@/lib/types';
 import { loadGunnyCorpus } from '@/lib/gunnyCorpus';
 import type { TrainingPath, CorpusSelectionInput } from '@/data/gunny-corpus';
 import { getCoreIdentity, resolvePersonaId, detectPersonaDrift } from '@/lib/personas';
@@ -2159,6 +2160,95 @@ ${operatorContext.recentWorkoutHistory || 'No workouts logged yet.'}
 `;
 }
 
+// Parent-Coach Mode — May 2026. Different persona from SOCCER_YOUTH_PROMPT
+// because the addressee is the PARENT, not the kid. The junior doesn't
+// have app access at the 4-10 age band (see ParentDashboard's
+// Parent-Led Mode), so this surface coaches the parent ON the kid:
+// drill scripts, cue language, age-appropriate progression, safety
+// escalation when the parent reports a symptom from the kid.
+//
+// Built as a function (not a const) because it interpolates the
+// junior's specific identity into the prompt body — Gunny needs to
+// know who BUMBLEBEE is by callsign and age every turn.
+//
+// Safety floor is identical to SOCCER_YOUTH_PROMPT / FOOTBALL_YOUTH_PROMPT
+// (no body comp, no supplements, head-impact full stop, pain protocol,
+// no 1RM under 14, mastery climate, process praise) — restated inline
+// rather than chained so the prompt is self-contained.
+interface ParentCoachJunior {
+  id: string;
+  callsign: string;
+  age: number;
+  sport?: string;          // 'soccer' | 'football' | undefined
+  level?: string;          // 'recreational' | 'club' | etc.
+  position?: string;       // soccer position code or football role
+  sex?: string;            // 'female' | 'male' | etc. (derived from profile if available)
+}
+
+function buildParentCoachPrompt(junior: ParentCoachJunior): string {
+  const sport = junior.sport === 'football' ? 'football' : 'soccer';
+  const tier =
+    junior.age <= 5
+      ? 'Tier 1 (4-5) — foundational, play-based'
+      : junior.age <= 7
+        ? 'Tier 2 (6-7) — skill introduction'
+        : junior.age <= 10
+          ? 'Tier 3 (8-10) — skill refinement + position introduction'
+          : 'Tier 4 (11+) — pre-PHV programming, escalated NMT';
+
+  const sportCorpus =
+    sport === 'soccer'
+      ? `Youth Soccer (4-10):
+  - US Soccer PDI by age: 4v4 no GK at U6 (Tier 1); 4v4 with light GK + FIFA 11+ Kids warm-up (Tier 2); 7v7 + full FIFA 11+ Kids + position introduction (Tier 3).
+  - FIFA 11+ Kids = NMT dynamic warm-up; >=2x/wk min effective dose (Rossler 2018 RCT, LaBella 2011 cluster RCT).
+  - Pre-PHV girls share programming with boys per Quatman 2008 / Ford 2010 / Hewett 2015 — NMT sex divergence emerges only at PHV. Mastery climate + process praise per Smith Smoll Cumming CET and Henderlong Corpus & Lepper 2007.`
+      : `Youth Football (10-12):
+  - Heads Up dynamic warm-up + cervical isometrics in place of FIFA 11+.
+  - NO 1RM under 14 (NSCA Youth Position Statement). NO live OL/DL collisions for 10-12 — form-fit, bag, sled only.
+  - Concussion protocol is the strictest in youth contact sports — CDC Heads Up + AAP guidance.`;
+
+  return `You are GUNNY in PARENT-COACH MODE.
+
+═══ WHO YOU'RE TALKING TO ═══
+You are advising a PARENT who runs training for their junior operator. The athlete does NOT have app access at this age. The PARENT IS THE COACH. They read your cues aloud, run the drills, and tap LOG SESSION when finished.
+
+THE ATHLETE
+- Callsign: ${junior.callsign}
+- Age: ${junior.age}
+- Sport: ${sport}
+- Level: ${junior.level || 'unspecified'}
+${junior.sex ? `- Sex: ${junior.sex}` : ''}
+${junior.position && junior.position !== 'unsure' ? `- Position / role: ${junior.position}` : ''}
+- Programming tier: ${tier}
+
+═══ HOW YOU SPEAK ═══
+- Address the parent as "Coach" or by their callsign (passed in operatorContext).
+- Translate technique into PARENT-RUNNABLE CUES. Bad: "perform an A-skip with knee drive to 90°." Good: "March in place lifting knees up to belt height. Eight steps. Then jog ten yards."
+- Default response length: 3-6 lines. Parents are busy and the kid is asking for snacks.
+- For a session plan, output a structured drill list — one line per drill: TIME · DRILL NAME · CUE (read aloud).
+- When the parent says "build today's session" / "generate a workout" / "what should ${junior.callsign} do today" → emit a <daily_ops_json> block matching the schema the training surface expects. Use age-appropriate timing (${junior.age <= 5 ? '5-10 min per block, 20 min total max' : junior.age <= 7 ? '8-12 min per block, 30 min total max' : '10-15 min per block, 45 min total max'}).
+- Match the parent's language. If they write in Spanish, respond in Spanish.
+
+═══ HARD SAFETY FLOOR — RESTATED INLINE ═══
+1. NO body composition talk. NO calorie deficits. NO supplements. Ever. The kid is ${junior.age}.
+2. NO 1RM testing. NO high-load resistance training. The kid is under 14.
+3. Concussion language from the parent ("she said her head hurts" / "he saw stars" / "blacked out for a sec" / "dizzy after the hit") → IMMEDIATE STOP. Tell the parent: stop training, refer to pediatrician, do not resume until cleared. Log a safety event with type='concussion_keyword' (the route handles persistence).
+4. Pain >3/10 or any joint pain → stop the drill, log under safety events, modify next session.
+5. Refusal is data, not defiance. If the parent reports "${junior.callsign} doesn't want to do it" → NEVER tell them to force it. Pivot to a fun drill, log refusal if persistent (3+ sessions = pattern).
+6. Heat / dehydration: water every 10-15 min in any session. Reinforce this.
+7. Mastery climate. Process praise > outcome praise. Coach the parent on this language: "you tried five times" beats "great job".
+8. The parent is on the record. Keep the conversation appropriate.
+
+═══ CORPUS YOU'RE DRAWING FROM ═══
+${sportCorpus}
+
+═══ WHAT YOU OUTPUT ═══
+- Default: short, parent-readable, no jargon, no Marine-DI cursing (the kid is in earshot).
+- Drill cards on request: TIME · DRILL · CUE format, one per line.
+- Full session on "build today's session": <daily_ops_json> block.
+- Safety language detected: STOP first, then advise.`;
+}
+
 // reality check immediately after the "you KNOW all this" claim.
 // Returns '' when the operator has everything set up — in that case the
 // original preamble is already truthful and no override is needed.
@@ -3238,7 +3328,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { messages, tier, operatorContext, mode, screenContext, clientDate, clientDateLong, clientTimezone, chatType: chatTypeFromBody } = body;
+    const { messages, tier, operatorContext, mode, screenContext, clientDate, clientDateLong, clientTimezone, chatType: chatTypeFromBody, juniorContext: juniorContextFromBody } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -3280,6 +3370,62 @@ export async function POST(req: NextRequest) {
     const isAssistantMode = mode === 'assistant';
     const isOnboardingMode = mode === 'onboarding';
     const isOpsMode = mode === 'ops';
+    // Parent-Coach Mode (May 2026) — parent chats ABOUT their linked
+    // junior. Different system prompt, junior-scoped safety logging,
+    // chatType convention `gunny-parent-hub-{juniorId}` for per-junior
+    // thread isolation.
+    const isParentCoachingMode = mode === 'parent_coaching';
+
+    // Server-side validation for parent-coaching: caller MUST be in
+    // the junior's parentIds. Without this any operator could chat
+    // "as a parent" of any junior, leaking their data + adding fake
+    // safety events. We re-fetch the junior server-side so the client
+    // can't lie about age/sport/sex to manipulate the prompt.
+    let parentCoachJunior: ParentCoachJunior | null = null;
+    if (isParentCoachingMode) {
+      const requestedJuniorId =
+        typeof juniorContextFromBody?.id === 'string'
+          ? juniorContextFromBody.id
+          : null;
+      if (!requestedJuniorId) {
+        return NextResponse.json(
+          { error: 'parent_coaching mode requires juniorContext.id' },
+          { status: 400 },
+        );
+      }
+      const jr = await prisma.operator.findUnique({
+        where: { id: requestedJuniorId },
+        select: {
+          id: true,
+          callsign: true,
+          isJunior: true,
+          parentIds: true,
+          juniorAge: true,
+          sportProfile: true,
+          profile: true,
+        },
+      });
+      const callerIsParent =
+        !!jr?.isJunior && (jr.parentIds || []).includes(auth.operatorId);
+      const callerIsAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
+      if (!jr || !jr.isJunior || (!callerIsParent && !callerIsAdmin)) {
+        return NextResponse.json(
+          { error: 'Forbidden — caller is not a linked parent of this junior.' },
+          { status: 403 },
+        );
+      }
+      const sp = (jr.sportProfile as Record<string, unknown> | null) || {};
+      const profile = (jr.profile as Record<string, unknown> | null) || {};
+      parentCoachJunior = {
+        id: jr.id,
+        callsign: jr.callsign,
+        age: typeof jr.juniorAge === 'number' ? jr.juniorAge : 0,
+        sport: typeof sp.sport === 'string' ? sp.sport : undefined,
+        level: typeof sp.level === 'string' ? sp.level : undefined,
+        position: typeof sp.position === 'string' ? sp.position : undefined,
+        sex: typeof profile.sex === 'string' ? profile.sex : undefined,
+      };
+    }
 
     // Force Opus for platform owner (highest-quality responses for QA).
     const ownerOverride = operatorContext?.callsign === 'RAMPAGE';
@@ -4018,7 +4164,10 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // protocols handle the conversation; this is the audit trail. Adults
     // and flag-disabled juniors short-circuit through here.
     let safetyEvents: JuniorSafetyEvent[] = [];
-    if (isJuniorOperator) {
+    // Parent-Coach Mode enters this branch even though the caller is
+    // adult — the safety scan is FOR the junior (target id swapped
+    // below), not for the parent who's chatting.
+    if (isJuniorOperator || (isParentCoachingMode && parentCoachJunior)) {
       const latestUser = [...anthropicMessages].reverse().find(m => m.role === 'user');
       const latestText = latestUser
         ? typeof latestUser.content === 'string'
@@ -4028,13 +4177,26 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
               .map(p => p.text)
               .join(' ')
         : '';
-      safetyEvents = await detectAndLogSafety(auth.operatorId, true, latestText);
+      // Parent-Coach Mode: safety language reported BY the parent is
+      // ABOUT the junior — log it on the junior's record so the
+      // parent's Safety Events card surfaces it correctly. Parent-as-
+      // self has nothing to log here.
+      const safetyTargetId =
+        isParentCoachingMode && parentCoachJunior
+          ? parentCoachJunior.id
+          : auth.operatorId;
+      safetyEvents = await detectAndLogSafety(safetyTargetId, true, latestText);
     }
 
     let systemPrompt: string;
     if (isOpsMode) {
       // Ops mode is platform-owner only; juniors never reach it. Adult prompt OK.
       systemPrompt = OPS_PROMPT;
+    } else if (isParentCoachingMode && parentCoachJunior) {
+      // Parent talking ABOUT their linked junior. Different persona —
+      // addresses the parent, scripts cues they read aloud, restates
+      // youth safety floor inline. See buildParentCoachPrompt().
+      systemPrompt = buildParentCoachPrompt(parentCoachJunior);
     } else if (isJuniorOperator) {
       // Junior Operator routing — sport-specific youth prompt replaces
       // SYSTEM_PROMPT. Soccer juniors get SOCCER_YOUTH_PROMPT, football
