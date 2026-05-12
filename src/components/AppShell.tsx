@@ -1526,6 +1526,16 @@ const AppShell: React.FC<AppShellProps> = ({
     const today = getLocalDateStr();
     let workingOp = currentSelectedOp;
     let touched = false;
+    // WS3 fix (May 2026) — collect every silent-failure reason so we
+    // can surface them on the voice-response banner instead of burying
+    // them in console.warn. The original bug class: Gunny says "swapped
+    // your bench press" in chat, the apply silently no-ops because the
+    // exercise name didn't match exactly or the target date had no
+    // workout, the operator looks at the workout, sees no change, and
+    // thinks the feature is broken. Three silent paths in this function
+    // (no workout / completed workout / lib no-op) — all three now
+    // append to `failures` and bubble up.
+    const failures: string[] = [];
 
     for (const raw of mods) {
       const mod = raw as WorkoutModification;
@@ -1548,10 +1558,16 @@ const AppShell: React.FC<AppShellProps> = ({
       const current = workingOp.workouts?.[targetDate];
       if (!current) {
         console.warn('[gunny-mod:appshell] no workout at target date:', targetDate, mod);
+        failures.push(
+          `No workout planned for ${targetDate} — couldn't ${mod.type.replace(/_/g, ' ')}.`,
+        );
         continue;
       }
       if (current.completed) {
         console.warn('[gunny-mod:appshell] refusing to modify completed workout at', targetDate, mod);
+        failures.push(
+          `Workout on ${targetDate} is already marked complete — refusing to modify a logged session.`,
+        );
         continue;
       }
       try {
@@ -1569,13 +1585,26 @@ const AppShell: React.FC<AppShellProps> = ({
           touched = true;
         } else {
           console.warn('[gunny-mod:appshell] no-op:', result.reason, mod);
+          failures.push(result.reason || `${mod.type} didn't match anything in the workout.`);
         }
       } catch (e) {
         console.error('applyWorkoutModification failed:', e);
+        failures.push(`${mod.type} threw an error — see console.`);
       }
     }
 
     if (touched) onUpdateOperator(workingOp);
+
+    // WS3 surface — only fire when NOTHING was applied. Partial
+    // failures (some mods succeeded, others didn't) stay as console
+    // logs so we don't flood a 5-block batch with one toast per miss.
+    // The single-failure case is the one that causes the "Gunny lied"
+    // perception — that's what this surface guards.
+    if (failures.length > 0 && !touched) {
+      showGunnyVoiceResponse(
+        `⚠ Couldn't apply that — ${failures[0]} Try naming the exercise exactly as it appears in your workout, or open the workout and point at it.`,
+      );
+    }
   };
 
   // Apply <workout_delete> signals from Gunny — removes the workout
