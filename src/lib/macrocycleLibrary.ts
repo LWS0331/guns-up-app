@@ -269,6 +269,188 @@ const FAT_LOSS: BlockSpec[] = [
   },
 ];
 
+/** Olympic Weightlifting meet — Hatch-anchored 12-wk peak.
+ *
+ *  Front block is flexible (general prep); the back half mirrors
+ *  Hatch's percentage table (5x5 → 3x3 → singles at 103%) so operators
+ *  who use Hatch directly can map their weeks into the same shape.
+ *  Citation: periodization/olympic.md §18 (Hatch Squat 12-wk),
+ *  §19 (Catalyst Beginner 4-wk used for GPP), §20 (Bulgarian — note
+ *  in description that we DO NOT auto-prescribe Bulgarian since it's
+ *  advanced-only). */
+const OLYMPIC_MEET: BlockSpec[] = [
+  {
+    kind: 'general_prep',
+    name: 'General Prep',
+    durationWeeks: 4,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 1.10,
+    intensityMultiplier: 0.75,
+    description: 'Snatch/CJ technical reps + Catalyst-beginner-style 4x3 work. Front+back squat build to Hatch entry. RPE 6-7.',
+    flexible: true,
+    performanceMarker: {
+      label: 'Clean technical 4x3 on snatch + CJ at ~70% projected 1RM',
+      kind: 'compliance_rate',
+      threshold: 80,
+      advanceEarlyDaysAllowed: 7,
+    },
+  },
+  {
+    kind: 'specific_prep',
+    name: 'Hatch Volume Phase',
+    durationWeeks: 4,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 1.00,
+    intensityMultiplier: 0.85,
+    description: 'Hatch weeks 1-4: front+back squat 5x5 @ 65-75%. Snatch / C&J doubles at 70-80%.',
+    performanceMarker: {
+      label: 'Hit Hatch wk-4 prescribed loads on both squats',
+      kind: 'intensity_target',
+      threshold: 75,
+      advanceEarlyDaysAllowed: 5,
+    },
+  },
+  {
+    kind: 'peak',
+    name: 'Hatch Peak (wk 6-11)',
+    durationWeeks: 3,
+    compatibility: 'exclusive',
+    volumeMultiplier: 0.85,
+    intensityMultiplier: 0.95,
+    description: 'Hatch progression 3x3 → 2x2 → singles, culminating in 103% squat attempt. Snatch + C&J singles at planned openers.',
+    performanceMarker: {
+      label: 'Smooth 95-100% single on snatch + C&J openers',
+      kind: 'intensity_target',
+      threshold: 95,
+      advanceEarlyDaysAllowed: 3,
+    },
+  },
+  {
+    kind: 'taper',
+    name: 'Comp Taper',
+    durationWeeks: 1,
+    compatibility: 'exclusive',
+    volumeMultiplier: 0.50,
+    intensityMultiplier: 0.95,
+    description: 'Hatch wk-12 unload. Openers only, no maxes. Movement quality > load.',
+  },
+];
+
+/** Tactical assessment (PFT / selection) — MTI Fluid 7-wk.
+ *
+ *  Citation: periodization/tactical.md §16 (MTI Hector / Fluid
+ *  Periodization Base Fitness). Six work weeks + one programmed
+ *  unload, assessment-driven progression. Strength, work capacity,
+ *  and endurance are trained concurrently — engine doesn't enforce
+ *  that but the descriptions cue Gunny. */
+const TACTICAL_ASSESSMENT: BlockSpec[] = [
+  {
+    kind: 'general_prep',
+    name: 'Assessment Base',
+    durationWeeks: 3,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 1.10,
+    intensityMultiplier: 0.75,
+    description: 'Week 1 assessments (1RM TLU lifts, 10-min work cap, run/ruck). Weeks 2-3 at 70-80% TM + chassis integrity 2x/wk.',
+    flexible: true,
+    performanceMarker: {
+      label: 'Complete all assessment events without failure',
+      kind: 'compliance_rate',
+      threshold: 80,
+      advanceEarlyDaysAllowed: 5,
+    },
+  },
+  {
+    kind: 'intensification',
+    name: 'Build Block',
+    durationWeeks: 3,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 1.00,
+    intensityMultiplier: 0.90,
+    description: 'Weeks 4-6 — strength 85-95% TM, work-cap targets 95-105% of assessed rounds, endurance intervals at assessed pace.',
+    performanceMarker: {
+      label: 'Hit 90% week 6 prescribed loads + retest pace at or under target',
+      kind: 'intensity_target',
+      threshold: 90,
+      advanceEarlyDaysAllowed: 3,
+    },
+  },
+  {
+    kind: 'taper',
+    name: 'Assessment Taper',
+    durationWeeks: 1,
+    compatibility: 'exclusive',
+    volumeMultiplier: 0.55,
+    intensityMultiplier: 0.85,
+    description: 'Programmed unload — bodyweight subs for barbell, easy-pace runs. Re-test on assessment day.',
+  },
+];
+
+/** CrossFit competition (Open / Sanctional / Semis) — 12-wk peak.
+ *
+ *  Mirrors the powerlifting 4/4/3/1 shape but biased toward metcon
+ *  density and mixed-modal capacity. Reference shape is the Open's
+ *  3-week peak; the four-week accumulation up front lets us fit
+ *  technical skill work (muscle-ups, ring HSPU, double-unders) into
+ *  the cycle before competition density takes over. */
+const CROSSFIT_COMP: BlockSpec[] = [
+  {
+    kind: 'accumulation',
+    name: 'Skill + Capacity',
+    durationWeeks: 4,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 1.20,
+    intensityMultiplier: 0.70,
+    description: 'High-volume metcons, skill EMOMs (MU, HSPU, DU), strength bias. Build engine and movement library.',
+    flexible: true,
+    performanceMarker: {
+      label: 'Clean unbroken set of competition skills (e.g. 10 MU, 30 DU)',
+      kind: 'compliance_rate',
+      threshold: 80,
+      advanceEarlyDaysAllowed: 5,
+    },
+  },
+  {
+    kind: 'specific_prep',
+    name: 'Competition Density',
+    durationWeeks: 4,
+    compatibility: 'concurrent_with_secondary',
+    volumeMultiplier: 1.10,
+    intensityMultiplier: 0.85,
+    description: 'Competition-style WODs at 80-90% of expected open pace. Score-and-repeat to track adaptation.',
+    performanceMarker: {
+      label: 'Score within 5% of target on benchmark WOD (Fran/Grace/Murph subset)',
+      kind: 'intensity_target',
+      threshold: 90,
+      advanceEarlyDaysAllowed: 3,
+    },
+  },
+  {
+    kind: 'peak',
+    name: 'Open Peak',
+    durationWeeks: 3,
+    compatibility: 'exclusive',
+    volumeMultiplier: 0.95,
+    intensityMultiplier: 0.95,
+    description: 'Friday-Friday workout cycle mirroring Open release cadence. Score → recover → retest at 95-100% effort.',
+    performanceMarker: {
+      label: 'Open-style workout at 95%+ effort, no significant pacing breaks',
+      kind: 'intensity_target',
+      threshold: 95,
+      advanceEarlyDaysAllowed: 3,
+    },
+  },
+  {
+    kind: 'taper',
+    name: 'Open Taper',
+    durationWeeks: 1,
+    compatibility: 'exclusive',
+    volumeMultiplier: 0.50,
+    intensityMultiplier: 0.90,
+    description: 'Final week. Movement quality, short skill primers, minimal grinders. Sleep + carbs.',
+  },
+];
+
 /** Lookup — picks the canonical template for a goal type. */
 export function getTemplateForGoal(type: MacroGoalType): BlockSpec[] {
   switch (type) {
@@ -280,6 +462,12 @@ export function getTemplateForGoal(type: MacroGoalType): BlockSpec[] {
       return SEASON_PREP;
     case 'fat_loss':
       return FAT_LOSS;
+    case 'olympic_meet':
+      return OLYMPIC_MEET;
+    case 'tactical_assessment':
+      return TACTICAL_ASSESSMENT;
+    case 'crossfit_comp':
+      return CROSSFIT_COMP;
   }
 }
 

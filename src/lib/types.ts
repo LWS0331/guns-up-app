@@ -759,7 +759,16 @@ export type MacroGoalType =
   | 'powerlifting_meet'
   | 'hypertrophy_phase'
   | 'season_prep'
-  | 'fat_loss';
+  | 'fat_loss'
+  // ---- 2026-05 corpus alignment ----
+  // The corpus carries dedicated periodization for Olympic weightlifting,
+  // tactical/military assessment, and CrossFit competition — but only the
+  // four legacy goal types were surfaced in the macrocycle picker. Adding
+  // these three closes the gap so operators on those paths get a
+  // periodization aligned with what Gunny's corpus actually teaches.
+  | 'olympic_meet'           // Olympic Weightlifting competition (Hatch-anchored 12-wk peak)
+  | 'tactical_assessment'    // PFT / selection / mil-LE assessment (MTI Fluid 7-wk)
+  | 'crossfit_comp';         // CrossFit Open / Sanctional peak (12-wk metcon peak)
 
 export type MacroBlockKind =
   | 'general_prep'      // GPP — base building, high volume, low specificity
