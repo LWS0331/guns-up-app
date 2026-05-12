@@ -43,16 +43,53 @@ export default function COCSectionNav({ sections }: COCSectionNavProps) {
   const jumpTo = (id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
-    // AppShell's scroll container is <main style="overflow: auto">,
-    // NOT the window. window.scrollTo() no-ops in that case, which is
-    // why the v1 implementation pulsed the destination but never
-    // actually moved. scrollIntoView walks up to the nearest scrolling
-    // ancestor regardless of whether that's window or a div, so it
-    // works in both shapes. The destination div's scroll-margin-top
-    // handles the offset for the sticky nav + top bar (set in
-    // AppShell.tsx where each anchor div is rendered).
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Brief amber pulse so the user's eye lands. Cleared after 1.2s.
+    // Third-attempt fix for "chips flicker but don't scroll." The
+    // previous attempts used window.scrollTo (wrong container) then
+    // scrollIntoView (was no-op'ing inside <main>, likely because
+    // gu-scalable applies CSS `zoom` and that confuses the browser's
+    // scroll API for that container in some engines).
+    //
+    // This walks up the DOM to find the nearest ancestor with
+    // overflow-y: auto|scroll AND actual overflowing content (some
+    // wrappers have overflow:auto but aren't scrolling). Then scrolls
+    // THAT container directly via scrollTo on a computed offset —
+    // works regardless of what scroll API quirks exist.
+    let parent: HTMLElement | null = el.parentElement;
+    let scrollContainer: HTMLElement | null = null;
+    while (parent && parent !== document.documentElement) {
+      const style = window.getComputedStyle(parent);
+      const oy = style.overflowY;
+      if (
+        (oy === 'auto' || oy === 'scroll') &&
+        parent.scrollHeight > parent.clientHeight
+      ) {
+        scrollContainer = parent;
+        break;
+      }
+      parent = parent.parentElement;
+    }
+
+    if (scrollContainer) {
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      // elRect.top is relative to viewport; containerRect.top tells us
+      // where the scroll container's viewport starts. Their delta is
+      // how far the element is from the container top in the current
+      // scroll position. Add scrollTop to get the absolute target,
+      // subtract 72 to clear the sticky nav.
+      const target = elRect.top - containerRect.top + scrollContainer.scrollTop - 72;
+      scrollContainer.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    } else {
+      // Fallback: try scrollIntoView, then window.scrollTo
+      try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {
+        const y = el.getBoundingClientRect().top + window.pageYOffset - 72;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }
+
+    // Brief green pulse so the user's eye lands. Cleared after 1.2s.
     el.classList.add('coc-section-flash');
     window.setTimeout(() => el.classList.remove('coc-section-flash'), 1200);
   };
