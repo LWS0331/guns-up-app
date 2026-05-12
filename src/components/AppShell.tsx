@@ -2020,7 +2020,7 @@ const AppShell: React.FC<AppShellProps> = ({
 
             {/* Battle Plan Reference — dedicated section */}
             {currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate && (
-              <div id="coc-battle-plan" style={{ scrollMarginTop: 116 }}>
+              <div id="coc-battle-plan" style={{ scrollMarginTop: 72 }}>
                 <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true}
                   operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
               </div>
@@ -2028,28 +2028,28 @@ const AppShell: React.FC<AppShellProps> = ({
 
             {/* Daily Brief Reference — dedicated section */}
             {currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date && (
-              <div id="coc-daily-brief" style={{ scrollMarginTop: 116 }}>
+              <div id="coc-daily-brief" style={{ scrollMarginTop: 72 }}>
                 <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} />
               </div>
             )}
 
-            <div id="coc-dashboard" style={{ scrollMarginTop: 116 }}>
+            <div id="coc-dashboard" style={{ scrollMarginTop: 72 }}>
               <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
             </div>
 
-            <div id="coc-leaderboard" style={{ scrollMarginTop: 116 }}>
+            <div id="coc-leaderboard" style={{ scrollMarginTop: 72 }}>
               <Leaderboard operators={operators} currentUser={currentUser} />
             </div>
-            <div id="coc-achievements" style={{ marginTop: 20, scrollMarginTop: 116 }}>
+            <div id="coc-achievements" style={{ marginTop: 20, scrollMarginTop: 72 }}>
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.achievements')}</h3>
               <Achievements operator={currentSelectedOp} />
             </div>
-            <div id="coc-squad" style={{ marginTop: 20, scrollMarginTop: 116 }}>
+            <div id="coc-squad" style={{ marginTop: 20, scrollMarginTop: 72 }}>
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.squad_feed')}</h3>
               <SocialFeed operators={operators} currentOperator={currentSelectedOp} />
             </div>
             {currentSelectedOp.betaUser && (
-              <div id="coc-feedback" style={{ marginTop: 20, scrollMarginTop: 116 }}>
+              <div id="coc-feedback" style={{ marginTop: 20, scrollMarginTop: 72 }}>
                 <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff4444', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.beta_feedback')}</h3>
                 <BetaFeedback operatorId={currentSelectedOp.id} callsign={currentSelectedOp.callsign} />
               </div>
