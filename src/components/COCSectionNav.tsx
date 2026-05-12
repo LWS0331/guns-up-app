@@ -43,10 +43,15 @@ export default function COCSectionNav({ sections }: COCSectionNavProps) {
   const jumpTo = (id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
-    // Account for the sticky nav itself + app top bar when scrolling.
-    // 56 (top bar) + ~52 (this nav) = ~108px offset.
-    const y = el.getBoundingClientRect().top + window.pageYOffset - 116;
-    window.scrollTo({ top: y, behavior: 'smooth' });
+    // AppShell's scroll container is <main style="overflow: auto">,
+    // NOT the window. window.scrollTo() no-ops in that case, which is
+    // why the v1 implementation pulsed the destination but never
+    // actually moved. scrollIntoView walks up to the nearest scrolling
+    // ancestor regardless of whether that's window or a div, so it
+    // works in both shapes. The destination div's scroll-margin-top
+    // handles the offset for the sticky nav + top bar (set in
+    // AppShell.tsx where each anchor div is rendered).
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     // Brief amber pulse so the user's eye lands. Cleared after 1.2s.
     el.classList.add('coc-section-flash');
     window.setTimeout(() => el.classList.remove('coc-section-flash'), 1200);
@@ -75,7 +80,13 @@ export default function COCSectionNav({ sections }: COCSectionNavProps) {
         aria-label="Command Center sections"
         style={{
           position: 'sticky',
-          top: 56,
+          // top is relative to the scrolling ancestor's viewport — and
+          // that's <main>, not window. <main> already starts below the
+          // app's top bar, so top: 0 here means "stick at the top of
+          // the scroll viewport." Using a non-zero offset would leave
+          // a dead band of content visible above the nav as the user
+          // scrolls.
+          top: 0,
           zIndex: 30,
           marginBottom: 16,
           marginLeft: -16,
