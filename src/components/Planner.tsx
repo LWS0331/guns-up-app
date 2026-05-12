@@ -10,6 +10,7 @@ import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import { VoiceCommand } from '@/components/VoiceInput';
 import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice } from '@/lib/tts';
+import { resolveRestSeconds } from '@/lib/restTimer';
 import VideoModal from '@/components/VideoModal';
 import WarmupMovementCard from '@/components/WarmupMovementCard';
 import HRZoneGauge from '@/components/HRZoneGauge';
@@ -2885,17 +2886,22 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               sets[nowSetIdx] = { ...sets[nowSetIdx], completed: true };
               return { ...prev, [block.id]: { ...blockData, sets } };
             });
-            // Auto-start rest from the prescription string.
-            const restMatch = block.prescription?.match(/(?:rest|Rest|REST)\s*:?\s*(\d+)\s*:?\s*(\d+)?/i);
-            if (restMatch) {
-              const mins = restMatch[2] !== undefined ? parseInt(restMatch[1]) : 0;
-              const secs = restMatch[2] !== undefined ? parseInt(restMatch[2]) : parseInt(restMatch[1]);
-              const totalSecs = mins * 60 + secs;
-              if (totalSecs > 0) {
-                setRestTimer(totalSecs);
-                setRestTimerMax(totalSecs);
-                setRestRunning(true);
-              }
+            // Auto-start rest (WS2). Resolver checks the prescription
+            // string with a broadened regex bank, falls back to the
+            // operator's defaultRestSec preference, then to the app
+            // default. Single positive number unless the operator has
+            // opted out by setting defaultRestSec=0. Replaces the old
+            // inline regex which only matched "rest 2:00" style hints
+            // — anything else silently no-op'd, leaving the operator
+            // to time their own rest.
+            const rest = resolveRestSeconds(
+              block.prescription,
+              operator.preferences?.defaultRestSec,
+            );
+            if (rest.seconds > 0) {
+              setRestTimer(rest.seconds);
+              setRestTimerMax(rest.seconds);
+              setRestRunning(true);
             }
             // Stepped flow: if this was the last set of the block,
             // auto-advance the stepper cursor to the next step. Defer
