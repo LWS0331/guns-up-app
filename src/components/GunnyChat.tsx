@@ -2943,6 +2943,13 @@ ${mealSuggestion}`;
         const today = getLocalDateStr();
         let workingOp = operator;
         let touched = false;
+        // WS3 fix — quick-action path was the second silent-failure
+        // site for workout mods (the main chat-handler path already
+        // notifies via setMessages, but this path only console.warn'd).
+        // Same pattern: collect failures, surface one to the user
+        // via the same chat-note channel the main handler uses when
+        // nothing was actually applied.
+        const qaFailures: string[] = [];
         for (const mod of qaMods) {
           if (!mod || typeof mod !== 'object') continue;
           if (mod.type === 'prefill_weights') {
@@ -2951,7 +2958,12 @@ ${mealSuggestion}`;
             continue;
           }
           const current = workingOp.workouts?.[today];
-          if (!current) continue;
+          if (!current) {
+            qaFailures.push(
+              `No workout planned for today — couldn't ${mod.type.replace(/_/g, ' ')}.`,
+            );
+            continue;
+          }
           try {
             // Quick-action path mirrors the chat-handler updates above:
             // unwrap the result + log/skip silent no-ops.
@@ -2965,12 +2977,26 @@ ${mealSuggestion}`;
               wasModification = true;
             } else {
               console.warn('[gunny-mod:quick-action] no-op:', result.reason, mod);
+              qaFailures.push(result.reason || `${mod.type} didn't match anything in your workout.`);
             }
           } catch (e) {
             console.error('applyWorkoutModification (quick action) failed:', e);
+            qaFailures.push(`${mod.type} threw an error — see console.`);
           }
         }
         if (touched && onUpdateOperator) onUpdateOperator(workingOp);
+        // Surface only when nothing was applied — same convention as
+        // the main chat-handler path above. Avoids spam on partial
+        // batches where some mods succeeded.
+        if (qaFailures.length > 0 && !touched) {
+          const note = qaFailures[0];
+          setMessages(prev => [...prev, {
+            id: 'gunny-qa-mod-note-' + Date.now(),
+            role: 'gunny',
+            text: `⚠ Heads up — I tried to apply that quick action but couldn't find the right exercise to act on. ${note} Try naming the exercise exactly as it appears, or open the workout and tell me which one.`,
+            timestamp: new Date(),
+          }]);
+        }
       }
 
       if (!wasModification && apiResult?.workoutData) {
