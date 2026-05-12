@@ -15,6 +15,7 @@ import UserSwitcher from '@/components/UserSwitcher';
 // signup. Picker still lives on LoginScreen.
 import { useLanguage } from '@/lib/i18n';
 import COCDashboard from '@/components/COCDashboard';
+import COCSectionNav, { type COCNavSection } from '@/components/COCSectionNav';
 import Planner, { WorkoutModeState } from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
@@ -1993,30 +1994,62 @@ const AppShell: React.FC<AppShellProps> = ({
               </div>
             )}
 
+            {/* WS1 — sticky section nav so leaderboard / achievements /
+                squad / feedback aren't buried below the fold. Sections
+                with conditional render (BATTLE_PLAN / DAILY_BRIEF /
+                FEEDBACK) are filtered out when absent so the chip row
+                only surfaces destinations the operator can actually
+                reach. */}
+            {(() => {
+              const navSections: COCNavSection[] = [];
+              if (currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate) {
+                navSections.push({ id: 'coc-battle-plan', labelKey: 'coc.nav.battle_plan', accent: '#00ff41' });
+              }
+              if (currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date) {
+                navSections.push({ id: 'coc-daily-brief', labelKey: 'coc.nav.daily_brief', accent: '#FF8C00' });
+              }
+              navSections.push({ id: 'coc-dashboard', labelKey: 'coc.nav.dashboard', accent: '#00ff41' });
+              navSections.push({ id: 'coc-leaderboard', labelKey: 'coc.nav.leaderboard', accent: '#FF8C00' });
+              navSections.push({ id: 'coc-achievements', labelKey: 'coc.nav.achievements', accent: '#FF8C00' });
+              navSections.push({ id: 'coc-squad', labelKey: 'coc.nav.squad', accent: '#00ff41' });
+              if (currentSelectedOp.betaUser) {
+                navSections.push({ id: 'coc-feedback', labelKey: 'coc.nav.feedback', accent: '#ff4444' });
+              }
+              return <COCSectionNav sections={navSections} />;
+            })()}
+
             {/* Battle Plan Reference — dedicated section */}
             {currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate && (
-              <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true}
-                operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
+              <div id="coc-battle-plan" style={{ scrollMarginTop: 116 }}>
+                <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true}
+                  operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
+              </div>
             )}
 
             {/* Daily Brief Reference — dedicated section */}
             {currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date && (
-              <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} />
+              <div id="coc-daily-brief" style={{ scrollMarginTop: 116 }}>
+                <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} />
+              </div>
             )}
 
-            <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
+            <div id="coc-dashboard" style={{ scrollMarginTop: 116 }}>
+              <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
+            </div>
 
-            <Leaderboard operators={operators} currentUser={currentUser} />
-            <div style={{ marginTop: 20 }}>
+            <div id="coc-leaderboard" style={{ scrollMarginTop: 116 }}>
+              <Leaderboard operators={operators} currentUser={currentUser} />
+            </div>
+            <div id="coc-achievements" style={{ marginTop: 20, scrollMarginTop: 116 }}>
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.achievements')}</h3>
               <Achievements operator={currentSelectedOp} />
             </div>
-            <div style={{ marginTop: 20 }}>
+            <div id="coc-squad" style={{ marginTop: 20, scrollMarginTop: 116 }}>
               <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.squad_feed')}</h3>
               <SocialFeed operators={operators} currentOperator={currentSelectedOp} />
             </div>
             {currentSelectedOp.betaUser && (
-              <div style={{ marginTop: 20 }}>
+              <div id="coc-feedback" style={{ marginTop: 20, scrollMarginTop: 116 }}>
                 <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff4444', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.beta_feedback')}</h3>
                 <BetaFeedback operatorId={currentSelectedOp.id} callsign={currentSelectedOp.callsign} />
               </div>

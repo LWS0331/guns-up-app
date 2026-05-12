@@ -177,6 +177,15 @@ export const translations = {
     // Post-workout analysis (WS4) — completion-screen surfaces.
     'post_workout.vs_last_time': 'VS LAST SESSION',
     'post_workout.adherence': 'ADHERENCE',
+    // WS1 — COC section navigation chips
+    'coc.nav.battle_plan': 'BATTLE PLAN',
+    'coc.nav.daily_brief': 'DAILY BRIEF',
+    'coc.nav.dashboard': 'DASHBOARD',
+    'coc.nav.leaderboard': 'LEADERBOARD',
+    'coc.nav.achievements': 'ACHIEVEMENTS',
+    'coc.nav.squad': 'SQUAD FEED',
+    'coc.nav.feedback': 'FEEDBACK',
+    'notif.tap_to_open': 'TAP TO OPEN',
     'intel.weak_points': 'Weak Points',
     'intel.movements_avoid': 'Movements to Avoid',
     'intel.macro_targets': 'MACRO TARGETS',
@@ -1677,6 +1686,15 @@ export const translations = {
     // Análisis post-entrenamiento (WS4).
     'post_workout.vs_last_time': 'VS ÚLTIMA SESIÓN',
     'post_workout.adherence': 'ADHERENCIA',
+    // WS1 — Chips de navegación del COC
+    'coc.nav.battle_plan': 'PLAN DE BATALLA',
+    'coc.nav.daily_brief': 'INFORME DIARIO',
+    'coc.nav.dashboard': 'PANEL',
+    'coc.nav.leaderboard': 'CLASIFICACIÓN',
+    'coc.nav.achievements': 'LOGROS',
+    'coc.nav.squad': 'ESCUADRÓN',
+    'coc.nav.feedback': 'COMENTARIOS',
+    'notif.tap_to_open': 'TOCA PARA ABRIR',
     'intel.weak_points': 'Puntos Débiles',
     'intel.movements_avoid': 'Movimientos a Evitar',
     'intel.macro_targets': 'OBJETIVOS DE MACROS',
