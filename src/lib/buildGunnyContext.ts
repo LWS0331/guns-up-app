@@ -174,6 +174,21 @@ export function buildFullGunnyContext(
   const recentWorkoutHistory = (() => {
     const dates = Object.keys(workouts).sort().reverse().slice(0, 7);
     if (!dates.length) return 'No workouts logged yet';
+    // Prepend the day-of-week explicitly. Without it, the LLM derives
+    // weekday from the date string AND its training-data sense of
+    // "what day was 2026-05-11?" — and gets it consistently wrong by
+    // one day (operator report May 12: "you called Monday Sunday").
+    // Stamping the canonical weekday here means Gunny just reads it.
+    const weekdayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'long' });
+    const dayOfWeek = (yyyyMmDd: string): string => {
+      try {
+        // T12:00:00 keeps us in the middle of the day so timezone
+        // shifts can't flip us across midnight to the wrong weekday.
+        return weekdayFmt.format(new Date(yyyyMmDd + 'T12:00:00'));
+      } catch {
+        return '';
+      }
+    };
     return dates
       .map(date => {
         const w = workouts[date];
@@ -181,7 +196,8 @@ export function buildFullGunnyContext(
           .filter((b: { type: string }) => b.type === 'exercise')
           .map((b: { exerciseName?: string; prescription?: string }) => `${b.exerciseName} (${b.prescription})`)
           .join(', ');
-        return `${date}: "${w.title || 'Untitled'}" — ${ex}${w.completed ? ' ✅' : ''}`;
+        const wd = dayOfWeek(date);
+        return `${wd ? wd + ' ' : ''}${date}: "${w.title || 'Untitled'}" — ${ex}${w.completed ? ' ✅' : ''}`;
       })
       .join('\n');
   })();
