@@ -22,6 +22,7 @@ import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
 import JuniorIntakeForm from '@/components/JuniorIntakeForm';
 import ParentDashboard from '@/components/ParentDashboard';
+import ParentLedWorkoutMode from '@/components/ParentLedWorkoutMode';
 import DailyOps from '@/components/DailyOps';
 import { hasCommanderAccess } from '@/lib/tierGates';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
@@ -323,6 +324,10 @@ const AppShell: React.FC<AppShellProps> = ({
   // Drives the per-message HEAR IT / STOP button state.
   const [panelSpeakingIdx, setPanelSpeakingIdx] = useState<number | null>(null);
   const [workoutModeState, setWorkoutModeState] = useState<WorkoutModeState>({ active: false, workoutTitle: '', exercises: [] });
+  // Parent-Led Workout Mode active session — when set, the parent_hub
+  // tab swaps from ParentDashboard to ParentLedWorkoutMode (full-screen
+  // takeover, same pattern as adult workout mode in the COC tab).
+  const [parentLedActive, setParentLedActive] = useState<{ junior: Operator; workout: Workout; dateISO: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
@@ -2123,12 +2128,35 @@ const AppShell: React.FC<AppShellProps> = ({
         // parentIds. Read-only visibility into the linked juniors' training,
         // safety events, emergency contact. The junior is told their parent
         // sees this (transparency disclosed in JuniorIntakeForm welcome).
+        //
+        // When a parent-led workout is active, the dashboard is replaced
+        // with the full-screen workout execution surface (same takeover
+        // pattern Planner uses for adult workout mode in the COC tab).
+        if (parentLedActive) {
+          return (
+            <div style={{ padding: '16px 18px' }}>
+              <ParentLedWorkoutMode
+                parent={currentUser}
+                junior={parentLedActive.junior}
+                workout={parentLedActive.workout}
+                dateISO={parentLedActive.dateISO}
+                onUpdateJunior={onUpdateOperator}
+                onExit={() => setParentLedActive(null)}
+                onOpenGunny={() => setActiveTab('gunny')}
+                onSendGunnyMessage={sendGunnyVoiceMessage}
+              />
+            </div>
+          );
+        }
         return (
           <div style={{ padding: '16px 18px' }}>
             <ParentDashboard
               parent={currentUser}
               juniors={linkedJuniorsForHub}
               onUpdateJunior={onUpdateOperator}
+              onStartSession={(junior, workout) => {
+                setParentLedActive({ junior, workout, dateISO: getLocalDateStr() });
+              }}
             />
           </div>
         );
