@@ -1367,7 +1367,75 @@ export const OPERATORS: Operator[] = [
 
     prs: [],                                         // Junior PR board: sport-performance only
     injuries: [],
-    workouts: {},
+    // One seeded session so the Parent-Led Workout Mode has something
+    // to launch on first use. Age 4, Tier 1 (play-based, ~15 min total)
+    // per the female-youth-soccer-4-10 corpus reference. Each block's
+    // prescription is written as a script the parent reads aloud — that
+    // matches how ParentLedWorkoutMode renders block.prescription as a
+    // "cue card" rather than parsing it for sets/reps.
+    workouts: {
+      '2026-05-13': {
+        id: 'wo-brielle-2026-05-13',
+        date: '2026-05-13',
+        title: 'Bumblebee · Soft Feet & Bear Walks',
+        notes: 'Tier 1 play-based. Stop early if attention drops — variety > duration.',
+        warmup:
+          'March in place 30s\n' +
+          'Arm circles 10 each way\n' +
+          'Bunny hops in place 10',
+        blocks: [
+          {
+            type: 'exercise',
+            id: 'wo-brielle-2026-05-13-b1',
+            sortOrder: 0,
+            exerciseName: 'Bear walks across the room',
+            prescription:
+              'Say: "Show me your bear walk! Hands and feet on the ground, walk to the wall and back."\n' +
+              'Watch for: hands flat, knees off the ground briefly, bottom not too high.\n' +
+              '2 trips. Make it a game — race the bear back home.',
+            isLinkedToNext: false,
+          },
+          {
+            type: 'exercise',
+            id: 'wo-brielle-2026-05-13-b2',
+            sortOrder: 1,
+            exerciseName: 'Soft-feet jumps over a line',
+            prescription:
+              'Place tape or a line on the floor. Say: "Jump over the line and land like a ninja — sooo quiet."\n' +
+              'Watch for: knees over toes on landing, not stiff-legged. Cue "soft feet" if she lands hard.\n' +
+              '8-10 jumps. Mix in a forwards/backwards/side-to-side variation if she\'s engaged.',
+            isLinkedToNext: false,
+          },
+          {
+            type: 'exercise',
+            id: 'wo-brielle-2026-05-13-b3',
+            sortOrder: 2,
+            exerciseName: 'Toe-taps on the ball',
+            prescription:
+              'Roll a small ball to her feet. Say: "Tap the top of the ball with each foot, super light."\n' +
+              'Watch for: balance on standing leg, eyes on the ball.\n' +
+              '20 taps total (10 per foot). End the drill the moment focus drifts.',
+            isLinkedToNext: false,
+          },
+          {
+            type: 'exercise',
+            id: 'wo-brielle-2026-05-13-b4',
+            sortOrder: 3,
+            exerciseName: 'Race-back game (end on fun)',
+            prescription:
+              'Pick a finish line. Say: "On 1-2-3, run as fast as you can to the wall and tag it!"\n' +
+              'Run with her. Celebrate the effort — process praise, not "you won".\n' +
+              '3-4 races. Stop while she still wants more.',
+            isLinkedToNext: false,
+          },
+        ],
+        cooldown:
+          'Big stretch — reach for the sky 10s\n' +
+          'Touch toes (or as low as comfy) 10s\n' +
+          'Three deep breaths together',
+        completed: false,
+      },
+    },
     dayTags: {},
 
     preferences: {

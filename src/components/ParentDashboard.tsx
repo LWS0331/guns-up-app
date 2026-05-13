@@ -34,6 +34,10 @@ interface ParentDashboardProps {
   juniors: Operator[];
   onUpdateJunior: (updated: Operator) => void;
   onSelectJuniorForChat?: (junior: Operator) => void;
+  /** Launch the full-screen Parent-Led Workout Mode for this junior + workout.
+   *  When omitted, the START SESSION button hides and the legacy big "LOG
+   *  SESSION DONE" toggle remains the only completion path. */
+  onStartSession?: (junior: Operator, workout: Workout) => void;
 }
 
 // Type labels — color stays static, label resolved at render time via t().
@@ -58,7 +62,7 @@ function formatRelative(iso: string, t: (k: string) => string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSelectJuniorForChat }: ParentDashboardProps) {
+export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSelectJuniorForChat, onStartSession }: ParentDashboardProps) {
   const { t } = useLanguage();
   const [activeJuniorId, setActiveJuniorId] = useState<string>(juniors[0]?.id || '');
   const activeJunior = juniors.find(j => j.id === activeJuniorId) || juniors[0];
@@ -269,6 +273,35 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                  {/* Primary CTA: launch full-screen Parent-Led Workout
+                      Mode. Hidden when onStartSession isn't wired (e.g.
+                      embedded views) so we degrade gracefully to the
+                      legacy LOG SESSION toggle. */}
+                  {onStartSession && !todayWorkout.completed && (
+                    <button
+                      type="button"
+                      onClick={() => onStartSession(activeJunior, todayWorkout)}
+                      style={{
+                        padding: '14px 28px',
+                        background: '#00ff41',
+                        color: '#000',
+                        border: 'none',
+                        fontFamily: 'Orbitron, sans-serif',
+                        fontSize: 14,
+                        fontWeight: 700,
+                        letterSpacing: 1.8,
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        boxShadow: '0 0 12px rgba(0,255,65,0.35)',
+                      }}
+                    >
+                      ▶ {t('parent.workout.start_session')}
+                    </button>
+                  )}
+                  {/* Secondary: keep the legacy LOG SESSION DONE toggle
+                      so a parent who already ran the session offline can
+                      mark it complete without going through the stepped
+                      flow. */}
                   {todayWorkout.completed ? (
                     <button
                       type="button"
@@ -293,14 +326,14 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
                       type="button"
                       onClick={() => handleLogSession(true)}
                       style={{
-                        padding: '14px 28px',
-                        background: '#00b8d4',
-                        color: '#0a0a0a',
-                        border: 'none',
+                        padding: '14px 20px',
+                        background: 'transparent',
+                        color: '#00b8d4',
+                        border: '1px solid #00b8d4',
                         fontFamily: 'Orbitron, sans-serif',
-                        fontSize: 14,
+                        fontSize: 12,
                         fontWeight: 700,
-                        letterSpacing: 1.8,
+                        letterSpacing: 1.5,
                         borderRadius: 4,
                         cursor: 'pointer',
                       }}
