@@ -2896,14 +2896,16 @@ const AppShell: React.FC<AppShellProps> = ({
         return '';
       })()}`}>
         {(() => {
-          // Reorder for the mobile grid: Gunny stays anchored at
-          // slot 3 across layouts so the halo treatment lands in a
-          // consistent visual position. Layouts grow by appending
-          // power tabs to the right.
+          // Reorder for the mobile grid. Gunny anchors at slot 3 in
+          // the 5/6-col layouts (visually centered for 5-col, slightly
+          // left-of-center for 6-col). The 7-col layout shifts Gunny
+          // one slot right so the hero halo lands on the true visual
+          // center (slot 4 of 7) — this case is the trainer-parent
+          // surface (Ruben/Britney) where all three power tabs coexist.
           //
           // Layout (5-col):  [coc] [planner] [GUNNY] [intel] [daily_ops|ops|parent_hub]
           // Layout (6-col):  [coc] [planner] [GUNNY] [intel] [daily_ops] [ops|parent_hub]
-          // Layout (7-col):  [coc] [planner] [GUNNY] [intel] [daily_ops] [parent_hub] [ops]
+          // Layout (7-col):  [coc] [planner] [intel] [GUNNY] [daily_ops] [parent_hub] [ops]
           const byId = new Map(tabs.map(t => [t.id, t] as const));
           const dailyOps = byId.get('daily_ops') ?? null;
           const ops = byId.get('ops') ?? null;
@@ -2915,8 +2917,8 @@ const AppShell: React.FC<AppShellProps> = ({
             ? [
                 byId.get('coc') ?? null,
                 byId.get('planner') ?? null,
-                byId.get('gunny') ?? null,
                 byId.get('intel') ?? null,
+                byId.get('gunny') ?? null,
                 dailyOps,
                 parentHub,
                 ops,
