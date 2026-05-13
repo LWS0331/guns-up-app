@@ -2880,31 +2880,48 @@ const AppShell: React.FC<AppShellProps> = ({
           icon glyph + label structure but reorder so Gunny sits in the
           center with the special halo treatment per the handoff. */}
       <nav className={`ds-tabbar bottom-nav${(() => {
-        // Compute six-column flag synchronously so the parent gets the
-        // right grid template before children render. Six columns
-        // appear when the operator has BOTH a power-tab (ops or
-        // parent_hub) AND daily_ops — typical for admins/trainers who
-        // are also Commander-tier (e.g. founders testing the feature).
+        // Compute column-count flag synchronously so the parent gets
+        // the right grid template before children render. The rare
+        // 7-col case is a trainer-parent (e.g. Ruben/Britney): they
+        // hold Daily Ops + OPS (trainer privileges) AND Parent Hub
+        // (junior operator linked via parentIds) at the same time.
+        // Without this, OPS would win the single "power tab" slot
+        // and Parent Hub would silently disappear on mobile.
         const ids = new Set(tabs.map(t => t.id));
-        const hasPowerTab = ids.has('ops') || ids.has('parent_hub');
+        const hasOps = ids.has('ops');
+        const hasParentHub = ids.has('parent_hub');
         const hasDailyOps = ids.has('daily_ops');
-        return hasPowerTab && hasDailyOps ? ' six-col' : '';
+        if (hasDailyOps && hasOps && hasParentHub) return ' seven-col';
+        if (hasDailyOps && (hasOps || hasParentHub)) return ' six-col';
+        return '';
       })()}`}>
         {(() => {
-          // Reorder for the mobile grid: Gunny stays in the
-          // visually-anchored center slot. We build a 5-slot row for
-          // the common case and a 6-slot row when both Daily Ops AND
-          // a power tab (OPS / PARENT_HUB) need to coexist — e.g. a
-          // founder/admin who's also Commander-tier and wants both
-          // surfaces at thumb-reach.
+          // Reorder for the mobile grid: Gunny stays anchored at
+          // slot 3 across layouts so the halo treatment lands in a
+          // consistent visual position. Layouts grow by appending
+          // power tabs to the right.
           //
           // Layout (5-col):  [coc] [planner] [GUNNY] [intel] [daily_ops|ops|parent_hub]
           // Layout (6-col):  [coc] [planner] [GUNNY] [intel] [daily_ops] [ops|parent_hub]
+          // Layout (7-col):  [coc] [planner] [GUNNY] [intel] [daily_ops] [parent_hub] [ops]
           const byId = new Map(tabs.map(t => [t.id, t] as const));
           const dailyOps = byId.get('daily_ops') ?? null;
-          const powerTab = byId.get('ops') ?? byId.get('parent_hub') ?? null;
-          const sixCol = !!dailyOps && !!powerTab;
-          const slots: (typeof tabs[number] | null)[] = sixCol
+          const ops = byId.get('ops') ?? null;
+          const parentHub = byId.get('parent_hub') ?? null;
+          const powerTab = ops ?? parentHub;
+          const sevenCol = !!dailyOps && !!ops && !!parentHub;
+          const sixCol = !sevenCol && !!dailyOps && !!powerTab;
+          const slots: (typeof tabs[number] | null)[] = sevenCol
+            ? [
+                byId.get('coc') ?? null,
+                byId.get('planner') ?? null,
+                byId.get('gunny') ?? null,
+                byId.get('intel') ?? null,
+                dailyOps,
+                parentHub,
+                ops,
+              ]
+            : sixCol
             ? [
                 byId.get('coc') ?? null,
                 byId.get('planner') ?? null,
