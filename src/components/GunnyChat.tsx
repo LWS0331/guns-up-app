@@ -32,7 +32,101 @@ interface Message {
   text: string;
   timestamp: Date;
   isWorkout?: boolean;
-  image?: string; // base64 data URL for vision analysis
+  image?: string; // base64 data URL for vision analysis (single still)
+  images?: string[]; // base64 data URLs in temporal order — video form-check keyframes
+}
+
+// Video form-check support — limits chosen to keep upload + LLM cost bounded:
+// 30MB cap matches what most phones produce for ~8s 1080p clips, and 8s is
+// roughly 3-5 reps of a typical compound lift. We extract 5 evenly-spaced
+// JPEG stills client-side because Claude has no native video input.
+const VIDEO_MAX_BYTES = 30 * 1024 * 1024;
+const VIDEO_MAX_DURATION_SEC = 8;
+const VIDEO_FRAME_COUNT = 5;
+const VIDEO_FRAME_QUALITY = 0.85;
+const VIDEO_FRAME_MAX_DIM = 1280;
+
+/**
+ * Extract `count` evenly-spaced JPEG keyframes from a video file. Returns the
+ * frames as base64 data URLs in temporal order. Frames are downscaled to fit
+ * `VIDEO_FRAME_MAX_DIM` on the long edge so the per-frame payload stays sane
+ * after Claude's vision tokenization.
+ */
+async function extractVideoKeyframes(file: File, count: number): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'auto';
+    video.muted = true;
+    // Required so iOS Safari will decode + paint frames offscreen rather than
+    // demanding a user gesture and a visible <video> element.
+    video.playsInline = true;
+    video.src = url;
+
+    const cleanup = () => URL.revokeObjectURL(url);
+
+    video.onerror = () => { cleanup(); reject(new Error('Could not read video file')); };
+
+    video.onloadedmetadata = async () => {
+      const duration = video.duration;
+      if (!isFinite(duration) || duration <= 0) {
+        cleanup();
+        reject(new Error('Could not determine video duration'));
+        return;
+      }
+      if (duration > VIDEO_MAX_DURATION_SEC + 0.25) {
+        cleanup();
+        reject(new Error(`Clip too long (${duration.toFixed(1)}s) — keep it under ${VIDEO_MAX_DURATION_SEC}s`));
+        return;
+      }
+
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) { cleanup(); reject(new Error('Video has no visual track')); return; }
+      const scale = Math.min(1, VIDEO_FRAME_MAX_DIM / Math.max(w, h));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { cleanup(); reject(new Error('Canvas 2D context unavailable')); return; }
+
+      // Sample inside [5%, 95%] of the clip to avoid black-frame heads/tails.
+      const start = duration * 0.05;
+      const end = duration * 0.95;
+      const stamps: number[] = [];
+      for (let i = 0; i < count; i++) {
+        stamps.push(start + ((end - start) * i) / Math.max(1, count - 1));
+      }
+
+      const frames: string[] = [];
+      try {
+        for (const t of stamps) {
+          await new Promise<void>((res, rej) => {
+            const onSeeked = () => {
+              video.removeEventListener('seeked', onSeeked);
+              video.removeEventListener('error', onErr);
+              res();
+            };
+            const onErr = () => {
+              video.removeEventListener('seeked', onSeeked);
+              video.removeEventListener('error', onErr);
+              rej(new Error('Seek failed'));
+            };
+            video.addEventListener('seeked', onSeeked);
+            video.addEventListener('error', onErr);
+            video.currentTime = Math.min(t, Math.max(0, duration - 0.05));
+          });
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          frames.push(canvas.toDataURL('image/jpeg', VIDEO_FRAME_QUALITY));
+        }
+        cleanup();
+        resolve(frames);
+      } catch (err) {
+        cleanup();
+        reject(err instanceof Error ? err : new Error('Frame extraction failed'));
+      }
+    };
+  });
 }
 
 // GOAL_PATHS is still used by the "show me goal paths" local handler below —
@@ -500,6 +594,11 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
+  // Video form-check: client-side keyframe extraction produces 4-6 stills sent
+  // as a single user message. When this is non-null `pendingImage` is left null
+  // — the two states are mutually exclusive.
+  const [pendingFrames, setPendingFrames] = useState<string[] | null>(null);
+  const [extractingVideo, setExtractingVideo] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
@@ -1564,6 +1663,7 @@ ${mealSuggestion}`;
           .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
           .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, ''),
         ...(m.image ? { image: m.image } : {}),
+        ...(m.images && m.images.length > 0 ? { images: m.images } : {}),
       }));
 
       const operatorContext = buildFullGunnyContext(operator, { language });
@@ -1855,14 +1955,23 @@ ${mealSuggestion}`;
     // indicator up, or streaming into a placeholder), ignore this tap so the
     // user can't stack duplicate messages while waiting for Gunny's reply.
     if (isTyping) return;
-    if (!inputValue.trim() && !pendingImage) return;
-    const text = inputValue || (pendingImage ? 'Analyze this image' : '');
+    if (!inputValue.trim() && !pendingImage && !pendingFrames) return;
+    const hasFrames = !!pendingFrames && pendingFrames.length > 0;
+    const text = inputValue || (hasFrames ? 'Check my form on this clip' : pendingImage ? 'Analyze this image' : '');
     const lower = text.toLowerCase();
-    const userMessage: Message = { id: 'user-' + Date.now(), role: 'user', text, timestamp: new Date(), ...(pendingImage && { image: pendingImage }) };
+    const userMessage: Message = {
+      id: 'user-' + Date.now(),
+      role: 'user',
+      text,
+      timestamp: new Date(),
+      ...(pendingImage && !hasFrames && { image: pendingImage }),
+      ...(hasFrames && { images: pendingFrames as string[] }),
+    };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInputValue('');
     setPendingImage(null);
+    setPendingFrames(null);
     setIsTyping(true); setThinkingStartedAt(Date.now());
 
     // Track Gunny chat event
@@ -3859,53 +3968,83 @@ ${mealSuggestion}`;
           <input
             ref={imageInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/mp4,video/quicktime"
             style={{ display: 'none' }}
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
-              // Hard cap at 25 MB raw — beyond that, decoding the image
-              // into a canvas can OOM mobile Safari. Below that, we
-              // resize + recompress so the base64 payload fits the
-              // Anthropic 5 MB API limit. See compressImageForVision.
+              // Reset the input early so picking the same file twice still
+              // fires onChange (matters for both image and video paths).
+              e.target.value = '';
+
+              const isVideo = file.type.startsWith('video/');
+              if (isVideo) {
+                if (file.size > VIDEO_MAX_BYTES) {
+                  alert(`Video must be under ${VIDEO_MAX_BYTES / (1024 * 1024)}MB. Trim it down or shorten the clip.`);
+                  return;
+                }
+                setExtractingVideo(true);
+                try {
+                  const frames = await extractVideoKeyframes(file, VIDEO_FRAME_COUNT);
+                  setPendingImage(null);
+                  setPendingFrames(frames);
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : 'Could not process video');
+                } finally {
+                  setExtractingVideo(false);
+                }
+                return;
+              }
+
+              // Single image path. Hard cap at 25 MB raw — beyond that,
+              // decoding into a canvas can OOM mobile Safari. Below that,
+              // compressImageForVision resizes + recompresses so the base64
+              // payload fits the Anthropic 5 MB API limit.
               if (file.size > 25 * 1024 * 1024) {
                 alert('Image is too large (max 25 MB raw). Try a smaller photo.');
-                e.target.value = '';
                 return;
               }
               try {
                 const dataUrl = await compressImageForVision(file);
+                setPendingFrames(null);
                 setPendingImage(dataUrl);
               } catch (err) {
                 console.error('[GunnyChat:imageAttach] failed:', err);
                 alert("Couldn't process that image. Try a different photo.");
               }
-              e.target.value = '';
             }}
           />
 
-          {/* Image attach tool — uses .composer-tool styling but
-              flips to a danger-orange treatment when an image is
-              already pending so users see the attached state. */}
-          <button
-            type="button"
-            onClick={() => imageInputRef.current?.click()}
-            title={t('gunnychat.attach_image')}
-            aria-label={t('gunnychat.attach_image')}
-            style={{
-              background: pendingImage ? 'rgba(255,107,53,0.4)' : 'rgba(0,255,65,0.08)',
-              border: `1px solid ${pendingImage ? '#ff6b35' : 'var(--border-green-soft)'}`,
-              color: pendingImage ? '#ff6b35' : 'var(--green)',
-              width: 32,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              lineHeight: 1,
-            }}
-          >
-            <Icon.Camera size={16} />
-          </button>
+          {/* Image / video attach tool — uses .composer-tool styling but
+              flips to a danger-orange treatment when media is already
+              pending so users see the attached state. Single image OR
+              extracted video frames trigger the attached look. */}
+          {(() => {
+            const hasMedia = !!pendingImage || !!pendingFrames;
+            return (
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                title={t('gunnychat.attach_image')}
+                aria-label={t('gunnychat.attach_image')}
+                disabled={extractingVideo}
+                style={{
+                  background: hasMedia ? 'rgba(255,107,53,0.4)' : 'rgba(0,255,65,0.08)',
+                  border: `1px solid ${hasMedia ? '#ff6b35' : 'var(--border-green-soft)'}`,
+                  color: hasMedia ? '#ff6b35' : 'var(--green)',
+                  width: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: extractingVideo ? 'wait' : 'pointer',
+                  lineHeight: 1,
+                  opacity: extractingVideo ? 0.6 : 1,
+                }}
+              >
+                <Icon.Camera size={16} />
+              </button>
+            );
+          })()}
 
           <button
             type="button"
@@ -3913,7 +4052,7 @@ ${mealSuggestion}`;
             // Class kept as send-btn AND composer-send so the
             // VoiceInput's auto-send query selector still works.
             className="send-btn composer-send"
-            disabled={isTyping || (!inputValue.trim() && !pendingImage)}
+            disabled={isTyping || extractingVideo || (!inputValue.trim() && !pendingImage && !pendingFrames)}
             aria-busy={isTyping || undefined}
             style={{
               background: 'var(--green)',
@@ -3934,12 +4073,32 @@ ${mealSuggestion}`;
           </button>
         </div>
       </div>
+      {/* Extraction in-progress strip (video → keyframes). */}
+      {extractingVideo && (
+        <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(0,255,65,0.06)', borderTop: '1px solid rgba(0,255,65,0.2)' }}>
+          <span style={{ fontFamily: 'Chakra Petch, sans-serif', fontSize: 11, color: 'var(--green)' }}>EXTRACTING KEYFRAMES…</span>
+        </div>
+      )}
       {/* Image preview */}
       {pendingImage && (
         <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,107,53,0.08)', borderTop: '1px solid rgba(255,107,53,0.2)' }}>
           <img src={pendingImage} alt="Preview" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #333' }} />
           <span style={{ fontFamily: 'Chakra Petch, sans-serif', fontSize: 11, color: '#ff6b35' }}>IMAGE ATTACHED — Gunny will analyze</span>
           <button onClick={() => setPendingImage(null)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: 14 }}>✕</button>
+        </div>
+      )}
+      {/* Video keyframes preview — strip of stills in temporal order. */}
+      {pendingFrames && pendingFrames.length > 0 && (
+        <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,107,53,0.08)', borderTop: '1px solid rgba(255,107,53,0.2)' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {pendingFrames.map((src, i) => (
+              <img key={i} src={src} alt={`Frame ${i + 1}`} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, border: '1px solid #333' }} />
+            ))}
+          </div>
+          <span style={{ fontFamily: 'Chakra Petch, sans-serif', fontSize: 11, color: '#ff6b35' }}>
+            FORM-CHECK VIDEO — {pendingFrames.length} STILLS — Gunny will analyze across frames
+          </span>
+          <button onClick={() => setPendingFrames(null)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: 14 }}>✕</button>
         </div>
       )}
     </div>

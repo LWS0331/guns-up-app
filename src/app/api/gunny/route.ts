@@ -4043,7 +4043,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // whole time. Pull the stored thread, splice out the overlap with the
     // client-supplied tail, and prepend the older turns so the model sees
     // the real conversation.
-    type IncomingMsg = { role?: string; text?: string; content?: string; image?: string };
+    type IncomingMsg = { role?: string; text?: string; content?: string; image?: string; images?: string[] };
     let mergedMessages: IncomingMsg[] = messages;
     const STRUCTURED_TAG_RE = /<(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json|daily_ops_block_override)>[\s\S]*?<\/(?:meal_json|meal_delete|pr_json|workout_json|workout_modification|workout_delete|profile_json|voice_control|hydration_json|readiness_json|injury_modification|day_tag_json|nutrition_targets_json|goal_json|dietary_json|macrocycle_json|pr_modification|pr_delete|wearable_control|notification_json|trainer_note_json|daily_ops_json|daily_ops_block_override)>/g;
     const historyChatType: string | null =
@@ -4117,7 +4117,10 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     }
 
     // Convert messages to Anthropic format — filter empty and ensure first msg is user role
-    // Support vision: if a message has an image field (base64 data URL), build content blocks
+    // Support vision: a user message may carry either a single `image` (legacy)
+    // or an `images` array (video form-check: client-extracted keyframes in
+    // temporal order). Both produce one Claude image content block per kept
+    // frame.
     //
     // Anthropic vision API rejects any image whose BASE64 payload is > 5 MB
     // with HTTP 400 invalid_request_error. The reject blows up the entire
@@ -4127,43 +4130,86 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // subsequent turn — including text-only follow-ups — failed because
     // the persisted history slice still contained the oversized image).
     //
-    // Defense: strip images whose base64 chunk would exceed the API's
-    // 5 MB cap. We keep the message's text so the conversation thread
-    // stays intact; only the offending image is replaced with a short
-    // placeholder so Gunny knows there WAS a photo there. New uploads
-    // are already client-side-compressed (see src/lib/imageCompress.ts);
-    // this is the chat-history poison-cleanup half of the fix.
+    // Defense: strip frames whose base64 chunk would exceed the cap.
+    // We keep the message's text so the conversation thread stays intact;
+    // only the offending frame(s) are dropped, and a short placeholder is
+    // stamped into the text so Gunny knows something was there. New
+    // uploads are already client-side-compressed (still uploads via
+    // src/lib/imageCompress.ts; video keyframes via the extractor in
+    // GunnyChat.tsx); this is the chat-history poison-cleanup half of
+    // the fix and applies to every frame regardless of source.
     const MAX_IMAGE_BASE64_BYTES = 5 * 1024 * 1024;
     let strippedHistoryImages = 0;
     const anthropicMessages = mergedMessages
-      .map((msg: { role?: string; text?: string; content?: string; image?: string }) => {
+      .map((msg: { role?: string; text?: string; content?: string; image?: string; images?: string[] }) => {
         const role = msg.role === 'gunny' ? 'assistant' as const : 'user' as const;
         const text = msg.text || msg.content || '';
-        // If user message has an image, build multi-part content array
-        if (msg.image && role === 'user') {
+
+        // Collect frames in order: legacy `image` first, then any `images[]`.
+        // De-dupe so a client that double-sets both fields doesn't double-pay.
+        const rawFrames: string[] = [];
+        if (msg.image) rawFrames.push(msg.image);
+        if (Array.isArray(msg.images)) {
+          for (const f of msg.images) {
+            if (typeof f === 'string' && f && !rawFrames.includes(f)) rawFrames.push(f);
+          }
+        }
+
+        if (rawFrames.length > 0 && role === 'user') {
           type SupportedMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
           const ALLOWED_MEDIA: SupportedMediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-          const parts: Array<{ type: 'image'; source: { type: 'base64'; media_type: SupportedMediaType; data: string } } | { type: 'text'; text: string }> = [];
-          // Extract media type and base64 data from data URL
-          const match = msg.image.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-          const oversized = match && match[2].length > MAX_IMAGE_BASE64_BYTES;
-          if (oversized) {
-            // Drop the image but stamp the text so context isn't lost.
-            // Don't emit the image part at all — Anthropic counts every
-            // base64 byte we send, even history.
-            strippedHistoryImages++;
-          } else if (match && ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) {
-            parts.push({ type: 'image', source: { type: 'base64', media_type: match[1] as SupportedMediaType, data: match[2] } });
+          const parts: Array<
+            | { type: 'image'; source: { type: 'base64'; media_type: SupportedMediaType; data: string } }
+            | { type: 'text'; text: string }
+          > = [];
+
+          // Walk every frame, apply the per-image size cap, and skip anything
+          // unparseable / disallowed / oversized. `droppedThisMessage` tracks
+          // strips on THIS turn so we can stamp the text with an accurate
+          // count even if multiple frames in one message exceed the cap.
+          let droppedThisMessage = 0;
+          for (const frame of rawFrames) {
+            const match = frame.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+            if (!match || !ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) continue;
+            if (match[2].length > MAX_IMAGE_BASE64_BYTES) {
+              strippedHistoryImages++;
+              droppedThisMessage++;
+              continue;
+            }
+            parts.push({
+              type: 'image',
+              source: { type: 'base64', media_type: match[1] as SupportedMediaType, data: match[2] },
+            });
           }
-          let outText = text;
-          if (oversized) {
-            outText = (text ? `${text}\n` : '') + '[image omitted from history — exceeded vision API size limit]';
+
+          // If nothing decoded / survived the cap, fall back to a plain text
+          // message rather than sending an empty multi-part content array
+          // (Anthropic rejects). Stamp the text if we dropped frames so the
+          // conversation context still mentions there was an image.
+          if (parts.length === 0) {
+            const fallback = droppedThisMessage > 0
+              ? `${text ? `${text}\n` : ''}[image omitted from history — exceeded vision API size limit]`
+              : (text || 'Analyze this image.');
+            return { role, content: fallback };
           }
-          if (outText.trim()) {
-            parts.push({ type: 'text', text: outText });
+
+          // Multi-frame messages = client-side video keyframe extraction. Tell
+          // Gunny the frames are temporally ordered stills from a form-check
+          // clip so it critiques the movement across the sequence rather than
+          // each frame in isolation. Single-frame messages keep the legacy
+          // "Analyze this image" default. The lead/count reflects what
+          // ACTUALLY made it past the size cap, not what the client sent.
+          let userText: string;
+          if (parts.length > 1) {
+            const lead = `[Form-check video — ${parts.length} stills attached above in temporal order, earliest first. Comment on rep tempo, bar/limb path, depth/ROM, and any safety issues across the sequence. Treat the frames as a single movement, not as independent photos.]`;
+            userText = text.trim() ? `${lead}\n\n${text}` : lead;
           } else {
-            parts.push({ type: 'text', text: 'Analyze this image.' });
+            userText = text.trim() || 'Analyze this image.';
           }
+          if (droppedThisMessage > 0) {
+            userText = `${userText}\n[${droppedThisMessage} image(s) omitted from history — exceeded vision API size limit]`;
+          }
+          parts.push({ type: 'text', text: userText });
           return { role, content: parts };
         }
         return { role, content: text };
