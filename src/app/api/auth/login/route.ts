@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
+import { isOperatorAllowed, NOT_ALLOWED_RESPONSE } from '@/lib/allowlist';
+import { setAuthCookie } from '@/lib/authCookie';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,11 +22,18 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Closed-beta allowlist gate. Operators without an assigned email
+      // (and not in OPS_CENTER_ACCESS) cannot authenticate, even with a
+      // valid PIN. Activation = admin assigns email via /api/admin/set-emails.
+      if (!isOperatorAllowed(operator)) {
+        return NextResponse.json(NOT_ALLOWED_RESPONSE, { status: 403 });
+      }
+
       const token = generateToken(operator.id, operator.role);
 
       const { passwordHash: _, ...operatorData } = operator;
 
-      return NextResponse.json({
+      const res = NextResponse.json({
         token,
         operator: {
           ...operatorData,
@@ -37,6 +46,10 @@ export async function POST(request: NextRequest) {
           dayTags: operatorData.dayTags as Record<string, unknown>,
         },
       });
+      // Apr 2026 fix: also set httpOnly cookie so iOS PWA users don't get
+      // kicked back to login when localStorage is cleared between sessions.
+      setAuthCookie(res, token);
+      return res;
     }
 
     // Email/password login
@@ -67,11 +80,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Allowlist gate (defense in depth — email-path login means this
+    // operator has an email by definition, but admins can also nullify
+    // an email later to revoke access without deleting the row).
+    if (!isOperatorAllowed(operator)) {
+      return NextResponse.json(NOT_ALLOWED_RESPONSE, { status: 403 });
+    }
+
     const token = generateToken(operator.id, operator.role);
 
     const { passwordHash: _, ...operatorData } = operator;
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       token,
       operator: {
         ...operatorData,
@@ -84,6 +104,9 @@ export async function POST(request: NextRequest) {
         dayTags: operatorData.dayTags as Record<string, unknown>,
       },
     });
+    // Apr 2026 fix — see PIN branch above for rationale.
+    setAuthCookie(res, token);
+    return res;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

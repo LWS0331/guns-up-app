@@ -1,0 +1,161 @@
+// /api/admin/operator-provision — create a missing Operator row in
+// production from the static seed config.
+//
+// Built May 2026 immediately after the tier-rebalance dry-run
+// surfaced that Britney's account (op-britney VALKYRIE) was in the
+// static `src/data/operators.ts` seed but had never been written to
+// production Postgres. Same pattern likely applies to other
+// statically-defined operators that were added after the original
+// seed run.
+//
+// Idempotent: if the row already exists, return it without
+// modification (no overwrite). To rewrite an existing row use the
+// dedicated /api/admin/operator-tier endpoint or update intake JSON
+// directly.
+//
+// POST body:
+//   { "operatorId": "op-britney" }
+//
+// Response includes a `created: bool` flag so the caller knows
+// whether the row already existed.
+//
+// Auth: OPS_CENTER_ACCESS only.
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { requireAuth } from '@/lib/requireAuth';
+import { OPS_CENTER_ACCESS } from '@/lib/types';
+import { OPERATORS } from '@/data/operators';
+
+interface ProvisionBody {
+  operatorId?: string;
+}
+
+export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  if (!OPS_CENTER_ACCESS.includes(auth.operatorId)) {
+    return NextResponse.json({ error: 'Admin only' }, { status: 403 });
+  }
+
+  let body: ProvisionBody;
+  try {
+    body = (await req.json()) as ProvisionBody;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const operatorId = typeof body.operatorId === 'string' ? body.operatorId.trim() : '';
+  if (!operatorId) {
+    return NextResponse.json({ error: 'operatorId required' }, { status: 400 });
+  }
+
+  // Check the static seed for this id.
+  const seed = OPERATORS.find((op) => op.id === operatorId);
+  if (!seed) {
+    return NextResponse.json(
+      {
+        error: `Operator '${operatorId}' is not in the static seed (src/data/operators.ts)`,
+      },
+      { status: 404 },
+    );
+  }
+
+  // Idempotency check.
+  const existing = await prisma.operator.findUnique({ where: { id: operatorId } });
+  if (existing) {
+    return NextResponse.json({
+      ok: true,
+      created: false,
+      message: 'Operator already exists in production — no changes.',
+      operator: {
+        id: existing.id,
+        callsign: existing.callsign,
+        tier: existing.tier,
+        role: existing.role,
+      },
+    });
+  }
+
+  // Create the row from the seed. We project the seed shape onto the
+  // Operator model — most JSON-column fields default to {} or [] in
+  // the schema, so we only write the columns we have direct values
+  // for and let Prisma's defaults handle the rest.
+  //
+  // Junior-operator fields (isJunior, juniorAge, parentIds, sportProfile,
+  // juniorConsent, juniorSafety) MUST be written from the seed when
+  // present — they don't get defaults that are correct for juniors, and
+  // omitting them creates a row that looks adult on the DB even though
+  // the seed declares a junior. The bug that surfaced as "BUMBLEBEE
+  // doesn't show in Parent Hub" was exactly this: row got written
+  // without isJunior=true and parentIds, so getParentJuniors() filtered
+  // her out for both linked parents.
+  //
+  // Same goes for tierLocked + intake + macroCycles — these are part of
+  // the seed shape, the schema has defaults that don't match a populated
+  // seed (e.g. tierLocked defaults false; intake defaults {} but a seed
+  // may carry a completed-flag).
+  const created = await prisma.operator.create({
+    data: {
+      id: seed.id,
+      name: seed.name,
+      callsign: seed.callsign,
+      pin: seed.pin,
+      role: seed.role,
+      tier: seed.tier,
+      personaId: seed.personaId ?? null,
+      coupleWith: seed.coupleWith ?? null,
+      trainerId: seed.trainerId ?? null,
+      clientIds: seed.clientIds ?? [],
+      betaUser: seed.betaUser ?? false,
+      tierLocked: seed.tierLocked ?? false,
+      // Junior-operator identity fields. parentIds is the discriminator
+      // the Parent Hub queries on — DO NOT omit when the seed sets it.
+      isJunior: seed.isJunior ?? false,
+      ...(typeof seed.juniorAge === 'number' ? { juniorAge: seed.juniorAge } : {}),
+      parentIds: seed.parentIds ?? [],
+      // JSON columns from seed — cast through unknown to satisfy
+      // Prisma's strict input types without losing shape.
+      profile: (seed.profile ?? {}) as object,
+      preferences: (seed.preferences ?? {}) as object,
+      nutrition: (seed.nutrition ?? {}) as object,
+      prs: (seed.prs ?? []) as object,
+      injuries: (seed.injuries ?? []) as object,
+      workouts: (seed.workouts ?? {}) as object,
+      dayTags: (seed.dayTags ?? {}) as object,
+      sitrep: (seed.sitrep ?? {}) as object,
+      dailyBrief: (seed.dailyBrief ?? {}) as object,
+      intake: (seed.intake ?? {}) as object,
+      sportProfile: (seed.sportProfile ?? {}) as object,
+      juniorConsent: (seed.juniorConsent ?? {}) as object,
+      juniorSafety: (seed.juniorSafety ?? {}) as object,
+      macroCycles: (seed.macroCycles ?? []) as object,
+      // Optional fields that the schema accepts but the seed may not have
+      ...(seed.email ? { email: seed.email } : {}),
+      ...(seed.trainerNotes ? { trainerNotes: seed.trainerNotes } : {}),
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log('[operator-provision] created', {
+    actor: auth.operatorId,
+    target: operatorId,
+    callsign: created.callsign,
+    tier: created.tier,
+    role: created.role,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    created: true,
+    message: `Operator '${operatorId}' provisioned from static seed.`,
+    operator: {
+      id: created.id,
+      callsign: created.callsign,
+      tier: created.tier,
+      role: created.role,
+      name: created.name,
+    },
+  });
+}

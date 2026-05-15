@@ -6,21 +6,30 @@ import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/work
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
-import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone } from '@/lib/dateUtils';
+import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, getLocalHourMinute, getLocalTimeOfDayBand } from '@/lib/dateUtils';
 import Icon, { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
 import UserSwitcher from '@/components/UserSwitcher';
-import LanguageToggle from '@/components/LanguageToggle';
+// LanguageToggle removed from AppShell — language now locks at
+// signup. Picker still lives on LoginScreen.
 import { useLanguage } from '@/lib/i18n';
 import COCDashboard from '@/components/COCDashboard';
+import COCSectionNav, { type COCNavSection } from '@/components/COCSectionNav';
 import Planner, { WorkoutModeState } from '@/components/Planner';
 import IntelCenter from '@/components/IntelCenter';
 import { GunnyChat } from '@/components/GunnyChat';
 import IntakeForm from '@/components/IntakeForm';
+import JuniorIntakeForm from '@/components/JuniorIntakeForm';
+import ParentDashboard from '@/components/ParentDashboard';
+import ParentLedWorkoutMode from '@/components/ParentLedWorkoutMode';
+import DailyOps from '@/components/DailyOps';
+import { hasCommanderAccess } from '@/lib/tierGates';
+import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
+import { getParentJuniors } from '@/data/operators';
 import SitrepView from '@/components/SitrepView';
 import TacticalRadio from '@/components/TacticalRadio';
-import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
+import { speak as gunnySpeak, isTtsEnabled, setTtsEnabled as setTtsEnabledGlobal, onTtsEnabledChange, unlockAudioContext, stopSpeaking, onSpeechDone, offSpeechDone } from '@/lib/tts';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
 import { getAuthToken } from '@/lib/authClient';
@@ -33,6 +42,10 @@ import SocialFeed from '@/components/SocialFeed';
 import BetaFeedback from '@/components/BetaFeedback';
 import TrainerDashboard from '@/components/TrainerDashboard';
 import { TermsOfService, PrivacyPolicy } from '@/components/LegalPages';
+import WhatsNewModal from '@/components/WhatsNewModal';
+import PersonaPicker from '@/components/PersonaPicker';
+import type { Announcement, AnnouncementAction } from '@/data/announcements';
+import type { PersonaId } from '@/lib/personas';
 import { trackEvent, EVENTS } from '@/lib/analytics';
 import {
   requestNotificationPermission,
@@ -101,6 +114,10 @@ interface ChatMessage {
   role: 'user' | 'gunny';
   text: string;
   timestamp?: number;
+  /** Optional base64 data-URL attached to a user message — forwarded
+   *  to /api/gunny as a Claude vision content block. Used by the
+   *  workout-mode form-check upload path. */
+  image?: string;
 }
 
 interface OperatorContextData {
@@ -175,7 +192,61 @@ const AppShell: React.FC<AppShellProps> = ({
   onUpdateOperator,
   onLogout,
 }) => {
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
+
+  // ─── Language lock (May 2026) ───────────────────────────────────────
+  // Operators pick EN or ES at signup, and that choice is stored in
+  // operator.preferences.language. The in-app LanguageToggle has been
+  // hidden — switches require a support request.
+  //
+  // Three layers of resolution, in order of trust:
+  //   1. operator.preferences.language (server, source of truth)
+  //   2. localStorage (legacy beta operators who toggled via the old UI)
+  //   3. default 'en'
+  //
+  // For (2): we backfill the localStorage value into the operator
+  // record one time, so going forward the server is canonical and
+  // they survive device changes / cache wipes.
+  useEffect(() => {
+    const prefs = (currentUser.preferences || {}) as Record<string, unknown>;
+    const serverLang = prefs.language;
+    if (serverLang === 'en' || serverLang === 'es') {
+      if (serverLang !== language) setLanguage(serverLang);
+      return;
+    }
+    // No server preference yet — backfill from localStorage if present.
+    let lsLang: 'en' | 'es' | null = null;
+    try {
+      const v = localStorage.getItem('gunsup-language');
+      if (v === 'en' || v === 'es') lsLang = v;
+    } catch { /* localStorage unavailable */ }
+    const resolved: 'en' | 'es' = lsLang ?? 'en';
+    if (resolved !== language) setLanguage(resolved);
+    // Persist back to the operator record so future logins on any
+    // device honor this choice. Best-effort; silent failure is fine
+    // because localStorage continues to keep the client consistent.
+    (async () => {
+      try {
+        const token = getAuthToken();
+        await fetch(`/api/operators/${currentUser.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            preferences: { ...(currentUser.preferences || {}), language: resolved },
+          }),
+        });
+      } catch {
+        // Silent — backfill will retry on next login.
+      }
+    })();
+    // We intentionally only depend on operator id — preferences object
+    // identity changes on every render and would loop the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser.id]);
+
   // Check if intake is completed — 3-layer check: intake column, profile flag, localStorage backup
   const lsIntakeDone = (() => { try { return localStorage.getItem(`guns-up-intake-done-${currentUser.id}`) === 'true'; } catch { return false; } })();
   const intakeCompleted = currentUser.intake?.completed === true || currentUser.profile?.intakeCompleted === true || lsIntakeDone;
@@ -225,6 +296,14 @@ const AppShell: React.FC<AppShellProps> = ({
   const [pendingSitrep, setPendingSitrep] = useState<import('@/lib/types').Sitrep | null>(null);
   const [showNewPlanConfirm, setShowNewPlanConfirm] = useState(false);
 
+  // ─── What's New (standing shipping order) ────────────────────────────
+  // Fetch /api/announcements/current on mount. If an unseen entry comes
+  // back, render WhatsNewModal. CTA actions route through
+  // handleAnnouncementAction below — that's how `open_persona_picker`
+  // surfaces a full-screen PersonaPicker without modal nesting.
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [showStandalonePersonaPicker, setShowStandalonePersonaPicker] = useState(false);
+
   // Gunny AI panel state
   const [showGunnyPanel, setShowGunnyPanel] = useState(false);
   const [gunnyMessages, setGunnyMessages] = useState<ChatMessage[]>([]);
@@ -240,10 +319,31 @@ const AppShell: React.FC<AppShellProps> = ({
     if (typeof window === 'undefined') return true;
     return isTtsEnabled();
   });
+  // Index of the Gunny message in the side-panel chat that is
+  // currently being read aloud (or null if nothing is speaking).
+  // Drives the per-message HEAR IT / STOP button state.
+  const [panelSpeakingIdx, setPanelSpeakingIdx] = useState<number | null>(null);
   const [workoutModeState, setWorkoutModeState] = useState<WorkoutModeState>({ active: false, workoutTitle: '', exercises: [] });
+  // Parent-Led Workout Mode active session — when set, the parent_hub
+  // tab swaps from ParentDashboard to ParentLedWorkoutMode (full-screen
+  // takeover, same pattern as adult workout mode in the COC tab).
+  const [parentLedActive, setParentLedActive] = useState<{ junior: Operator; workout: Workout; dateISO: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
+  // Tracks whether AppShell.gunnyMessages has been hydrated from the
+  // DB for the current operator. Critical for preventing the
+  // chat-history wipe bug: sendGunnyVoiceMessage (called from
+  // Planner / DailyOps / WorkoutMode) appends to gunnyMessages, then
+  // the persistence effect PUTs the result to /api/chat — which uses
+  // upsert and overwrites the entire `messages` field. If
+  // gunnyMessages is still [] (because the floating panel hasn't been
+  // opened yet to trigger hydration), the PUT replaces full history
+  // with a 1- or 2-message array.
+  // The hydration effect below populates gunnyMessages on operator
+  // mount regardless of panel state, and the persistence effect
+  // gates on this ref so saves only fire after we've loaded.
+  const gunnyMessagesHydratedRef = useRef<string>(''); // operator id we've hydrated for
 
   // Initialize mounted state and responsive detection
   useEffect(() => {
@@ -261,9 +361,66 @@ const AppShell: React.FC<AppShellProps> = ({
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // ─── What's New fetch on mount ──────────────────────────────────────
+  // Skip while intake is in progress so we don't stack a modal over a
+  // brand-new operator onboarding. Once intake clears, this runs.
+  useEffect(() => {
+    if (showIntake) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = getAuthToken();
+        const res = await fetch('/api/announcements/current', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.announcement) {
+          setAnnouncement(data.announcement as Announcement);
+        }
+      } catch {
+        // Silent — announcements are nice-to-have, not critical path.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showIntake, currentUser.id]);
+
+  // CTA action router. Keys must match the AnnouncementAction union in
+  // src/data/announcements.ts. WhatsNewModal already POSTs the dismiss
+  // before invoking this, so we just route to the right surface.
+  const handleAnnouncementAction = useCallback((action: AnnouncementAction) => {
+    switch (action) {
+      case 'open_persona_picker':
+        setShowStandalonePersonaPicker(true);
+        break;
+      case 'open_intake':
+        setShowIntake(true);
+        break;
+      case 'open_billing':
+        // Billing tab lives under ops center for now — drop into ops if
+        // this operator has access. OPS_CENTER_ACCESS is keyed by op id,
+        // not role. Non-admins fall through to dismiss-only.
+        if (OPS_CENTER_ACCESS.includes(currentUser.id)) {
+          setActiveTab('ops');
+        }
+        break;
+      case 'open_wearable_connect':
+        // Wearable hub is reached from Intel Center. Route there.
+        setActiveTab('intel');
+        break;
+      case 'dismiss_only':
+      default:
+        break;
+    }
+  }, [currentUser.id]);
+
   // ═══ Compliance Notification Engine ═══
   useEffect(() => {
-    // Request notification permission once on mount
+    // Request notification permission once on mount. Silent .catch is
+    // intentional — user-denied permission is normal and shouldn't pollute
+    // the console. The other AppShell .catch sites (chat saves at 686/695/
+    // 722/800/821) ARE logged because silent failure there = data loss.
     requestNotificationPermission().catch(() => {});
 
     const prefs = loadNotificationPrefs(currentUser.id);
@@ -381,49 +538,199 @@ const AppShell: React.FC<AppShellProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [gunnyMessages, gunnyLoading]);
 
-  // Load saved panel chat or generate greeting when panel opens
+  // ──────────────────────────────────────────────────────────────────────
+  // EARLY HYDRATION — populate gunnyMessages from DB on operator mount
+  // regardless of whether the floating panel is open. Phase 2 fix for
+  // the chat-history wipe bug surfaced by the Daily Ops "Generate
+  // today's plan" CTA: sendGunnyVoiceMessage appends to gunnyMessages
+  // and the persistence effect PUTs the result to /api/chat (which
+  // upserts and replaces the entire `messages` array). Without this
+  // hydration, sendGunnyVoiceMessage triggered from anywhere OTHER
+  // than the floating panel (Planner voice, DailyOps "Generate", etc.)
+  // appended to an empty array → the persistence PUT wiped all prior
+  // history.
+  // The panel-init effect below still runs for panel-specific setup
+  // (greeting fallback, gunnyGreeted flag) but gunnyMessages itself
+  // is already populated by this earlier effect.
+  // ──────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (gunnyMessagesHydratedRef.current === selectedOperator.id) return;
+    const opId = selectedOperator.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/chat?operatorId=${opId}&chatType=gunny-tab`,
+          { headers: { Authorization: `Bearer ${getAuthToken()}` } },
+        );
+        if (!res.ok) {
+          // Mark hydrated anyway so the persistence effect can run for
+          // truly-new operators (no chat history yet). Failing closed
+          // here would leave new operators unable to save their first
+          // message, which is worse than the original bug.
+          if (!cancelled) gunnyMessagesHydratedRef.current = opId;
+          return;
+        }
+        const data = await res.json();
+        const msgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
+        if (cancelled) return;
+        if (msgs.length > 0) {
+          // Set state ONLY when we have content. If the DB returned
+          // empty, leave gunnyMessages alone — the panel-init effect
+          // may set a greeting later.
+          setGunnyMessages(msgs);
+        }
+        gunnyMessagesHydratedRef.current = opId;
+      } catch {
+        if (!cancelled) gunnyMessagesHydratedRef.current = opId;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOperator.id]);
+
+  // Load saved panel chat or generate greeting when panel opens.
+  //
+  // ─── ARCHITECTURE NOTE ────────────────────────────────────────────────
+  // The Gunny PANEL (this floating side overlay) AND the dedicated GUNNY
+  // TAB (rendered by GunnyChat.tsx) USED to write to two separate backend
+  // threads:
+  //   • Panel  → chatType: 'gunny-panel' / localStorage key gunny-panel-${id}
+  //   • Tab    → chatType: 'gunny-tab'   / localStorage key gunny-chat-${id}
+  // Same operator opening the panel on desktop and the tab on mobile saw
+  // two completely different chat histories. Bug:
+  //
+  //   "DESKTOP CHAT AND MOBILE CHAT IS NOT MATCHING. WHY IS THAT
+  //    HAPPENING IF ITS THE SAME USER"
+  //
+  // Fix: both surfaces now read/write the SAME chatType ('gunny-tab') and
+  // the SAME localStorage key ('gunny-chat-${id}'). The load path also
+  // runs a one-time per-operator migration: if the legacy 'gunny-panel'
+  // thread has messages, merge them into 'gunny-tab' (sort by timestamp,
+  // dedup by role+timestamp+text-prefix) before rendering, then mark
+  // migrated so the merge doesn't repeat. The legacy thread is cleared
+  // (written empty) after merge so the same content can't drift back in
+  // if a stale client hits the old chatType.
+  // ──────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!showGunnyPanel) return;
     // Only initialize once per operator
     if (panelInitRef.current === selectedOperator.id) return;
     panelInitRef.current = selectedOperator.id;
 
-    const loadPanelChat = async () => {
-      // Try API first
+    const opId = selectedOperator.id;
+    const CANONICAL_TYPE = 'gunny-tab';
+    const LEGACY_TYPE = 'gunny-panel';
+    const CANONICAL_KEY = `gunny-chat-${opId}`;
+    const LEGACY_KEY = `gunny-panel-${opId}`;
+    const MIGRATED_FLAG_KEY = `gunny-panel-migrated-${opId}`;
+
+    const fetchThread = async (chatType: string): Promise<ChatMessage[]> => {
       try {
-        const res = await fetch(`/api/chat?operatorId=${selectedOperator.id}&chatType=gunny-panel`, {
+        const res = await fetch(`/api/chat?operatorId=${opId}&chatType=${chatType}`, {
           headers: { 'Authorization': `Bearer ${getAuthToken()}` },
         });
-        if (res.ok) {
-          const data = await res.json();
-          const msgs = data.messages as ChatMessage[];
-          if (Array.isArray(msgs) && msgs.length > 0) {
-            setGunnyMessages(msgs);
-            setGunnyGreeted(true);
-            return;
-          }
-        }
-      } catch { /* API unavailable */ }
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+      } catch {
+        return [];
+      }
+    };
 
-      // Fallback to localStorage
+    const readLocalThread = (key: string): ChatMessage[] => {
       try {
-        const key = `gunny-panel-${selectedOperator.id}`;
         const raw = localStorage.getItem(key);
-        if (raw) {
-          const saved = JSON.parse(raw) as ChatMessage[];
-          if (Array.isArray(saved) && saved.length > 0) {
-            setGunnyMessages(saved);
-            setGunnyGreeted(true);
-            // Migrate to API
-            fetch('/api/chat', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
-              body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: saved }),
-            }).catch(() => {});
-            return;
-          }
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? (parsed as ChatMessage[]) : [];
+      } catch {
+        return [];
+      }
+    };
+
+    // Merge two message arrays by timestamp; dedup any pair that looks
+    // identical (same role + same timestamp + same first-40-char prefix).
+    // We can't use full-text equality because streaming deltas may have
+    // been truncated mid-write on one path and not the other.
+    const mergeThreads = (a: ChatMessage[], b: ChatMessage[]): ChatMessage[] => {
+      const all = [...a, ...b].sort((x, y) => (x.timestamp || 0) - (y.timestamp || 0));
+      const seen = new Set<string>();
+      const out: ChatMessage[] = [];
+      for (const m of all) {
+        const key = `${m.role}|${m.timestamp || 0}|${(m.text || '').slice(0, 40)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(m);
+      }
+      return out;
+    };
+
+    const loadPanelChat = async () => {
+      // Always load the canonical thread first.
+      let canonical = await fetchThread(CANONICAL_TYPE);
+
+      // One-time migration of the legacy 'gunny-panel' thread.
+      const alreadyMigrated = (() => {
+        try { return localStorage.getItem(MIGRATED_FLAG_KEY) === 'true'; }
+        catch { return false; }
+      })();
+
+      if (!alreadyMigrated) {
+        // Pull legacy from API + localStorage; whichever has more wins.
+        const legacyApi = await fetchThread(LEGACY_TYPE);
+        const legacyLocal = readLocalThread(LEGACY_KEY);
+        const legacy = legacyApi.length >= legacyLocal.length ? legacyApi : legacyLocal;
+
+        if (legacy.length > 0) {
+          canonical = mergeThreads(canonical, legacy);
+          // Persist merged → canonical thread + canonical localStorage key.
+          try { localStorage.setItem(CANONICAL_KEY, JSON.stringify(canonical)); }
+          catch (err) { console.warn('[AppShell:migrate] localStorage write failed:', err); }
+          fetch('/api/chat', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+            body: JSON.stringify({ operatorId: opId, chatType: CANONICAL_TYPE, messages: canonical }),
+          }).catch(err => console.error('[AppShell:migrate] canonical PUT failed:', err));
+          // Clear legacy thread so a stale client can't pull it again.
+          // ?force=true bypasses the shrink-guard added May 2026 — this
+          // is an INTENTIONAL clear (legacy thread already merged into
+          // canonical above), not the wipe pattern the guard prevents.
+          fetch('/api/chat?force=true', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+            body: JSON.stringify({ operatorId: opId, chatType: LEGACY_TYPE, messages: [] }),
+          }).catch(err => console.error('[AppShell:migrate] legacy clear failed:', err));
         }
-      } catch { /* ignore */ }
+
+        // Always mark migrated to prevent re-running, and clear the
+        // legacy localStorage key so it doesn't bloat storage.
+        try {
+          localStorage.setItem(MIGRATED_FLAG_KEY, 'true');
+          localStorage.removeItem(LEGACY_KEY);
+        } catch { /* ignore */ }
+      }
+
+      if (canonical.length > 0) {
+        setGunnyMessages(canonical);
+        setGunnyGreeted(true);
+        return;
+      }
+
+      // Fallback: canonical-key localStorage covers offline-first writes
+      // from GunnyChat.tsx that haven't synced to the API yet.
+      const localCanonical = readLocalThread(CANONICAL_KEY);
+      if (localCanonical.length > 0) {
+        setGunnyMessages(localCanonical);
+        setGunnyGreeted(true);
+        fetch('/api/chat', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+          body: JSON.stringify({ operatorId: opId, chatType: CANONICAL_TYPE, messages: localCanonical }),
+        }).catch(err => console.error('[AppShell:fallback-hydrate] PUT failed:', err));
+        return;
+      }
 
       // No saved history — show context-aware greeting
       setGunnyGreeted(true);
@@ -445,7 +752,7 @@ const AppShell: React.FC<AppShellProps> = ({
       }]);
     };
     loadPanelChat();
-  }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign]);
+  }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign, activeTab]);
 
   // Persist panel messages — split strategy:
   // • localStorage: every content change (sync, cheap, survives unmount/refresh).
@@ -459,6 +766,16 @@ const AppShell: React.FC<AppShellProps> = ({
   useEffect(() => {
     if (gunnyMessages.length === 0) return;
 
+    // CRITICAL: never PUT to /api/chat before we've hydrated from the
+    // DB for this operator. Without this gate, the very first append
+    // to gunnyMessages (from sendGunnyVoiceMessage) would trigger a
+    // PUT that overwrites the entire messages JSON column with a
+    // 1- or 2-message array — wiping all prior history. The
+    // hydration ref is set by the EARLY HYDRATION effect above (or
+    // by a confirmed empty-fetch for new operators); until that
+    // ref matches the current operator, defer all persistence.
+    if (gunnyMessagesHydratedRef.current !== selectedOperator.id) return;
+
     // Content-aware signature catches text mutations, not just array length changes.
     const snapshot = gunnyMessages
       .map(m => `${m.role}:${(m.text ?? '').length}:${m.timestamp}`)
@@ -468,8 +785,14 @@ const AppShell: React.FC<AppShellProps> = ({
 
     const serialized = gunnyMessages;
 
+    // Persist to the CANONICAL chatType ('gunny-tab') + key
+    // ('gunny-chat-${id}'). Both surfaces — this floating panel and
+    // the dedicated GunnyChat tab — write to the same thread so the
+    // operator sees a single chat history regardless of which surface
+    // they used. See the load effect's architecture note above for
+    // the migration story off the legacy 'gunny-panel' thread.
     try {
-      localStorage.setItem(`gunny-panel-${selectedOperator.id}`, JSON.stringify(serialized));
+      localStorage.setItem(`gunny-chat-${selectedOperator.id}`, JSON.stringify(serialized));
     } catch (err) { console.warn('[AppShell:panel-persist] localStorage write failed (quota?):', err); }
     lastPanelPendingRef.current = { serialized };
 
@@ -482,8 +805,8 @@ const AppShell: React.FC<AppShellProps> = ({
         method: 'PUT',
         keepalive: true,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
-        body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-panel', messages: pending.serialized }),
-      }).catch(() => {});
+        body: JSON.stringify({ operatorId: selectedOperator.id, chatType: 'gunny-tab', messages: pending.serialized }),
+      }).catch(err => console.error('[AppShell:panel-debounce] PUT /api/chat failed:', err));
       lastPanelPendingRef.current = null;
     }, 600);
   }, [gunnyMessages, selectedOperator.id]);
@@ -503,8 +826,8 @@ const AppShell: React.FC<AppShellProps> = ({
           method: 'PUT',
           keepalive: true,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
-          body: JSON.stringify({ operatorId, chatType: 'gunny-panel', messages: pending.serialized }),
-        }).catch(() => {});
+          body: JSON.stringify({ operatorId, chatType: 'gunny-tab', messages: pending.serialized }),
+        }).catch(err => console.error('[AppShell:panel-unmount-flush] PUT /api/chat failed:', err));
         lastPanelPendingRef.current = null;
       }
     };
@@ -830,6 +1153,50 @@ const AppShell: React.FC<AppShellProps> = ({
     if (gunnyTtsEnabled) gunnySpeak(text);
   };
 
+  // Subscribe to lib/tts queue-empty so the panel HEAR IT button
+  // flips back from STOP when audio finishes naturally OR when
+  // stopSpeaking() runs. Replaces the prior 600ms DOM polling
+  // which was unreliable for OpenAI TTS audio (those Audio
+  // elements aren't attached to the DOM, so the poll thought
+  // playback was done while the audio kept playing).
+  useEffect(() => {
+    const cb = () => setPanelSpeakingIdx(null);
+    onSpeechDone(cb);
+    return () => offSpeechDone(cb);
+  }, []);
+
+  // Per-message playback for the side-panel chat. Tap once → Gunny
+  // reads it aloud; tap the SAME button again → stop. Tapping a
+  // different message stops the prior one and starts the new one.
+  // Bypasses the global TTS-mute flag (the user explicitly asked to
+  // hear THIS message). Always user-initiated, so it survives iOS
+  // Safari's autoplay block.
+  const playPanelMessage = useCallback((idx: number, text: string) => {
+    if (!text || !text.trim()) return;
+    if (panelSpeakingIdx === idx) {
+      stopSpeaking();
+      // setPanelSpeakingIdx(null) fires via the onSpeechDone hook above.
+      return;
+    }
+    stopSpeaking();
+    unlockAudioContext();
+    const wasMuted = !isTtsEnabled();
+    if (wasMuted) setTtsEnabledGlobal(true);
+    setPanelSpeakingIdx(idx);
+    gunnySpeak(text).catch((err) =>
+      console.warn('[appshell] panel play-message failed:', err),
+    );
+    if (wasMuted) {
+      // Restore mute once playback actually finishes (not when
+      // gunnySpeak resolves — that happens at request-queue time).
+      const restore = () => {
+        setTtsEnabledGlobal(false);
+        offSpeechDone(restore);
+      };
+      onSpeechDone(restore);
+    }
+  }, [panelSpeakingIdx]);
+
   const toggleGunnyTts = () => {
     const next = !gunnyTtsEnabled;
     setTtsEnabledGlobal(next); // persists + broadcasts via onTtsEnabledChange
@@ -906,6 +1273,11 @@ const AppShell: React.FC<AppShellProps> = ({
           clientDate: getLocalDateStr(),
           clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
           clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — actual clock so Gunny can answer
+          // "is it too late to lift?" / "what should I eat now?"
+          // without assuming a default hour.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
           ...(trainerData && { trainerData }),
         }),
       });
@@ -921,7 +1293,7 @@ const AppShell: React.FC<AppShellProps> = ({
               ? { ...m, text: errMsg } : m
           ));
         } else {
-          const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
+          const replyText = data.response || data.message || data.text || 'Copy that, Marine.';
           setGunnyMessages(prev => prev.map(m =>
             (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
               ? { ...m, text: replyText } : m
@@ -929,6 +1301,13 @@ const AppShell: React.FC<AppShellProps> = ({
           speakGunny(replyText);
           // Handle meal/workout data from JSON fallback
           if (data.mealData) handlePanelMealData(data.mealData);
+          // Apply workout deletions FIRST so subsequent add/modify
+          // operations on the same response (e.g. a "move" — delete
+          // source + add target) don't fight each other.
+          const deletes = Array.isArray(data.workoutDeletes)
+            ? data.workoutDeletes
+            : (data.workoutDelete ? [data.workoutDelete] : []);
+          if (deletes.length > 0) handlePanelWorkoutDeletes(deletes);
           // Prefer the plural array if present (route returns both for
           // backwards compat). Falls back to the single mod for older servers.
           const mods = Array.isArray(data.workoutModifications)
@@ -976,15 +1355,69 @@ const AppShell: React.FC<AppShellProps> = ({
             const payload = JSON.parse(dataStr);
             if (eventType === 'delta' && payload.text) {
               accumulated += payload.text;
+              // Strip ALL structured-data tags from the visible stream so
+              // raw JSON never leaks into the side-panel chat bubble.
+              // KEEP IN SYNC with GunnyChat.tsx — this is the same set of
+              // tags the main chat surface strips. The side-panel had
+              // historically stripped only 4 tags (workout_json /
+              // workout_modification / profile_json / meal_json) plus the
+              // 2 daily-ops tags added in PR #116, leaving 17 other tags
+              // capable of leaking through if Gunny emitted them while
+              // the side panel was active. Synced May 2026.
+              //
+              // Each tag gets two regexes:
+              //   - non-greedy <TAG>...</TAG> for fully-arrived blocks
+              //   - greedy <TAG>...$ for in-flight (closing tag pending)
               const visible = accumulated
                 .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
                 .replace(/<workout_json>[\s\S]*$/, '')
                 .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
                 .replace(/<workout_modification>[\s\S]*$/, '')
+                .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
+                .replace(/<workout_delete>[\s\S]*$/, '')
                 .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
-                .replace(/<meal_json>[\s\S]*$/, '');
+                .replace(/<meal_json>[\s\S]*$/, '')
+                .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
+                .replace(/<meal_delete>[\s\S]*$/, '')
+                .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
+                .replace(/<pr_json>[\s\S]*$/, '')
+                .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+                .replace(/<pr_modification>[\s\S]*$/, '')
+                .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+                .replace(/<pr_delete>[\s\S]*$/, '')
+                .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+                .replace(/<hydration_json>[\s\S]*$/, '')
+                .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+                .replace(/<readiness_json>[\s\S]*$/, '')
+                .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+                .replace(/<injury_modification>[\s\S]*$/, '')
+                .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+                .replace(/<day_tag_json>[\s\S]*$/, '')
+                .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+                .replace(/<nutrition_targets_json>[\s\S]*$/, '')
+                .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+                .replace(/<goal_json>[\s\S]*$/, '')
+                .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+                .replace(/<dietary_json>[\s\S]*$/, '')
+                .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+                .replace(/<macrocycle_json>[\s\S]*$/, '')
+                .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+                .replace(/<wearable_control>[\s\S]*$/, '')
+                .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+                .replace(/<notification_json>[\s\S]*$/, '')
+                .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+                .replace(/<trainer_note_json>[\s\S]*$/, '')
+                .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+                .replace(/<daily_ops_json>[\s\S]*$/, '')
+                .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
+                .replace(/<daily_ops_block_override>[\s\S]*$/, '')
+                .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
+                .replace(/<voice_control>[\s\S]*$/, '')
+                // Trailing half-streamed markdown table row (pipe-led line
+                // missing its closing pipe) — same as GunnyChat.
+                .replace(/\n\|[^\n|]*$/, '');
               // Hide thinking indicator once we have content
               if (visible.length > 0) {
                 setGunnyLoading(false);
@@ -1014,6 +1447,12 @@ const AppShell: React.FC<AppShellProps> = ({
         ));
         speakGunny(finalPayload.cleanText);
         if (finalPayload.mealData) handlePanelMealData(finalPayload.mealData);
+        // Same ordering rationale as the non-streaming branch above:
+        // apply deletes first so a delete+add (move) lands cleanly.
+        const fdeletes = Array.isArray(finalPayload.workoutDeletes)
+          ? finalPayload.workoutDeletes
+          : (finalPayload.workoutDelete ? [finalPayload.workoutDelete] : []);
+        if (fdeletes.length > 0) handlePanelWorkoutDeletes(fdeletes);
         const fmods = Array.isArray(finalPayload.workoutModifications)
           ? finalPayload.workoutModifications
           : (finalPayload.workoutModification ? [finalPayload.workoutModification] : []);
@@ -1098,6 +1537,16 @@ const AppShell: React.FC<AppShellProps> = ({
     const today = getLocalDateStr();
     let workingOp = currentSelectedOp;
     let touched = false;
+    // WS3 fix (May 2026) — collect every silent-failure reason so we
+    // can surface them on the voice-response banner instead of burying
+    // them in console.warn. The original bug class: Gunny says "swapped
+    // your bench press" in chat, the apply silently no-ops because the
+    // exercise name didn't match exactly or the target date had no
+    // workout, the operator looks at the workout, sees no change, and
+    // thinks the feature is broken. Three silent paths in this function
+    // (no workout / completed workout / lib no-op) — all three now
+    // append to `failures` and bubble up.
+    const failures: string[] = [];
 
     for (const raw of mods) {
       const mod = raw as WorkoutModification;
@@ -1108,17 +1557,93 @@ const AppShell: React.FC<AppShellProps> = ({
         continue;
       }
 
-      const current = workingOp.workouts?.[today];
-      if (!current) continue;
+      // Resolve target date: explicit mod.targetDate (Gunny emitted
+      // YYYY-MM-DD because the operator named a day) > today. Refuse
+      // to modify a completed workout — the May 1 bug routed an
+      // "add to Saturday" mod onto Friday's completed session because
+      // the panel resolver only ever looked at today, dropping silently
+      // when today was empty. Both arms now respect explicit date AND
+      // completed-guard.
+      const explicitDate = (mod as { targetDate?: string }).targetDate;
+      const targetDate = explicitDate || today;
+      const current = workingOp.workouts?.[targetDate];
+      if (!current) {
+        console.warn('[gunny-mod:appshell] no workout at target date:', targetDate, mod);
+        failures.push(
+          `No workout planned for ${targetDate} — couldn't ${mod.type.replace(/_/g, ' ')}.`,
+        );
+        continue;
+      }
+      if (current.completed) {
+        console.warn('[gunny-mod:appshell] refusing to modify completed workout at', targetDate, mod);
+        failures.push(
+          `Workout on ${targetDate} is already marked complete — refusing to modify a logged session.`,
+        );
+        continue;
+      }
       try {
-        const modified = applyWorkoutModification(current, mod);
-        workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-        touched = true;
+        // Unwrap the new return shape — silent no-ops are surfaced
+        // via result.changed so the caller can decide whether to
+        // persist anything. Without this branch we'd persist the
+        // unchanged workout reference, which is harmless but
+        // generates noise re-renders.
+        const result = applyWorkoutModification(current, mod);
+        if (result.changed) {
+          workingOp = {
+            ...workingOp,
+            workouts: { ...workingOp.workouts, [targetDate]: result.workout },
+          };
+          touched = true;
+        } else {
+          console.warn('[gunny-mod:appshell] no-op:', result.reason, mod);
+          failures.push(result.reason || `${mod.type} didn't match anything in the workout.`);
+        }
       } catch (e) {
         console.error('applyWorkoutModification failed:', e);
+        failures.push(`${mod.type} threw an error — see console.`);
       }
     }
 
+    if (touched) onUpdateOperator(workingOp);
+
+    // WS3 surface — only fire when NOTHING was applied. Partial
+    // failures (some mods succeeded, others didn't) stay as console
+    // logs so we don't flood a 5-block batch with one toast per miss.
+    // The single-failure case is the one that causes the "Gunny lied"
+    // perception — that's what this surface guards.
+    if (failures.length > 0 && !touched) {
+      showGunnyVoiceResponse(
+        `⚠ Couldn't apply that — ${failures[0]} Try naming the exercise exactly as it appears in your workout, or open the workout and point at it.`,
+      );
+    }
+  };
+
+  // Apply <workout_delete> signals from Gunny — removes the workout
+  // for one or more dates from operator.workouts. Without this handler,
+  // Gunny would say "deleted from planner" in chat but the planner
+  // would still show the workout (the bug the operator hit). The dates
+  // payload comes from /api/gunny which now parses <workout_delete>
+  // blocks and returns either a single workoutDelete or an array of
+  // workoutDeletes (batch).
+  const handlePanelWorkoutDeletes = (deletes: unknown) => {
+    const list: Array<{ date: string }> = Array.isArray(deletes)
+      ? (deletes as Array<{ date: string }>)
+      : (deletes && typeof (deletes as { date?: string }).date === 'string'
+          ? [deletes as { date: string }]
+          : []);
+    if (list.length === 0) return;
+
+    let workingOp = currentSelectedOp;
+    let touched = false;
+    for (const item of list) {
+      const date = item?.date;
+      if (!date || !isValidDateStr(date)) continue;
+      if (!workingOp.workouts || !workingOp.workouts[date]) continue;
+      const nextWorkouts = { ...workingOp.workouts };
+      delete nextWorkouts[date];
+      workingOp = { ...workingOp, workouts: nextWorkouts };
+      touched = true;
+    }
     if (touched) onUpdateOperator(workingOp);
   };
 
@@ -1178,16 +1703,20 @@ const AppShell: React.FC<AppShellProps> = ({
   }, []);
 
   // Voice "over" trigger — sends directly to Gunny without touching the phone
-  // Does NOT open the Gunny panel — response shows as overlay on workout screen
-  const sendGunnyVoiceMessage = useCallback((text: string) => {
+  // Does NOT open the Gunny panel — response shows as overlay on workout screen.
+  // The optional `image` field is forwarded to /api/gunny which already
+  // accepts base64 images on user messages (route.ts:1090-1104) — used by
+  // NotesFormPopover's "Upload Form Check" path.
+  const sendGunnyVoiceMessage = useCallback((text: string, opts?: { image?: string }) => {
     if (!text.trim()) return;
     // DON'T open Gunny panel — keep workout screen focused
     // Still log to chat history so user can review later
     setTimeout(() => {
-      const userMessage: ChatMessage = {
+      const userMessage: ChatMessage & { image?: string } = {
         role: 'user',
         text: text,
         timestamp: Date.now(),
+        ...(opts?.image ? { image: opts.image } : {}),
       };
       setGunnyMessages(prev => [...prev, userMessage]);
       setGunnyInput('');
@@ -1216,6 +1745,11 @@ const AppShell: React.FC<AppShellProps> = ({
               clientDate: getLocalDateStr(),
               clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
               clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — actual clock so Gunny can answer
+          // "is it too late to lift?" / "what should I eat now?"
+          // without assuming a default hour.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
               ...(trainerData && { trainerData }),
             }),
           });
@@ -1225,7 +1759,7 @@ const AppShell: React.FC<AppShellProps> = ({
             const errMsg = data?.error || 'Gunny AI temporarily offline.';
             setGunnyMessages(prev => [...prev, { role: 'gunny' as const, text: errMsg, timestamp: Date.now() }]);
           } else {
-            const replyText = data.response || data.message || data.text || 'Copy that, soldier.';
+            const replyText = data.response || data.message || data.text || 'Copy that, Marine.';
             setGunnyMessages(prev => [...prev, { role: 'gunny' as const, text: replyText, timestamp: Date.now() }]);
             // Show response on workout screen + speak it
             showGunnyVoiceResponse(replyText);
@@ -1264,6 +1798,13 @@ const AppShell: React.FC<AppShellProps> = ({
               }
             }
 
+            // Voice path: workout deletions land first so move-style
+            // operations (delete source date, add target date) don't
+            // race each other.
+            const voiceDeletes: unknown[] = Array.isArray(data.workoutDeletes)
+              ? data.workoutDeletes
+              : (data.workoutDelete ? [data.workoutDelete] : []);
+            if (voiceDeletes.length > 0) handlePanelWorkoutDeletes(voiceDeletes);
             const voiceMods: unknown[] = Array.isArray(data.workoutModifications)
               ? data.workoutModifications
               : (data.workoutModification ? [data.workoutModification] : []);
@@ -1338,19 +1879,83 @@ const AppShell: React.FC<AppShellProps> = ({
     { id: 'gunny',   label: t('nav.gunny_short'),  labelKey: 'nav.gunny_short',  icon: <Icon.Bolt /> },
   ];
 
+  // Parent Hub tab — only surfaces for adults whose id appears in any
+  // junior operator's parentIds (i.e. they have a linked junior). Behind
+  // the JUNIOR_OPERATOR_ENABLED flag. Renders ParentDashboard inside.
+  const linkedJuniorsForHub = isJuniorOperatorEnabledClient()
+    ? getParentJuniors(currentUser.id, operators)
+    : [];
+  const showParentHub = linkedJuniorsForHub.length > 0;
+
   // Conditionally add OPS tab for trainers and admins.
-  const tabs = (OPS_CENTER_ACCESS.includes(currentUser.id) || currentUser.role === 'trainer')
-    ? [...baseTabs, { id: 'ops' as AppTab, label: 'OPS', labelKey: 'nav.ops', icon: <Icon.Settings /> }]
-    : baseTabs;
+  const isTrainerOrAdmin = OPS_CENTER_ACCESS.includes(currentUser.id) || currentUser.role === 'trainer';
+
+  // Daily Ops tab — Commander-tier (opus / white_glove) feature.
+  // For junior operators viewing their own surface we surface it
+  // anyway and let the DailyOps component handle the "awaiting parent"
+  // state; for adult viewers it surfaces only when they themselves
+  // hold Commander access. Trainers/admins see it for any operator
+  // they're viewing because they sit above the tier gate.
+  const showDailyOps =
+    isTrainerOrAdmin ||
+    currentSelectedOp.isJunior ||
+    hasCommanderAccess({
+      id: currentSelectedOp.id,
+      tier: currentSelectedOp.tier ?? undefined,
+      role: currentSelectedOp.role,
+    });
+
+  const tabs: typeof baseTabs = [
+    ...baseTabs,
+    ...(showDailyOps
+      ? [{ id: 'daily_ops' as AppTab, label: t('nav.daily_ops_short') || 'OPS DAY', labelKey: 'nav.daily_ops_short', icon: <Icon.Clock /> }]
+      : []),
+    ...(showParentHub
+      ? [{ id: 'parent_hub' as AppTab, label: t('nav.parent_hub_short'), labelKey: 'nav.parent_hub_short', icon: <Icon.Target /> }]
+      : []),
+    ...(isTrainerOrAdmin
+      ? [{ id: 'ops' as AppTab, label: 'OPS', labelKey: 'nav.ops', icon: <Icon.Settings /> }]
+      : []),
+  ];
 
   const renderTabContent = () => {
     switch (activeTab) {
       case 'coc':
         return (
           <>
-            {currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
-              <DailyBriefComponent operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
-            )}
+            {/* WS1 — sticky section nav MUST be the first child of the
+                COC fragment so it docks against the top of <main>'s
+                scroll viewport. Previously it rendered below the
+                DailyBrief widget + battle-plan button, so it appeared
+                "floating in the middle" and never became sticky until
+                the operator scrolled past everything above it. */}
+            {(() => {
+              const navSections: COCNavSection[] = [];
+              if (currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0) {
+                navSections.push({ id: 'coc-daily-brief', labelKey: 'coc.nav.daily_brief', accent: '#FF8C00' });
+              }
+              if (currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate) {
+                navSections.push({ id: 'coc-battle-plan', labelKey: 'coc.nav.battle_plan', accent: '#00ff41' });
+              }
+              navSections.push({ id: 'coc-dashboard', labelKey: 'coc.nav.dashboard', accent: '#00ff41' });
+              navSections.push({ id: 'coc-leaderboard', labelKey: 'coc.nav.leaderboard', accent: '#FF8C00' });
+              navSections.push({ id: 'coc-achievements', labelKey: 'coc.nav.achievements', accent: '#FF8C00' });
+              navSections.push({ id: 'coc-squad', labelKey: 'coc.nav.squad', accent: '#00ff41' });
+              if (currentSelectedOp.betaUser) {
+                navSections.push({ id: 'coc-feedback', labelKey: 'coc.nav.feedback', accent: '#ff4444' });
+              }
+              return <COCSectionNav sections={navSections} />;
+            })()}
+
+            <div id="coc-daily-brief" style={{ scrollMarginTop: 72 }}>
+              {currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
+                <DailyBriefComponent
+                  operator={currentSelectedOp}
+                  onUpdateOperator={onUpdateOperator}
+                  onViewPriorNutrition={() => setActiveTab('intel')}
+                />
+              )}
+            </div>
 
             {/* New Battle Plan button — only shown on own profile
                 when a SITREP already exists. Uses .btn.btn-amber.btn-sm
@@ -1420,30 +2025,44 @@ const AppShell: React.FC<AppShellProps> = ({
               </div>
             )}
 
-            {/* Battle Plan Reference — dedicated section */}
+            {/* Battle Plan Reference — dedicated section.
+                Nav's BATTLE PLAN chip anchors here. The interactive
+                DailyBrief widget (top of the COC, before the nav was
+                introduced) keeps the canonical coc-daily-brief anchor;
+                DailyBriefRef below is just a compact re-render of the
+                same data so it doesn't need its own chip. */}
             {currentSelectedOp.sitrep && currentSelectedOp.sitrep.generatedDate && (
-              <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true}
-                operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
+              <div id="coc-battle-plan" style={{ scrollMarginTop: 72 }}>
+                <BattlePlanRef sitrep={currentSelectedOp.sitrep} focus="all" compact={true}
+                  operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} />
+              </div>
             )}
 
-            {/* Daily Brief Reference — dedicated section */}
+            {/* Daily Brief Reference — dedicated section (compact form,
+                no anchor — the DAILY BRIEF chip points at the interactive
+                widget at the top of the tab) */}
             {currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date && (
               <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} />
             )}
 
-            <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
-            <Leaderboard operators={operators} currentUser={currentUser} />
-            <div style={{ marginTop: 20 }}>
-              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>ACHIEVEMENTS</h3>
+            <div id="coc-dashboard" style={{ scrollMarginTop: 72 }}>
+              <COCDashboard operator={currentSelectedOp} allOperators={accessibleUsers} />
+            </div>
+
+            <div id="coc-leaderboard" style={{ scrollMarginTop: 72 }}>
+              <Leaderboard operators={operators} currentUser={currentUser} />
+            </div>
+            <div id="coc-achievements" style={{ marginTop: 20, scrollMarginTop: 72 }}>
+              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#FF8C00', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.achievements')}</h3>
               <Achievements operator={currentSelectedOp} />
             </div>
-            <div style={{ marginTop: 20 }}>
-              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>SQUAD FEED</h3>
+            <div id="coc-squad" style={{ marginTop: 20, scrollMarginTop: 72 }}>
+              <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00ff41', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.squad_feed')}</h3>
               <SocialFeed operators={operators} currentOperator={currentSelectedOp} />
             </div>
             {currentSelectedOp.betaUser && (
-              <div style={{ marginTop: 20 }}>
-                <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff4444', letterSpacing: 1, marginBottom: 12 }}>BETA FEEDBACK</h3>
+              <div id="coc-feedback" style={{ marginTop: 20, scrollMarginTop: 72 }}>
+                <h3 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#ff4444', letterSpacing: 1, marginBottom: 12 }}>{t('appshell.beta_feedback')}</h3>
                 <BetaFeedback operatorId={currentSelectedOp.id} callsign={currentSelectedOp.callsign} />
               </div>
             )}
@@ -1481,7 +2100,21 @@ const AppShell: React.FC<AppShellProps> = ({
           </>
         );
       case 'planner':
-        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setShowGunnyPanel(true)} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} />;
+        return <Planner operator={currentSelectedOp} onUpdateOperator={onUpdateOperator} onOpenGunny={() => setActiveTab('gunny')} onSendGunnyMessage={sendGunnyVoiceMessage} gunnyVoiceResponse={gunnyVoiceResponse} onDismissGunnyResponse={() => setGunnyVoiceResponse(null)} onWorkoutModeChange={setWorkoutModeState} onWorkoutSaved={() => setActiveTab('planner')} />;
+      case 'daily_ops':
+        // Daily Ops Planner — Gunny's prescribed daily-schedule.
+        // Sister surface to Planner; bridges to GunnyChat via
+        // onSendGunnyMessage so "Generate today's plan" tap routes
+        // through the chat channel that owns the LLM call.
+        return (
+          <DailyOps
+            operator={currentSelectedOp}
+            onSendGunnyMessage={(prompt) => {
+              setActiveTab('gunny');
+              sendGunnyVoiceMessage(prompt);
+            }}
+          />
+        );
       case 'intel':
         return <IntelCenter operator={currentSelectedOp} currentUser={currentUser} onUpdateOperator={onUpdateOperator} onRequestIntake={() => setShowIntake(true)} />;
       case 'radio':
@@ -1490,38 +2123,87 @@ const AppShell: React.FC<AppShellProps> = ({
         // Rendered as an always-mounted sibling inside <main> below so streaming
         // state survives tab switches. See the display-toggled wrapper near renderTabContent().
         return null;
+      case 'parent_hub':
+        // Surfaces only for adults with at least one junior in their
+        // parentIds. Read-only visibility into the linked juniors' training,
+        // safety events, emergency contact. The junior is told their parent
+        // sees this (transparency disclosed in JuniorIntakeForm welcome).
+        //
+        // When a parent-led workout is active, the dashboard is replaced
+        // with the full-screen workout execution surface (same takeover
+        // pattern Planner uses for adult workout mode in the COC tab).
+        if (parentLedActive) {
+          return (
+            <div style={{ padding: '16px 18px' }}>
+              <ParentLedWorkoutMode
+                parent={currentUser}
+                junior={parentLedActive.junior}
+                workout={parentLedActive.workout}
+                dateISO={parentLedActive.dateISO}
+                onUpdateJunior={onUpdateOperator}
+                onExit={() => setParentLedActive(null)}
+                onOpenGunny={() => setActiveTab('gunny')}
+                onSendGunnyMessage={sendGunnyVoiceMessage}
+              />
+            </div>
+          );
+        }
+        return (
+          <div style={{ padding: '16px 18px' }}>
+            <ParentDashboard
+              parent={currentUser}
+              juniors={linkedJuniorsForHub}
+              onUpdateJunior={onUpdateOperator}
+              onStartSession={(junior, workout) => {
+                setParentLedActive({ junior, workout, dateISO: getLocalDateStr() });
+              }}
+            />
+          </div>
+        );
       case 'ops':
         // Trainer-specific view
         if (currentUser.role === 'trainer') {
+          // The two-button toggle (MY CLIENTS / COMMAND CENTER) was
+          // clipping behind the topbar on mobile because the buttons
+          // were sized as full bracket-card chrome (.btn-primary /
+          // .btn-ghost render at ~44px tall with 14px+ padding) and
+          // the row sat flush against the AppShell header.
+          //
+          // Mobile fix: smaller pill segmented control, equal-width
+          // splits, tighter padding. Desktop keeps the spacious
+          // version. The toggle is also Command-Center-only (admins),
+          // so non-admins skip the toggle entirely.
+          const hasCommandCenter = OPS_CENTER_ACCESS.includes(currentUser.id);
           return (
             <div>
-              {/* Sub-tab toggle for trainers */}
-              <div style={{
-                display: 'flex',
-                gap: '10px',
-                padding: '14px 18px',
-                borderBottom: '1px solid var(--border-green-soft)',
-                background: 'var(--bg-card)',
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowTrainerDashboard(false)}
-                  className={`btn btn-sm ${!showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
-                >
-                  My Clients
-                </button>
-                {OPS_CENTER_ACCESS.includes(currentUser.id) && (
+              {hasCommandCenter && (
+                <div style={{
+                  display: 'flex',
+                  gap: isMobile ? '6px' : '10px',
+                  padding: isMobile ? '8px 12px' : '14px 18px',
+                  borderBottom: '1px solid var(--border-green-soft)',
+                  background: 'var(--bg-card)',
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowTrainerDashboard(false)}
+                    className={`btn ${isMobile ? 'btn-xs' : 'btn-sm'} ${!showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ flex: 1, minHeight: isMobile ? 32 : 40, fontSize: isMobile ? 11 : 13 }}
+                  >
+                    {isMobile ? 'CLIENTS' : 'My Clients'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setShowTrainerDashboard(true)}
-                    className={`btn btn-sm ${showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    className={`btn ${isMobile ? 'btn-xs' : 'btn-sm'} ${showTrainerDashboard ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ flex: 1, minHeight: isMobile ? 32 : 40, fontSize: isMobile ? 11 : 13 }}
                   >
-                    Command Center
+                    {isMobile ? 'COMMAND' : 'Command Center'}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
               {/* Content */}
-              {showTrainerDashboard && OPS_CENTER_ACCESS.includes(currentUser.id) ? (
+              {showTrainerDashboard && hasCommandCenter ? (
                 <OpsCenter currentUser={currentUser} operators={operators} />
               ) : (
                 <TrainerDashboard trainer={currentUser} allOperators={operators} onUpdateOperator={onUpdateOperator} />
@@ -1613,22 +2295,110 @@ const AppShell: React.FC<AppShellProps> = ({
     );
   }
 
-  // Show intake form if not completed OR user requested to re-take it
+  // ─── Standalone PersonaPicker takeover ──────────────────────────────
+  // Triggered by the What's New modal CTA `open_persona_picker`. Renders
+  // as a full-screen page that writes the operator's choice and exits.
+  // Intentionally placed BEFORE the intake check so a mid-onboarding
+  // takeover doesn't happen — intake always wins.
+  if (showStandalonePersonaPicker && !showIntake) {
+    return (
+      <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
+        <DataRain />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <PersonaPicker
+            currentPersonaId={(currentUser.personaId as PersonaId | undefined) ?? 'gunny'}
+            operatorAge={currentUser.profile?.age}
+            operatorFitnessLevel={currentUser.intake?.fitnessLevel}
+            mode="standalone"
+            onBack={() => setShowStandalonePersonaPicker(false)}
+            onSelectPersona={(id) => {
+              const updated: Operator = { ...currentUser, personaId: id };
+              onUpdateOperator(updated, true);
+              setShowStandalonePersonaPicker(false);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Show intake form if not completed OR user requested to re-take it.
+  // Junior operators (with the flag on) get the youth-safe JuniorIntakeForm
+  // instead of the adult IntakeForm. Adult flow + flag-disabled juniors
+  // fall through to the existing IntakeForm — no behavior change.
   if (showIntake) {
+    const useJuniorIntake = currentUser.isJunior === true && isJuniorOperatorEnabledClient();
     return (
       <div style={{ width: '100%', minHeight: '100dvh', backgroundColor: '#030303', color: '#00ff41', fontFamily: '"Chakra Petch", sans-serif', overflow: 'auto' }}>
         <DataRain />
         <div style={{ position: 'relative', zIndex: 1, padding: '20px 0' }}>
-          <IntakeForm
-            operator={currentUser}
-            onComplete={(updated) => {
-              onUpdateOperator(updated);
-              setShowIntake(false);
-              // Auto-generate SITREP after intake
-              generateSitrep(updated);
-            }}
-            onSkip={() => setShowIntake(false)}
-          />
+          {useJuniorIntake ? (
+            <JuniorIntakeForm
+              operator={currentUser}
+              onComplete={(updated) => {
+                onUpdateOperator(updated);
+                setShowIntake(false);
+                // SITREP generation is intentionally skipped for juniors —
+                // the adult SITREP path computes macros and prescribes adult
+                // training splits, neither of which apply to youth operators.
+                // The trainer (RAMPAGE) sets the junior's program manually.
+              }}
+              onSkip={() => setShowIntake(false)}
+            />
+          ) : (
+            <IntakeForm
+              operator={currentUser}
+              onComplete={async (updated) => {
+                onUpdateOperator(updated);
+                setShowIntake(false);
+
+                // Path recommendation: when the operator picked
+                // "LET GUNNY DECIDE" (gunny_pick) we call the
+                // /api/gunny/recommend-path endpoint to get a concrete
+                // training path + rationale based on intake. We do this
+                // BEFORE generateSitrep so the SITREP can use the
+                // resolved path. Errors are non-fatal — fall through
+                // to SITREP with whatever path was set.
+                let opForSitrep = updated;
+                if (updated.preferences?.trainingPath === 'gunny_pick') {
+                  try {
+                    const token = (typeof window !== 'undefined') ? localStorage.getItem('authToken') : null;
+                    const res = await fetch('/api/gunny/recommend-path', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                      },
+                      body: JSON.stringify({ operatorId: updated.id }),
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      if (data.ok && data.path) {
+                        const withPath: Operator = {
+                          ...updated,
+                          preferences: {
+                            ...updated.preferences,
+                            trainingPath: data.path,
+                            gunnyPathRationale: data.rationale,
+                            gunnyPathAlternates: data.alternates,
+                          },
+                        };
+                        onUpdateOperator(withPath);
+                        opForSitrep = withPath;
+                      }
+                    }
+                  } catch (err) {
+                    console.error('[AppShell] path recommendation failed', err);
+                  }
+                }
+
+                // Auto-generate SITREP after intake (now using
+                // resolved path if recommendation ran)
+                generateSitrep(opForSitrep);
+              }}
+              onSkip={() => setShowIntake(false)}
+            />
+          )}
         </div>
       </div>
     );
@@ -2010,11 +2780,12 @@ const AppShell: React.FC<AppShellProps> = ({
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             const isOps = tab.id === 'ops';
+            const isGunny = tab.id === 'gunny';
             return (
               <button
                 key={tab.id}
                 type="button"
-                className={`nav-tab ${isActive ? 'active' : ''}`}
+                className={`nav-tab ${isActive ? 'active' : ''} ${isGunny ? 'gunny-tab' : ''}`}
                 onClick={() => {
                   setActiveTab(tab.id);
                   trackEvent(EVENTS.TAB_CHANGED, { tab: tab.id });
@@ -2027,26 +2798,41 @@ const AppShell: React.FC<AppShellProps> = ({
                     : { padding: '12px 18px' }
                 }
               >
-                <span
-                  aria-hidden
-                  style={{
-                    opacity: isActive ? 1 : 0.5,
-                    marginRight: 6,
-                    display: 'inline-flex',
-                    verticalAlign: 'middle',
-                  }}
-                >
-                  {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 14 })}
-                </span>
+                {isGunny ? (
+                  // Match the mobile/iPad bottom-tab "hero Gunny"
+                  // treatment — the green-glowing logo image with
+                  // the radial halo behind it (.gunny-icon-wrap from
+                  // design-system.css). The .desktop modifier scales
+                  // the wrap down for the inline horizontal nav so
+                  // it doesn't pop out of the topbar like it does on
+                  // the mobile bottom bar.
+                  <span className="gunny-icon-wrap desktop" aria-hidden>
+                    <img src="/logo-glow.png" alt="" className="gunny-icon" />
+                  </span>
+                ) : (
+                  <span
+                    aria-hidden
+                    style={{
+                      opacity: isActive ? 1 : 0.5,
+                      marginRight: 6,
+                      display: 'inline-flex',
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 14 })}
+                  </span>
+                )}
                 {t(tab.labelKey)}
               </button>
             );
           })}
         </nav>
 
-        {/* Right: Language Toggle + User Switcher (desktop) */}
+        {/* Right: User Switcher (desktop). The EN/ES toggle was
+            removed in May 2026 — language is now locked at signup
+            and switches require a support request. The picker still
+            lives on the LoginScreen. */}
         <div className="desktop-user-switcher" style={{ minWidth: '280px', display: 'flex', justifyContent: 'flex-end', gap: '16px', alignItems: 'center' }}>
-          <LanguageToggle compact={true} />
           <UserSwitcher
             currentUser={currentUser}
             accessibleUsers={accessibleUsers}
@@ -2056,15 +2842,21 @@ const AppShell: React.FC<AppShellProps> = ({
           />
         </div>
 
-        {/* Mobile: compact user switcher */}
+        {/* Mobile: user switcher only.
+            The compact EN/ES toggle that used to live here was
+            removed in May 2026 (language locks at signup; switches
+            go through support). LoginScreen still surfaces the
+            picker pre-signup. */}
         {isMobile && (
-          <UserSwitcher
-            currentUser={currentUser}
-            accessibleUsers={accessibleUsers}
-            selectedUser={currentSelectedOp}
-            onSelectUser={setSelectedOperator}
-            onLogout={onLogout}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <UserSwitcher
+              currentUser={currentUser}
+              accessibleUsers={accessibleUsers}
+              selectedUser={currentSelectedOp}
+              onSelectUser={setSelectedOperator}
+              onLogout={onLogout}
+            />
+          </div>
         )}
       </header>
 
@@ -2082,11 +2874,30 @@ const AppShell: React.FC<AppShellProps> = ({
         overflow: 'auto',
         backgroundColor: '#030303',
         position: 'relative',
-        paddingBottom: isMobile ? '56px' : '0',
+        // Tab bar's actual height = 8px top padding + 56px button
+        // min-height + 6px bottom padding + safe-area-inset-bottom
+        // (per design-system.css .ds-tabbar). The legacy 56px padding
+        // here was clipping anything that sat at the bottom of the
+        // content area (notably the GunnyChat composer "What's the
+        // mission..." bar) under the fixed tab bar. 70px + safe-area
+        // matches the actual tab bar footprint.
+        paddingBottom: isMobile ? 'calc(70px + env(safe-area-inset-bottom, 0px))' : '0',
       }}>
         {renderTabContent()}
-        {/* Always-mounted GunnyChat — display-toggled so streaming state & refs survive tab switches. */}
-        <div style={{ display: activeTab === 'gunny' ? 'block' : 'none', height: '100%' }}>
+        {/* Always-mounted GunnyChat — display-toggled so streaming state & refs
+            survive tab switches. Absolute fill so the inner flex column
+            (header + scrollable messages + composer) honors the parent's
+            actual height; with the prior height:100% inside flex+overflow,
+            percentage heights resolved oddly and the composer slipped
+            beneath the bottom tab bar on mobile. */}
+        <div style={{
+          display: activeTab === 'gunny' ? 'block' : 'none',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: isMobile ? 'calc(70px + env(safe-area-inset-bottom, 0px))' : 0,
+        }}>
           <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />
         </div>
       </main>
@@ -2096,24 +2907,70 @@ const AppShell: React.FC<AppShellProps> = ({
           and the active top-pip indicator all live in CSS now. We keep the
           icon glyph + label structure but reorder so Gunny sits in the
           center with the special halo treatment per the handoff. */}
-      <nav className="ds-tabbar bottom-nav">
+      <nav className={`ds-tabbar bottom-nav${(() => {
+        // Compute column-count flag synchronously so the parent gets
+        // the right grid template before children render. The rare
+        // 7-col case is a trainer-parent (e.g. Ruben/Britney): they
+        // hold Daily Ops + OPS (trainer privileges) AND Parent Hub
+        // (junior operator linked via parentIds) at the same time.
+        // Without this, OPS would win the single "power tab" slot
+        // and Parent Hub would silently disappear on mobile.
+        const ids = new Set(tabs.map(t => t.id));
+        const hasOps = ids.has('ops');
+        const hasParentHub = ids.has('parent_hub');
+        const hasDailyOps = ids.has('daily_ops');
+        if (hasDailyOps && hasOps && hasParentHub) return ' seven-col';
+        if (hasDailyOps && (hasOps || hasParentHub)) return ' six-col';
+        return '';
+      })()}`}>
         {(() => {
-          // Reorder for the 5-slot mobile grid: Gunny lives in the
-          // visually-anchored center slot. Build the row dynamically so
-          // 4-tab (regular user) and 5-tab (admin/trainer) cases both
-          // produce a 5-col grid with Gunny centered.
+          // Reorder for the mobile grid. Gunny anchors at slot 3 in
+          // the 5/6-col layouts (visually centered for 5-col, slightly
+          // left-of-center for 6-col). The 7-col layout shifts Gunny
+          // one slot right so the hero halo lands on the true visual
+          // center (slot 4 of 7) — this case is the trainer-parent
+          // surface (Ruben/Britney) where all three power tabs coexist.
           //
-          // Layout target: [coc] [planner] [GUNNY] [intel] [ops?]
-          // For 4-tab users, the 5th slot stays empty; the grid keeps
-          // Gunny visually centered.
+          // Layout (5-col):  [coc] [planner] [GUNNY] [intel] [daily_ops|ops|parent_hub]
+          // Layout (6-col):  [coc] [planner] [GUNNY] [intel] [daily_ops] [ops|parent_hub]
+          // Layout (7-col):  [coc] [planner] [intel] [GUNNY] [daily_ops] [parent_hub] [ops]
           const byId = new Map(tabs.map(t => [t.id, t] as const));
-          const slots: (typeof tabs[number] | null)[] = [
-            byId.get('coc') ?? null,
-            byId.get('planner') ?? null,
-            byId.get('gunny') ?? null,
-            byId.get('intel') ?? null,
-            byId.get('ops') ?? null,
-          ];
+          const dailyOps = byId.get('daily_ops') ?? null;
+          const ops = byId.get('ops') ?? null;
+          const parentHub = byId.get('parent_hub') ?? null;
+          const powerTab = ops ?? parentHub;
+          const sevenCol = !!dailyOps && !!ops && !!parentHub;
+          const sixCol = !sevenCol && !!dailyOps && !!powerTab;
+          const slots: (typeof tabs[number] | null)[] = sevenCol
+            ? [
+                byId.get('coc') ?? null,
+                byId.get('planner') ?? null,
+                byId.get('intel') ?? null,
+                byId.get('gunny') ?? null,
+                dailyOps,
+                parentHub,
+                ops,
+              ]
+            : sixCol
+            ? [
+                byId.get('coc') ?? null,
+                byId.get('planner') ?? null,
+                byId.get('gunny') ?? null,
+                byId.get('intel') ?? null,
+                dailyOps,
+                powerTab,
+              ]
+            : [
+                byId.get('coc') ?? null,
+                byId.get('planner') ?? null,
+                byId.get('gunny') ?? null,
+                byId.get('intel') ?? null,
+                // 5-col fallback priority: daily_ops first (the
+                // user-facing daily-rhythm surface), then power tabs.
+                // Non-admin Commanders get Daily Ops here. Non-Commander
+                // trainers/admins (no Daily Ops in tabs) get OPS here.
+                dailyOps ?? powerTab,
+              ];
           return slots.map((tab, idx) => {
             if (!tab) {
               // Empty grid cell — preserves 5-col layout for 4-tab users.
@@ -2146,24 +3003,12 @@ const AppShell: React.FC<AppShellProps> = ({
         })()}
       </nav>
 
-      {/* Gunny AI floating pill — uses .ds-gunny-fab from the design
-          system. The legacy class .gunny-toggle-btn stays alongside so the
-          older positioning rules (defined in <style jsx> further below)
-          keep working until we fully strip them. The .show modifier is
-          conditional — without it the FAB stays hidden via opacity:0 +
-          pointer-events:none, with it the cubic-bezier pop animation
-          fires. */}
-      {activeTab !== 'gunny' && (
-        <button
-          className={`ds-gunny-fab gunny-toggle-btn ${!showGunnyPanel ? 'show' : ''}`}
-          onClick={() => setShowGunnyPanel(true)}
-          title="Open Gunny AI"
-          aria-hidden={showGunnyPanel}
-        >
-          <BoltIcon size={18} />
-          GUNNY
-        </button>
-      )}
+      {/* Gunny AI floating pill — REMOVED. The full GUNNY tab in the
+          bottom nav is the canonical entry point. The floating FAB
+          covered half the mobile screen and the side panel didn't deliver
+          on its "context-aware live edits" intent. Side panel JSX below
+          stays dormant for now; a future "Claude in Chrome" style
+          implementation will revive a different surface. */}
 
       {/* Gunny AI Panel Overlay (mobile) */}
       {showGunnyPanel && isMobile && (
@@ -2253,6 +3098,57 @@ const AppShell: React.FC<AppShellProps> = ({
                 className={`gunny-message ${msg.role}`}
               >
                 {msg.role === 'gunny' ? <GunnyMarkdown text={msg.text} accent="#ffb800" /> : msg.text}
+                {/* Per-message HEAR IT button — Gunny messages only.
+                    User-initiated playback bypasses iOS autoplay
+                    blocks AND the global TTS mute (so users who
+                    silenced auto-speak can still hear specific
+                    responses on demand). */}
+                {msg.role === 'gunny' && msg.text && msg.text.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playPanelMessage(idx, msg.text);
+                    }}
+                    aria-label={
+                      panelSpeakingIdx === idx
+                        ? 'Stop reading message'
+                        : 'Read message aloud'
+                    }
+                    title={
+                      panelSpeakingIdx === idx
+                        ? 'Stop'
+                        : 'Hear Gunny say this'
+                    }
+                    style={{
+                      marginTop: 8,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      background: panelSpeakingIdx === idx
+                        ? 'rgba(255,140,0,0.18)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${
+                        panelSpeakingIdx === idx
+                          ? 'rgba(255,140,0,0.6)'
+                          : 'rgba(255,140,0,0.2)'
+                      }`,
+                      color: panelSpeakingIdx === idx ? '#ffb800' : 'rgba(255,184,0,0.7)',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      padding: '3px 8px',
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      transition: 'all 0.15s ease',
+                      boxShadow: panelSpeakingIdx === idx
+                        ? '0 0 8px rgba(255,140,0,0.25)'
+                        : 'none',
+                    }}
+                  >
+                    {panelSpeakingIdx === idx ? '◼ STOP' : '▶ HEAR IT'}
+                  </button>
+                )}
               </div>
             ))}
             {gunnyLoading && (
@@ -2270,7 +3166,7 @@ const AppShell: React.FC<AppShellProps> = ({
             <textarea
               ref={inputRef}
               className="gunny-input"
-              placeholder="Ask about what you see..."
+              placeholder={t('appshell.ask_about_screen')}
               value={gunnyInput}
               onChange={(e) => {
                 setGunnyInput(e.target.value);
@@ -2301,6 +3197,18 @@ const AppShell: React.FC<AppShellProps> = ({
       {/* Legal Pages Overlays */}
       {showTOS && <TermsOfService onClose={() => setShowTOS(false)} />}
       {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
+
+      {/* What's New — first-login alert per the standing shipping order.
+          The modal fires server-side dismiss before close, then routes
+          the CTA action through handleAnnouncementAction (which can
+          surface the standalone PersonaPicker, intake flow, etc.). */}
+      {announcement && (
+        <WhatsNewModal
+          announcement={announcement}
+          onClose={() => setAnnouncement(null)}
+          onActionClick={handleAnnouncementAction}
+        />
+      )}
 
       {/* Classification Bar */}
       <div className="classification-bar" style={{ pointerEvents: 'auto', justifyContent: 'space-between', padding: '0 12px' }}>

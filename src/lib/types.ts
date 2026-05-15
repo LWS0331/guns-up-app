@@ -16,7 +16,7 @@ export interface Team {
 }
 
 export const TEAMS: Team[] = [
-  { id: 'team-wolf-pack', name: 'WOLF PACK', trainerId: 'op-ruben', memberIds: ['op-ruben', 'op-rosa', 'op-erika', 'op-efrain', 'op-aldo', 'op-edgar', 'op-jasmine', 'op-patty'] },
+  { id: 'team-wolf-pack', name: 'WOLF PACK', trainerId: 'op-ruben', memberIds: ['op-ruben', 'op-rosa', 'op-erika', 'op-efrain', 'op-aldo', 'op-edgar', 'op-jasmine', 'op-patty', 'op-poppy'] },
   { id: 'team-madheart', name: 'MADHEART', trainerId: 'op-britney', memberIds: ['op-britney', 'op-mary', 'op-harold', 'op-jonathan', 'op-natalie', 'op-arnold', 'op-lynette'] },
 ];
 
@@ -53,6 +53,9 @@ export interface IntakeAssessment {
   sessionDuration?: number; // minutes per session
   preferredSplit?: string; // PPL, Upper/Lower, Full Body, Bro Split, etc.
   trainingPath?: string; // bodybuilding, crossfit, powerlifting, athletic, tactical, hybrid, gunny_pick
+  // Triggers the pregnancy/postpartum corpus overlay in src/lib/gunnyCorpus.ts
+  // when set. UI selector lives in IntakeForm (follow-up).
+  lifeStage?: 'pregnancy' | 'postpartum';
   startingPRs: { exercise: string; weight: number; reps: number }[];
 }
 
@@ -118,6 +121,95 @@ export function getTrainerRank(clientCount: number): TrainerRank {
   return 'recruit';
 }
 
+// ─── Junior Operator (ages 10–18) ──────────────────────────────────────────
+// Gated behind JUNIOR_OPERATOR_ENABLED feature flag. See SOCCER_YOUTH_PROMPT
+// in src/app/api/gunny/route.ts for the youth-safe coaching voice and
+// hard knowledge boundaries (no body-comp, no supplements, no diagnosis).
+
+export type SoccerPosition = 'GK' | 'CB' | 'FB' | 'CM' | 'W' | 'ST' | 'unsure';
+export type CompetitionLevel = 'recreational' | 'club' | 'academy' | 'high_school_varsity' | 'mixed';
+export type MaturationStage = 'pre_phv' | 'peri_phv' | 'post_phv' | 'unknown';
+export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+/**
+ * Sport disciplines supported by the Junior Operator program.
+ * Each sport gets its own corpus overlay (youth-soccer.md,
+ * youth-football.md) and its own position vocabulary. The persona
+ * scaling (10-12 / 13-15 / 16-18) and core safety rules (concussion
+ * recognition, no-1RM-under-14, parent visibility) are shared across
+ * all sports.
+ *
+ * `position` stays typed as SoccerPosition for backward compat — when
+ * sport === 'football', a free-form football position string lives in
+ * `footballPosition` (kept off the soccer enum to avoid leaking
+ * football slots into the soccer dropdown).
+ */
+export type Sport = 'soccer' | 'football';
+
+export interface SportProfile {
+  sport: Sport;
+  /** Soccer position. Required when sport === 'soccer'. */
+  position: SoccerPosition;
+  /**
+   * Football position key, matching positions.<position_key> in the
+   * youth-football corpus (e.g. "pocket_passer_qb", "x_wr",
+   * "mike_lb"). Required when sport === 'football'. Free-form so
+   * adding a new position is a corpus-only update.
+   */
+  footballPosition?: string;
+  level: CompetitionLevel;
+  yearsPlaying: number;
+  trainingDaysPerWeek: number;                    // soccer practice days
+  gameDay: DayOfWeek;
+  noTrainingDays: DayOfWeek[];
+  trainingWindow: string;                         // e.g. "6:00 PM"
+  multiSport: boolean;
+  otherSports: string[];                          // e.g. ["dance"]
+  focusAreas: string[];                           // free-text from trainer/parent intake
+  // Coach observations (set by trainer, not athlete)
+  coachNotes: string;
+  // Maturation — set by trainer or auto-estimated via Mirwald (v2)
+  maturationStage: MaturationStage;
+  estimatedPeakHeightVelocity: string | null;     // ISO date string or null
+}
+
+export interface JuniorConsent {
+  parentSignatures: Array<{
+    parentOperatorId: string;
+    signedAt: string;                             // ISO date
+    consentVersion: string;                       // for legal audit
+  }>;
+  participationConsent: boolean;
+  dataConsent: boolean;
+  emergencyContact: {
+    name: string;
+    relationship: string;
+    phone: string;
+  };
+  pediatricianClearance: boolean;                 // optional but encouraged
+  pediatricianClearanceDate: string | null;
+}
+
+export type JuniorSafetyEventType =
+  | 'refusal'
+  | 'red_flag'
+  | 'parent_alert'
+  | 'pain_report'
+  | 'concussion_keyword';
+
+export interface JuniorSafetyEvent {
+  timestamp: string;
+  type: JuniorSafetyEventType;
+  detail: string;
+  resolved: boolean;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+}
+
+export interface JuniorSafetyFlags {
+  events: JuniorSafetyEvent[];
+}
+
 export interface Operator {
   id: string;
   name: string;
@@ -125,8 +217,14 @@ export interface Operator {
   pin: string;
   email?: string;
   passwordHash?: string;
+  googleId?: string; // Google OAuth `sub` claim — set after first /api/auth/google sign-in
   role: UserRole;
   tier: AiTier;
+  // AI coach persona — drives src/lib/personas.ts → getCoreIdentity().
+  // Defaults to 'gunny' for legacy operators (resolvePersonaId() handles
+  // missing/invalid values). Closed-beta minors are auto-set to 'coach'.
+  // The PersonaPicker UI persists changes here via onUpdateOperator.
+  personaId?: 'gunny' | 'raven' | 'buck' | 'coach';
   coupleWith: string | null; // ID of partner operator
   trainerId?: string; // ID of trainer (for clients)
   clientIds?: string[]; // IDs of clients (for trainers)
@@ -154,6 +252,25 @@ export interface Operator {
   preferences: TrainingPreferences;
   workouts: Record<string, Workout>; // key = "YYYY-MM-DD"
   dayTags: Record<string, DayTag>; // key = "YYYY-MM-DD"
+
+  /** Daily readiness check-in log (Apr 2026). Captures sleep / stress /
+   *  mood / readiness / energy + optional notes per local date. Gunny's
+   *  <readiness_json> channel writes here; profile.readiness/sleep/stress
+   *  also get mirrored to "today's value" so existing readers keep working. */
+  dailyReadiness?: Record<string, DailyReadinessEntry>;
+
+  /** Macrocycle engine (Apr 2026). Up to 2 active goals — see
+   *  src/lib/macrocycle.ts. Empty/undefined for operators who haven't
+   *  set a long-horizon goal. */
+  macroCycles?: MacroCycle[];
+
+  // Junior Operator fields (all undefined for adult operators)
+  isJunior?: boolean;
+  juniorAge?: number;                  // duplicate of profile.age for fast filter
+  parentIds?: string[];                // adult operators with full visibility
+  sportProfile?: SportProfile;
+  juniorConsent?: JuniorConsent;
+  juniorSafety?: JuniorSafetyFlags;
 }
 
 export interface OperatorProfile {
@@ -181,6 +298,11 @@ export interface OperatorProfile {
 export interface NutritionData {
   targets: { calories: number; protein: number; carbs: number; fat: number };
   meals: Record<string, Meal[]>; // key = "YYYY-MM-DD"
+  /** Daily hydration log — total ounces consumed per local date.
+   *  Apr 2026: added so Gunny's <hydration_json> channel and the
+   *  Nutrition tab can both record / read the same source of truth.
+   *  Optional + Record<> so legacy operators load without migration. */
+  hydration?: Record<string, number>;
 }
 
 export interface Meal {
@@ -204,6 +326,12 @@ export interface PRRecord {
   notes: string;
   type?: PRType; // defaults to 'strength' for backward compat
   achieved?: boolean; // for milestone-type PRs
+  // Training path active when the PR was logged. One of the IntakeAssessment
+  // trainingPath values (bodybuilding, crossfit, powerlifting, athletic,
+  // tactical, hybrid, gunny_pick). Stamped at ingestion time by both the
+  // Planner auto-detect and the GunnyChat <pr_json> handler. Older PRs
+  // logged before Apr 2026 have no path — UI renders them un-tagged.
+  path?: string;
 }
 
 // Milestone roadmap — generated based on fitness level
@@ -242,6 +370,18 @@ export interface TrainingPreferences {
   trainingPath?: string;
   weakPoints: string[];
   avoidMovements: string[];
+  /** Default rest-period (seconds) used when a prescription has no
+   *  explicit rest hint. Defaults to APP_DEFAULT_REST_SEC (120) in
+   *  src/lib/restTimer.ts when undefined. Set to 0 to opt out of
+   *  auto-start entirely (operator manages rest manually). */
+  defaultRestSec?: number;
+  // Gunny path recommendation engine — populated by /api/gunny/recommend-path
+  // when the operator picked "LET GUNNY DECIDE" during intake. The endpoint
+  // analyzes intake answers and returns a concrete path key + rationale +
+  // up to 2 alternates. The rationale gets surfaced in IntelCenter so the
+  // user understands why Gunny picked it.
+  gunnyPathRationale?: string;
+  gunnyPathAlternates?: { path: string; reason: string }[];
 }
 
 // Workout types
@@ -257,6 +397,19 @@ export interface Workout {
   completed: boolean;
   // Workout mode tracking
   results?: WorkoutResults;
+  // Autoregulation engine inputs (post-session capture):
+  //   sessionRpe — Foster's sRPE 1-10. Captured via single-question
+  //     prompt when the operator marks the workout complete. Drives
+  //     ACWR (acute:chronic workload ratio) calculation in the
+  //     readiness engine. Per-set rpe is good but patchy (skipped
+  //     on warmup, conditioning, etc.); sRPE is one tap, much higher
+  //     completion rate, and the standard input for load monitoring.
+  //   sessionDurationMin — actual time spent training. With sRPE
+  //     this gives load = sRPE × duration (Foster 2001). Auto-
+  //     populated from workout-mode timer when available; manual
+  //     entry as fallback.
+  sessionRpe?: number;
+  sessionDurationMin?: number;
 }
 
 export interface WorkoutResults {
@@ -304,10 +457,34 @@ export interface DayTag {
   note: string;
 }
 
+/** Daily readiness check-in. All numeric fields 1-10. `mood` is a free-form
+ *  short string ("crushing it" / "wiped" / etc.). Stored on
+ *  Operator.dailyReadiness keyed by YYYY-MM-DD. */
+export interface DailyReadinessEntry {
+  date: string;
+  readiness?: number;
+  sleep?: number;
+  stress?: number;
+  energy?: number;
+  mood?: string;
+  notes?: string;
+  /** When the entry was recorded (ISO). Used for "last check-in" UI. */
+  recordedAt: string;
+}
+
 // Exercise library
 export interface Exercise {
   id: string;
   name: string;
+  /**
+   * Spanish display name. Optional — when missing, callers fall back
+   * to `name`. Use the `resolveExerciseName(exercise, language)`
+   * helper from src/data/exercises.ts at every render site instead
+   * of reading `name` directly when an operator's language pref is
+   * available (Phase B i18n, May 2026). Stored workouts keep their
+   * baked-in name so historical data never shifts language.
+   */
+  nameEs?: string;
   category: string;
   equipment: string;
   videoUrl?: string;
@@ -399,7 +576,7 @@ export interface DailyBrief {
 }
 
 export type ViewMode = 'month' | 'week' | 'day';
-export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'radio' | 'ops';
+export type AppTab = 'coc' | 'planner' | 'intel' | 'gunny' | 'radio' | 'ops' | 'parent_hub' | 'daily_ops';
 
 // Operator IDs that can access OPS CENTER and the server-side admin guards.
 //
@@ -498,52 +675,61 @@ export interface Goal {
   name: string;
 }
 
-// Tier configuration with pricing and features (updated March 2026 with real API costs + caching).
+// Tier configuration with pricing and features.
+// ─── PRICING v1.0 (April 2026, per GUNS_UP_Pricing_Strategy_v1.docx) ───
+// The previous March 2026 numbers ($2 / $5 / $15 / $49.99) were the
+// beta-launch internal pricing; the v1.0 strategy doc locked in the
+// public-launch pricing below after benchmarking against 28 competitors
+// in the AI fitness market. Key changes:
+//   • RECON       $2.00  → $3.99   (still under every competitor except GymGenie)
+//   • OPERATOR    $5.00  → $9.99   (matches Hevy Pro / Apple Fitness+ / MacroFactor)
+//   • COMMANDER   $15.00 → $14.99  ($0.01 trim for psych pricing — anchor band)
+//   • WARFIGHTER  $49.99 unchanged (lifts to $79.99 in Phase DELTA, April 2027)
+// Annual is 17% off the monthly × 12 — not the legacy 16.7%.
+// Trainer share % per the v1.0 doc: 25 / 30 / 20 / 40 (was 25 / 30 / 35 / 40).
+// API costs assume 60% prompt-cache hit rate, validated in beta.
+// Margins are recomputed end-to-end in the doc's unit-economics waterfall.
+//
 // Model IDs are sourced from lib/models.ts — the central map — to avoid drift.
-// Previously `haiku` here was set to the short string `claude-haiku-4-5`, which
-// doesn't match the real Anthropic model ID `claude-haiku-4-5-20251001` used at
-// the API boundary; any UI that displayed this value next to a tier was also
-// showing the wrong string, and had anything tried to pass it to the SDK we'd
-// have gotten a 404.
 export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
   haiku: {
     name: 'RECON',
     codename: 'RECON',
     model: TIER_MODEL_MAP.haiku,
-    monthlyPrice: 2.00,
-    annualPrice: 20.00, // $1.67/mo — 17% off
-    trainerShare: 0.50,
-    platformShare: 0.97,
+    monthlyPrice: 3.99,
+    annualPrice: 39.92, // 17% off
+    trainerShare: 1.00,  // 25%
+    platformShare: 2.40,
     apiCostEstimate: 0.07,
-    stripeFee: 0.36,
+    stripeFee: 0.42,     // 2.9% + $0.30
     infraCost: 0.10,
-    margin: 48.5,
+    margin: 60.2,
     features: ['Gunny AI Chat', 'Workout Builder', 'Macro Estimation', 'Trainer Workout Feed'],
   },
   sonnet: {
     name: 'OPERATOR',
     codename: 'OPERATOR',
     model: TIER_MODEL_MAP.sonnet,
-    monthlyPrice: 5.00,
-    annualPrice: 50.00, // $4.17/mo — 17% off
-    trainerShare: 1.50,
-    platformShare: 2.61,
+    monthlyPrice: 9.99,
+    annualPrice: 99.50, // 17% off
+    trainerShare: 3.00,  // 30%
+    platformShare: 5.96,
     apiCostEstimate: 0.34,
-    stripeFee: 0.45,
+    stripeFee: 0.59,
     infraCost: 0.10,
-    margin: 52.2,
+    margin: 59.7,
     features: ['Gunny AI Chat', 'Workout Builder', 'Macro Estimation', 'Trainer Workout Feed', 'Weekly Programming', 'Goal Path Planning'],
   },
   opus: {
     name: 'COMMANDER',
     codename: 'COMMANDER',
     model: TIER_MODEL_MAP.opus,
-    monthlyPrice: 15.00,
-    annualPrice: 150.00, // $12.50/mo — 17% off
-    trainerShare: 3.00,
+    monthlyPrice: 14.99,
+    annualPrice: 149.40, // 17% off
+    trainerShare: 3.00,  // 20%
     platformShare: 10.60,
     apiCostEstimate: 0.56,
-    stripeFee: 0.74,
+    stripeFee: 0.73,
     infraCost: 0.10,
     margin: 70.7,
     features: ['Gunny AI Chat', 'Workout Builder', 'Macro Estimation', 'Trainer Workout Feed', 'Weekly Programming', 'Goal Path Planning', 'PR Tracking & Analysis', 'Injury Workarounds', 'Periodization Engine'],
@@ -553,8 +739,8 @@ export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
     codename: 'WARFIGHTER',
     model: TIER_MODEL_MAP.white_glove,
     monthlyPrice: 49.99,
-    annualPrice: 499.00, // $41.58/mo — 17% off
-    trainerShare: 20.00,
+    annualPrice: 497.90, // 17% off — Phase DELTA (Apr 2027) lifts to $79.99/mo, $797.90 annual
+    trainerShare: 20.00, // 40%
     platformShare: 27.58,
     apiCostEstimate: 0.56,
     stripeFee: 1.75,
@@ -563,3 +749,121 @@ export const TIER_CONFIGS: Record<AiTier, TierConfig> = {
     features: ['All Commander Features', 'Priority Support', 'Custom Meal Plans', 'Monthly Video Consult', 'Direct Trainer Hotline'],
   },
 };
+
+// ─── Macrocycle Engine ─────────────────────────────────────────────────────
+// Calendar-aware periodization for 6-12 month goals (powerlifting meet,
+// hypertrophy phase, season prep, fat loss). Reverse-engineers blocks from
+// goal date → today, with concurrent-goal arbitration (max 2 active goals)
+// and hybrid time + performance-marker block transitions.
+//
+// See:
+//   - src/lib/macrocycleLibrary.ts — goal-type block templates
+//   - src/lib/macrocycle.ts        — engine (build, arbitration, transitions)
+
+export type MacroGoalType =
+  | 'powerlifting_meet'
+  | 'hypertrophy_phase'
+  | 'season_prep'
+  | 'fat_loss'
+  // ---- 2026-05 corpus alignment ----
+  // The corpus carries dedicated periodization for Olympic weightlifting,
+  // tactical/military assessment, and CrossFit competition — but only the
+  // four legacy goal types were surfaced in the macrocycle picker. Adding
+  // these three closes the gap so operators on those paths get a
+  // periodization aligned with what Gunny's corpus actually teaches.
+  | 'olympic_meet'           // Olympic Weightlifting competition (Hatch-anchored 12-wk peak)
+  | 'tactical_assessment'    // PFT / selection / mil-LE assessment (MTI Fluid 7-wk)
+  | 'crossfit_comp'          // CrossFit Open / Sanctional peak (12-wk metcon peak)
+  // ---- 2026-05 corpus alignment (round 2) ----
+  // Maternal + rehab corpora carry their own staged frameworks
+  // (trimester-anchored for pregnancy; 4-stage rehab for return-to-sport)
+  // — adding them as proper macrocycle goals so the engine + UI can
+  // build them instead of force-fitting onto hypertrophy_phase.
+  | 'pregnancy_postpartum'   // Pregnancy peak at birth date (ACOG 804 / Mottola 2018 / Goom 2019)
+  | 'return_to_sport';       // Rehab return-to-sport (Cook isometric → eccentric → plyo → RTS)
+
+export type MacroBlockKind =
+  | 'general_prep'      // GPP — base building, high volume, low specificity
+  | 'specific_prep'     // SPP — sport-specific work, moderate volume
+  | 'accumulation'      // hypertrophy / volume phase
+  | 'intensification'   // strength / load phase
+  | 'peak'              // peak / competition prep
+  | 'taper'             // pre-competition deload
+  | 'deload'            // recovery week
+  | 'maintenance'       // off-cycle / pause
+  | 'cut'               // fat-loss cut
+  | 'transition';       // bridge between blocks
+
+// `exclusive` blocks pause secondary goals (e.g., peak/taper for a meet).
+// `concurrent_with_secondary` blocks allow secondary goals to run.
+// `concurrent_only` blocks can only be a secondary (e.g., maintenance).
+export type MacroBlockCompatibility =
+  | 'exclusive'
+  | 'concurrent_with_secondary'
+  | 'concurrent_only';
+
+export interface MacroPerformanceMarker {
+  /** Human-readable label, e.g. "Hit 5x5 @ 80% with ≤2 RIR" */
+  label: string;
+  /** Type of marker — drives the readiness check in macrocycle.ts. */
+  kind: 'volume_target' | 'intensity_target' | 'compliance_rate' | 'pr_progression';
+  /** Numeric threshold; semantics depend on kind:
+   *  - volume_target: weekly volume in lbs or reps
+   *  - intensity_target: avg working weight as % of 1RM (0-100)
+   *  - compliance_rate: planned-vs-completed sessions (0-100)
+   *  - pr_progression: target weight on the indicator lift in lbs */
+  threshold: number;
+  /** Once threshold is reached, block can advance EARLY by this many days. */
+  advanceEarlyDaysAllowed: number;
+}
+
+export interface MacroBlock {
+  id: string;
+  kind: MacroBlockKind;
+  name: string;                                  // e.g. "Accumulation Block"
+  startDate: string;                             // ISO YYYY-MM-DD
+  endDate: string;                               // ISO YYYY-MM-DD inclusive
+  durationWeeks: number;                         // nominal length
+  compatibility: MacroBlockCompatibility;
+  /** Daily-brief prescription scalers. Baseline = 1.0; deload = 0.5–0.7. */
+  volumeMultiplier: number;
+  intensityMultiplier: number;
+  performanceMarker?: MacroPerformanceMarker;
+  description: string;                           // short text for brief header
+  /** Operator-specific guidance, written by Gunny on block transition. */
+  gunnyNotes?: string;
+  status: 'upcoming' | 'active' | 'completed' | 'extended';
+}
+
+export interface MacroGoal {
+  id: string;
+  type: MacroGoalType;
+  name: string;                                  // e.g. "Springfield PL Open"
+  targetDate: string;                            // ISO YYYY-MM-DD
+  /** 1 = highest, 2 = secondary. Concurrent arbitration: priority 1 wins;
+   *  if priority 1's active block is `exclusive`, priority 2 pauses. */
+  priority: 1 | 2;
+  targetMetrics?: Record<string, number>;        // e.g. { squat: 405, bench: 275 }
+  status: 'active' | 'completed' | 'paused' | 'cancelled';
+  createdAt: string;
+}
+
+export interface MacroCycle {
+  id: string;
+  goal: MacroGoal;
+  blocks: MacroBlock[];                          // ordered by startDate
+  lastRecomputedAt: string;
+  /** IDs of blocks that already have Gunny annotations cached. */
+  annotatedBlockIds: string[];
+}
+
+export interface MacroCycleArbitrationResult {
+  /** The block that drives today's prescription. */
+  primaryBlock: MacroBlock | null;
+  primaryGoal: MacroGoal | null;
+  /** Secondary block running concurrently (null if paused or not present). */
+  secondaryBlock: MacroBlock | null;
+  secondaryGoal: MacroGoal | null;
+  /** Human-readable note when a secondary goal is paused. */
+  pausedNotes?: string;
+}

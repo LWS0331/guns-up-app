@@ -1,0 +1,462 @@
+{
+  "knowledge_id": "nicotine_pouches_oral_health_v1",
+  "version": "1.0.0",
+  "last_updated": "2026-05-01",
+  "topic": "Nicotine pouches and oral/dental health",
+  "scope": "Tobacco-free oral nicotine pouches (Zyn, On!, Velo, Rogue, Lucy, etc.) and their effects on teeth, gums, and oral tissues",
+  "evidence_quality_overall": "Limited but growing. Modern pouches widely available since ~2019. Longest published clinical study followed users for 24 weeks. Most long-term claims are extrapolated from snus epidemiology and nicotine pharmacology, not directly measured in pouch users.",
+  "tldr": "Modern nicotine pouches likely cause less dental damage than cigarettes or snus, but they are not benign. The most clinically dangerous effect is what they hide rather than what they show: site-specific gum recession, white mucosal lesions, and silent periodontal progression driven by nicotine-induced vasoconstriction. Carcinogen levels are 1-3 orders of magnitude lower than snus or cigarettes. Alkaline pH (~8.8) makes direct enamel erosion biologically implausible. For smokers who fully switch, the trade likely favors switching. For non-users starting pouches, no oral health benefit exists.",
+
+  "sections": [
+    {
+      "id": "enamel_and_staining",
+      "title": "Enamel erosion and tooth staining",
+      "summary": "Pouches do not appear to erode enamel directly and stain teeth dramatically less than cigarettes or snus. Indirect risks (xerostomia reducing salivary buffering) remain plausible but unmeasured.",
+      "key_facts": [
+        {
+          "fact": "Pouch pH is alkaline, ranging from 6.86 to 10.5 with median ~8.8 across major product analyses.",
+          "evidence_level": "strong",
+          "sources": ["Stanfill et al. CDC, Nicotine & Tobacco Research 2021 (37 products)", "Mallock et al., Tobacco Control 2024 (44 products)", "Bäck et al., BMC Chemistry 2023", "El-Hellani et al."],
+          "implication": "Critical pH for enamel demineralization is 5.5. Direct acid-mediated enamel erosion from the pouch matrix itself is biologically implausible under normal use."
+        },
+        {
+          "fact": "Free-base nicotine reaches ~86% of total nicotine at typical pouch pH due to engineered alkalinity (sodium carbonate/bicarbonate buffers).",
+          "evidence_level": "strong",
+          "sources": ["Mallock et al. 2024"],
+          "implication": "Maximizes nicotine absorption through oral mucosa."
+        },
+        {
+          "fact": "No published in vitro or clinical study has documented measurable enamel loss from pouches.",
+          "evidence_level": "strong",
+          "sources": ["Rungraungrayabkul, BMC Oral Health 2024 systematic review", "La Rosa, Frontiers in Oral Health 2026 mini-review"],
+          "implication": "Both systematic reviews found zero studies measuring enamel erosion as an outcome."
+        },
+        {
+          "fact": "In bovine enamel exposed for 86 days: cigarettes caused color change (ΔE) of 28.5, snus 18.3, modern oral pouch (LYFT 10mg) 4.1 — statistically indistinguishable from saline control (2.17).",
+          "evidence_level": "moderate",
+          "sources": ["Dalrymple et al., American Journal of Dentistry 2021 (industry-funded but methodologically rigorous)"],
+          "implication": "Pouches stain dramatically less than tobacco products. Pouches lack tobacco leaf, tar, and combustion byproducts — the dominant chromogens."
+        },
+        {
+          "fact": "When smokers switched to On! pouches, Lobene Stain Index dropped roughly 60% over 24 weeks.",
+          "evidence_level": "moderate",
+          "sources": ["Liu et al., Oral Health and Preventive Dentistry 2025"],
+          "implication": "Comparator was cigarettes, so this is more an indictment of cigarettes than vindication of pouches."
+        }
+      ]
+    },
+    {
+      "id": "cavities_and_caries",
+      "title": "Tooth decay and cavity risk",
+      "summary": "Pouches contain no sugar but nicotine itself promotes Streptococcus mutans virulence. Combined with chronic dry mouth, theoretical caries risk rises — especially root caries on recession-exposed surfaces. Not yet quantified in human pouch users.",
+      "key_facts": [
+        {
+          "fact": "All major brands (Zyn, On!, Velo, Rogue, Lucy) are sugar-free. Sweeteners include acesulfame potassium, sucralose, maltitol, and sometimes xylitol.",
+          "evidence_level": "strong",
+          "sources": ["Manufacturer disclosures"],
+          "implication": "Cariogenic load from formulation alone is essentially zero. Xylitol is anti-cariogenic; acesulfame K can lower S. mutans-to-sanguinis ratio in plaque."
+        },
+        {
+          "fact": "In Wistar rats infected with S. mutans, adding 1mg/mL nicotine to drinking water raised sulcal caries incidence from 37.3 to 42.7 (p=0.009) and increased S. mutans attachment to enamel.",
+          "evidence_level": "moderate",
+          "sources": ["Liu et al., Journal of Dental Sciences 2018"],
+          "implication": "Nicotine acts as a caries promoter independent of sugar."
+        },
+        {
+          "fact": "Nicotine up to 16 mg/mL upregulates S. mutans virulence genes, increases lactic acid output, and enhances biofilm and extracellular polysaccharide formation.",
+          "evidence_level": "moderate",
+          "sources": ["Huang et al. 2012, 2015 (in vitro)"],
+          "implication": "Direct molecular mechanism for nicotine-driven cariogenicity."
+        },
+        {
+          "fact": "Chronic xerostomia (dry mouth) reduces salivary buffering. Cementum demineralizes at pH 6.0-6.7 — well above plaque pH after meals.",
+          "evidence_level": "strong",
+          "sources": ["General dental literature"],
+          "implication": "Root caries risk is plausibly elevated on surfaces newly exposed by gum recession in pouch users."
+        },
+        {
+          "fact": "No clinical study has yet measured caries incidence in dedicated pouch users.",
+          "evidence_level": "gap",
+          "sources": ["Rungraungrayabkul 2024 systematic review captured DMFT only at baseline"],
+          "implication": "Caries risk in human pouch users is theoretically elevated but unquantified."
+        }
+      ]
+    },
+    {
+      "id": "gum_recession_and_lesions",
+      "title": "Gum recession and oral mucosal lesions",
+      "summary": "The most consistent clinical finding across studies: localized gum recession and white mucosal lesions (leukoplakia-like) appear precisely where users habitually place the pouch. Lesions regress on cessation based on long-term snus data.",
+      "key_facts": [
+        {
+          "fact": "Two case reports documented 22- and 25-year-old men with daily pouch use for 11 and 18 months presenting with localized buccal recession and frank leukoplakia at maxillary canine and premolar sites — patterns corresponding 'precisely' to placement habits.",
+          "evidence_level": "moderate",
+          "sources": ["BMC Oral Health 2025 case reports"],
+          "implication": "Same-site placement is the strongest single predictor of localized damage. Lesions can develop within 11 months."
+        },
+        {
+          "fact": "First histopathology of pouch-associated lesions in five-patient case series showed parakeratosis, acanthotic epithelium, intraepithelial and connective-tissue edema, and chronic inflammatory infiltration with lymphocytes and macrophages.",
+          "evidence_level": "moderate",
+          "sources": ["Miluna-Meldere et al., Diagnostic Pathology 2024"],
+          "implication": "Pattern is indistinguishable from classical smokeless-tobacco keratosis."
+        },
+        {
+          "fact": "In 19-year-old Swedish snuff users: 42% recession prevalence vs 17% in controls (odds ratio 5.1). In maxillary anterior zone where pouches typically sit: 33% vs 10%.",
+          "evidence_level": "strong",
+          "sources": ["Montén, Wennström and Ramberg, Journal of Clinical Periodontology 2006"],
+          "implication": "Provides the most rigorous denominator for placement-site recession risk. Pouches likely follow similar trajectory."
+        },
+        {
+          "fact": "South Asian smokeless-tobacco users showed mean recession of 2.99mm vs 1.05mm in controls. Published case described 6mm Class II Miller recession at single placement site.",
+          "evidence_level": "moderate",
+          "sources": ["2025 cross-sectional study"],
+          "implication": "Recession depth correlates with chronic same-site exposure."
+        },
+        {
+          "fact": "Among snus users who switched to pouches, gingival retraction occurred in 54-57%, with no improvement over six weeks of switching.",
+          "evidence_level": "moderate",
+          "sources": ["Alizadehgharib et al., European Journal of Oral Sciences 2022"],
+          "implication": "Recession appears to be established rather than reversible in the short term."
+        },
+        {
+          "fact": "In 27-29 year follow-up of 1,115 Swedish snus-induced-lesion patients, lesions disappeared in 100% (62 of 62) of those who permanently quit. No oral cancers occurred at original lesion sites.",
+          "evidence_level": "strong",
+          "sources": ["Roosaar et al., International Journal of Cancer 2006"],
+          "implication": "Mucosal lesions reverse with cessation. Frithiof's 1983 cohort showed near-complete clinical reversal within 14 days of quitting."
+        },
+        {
+          "fact": "In a barrier-modified pouch pilot, snus lesion prevalence dropped from 95.7% to 69.6% over five weeks of switching.",
+          "evidence_level": "preliminary",
+          "sources": ["La Rosa pilot, Acta Odontologica Scandinavica 2025"],
+          "implication": "Pouch lesions plausibly follow regression curve similar to snus, but not yet proven."
+        }
+      ]
+    },
+    {
+      "id": "hidden_periodontitis_risk",
+      "title": "Nicotine vasoconstriction masks gum disease (the silent danger)",
+      "summary": "The most clinically consequential mechanism: nicotine is a potent vasoconstrictor that suppresses bleeding and remodels gingival microvasculature, hiding advanced periodontal attachment loss from both patients and clinicians.",
+      "key_facts": [
+        {
+          "fact": "Gingival crevicular fluid concentrations of nicotine in heavy users reach roughly 300x plasma levels.",
+          "evidence_level": "strong",
+          "sources": ["Johnson and Hill, Periodontology 2000, 2004"],
+          "implication": "Local oral tissue exposure is dramatically higher than systemic measurements suggest."
+        },
+        {
+          "fact": "Chronic nicotine exposure produces fibrotic, pale, non-bleeding gingiva that conceals advanced underlying attachment loss.",
+          "evidence_level": "strong",
+          "sources": ["Bergström periodontal cohort", "Palmer et al., Journal of Clinical Periodontology 2005"],
+          "implication": "Standard gum disease warning signs (bleeding on brushing/flossing) are suppressed. Periodontitis progresses silently."
+        },
+        {
+          "fact": "Heavy smokers (>10 cigarettes/day) accumulate 2.06mm of alveolar bone loss vs 1.6mm in lighter smokers, despite presenting with cleaner-looking gums.",
+          "evidence_level": "strong",
+          "sources": ["Bergström cohort"],
+          "implication": "Visual appearance of gums is unreliable in heavy nicotine users."
+        },
+        {
+          "fact": "Nicotine impairs neutrophil phagocytosis, oxidative burst, and chemotaxis. Suppresses periodontal ligament fibroblast growth by 48% at 50µM and 86% at 200µM. Reduces collagen synthesis while accelerating collagen degradation.",
+          "evidence_level": "strong",
+          "sources": ["MacFarlane, Journal of Periodontology 1995", "PDL fibroblast in vitro studies"],
+          "implication": "Cellular biology of gum tissue is directly compromised by nicotine alone."
+        },
+        {
+          "fact": "Five real pouch products tested on human gingival fibroblasts: cytotoxicity in 2 of 5, IL-6 inflammatory upregulation in 1, HMOX1 oxidative-stress upregulation in 3.",
+          "evidence_level": "moderate",
+          "sources": ["Mallock-Ohnesorg group, Archives of Toxicology 2023"],
+          "implication": "Even tobacco-free pouch extracts trigger inflammatory signaling in gum tissue."
+        },
+        {
+          "fact": "Periodontopathogens detected in saliva of pouch users (Tannerella forsythia, Fusobacterium nucleatum, Porphyromonas gingivalis, Prevotella intermedia, Rothia mucilaginosa) but NONE in non-tobacco controls. T. forsythia dominated in pouch users specifically.",
+          "evidence_level": "moderate",
+          "sources": ["Miluna-Meldere et al., Microorganisms 2024"],
+          "implication": "Pouches drive measurable oral microbiome dysbiosis associated with periodontitis."
+        },
+        {
+          "fact": "Snus is NOT significantly associated with periodontitis. Snus users show local recession without classical destructive periodontitis.",
+          "evidence_level": "strong",
+          "sources": ["Solberg et al. meta-analysis, Journal of Clinical Periodontology 2025", "Hugoson and Rolandsson Swedish studies"],
+          "implication": "Cigarette smokers had roughly doubled periodontitis risk vs non-users; snus did not. Pouches likely follow snus pattern."
+        }
+      ]
+    },
+    {
+      "id": "implants_and_healing",
+      "title": "Dental implants and surgical healing",
+      "summary": "Nicotine alone (independent of combustion) significantly impairs implant osseointegration and surgical healing. Patients with planned implants, extractions, or periodontal surgery should expect compromised outcomes.",
+      "key_facts": [
+        {
+          "fact": "Systematic review of 8 in vivo studies of nicotine alone found statistically significant reduction in bone-to-implant contact (Z=-2.49, p=0.014).",
+          "evidence_level": "strong",
+          "sources": ["Javed et al., Journal of Periodontology 2017"],
+          "implication": "Isolates nicotine itself (not combustion products) as the cause of implant failure mechanisms."
+        },
+        {
+          "fact": "Implant failure rates: 6.35% in smokers vs 3.18% in non-smokers across 80,000+ implants — roughly doubled failure rate.",
+          "evidence_level": "strong",
+          "sources": ["Chrcanovic, Albrektsson, Wennerberg meta-analysis 2015"],
+          "implication": "Reference rate for nicotine-related implant compromise."
+        },
+        {
+          "fact": "Larger 2022 meta-analysis of 35,511 smoker implants: odds ratio of 2.40 for failure and 0.58mm greater marginal bone loss.",
+          "evidence_level": "strong",
+          "sources": ["2022 meta-analysis"],
+          "implication": "Vasoconstriction during the critical osseointegration window plus osteoblast suppression, osteoclast activation, and impaired angiogenesis."
+        },
+        {
+          "fact": "No pouch-specific implant data exist.",
+          "evidence_level": "gap",
+          "sources": [],
+          "implication": "Risk extrapolated from nicotine-isolation studies and smoking literature. Likely applies but not directly proven."
+        }
+      ]
+    },
+    {
+      "id": "carcinogens_and_cancer_risk",
+      "title": "Carcinogen content and oral cancer risk",
+      "summary": "Pouches contain 1-3 orders of magnitude lower tobacco-specific nitrosamines (TSNAs) than snus or cigarettes — closer to nicotine replacement therapy than to tobacco. IARC has not classified pouches; smokeless tobacco remains Group 1 carcinogenic.",
+      "key_facts": [
+        {
+          "fact": "TSNA content per unit by product class (NNN / NNK): Cigarettes 33-323 ng / 40-246 ng. US moist snuff up to ~1190 ng / ~120 ng. Swedish snus 50-250 ng / ~10-50 ng. Modern nicotine pouches 0-12.9 ng / 0-5.4 ng (mostly below limit of quantification). Nicotine gum/lozenge trace to ~2 ng / trace.",
+          "evidence_level": "strong",
+          "sources": ["Mallock 2024 independent analysis (44 pouches)", "Bäck 2023 industry-funded analysis"],
+          "implication": "Pouches resemble nicotine replacement therapy more than tobacco for the dominant smokeless-tobacco carcinogens. NNN and NNK drive smokeless-tobacco oral carcinogenesis."
+        },
+        {
+          "fact": "FDA's January 16, 2025 PMTA authorization of 20 Zyn products: 36 of 42 measured harmful and potentially harmful constituents were below quantification. FDA concluded products 'pose lower risk of cancer and other serious health conditions' than cigarettes or most smokeless tobacco.",
+          "evidence_level": "strong",
+          "sources": ["FDA PMTA marketing-granted order, January 16, 2025"],
+          "implication": "First federal regulatory recognition of relative risk reduction. Authorization is for legal marketing, not endorsement of safety."
+        },
+        {
+          "fact": "FDA December 2025 authorization of six On! PLUS products noted 'no measurable levels of several carcinogenic HPHCs (such as NNN) that are key drivers of oral cancer risk.'",
+          "evidence_level": "strong",
+          "sources": ["FDA PMTA decision December 2025"],
+          "implication": "Confirms carcinogen reduction extends across the modern pouch category."
+        },
+        {
+          "fact": "186 distinct compounds identified across 48 pouches in chemical screen. 8 are hazardous under EU CLP classification. Several products contained methyleugenol, benzophenone, β-myrcene — all IARC Group 2B (possibly carcinogenic).",
+          "evidence_level": "moderate",
+          "sources": ["Mallock-Ohnesorg 2023 chemical screen"],
+          "implication": "Pouches are not non-carcinogenic. Major smokeless-tobacco carcinogens are largely absent; minor flavoring-derived carcinogens remain."
+        },
+        {
+          "fact": "Some plant-based or 'white granular' pouches contained formaldehyde at 3-4x snus levels and quantifiable TSNAs above snus.",
+          "evidence_level": "moderate",
+          "sources": ["Mallock 2024"],
+          "implication": "Product variation matters. Not all pouches are equally low-risk."
+        },
+        {
+          "fact": "IARC has not classified pouches. Smokeless tobacco (including snus) remains Group 1 carcinogenic. Nicotine alone is not classified as a carcinogen.",
+          "evidence_level": "strong",
+          "sources": ["IARC monographs"],
+          "implication": "Regulatory carcinogen status differs between traditional smokeless tobacco and modern pouches."
+        }
+      ]
+    },
+    {
+      "id": "use_patterns_that_amplify_harm",
+      "title": "Risk-amplifying use patterns",
+      "summary": "Risk concentrates in identifiable behaviors: same-site placement, higher nicotine strengths, longer duration in mouth, dual use with cigarettes, and unregulated nicotine analog products.",
+      "key_facts": [
+        {
+          "fact": "Same-site placement is the single strongest predictor of localized damage (recession, leukoplakia, chronic ulceration).",
+          "evidence_level": "strong",
+          "sources": ["Multiple case reports", "Smokeless tobacco literature"],
+          "implication": "Mechanical pressure plus high free-base nicotine concentration repeatedly contacting same square centimeter of tissue."
+        },
+        {
+          "fact": "30mg pouches produced peak plasma nicotine of 29.4 ng/mL vs 15.2 ng/mL for a cigarette, with greater area under the curve.",
+          "evidence_level": "strong",
+          "sources": ["Mallock-Ohnesorg pharmacokinetic work"],
+          "implication": "Higher nicotine strengths intensify exposure. US sales since 2019 have shifted toward 6mg and 8mg products faster than toward 3mg."
+        },
+        {
+          "fact": "Manufacturers recommend 20-30 minutes per pouch, but observed average use approaches 75 minutes.",
+          "evidence_level": "moderate",
+          "sources": ["Use behavior studies"],
+          "implication": "Each additional minute adds cumulative free-base nicotine exposure to a finite tissue area."
+        },
+        {
+          "fact": "Dual use with cigarettes essentially erases the harm-reduction benefit.",
+          "evidence_level": "strong",
+          "sources": ["Smoking cessation literature"],
+          "implication": "Pouches only deliver risk reduction when they fully replace combustible tobacco."
+        },
+        {
+          "fact": "Unregulated 6-methyl nicotine analog products (Hippotine, MG, 'Imotine') contain 8-25mg of synthetic nicotine analog with worse neurotoxicity profile than nicotine itself, sold as 'tobacco-free' to evade regulation.",
+          "evidence_level": "moderate",
+          "sources": ["Jordt and Jabba 2024"],
+          "implication": "Emerging concern. These are NOT the same as PMTA-authorized pouches."
+        }
+      ]
+    },
+    {
+      "id": "comparison_to_other_products",
+      "title": "How pouches compare to snus and cigarettes",
+      "summary": "Pouches sit clearly below snus, which sits clearly below cigarettes, for staining, carcinogen content, and likely overall oral risk. Pouches still produce localized recession and lesions but milder than snus.",
+      "key_facts": [
+        {
+          "fact": "Staining hierarchy: cigarettes >> snus >> pouches >> baseline.",
+          "evidence_level": "strong",
+          "sources": ["Dalrymple et al. 2021", "Eliades et al. systematic review"]
+        },
+        {
+          "fact": "When users switch from snus to pouches, lesions improve. Pouches produce milder mucosal lesions than snus.",
+          "evidence_level": "moderate",
+          "sources": ["Alizadehgharib 2022", "La Rosa 2025"]
+        },
+        {
+          "fact": "Smokers switching to On! pouches over 24 weeks: gingival index improved 20-28%, bleeding index improved 23-30%.",
+          "evidence_level": "moderate",
+          "sources": ["Liu et al., Oral Health and Preventive Dentistry 2025"],
+          "implication": "Useful as smoker-comparator but NOT evidence pouches are harmless vs non-using baseline."
+        },
+        {
+          "fact": "Verdict: Pouches appear safer than cigarettes and probably safer than snus for oral outcomes, but carry distinctive localized risks (site-specific recession, leukoplakia-like lesions, dry mouth, silent periodontal progression) that no large human cohort has yet quantified.",
+          "evidence_level": "moderate",
+          "sources": ["Synthesis of available evidence"]
+        }
+      ]
+    },
+    {
+      "id": "harm_reduction_and_recommendations",
+      "title": "Practical harm reduction for users who continue",
+      "summary": "Two tiers of recommendations: strong-evidence interventions and plausible-but-untested ones. Complete cessation remains the single most evidence-based intervention.",
+      "strong_evidence_recommendations": [
+        {
+          "action": "Drink water frequently",
+          "rationale": "Counters xerostomia and preserves salivary buffering capacity"
+        },
+        {
+          "action": "Brush twice daily with soft-bristled brush and fluoride paste",
+          "rationale": "Standard caries prevention, especially important given nicotine-driven S. mutans virulence"
+        },
+        {
+          "action": "Use alcohol-free mouthwash",
+          "rationale": "Avoids worsening dry mouth"
+        },
+        {
+          "action": "Increase dental check-up frequency to every 3-4 months for daily users",
+          "rationale": "Catches periodontal progression that nicotine vasoconstriction will otherwise hide"
+        },
+        {
+          "action": "Biopsy any non-resolving white lesion",
+          "rationale": "Case reports show leukoplakia developing within 11 months at single placement sites"
+        }
+      ],
+      "plausible_untested_recommendations": [
+        {
+          "action": "Rotate placement sites",
+          "rationale": "Distributes mechanical and chemical exposure. Dentist consensus advice; never tested in clinical trial. Biologically plausible based on chewing-tobacco literature."
+        },
+        {
+          "action": "Limit pouches to 30 minutes or less",
+          "rationale": "Reduces cumulative free-base nicotine exposure per tissue area"
+        },
+        {
+          "action": "Choose 3mg over 6mg or higher strengths",
+          "rationale": "Reduces peak nicotine exposure to oral tissue"
+        },
+        {
+          "action": "Avoid immediate post-pouch brushing",
+          "rationale": "Allows local pH to normalize before mechanical brushing"
+        }
+      ],
+      "absolute_cessation_indications": [
+        "Existing periodontitis",
+        "Baseline xerostomia",
+        "Planned dental implants",
+        "Any oral premalignant lesion (leukoplakia, erythroplakia)"
+      ]
+    },
+    {
+      "id": "evidence_gaps",
+      "title": "What we don't know",
+      "summary": "Pouches have been widely available only since ~2019. Longest published clinical study is 24 weeks. Long-term cancer, tooth loss, and bone loss data in pouch users do not exist.",
+      "gaps": [
+        "No clinical study has measured caries incidence in dedicated pouch users.",
+        "No pouch-specific dental implant outcome data.",
+        "No long-term oral cancer epidemiology in pouch users (extrapolated from snus).",
+        "No long-term alveolar bone loss data in pouch users.",
+        "No long-term tooth loss data in pouch users.",
+        "Reversibility of pouch-associated lesions on cessation is plausible but unproven (extrapolated from snus).",
+        "Site-rotation effectiveness has never been tested in clinical trial."
+      ],
+      "ongoing_research": [
+        "30-year Swedish snus cohort",
+        "ClinicalTrials.gov NCT06043362 and other pouch trials",
+        "Meaningful chronic-exposure data not expected before early 2030s"
+      ],
+      "systematic_reviews": [
+        {
+          "citation": "Rungraungrayabkul, BMC Oral Health 2024",
+          "finding": "Identified only 3 eligible human studies covering 190 participants total, all rated high risk of bias."
+        },
+        {
+          "citation": "La Rosa, Frontiers in Oral Health 2026 mini-review",
+          "finding": "Concurred limited evidence base."
+        },
+        {
+          "citation": "Scherer, Harm Reduction Journal 2024",
+          "finding": "Same conclusion on evidence limitations."
+        }
+      ]
+    },
+    {
+      "id": "professional_positions",
+      "title": "Dental and regulatory body positions",
+      "summary": "No major dental association has issued a pouch-specific position statement as of May 2026. Existing tobacco/nicotine policies cover pouches by extension.",
+      "positions": [
+        {
+          "body": "American Dental Association (ADA)",
+          "status": "No pouch-specific position. Existing tobacco/nicotine policies apply by extension."
+        },
+        {
+          "body": "American Academy of Periodontology (AAP)",
+          "status": "No pouch-specific position."
+        },
+        {
+          "body": "FDI World Dental Federation",
+          "status": "No pouch-specific position."
+        },
+        {
+          "body": "AADOCR (AAP research arm)",
+          "status": "March 2025 case-series confirmed chronic inflammatory response at pouch placement sites. Called for longitudinal studies."
+        },
+        {
+          "body": "FDA",
+          "status": "January 2025 PMTA authorization of 20 Zyn products. December 2025 authorization of 6 On! PLUS products. June 2025 modified-risk application by Swedish Match under FDA Advisory Committee review January 22, 2026. Population-level decisions, not clinical guidance."
+        },
+        {
+          "body": "IARC",
+          "status": "Has not classified pouches. Smokeless tobacco remains Group 1 carcinogenic. Nicotine alone not classified as carcinogen."
+        }
+      ]
+    }
+  ],
+
+  "user_facing_summary": {
+    "for_smokers_considering_switching": "If you fully switch from cigarettes to pouches, the trade likely favors switching. You gain meaningful reduction in carcinogen exposure and probably in surface-level gum inflammation. You accept ongoing local risks: recession, keratotic lesions, dry mouth, microbiome shifts, and clinically subtle periodontitis that nicotine vasoconstriction will hide. Dual use erases the benefit.",
+    "for_non_users_considering_starting": "No oral health benefit exists. Compared to a non-using baseline, pouches present novel localized risks with no offsetting gain.",
+    "for_current_users": "Three behaviors carry the strongest evidence-supported benefit: rotate placement sites, hydrate aggressively to compensate for reduced saliva, increase dental check-up frequency to every 3-4 months. Biopsy any white lesion that doesn't resolve. Stop completely if you have existing periodontitis, dry mouth, planned implants, or any precancerous lesion."
+  },
+
+  "gunny_response_guidance": {
+    "tone": "Direct, no-BS, tactical. User-respecting. Don't moralize about nicotine choices — give them the facts and let them decide.",
+    "do_not": [
+      "Don't claim pouches are 'safe' — they aren't fully studied.",
+      "Don't claim pouches are equivalent to cigarettes — they aren't.",
+      "Don't recommend nicotine to non-users.",
+      "Don't give medical advice for specific diagnoses — defer to a dentist.",
+      "Don't speculate beyond the evidence — flag gaps explicitly."
+    ],
+    "do": [
+      "Distinguish what's proven from what's extrapolated.",
+      "Give specific numbers when users ask (pH, recession rates, TSNA levels).",
+      "Acknowledge the masking effect of nicotine vasoconstriction — this is the most important practical point.",
+      "Recommend dental check-up frequency increase for daily users.",
+      "If user describes a non-resolving white lesion, recommend dentist visit / biopsy."
+    ]
+  }
+}

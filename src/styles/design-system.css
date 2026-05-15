@@ -106,6 +106,7 @@
 .composer-send,
 .composer-tool,
 .subtabs button,
+.seg,
 .segmented .seg,
 .vitals-actions button,
 .ds-tabbar button,
@@ -512,7 +513,14 @@
   gap: 6px;
   align-items: center;
 }
-.segmented .seg {
+/* Top-level .seg covers BOTH siblings (prev/next chevrons that sit
+   outside .segmented in the planner header) AND descendants. Without
+   the standalone rule, iOS Safari paints the prev/next as default
+   white-fill rounded squares because none of the appearance reset
+   rules match. Keep both selectors to preserve the cascade — the
+   descendant variant below adds nothing new for now but stays in
+   case future overrides need finer scope. */
+.seg {
   font-family: var(--display);
   font-size: 10px;
   font-weight: 700;
@@ -530,6 +538,7 @@
   appearance: none;
   border-radius: 0;
 }
+.seg.active,
 .segmented .seg.active {
   color: var(--green);
   border-color: var(--green);
@@ -818,6 +827,33 @@
   z-index: 200;
   padding: 8px 0 calc(env(safe-area-inset-bottom, 0px) + 6px);
 }
+/* 6-col variant — enables Daily Ops + a power tab (OPS / PARENT_HUB)
+   to coexist at thumb-reach for admins / trainers who are also
+   Commander-tier. Buttons compress narrower (5 → 6 cols on a 390px
+   iPhone width = ~65px → ~54px per cell), still legible. */
+.ds-tabbar.six-col {
+  grid-template-columns: repeat(6, 1fr);
+}
+.ds-tabbar.six-col .lbl {
+  /* Slightly tighter label letter-spacing so 6-letter labels like
+     'PLANNER' don't truncate at narrower cell width. */
+  letter-spacing: 1px;
+}
+/* 7-col variant — trainer-parents who hold Daily Ops + OPS AND
+   Parent Hub need all three at thumb-reach (otherwise OPS would
+   shadow Parent Hub in the 6-col power-tab slot). At 390px iPhone
+   width that's ~46px per cell — labels stay legible because they're
+   all short (COC, GUNNY, INTEL, DAY OPS, PARENT, OPS). */
+.ds-tabbar.seven-col {
+  grid-template-columns: repeat(7, 1fr);
+}
+.ds-tabbar.seven-col .lbl {
+  letter-spacing: 0.5px;
+  font-size: 8px;
+}
+.ds-tabbar.seven-col button {
+  padding: 6px 2px 4px;
+}
 .ds-tabbar button {
   background: none;
   border: none;
@@ -870,6 +906,27 @@
   justify-content: center;
   margin-top: -14px;
   margin-bottom: -2px;
+}
+/* Inline desktop variant — used by the topbar horizontal nav so
+   the GUNNY tab matches the mobile bottom-tab hero treatment but
+   without the bottom-tab "pop out" margins. Smaller wrap + smaller
+   inner image so it sits inline next to the label like the other
+   SVG tab icons. */
+.gunny-icon-wrap.desktop {
+  width: 22px;
+  height: 22px;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.gunny-icon-wrap.desktop .gunny-icon {
+  width: 16px;
+  height: 16px;
+}
+.gunny-icon-wrap.desktop::before {
+  inset: -3px;
+  filter: blur(4px);
 }
 .gunny-icon-wrap::before {
   content: '';

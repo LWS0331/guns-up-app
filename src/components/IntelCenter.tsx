@@ -4,15 +4,25 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Meal, PRRecord, Injury, formatHeightInput, FitnessLevel, MilestoneGoal } from '@/lib/types';
 import WearableConnect from '@/components/WearableConnect';
+import CalendarConnect from '@/components/CalendarConnect';
 import ProgressCharts from '@/components/ProgressCharts';
 import BillingPanel from '@/components/BillingPanel';
 import { FOOD_DB } from '@/data/foods';
 import { notifyPRAlert, loadNotificationPrefs } from '@/lib/notifications';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
+import JuniorPRBoard from '@/components/JuniorPRBoard';
+import MacrocyclePanel from '@/components/MacrocyclePanel';
+import SupplementStack from '@/components/SupplementStack';
+import RecoveryReadout from '@/components/RecoveryReadout';
+import ReadinessPanel from '@/components/ReadinessPanel';
+import FormAnalysis from '@/components/FormAnalysis';
+import OperatingManual from '@/components/OperatingManual';
+import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
 import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import { getAuthToken } from '@/lib/authClient';
+import { compressImageForVision } from '@/lib/imageCompress';
 
 /** Format a meal.time for display — handles ISO, legacy locale strings, and bare times. */
 const formatMealTime = (raw: string | undefined): string => {
@@ -39,7 +49,7 @@ interface IntelCenterProps {
   onRequestIntake?: () => void;
 }
 
-type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES';
+type SubTab = 'PROFILE' | 'NUTRITION' | 'PR_BOARD' | 'ANALYTICS' | 'INJURIES' | 'PREFERENCES' | 'WEARABLES' | 'FORM_CHECK' | 'MACROCYCLE' | 'MANUAL';
 
 interface LocalState {
   profile: {
@@ -77,6 +87,34 @@ interface LocalState {
     daysPerWeek: number;
     weakPoints: string[];
     movementsToAvoid: string[];
+    // Apr 2026 audit: trainingPath was captured during intake but had
+    // ZERO UI surface in IntelCenter. That's why Gunny kept drifting on
+    // the field — the operator had no way to verify or correct what was
+    // saved. Surfacing it here closes the loop. Same logic applied to
+    // preferredWorkoutTime which was also intake-only.
+    trainingPath: string;
+    preferredWorkoutTime: string;
+    /** WS2 (May 2026). Optional. When undefined the resolver falls
+     *  back to APP_DEFAULT_REST_SEC (120s). Set 0 to opt out of
+     *  auto-start. */
+    defaultRestSec?: number;
+  };
+  // ── intakeFields ───────────────────────────────────────────────────
+  // Apr 2026 follow-up to PR #88. Audit found 7 more intake fields that
+  // were captured during onboarding but had no UI surface in any tab.
+  // Same Gunny-drift mechanism: data exists, operator can't see it,
+  // any prompt that depends on it produces opaque output. Grouping them
+  // under an explicit `intakeFields` slice (rather than overloading
+  // `preferences`) so the persist path (write-to-operator.intake) is
+  // unambiguous in handleSave.
+  intakeFields: {
+    currentActivity: string;
+    exerciseHistory: string;
+    movementScreenScore: number;
+    healthConditions: string[];
+    nutritionHabits: string;
+    dietaryRestrictions: string[];
+    supplements: string[];
   };
   newGoal: string;
   newEquipment: string;
@@ -228,12 +266,58 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       daysPerWeek: operator.preferences?.daysPerWeek || 6,
       weakPoints: operator.preferences?.weakPoints || [],
       movementsToAvoid: operator.preferences?.avoidMovements || [],
+      // Read trainingPath from intake first (the canonical source per
+      // buildGunnyContext.ts:424) and fall back to preferences for
+      // operators who completed intake before PR #82 — same fallback
+      // pattern as buildGunnyContext.
+      trainingPath: operator.intake?.trainingPath || operator.preferences?.trainingPath || 'gunny_pick',
+      preferredWorkoutTime: operator.intake?.preferredWorkoutTime || 'morning',
+      // WS2: read-through is intentional. Undefined stays undefined so
+      // the resolver falls back to APP_DEFAULT_REST_SEC. Number stays
+      // a number (including explicit 0 = opt out).
+      defaultRestSec: operator.preferences?.defaultRestSec,
+    },
+    intakeFields: {
+      currentActivity: operator.intake?.currentActivity || 'sedentary',
+      exerciseHistory: operator.intake?.exerciseHistory || 'none',
+      movementScreenScore: operator.intake?.movementScreenScore || 5,
+      healthConditions: operator.intake?.healthConditions || [],
+      nutritionHabits: operator.intake?.nutritionHabits || 'fair',
+      dietaryRestrictions: operator.intake?.dietaryRestrictions || [],
+      supplements: operator.intake?.supplements || [],
     },
     newGoal: '',
     newEquipment: '',
     newWeakPoint: '',
     newMovementToAvoid: '',
   });
+
+  // Re-sync the mirrored mealLogs slice whenever the operator prop changes.
+  //
+  // state.nutrition.mealLogs was originally seeded once at mount from
+  // operator.nutrition.meals[today] and never refreshed. That stale-state
+  // window meant: if the operator logged meals via Gunny chat (or in
+  // another tab/device) while IntelCenter was mounted, the user could
+  // click "Save Changes" on the form and the handleSave write would
+  // overwrite operator.nutrition.meals[today] with the stale snapshot —
+  // silently deleting recently-added meals.
+  //
+  // Only update when the canonical bucket actually differs from local state
+  // (compare via JSON.stringify; meal arrays are tiny, max ~10 entries).
+  // The meal-add handlers below also setState mealLogs immediately after
+  // onUpdateOperator, so this effect is a no-op in the synchronous case;
+  // it only fires for the cross-tab / cross-channel scenario.
+  useEffect(() => {
+    const todayStr = getTodayStr();
+    const serverBucket = operator.nutrition?.meals?.[todayStr] || [];
+    const stateBucket = state.nutrition.mealLogs;
+    if (JSON.stringify(serverBucket) === JSON.stringify(stateBucket)) return;
+    setState(prev => ({
+      ...prev,
+      nutrition: { ...prev.nutrition, mealLogs: serverBucket },
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operator.nutrition?.meals]);
 
   const handleSave = useCallback(() => {
     // Convert Goal objects back to strings
@@ -283,7 +367,33 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         daysPerWeek: state.preferences.daysPerWeek,
         weakPoints: state.preferences.weakPoints,
         avoidMovements: state.preferences.movementsToAvoid,
+        // Mirror trainingPath into preferences too so the buildGunnyContext
+        // fallback (intake → prefs) keeps working for legacy operators.
+        // The intake write below is the canonical source.
+        trainingPath: state.preferences.trainingPath,
+        // WS2: persist the rest-default preference. undefined stays
+        // undefined (operator never customized; resolver falls back
+        // to APP_DEFAULT_REST_SEC). Explicit 0 = opt out of auto-start.
+        defaultRestSec: state.preferences.defaultRestSec,
       },
+      // Write trainingPath + preferredWorkoutTime + the residual 7
+      // intakeFields into operator.intake. Intake is the canonical
+      // read source for these — buildGunnyContext.ts and intakeAudit.ts
+      // both read directly from operator.intake.*. Without writing
+      // them through, edits in IntelCenter would never propagate to
+      // Gunny (the exact bug surfaced in PR #82 / #88).
+      intake: {
+        ...(operator.intake || {}),
+        trainingPath: state.preferences.trainingPath,
+        preferredWorkoutTime: state.preferences.preferredWorkoutTime,
+        currentActivity: state.intakeFields.currentActivity,
+        exerciseHistory: state.intakeFields.exerciseHistory,
+        movementScreenScore: state.intakeFields.movementScreenScore,
+        healthConditions: state.intakeFields.healthConditions,
+        nutritionHabits: state.intakeFields.nutritionHabits,
+        dietaryRestrictions: state.intakeFields.dietaryRestrictions,
+        supplements: state.intakeFields.supplements,
+      } as Operator['intake'],
     };
     onUpdateOperator(updated);
   }, [state, operator, onUpdateOperator]);
@@ -476,6 +586,40 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       ...prev,
       preferences: { ...prev.preferences, [field]: value },
     }));
+  };
+
+  // intakeFields handler — mirrors handlePreferencesChange but writes
+  // into the new intakeFields slice. Save flushes the slice into
+  // operator.intake (canonical source for buildGunnyContext +
+  // intakeAudit).
+  const handleIntakeFieldChange = <K extends keyof LocalState['intakeFields']>(
+    field: K,
+    value: LocalState['intakeFields'][K],
+  ) => {
+    setState((prev) => ({
+      ...prev,
+      intakeFields: { ...prev.intakeFields, [field]: value },
+    }));
+  };
+
+  // Toggle helper for the array-typed intakeFields (healthConditions,
+  // dietaryRestrictions, supplements). Mirrors IntakeForm's
+  // toggleArrayItem behavior: clicking 'None' clears the whole list,
+  // clicking any other item toggles it in/out.
+  const toggleIntakeArrayItem = (
+    field: 'healthConditions' | 'dietaryRestrictions' | 'supplements',
+    item: string,
+  ) => {
+    setState((prev) => {
+      const arr = prev.intakeFields[field] || [];
+      let next: string[];
+      if (item === 'None') {
+        next = arr.includes('None') ? [] : ['None'];
+      } else {
+        next = arr.includes(item) ? arr.filter((x) => x !== item) : [...arr.filter((x) => x !== 'None'), item];
+      }
+      return { ...prev, intakeFields: { ...prev.intakeFields, [field]: next } };
+    });
   };
 
   const addEquipment = () => {
@@ -699,7 +843,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           handoff Daily-Brief pattern. */}
       <div className="ds-card bracket" style={{ gridColumn: '1 / -1' }}>
         <span className="bl" /><span className="br" />
-        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>Recovery</span>
+        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>{t('intel.recovery_eyebrow')}</span>
         <div
           style={{
             display: 'grid',
@@ -742,7 +886,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           button. The add input is the canonical .ds-input + .btn so
           it matches every other form-add affordance in the system. */}
       <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
-        <label htmlFor="intel-new-goal">Goals</label>
+        <label htmlFor="intel-new-goal">{t('intel.goals')}</label>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           {state.profile.goals.length === 0 && (
@@ -775,7 +919,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <input
             id="intel-new-goal"
             type="text"
-            placeholder="Add goal..."
+            placeholder={t('intel.add_goal_placeholder')}
             value={state.newGoal}
             onChange={(e) => setState((prev) => ({ ...prev, newGoal: e.target.value }))}
             onKeyPress={(e) => {
@@ -787,6 +931,128 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <button onClick={addGoal} className="btn btn-primary btn-sm" type="button">
             + Add
           </button>
+        </div>
+      </div>
+
+      {/* ─── INTAKE BACKGROUND ─────────────────────────────────────────
+          Captured during onboarding but no UI surface before this.
+          Surfacing them so the operator can verify/correct what Gunny
+          uses to calibrate programming + recovery + safety advice.
+          Each field writes to operator.intake.* on save (the canonical
+          source read by buildGunnyContext.ts).
+          - currentActivity: drives non-training NEAT estimate + recovery
+          - exerciseHistory: drives starting-load + program complexity
+          - movementScreenScore: drives exercise selection + mobility cues
+          - healthConditions: hard contraindication filter
+       */}
+      <div className="ds-card bracket" style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>
+          Intake Background
+        </span>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+          {/* Daily Activity Level */}
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label htmlFor="intel-activity">Daily Activity Level</label>
+            <select
+              id="intel-activity"
+              value={state.intakeFields.currentActivity}
+              onChange={(e) => handleIntakeFieldChange('currentActivity', e.target.value)}
+              className="ds-input"
+            >
+              <option value="sedentary">Sedentary — desk job, minimal movement</option>
+              <option value="lightly_active">Lightly Active — some daily walking</option>
+              <option value="active">Active — regular movement, on feet often</option>
+              <option value="very_active">Very Active — physical job or daily training</option>
+              <option value="athlete">Competitive Athlete — 5+ days, sport-specific</option>
+            </select>
+          </div>
+
+          {/* Exercise History */}
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label htmlFor="intel-exercise-history">Exercise History</label>
+            <select
+              id="intel-exercise-history"
+              value={state.intakeFields.exerciseHistory}
+              onChange={(e) => handleIntakeFieldChange('exerciseHistory', e.target.value)}
+              className="ds-input"
+            >
+              <option value="none">No Training Experience</option>
+              <option value="sporadic">Sporadic — on and off, no consistency</option>
+              <option value="consistent_beginner">Consistent Beginner — regular but learning</option>
+              <option value="consistent_intermediate">Consistent Intermediate — solid routine</option>
+              <option value="advanced_athlete">Advanced / Athlete — competitive or years of dedicated training</option>
+            </select>
+          </div>
+
+          {/* Movement Screen Score (1-10) */}
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label htmlFor="intel-mobility">Mobility / Movement Quality (1-10)</label>
+            <input
+              id="intel-mobility"
+              type="number"
+              min={1}
+              max={10}
+              value={state.intakeFields.movementScreenScore}
+              onChange={(e) => handleIntakeFieldChange('movementScreenScore', parseInt(e.target.value) || 5)}
+              className="ds-input"
+            />
+          </div>
+        </div>
+
+        {/* Health Conditions — chip toggle. Same UX as the Equipment
+            Arsenal grid in PREFERENCES so operators get a consistent
+            multi-select pattern. 'None' clears the list. */}
+        <div className="field" style={{ marginTop: 16, marginBottom: 0 }}>
+          <label>{t('intel.tracking_tiers.health_conditions_label')}</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {/* DB-key array stays English (canonical persistence keys) —
+                CONDITION_LABEL_KEYS map handles the visible label
+                translation. Hybrid bug surfaced in May 2026 audit:
+                without the labelKey indirection, an ES operator
+                toggling "Presión Alta" would silently store Spanish
+                text into operator.intake.healthConditions, breaking
+                downstream injury / contraindication lookups that key
+                off the English values. The same labelKey map exists
+                in IntakeForm.tsx — kept inline here too rather than
+                exporting to avoid coupling the form's internal state. */}
+            {([
+              ['High Blood Pressure', 'intake.health.cond.high_bp'],
+              ['Diabetes', 'intake.health.cond.diabetes'],
+              ['Heart Condition', 'intake.health.cond.heart'],
+              ['Asthma', 'intake.health.cond.asthma'],
+              ['Joint Pain', 'intake.health.cond.joint_pain'],
+              ['Back Problems', 'intake.health.cond.back'],
+              ['Knee Issues', 'intake.health.cond.knee'],
+              ['Shoulder Issues', 'intake.health.cond.shoulder'],
+              ['Previous Surgery', 'intake.health.cond.surgery'],
+              ['Pregnancy/Postpartum', 'intake.health.cond.pregnancy'],
+              ['None', 'intake.health.cond.none'],
+            ] as const).map(([c, labelKey]) => {
+              const active = (state.intakeFields.healthConditions || []).includes(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => toggleIntakeArrayItem('healthConditions', c)}
+                  style={{
+                    padding: '6px 10px',
+                    fontFamily: 'Chakra Petch, sans-serif',
+                    fontSize: 12,
+                    background: active ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.02)',
+                    border: `1px solid ${active ? 'rgba(0,255,65,0.55)' : 'rgba(0,255,65,0.15)'}`,
+                    color: active ? '#00ff41' : '#888',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {t(labelKey) || c}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -922,33 +1188,43 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Hard cap at 25 MB raw — beyond that, decoding into a canvas can
+    // OOM mobile Safari. Otherwise compressImageForVision resizes +
+    // recompresses to fit Anthropic's 5 MB base64-payload limit.
+    if (file.size > 25 * 1024 * 1024) {
+      alert('Image is too large (max 25 MB raw). Try a smaller photo.');
+      e.target.value = '';
+      return;
+    }
+
     setPhotoAnalyzing(true);
     setPhotoResult(null);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        const mimeType = file.type || 'image/jpeg';
+      const compressed = await compressImageForVision(file);
+      // compressImageForVision always returns a JPEG data URL when it
+      // re-encodes; for tiny / SVG passthroughs it preserves the
+      // original mime. Either way, parse the data URL to feed the
+      // analyze-photo endpoint with a matching mimeType.
+      const dataUrlMatch = compressed.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+      const base64 = dataUrlMatch ? dataUrlMatch[2] : compressed.split(',')[1];
+      const mimeType = dataUrlMatch ? dataUrlMatch[1] : (file.type || 'image/jpeg');
+      const res = await fetch('/api/nutrition/analyze-photo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ image: base64, mimeType }),
+      });
 
-        const res = await fetch('/api/nutrition/analyze-photo', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`,
-          },
-          body: JSON.stringify({ image: base64, mimeType }),
-        });
-
-        const data = await res.json();
-        if (data.success && data.data) {
-          setPhotoResult(data.data);
-        } else {
-          alert('Could not analyze photo. Try a clearer image.');
-        }
-        setPhotoAnalyzing(false);
-      };
-      reader.readAsDataURL(file);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setPhotoResult(data.data);
+      } else {
+        alert('Could not analyze photo. Try a clearer image.');
+      }
+      setPhotoAnalyzing(false);
     } catch (err) {
       console.error('[IntelCenter:analyzePhoto] Failed:', err);
       setPhotoAnalyzing(false);
@@ -1054,37 +1330,41 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       <div className="ds-card bracket" style={{ marginBottom: 16, padding: 12 }}>
         <span className="bl" /><span className="br" />
         <span className="t-eyebrow" style={{ marginBottom: 8, display: 'inline-flex' }}>
-          Tracking Accuracy Tiers
+          {t('intel.tracking_tiers.heading')}
         </span>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {/* Map iteration variable renamed `t` → `tr` to avoid shadowing
+              the i18n `t` translator now that label / desc resolve via
+              t(). DB-key strings (`labelKey`, `descKey`) keep the row's
+              identity stable across language switches. */}
           {[
-            { tier: 1, label: 'MANUAL ENTRY', desc: 'You weigh + enter exact macros', color: '#00ff41', icon: '⚡', accuracy: '±1-3%' },
-            { tier: 2, label: 'USDA SEARCH', desc: 'FDA-verified database lookup', color: '#4ade80', icon: '🔬', accuracy: '±5-10%' },
-            { tier: 3, label: 'QUICK LOG', desc: 'AI text parsing from description', color: '#facc15', icon: '💬', accuracy: '±15-25%' },
-            { tier: 4, label: 'PHOTO SNAP', desc: 'AI vision analysis of plate photo', color: '#ff6b35', icon: '📸', accuracy: '±20-40%' },
-          ].map(t => (
+            { tier: 1, labelKey: 'intel.tracking_tiers.tier1.label', descKey: 'intel.tracking_tiers.tier1.desc', color: '#00ff41', icon: '⚡', accuracy: '±1-3%' },
+            { tier: 2, labelKey: 'intel.tracking_tiers.tier2.label', descKey: 'intel.tracking_tiers.tier2.desc', color: '#4ade80', icon: '🔬', accuracy: '±5-10%' },
+            { tier: 3, labelKey: 'intel.tracking_tiers.tier3.label', descKey: 'intel.tracking_tiers.tier3.desc', color: '#facc15', icon: '💬', accuracy: '±15-25%' },
+            { tier: 4, labelKey: 'intel.tracking_tiers.tier4.label', descKey: 'intel.tracking_tiers.tier4.desc', color: '#ff6b35', icon: '📸', accuracy: '±20-40%' },
+          ].map(tr => (
             <div
-              key={t.tier}
+              key={tr.tier}
               style={{
                 padding: '8px 10px',
-                background: `${t.color}08`,
-                border: `1px solid ${t.color}30`,
+                background: `${tr.color}08`,
+                border: `1px solid ${tr.color}30`,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
               }}
             >
-              <span style={{ fontSize: 16 }}>{t.icon}</span>
+              <span style={{ fontSize: 16 }}>{tr.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="t-display-m" style={{ color: t.color, fontSize: 9, letterSpacing: 1 }}>
-                  TIER {t.tier}: {t.label}
+                <div className="t-display-m" style={{ color: tr.color, fontSize: 9, letterSpacing: 1 }}>
+                  TIER {tr.tier}: {t(tr.labelKey)}
                 </div>
                 <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
-                  {t.desc}
+                  {t(tr.descKey)}
                 </div>
               </div>
-              <span className="t-mono-data" style={{ color: t.color, fontWeight: 700, fontSize: 10 }}>
-                {t.accuracy}
+              <span className="t-mono-data" style={{ color: tr.color, fontWeight: 700, fontSize: 10 }}>
+                {tr.accuracy}
               </span>
             </div>
           ))}
@@ -1109,7 +1389,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         <button
           type="button"
           onClick={() => shiftViewingDate(-1)}
-          aria-label="Previous day"
+          aria-label={t('intel.prev_day_aria')}
           className="btn btn-ghost btn-sm"
         >
           ◀ Prev
@@ -1128,7 +1408,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           type="button"
           onClick={() => shiftViewingDate(1)}
           disabled={isViewingToday}
-          aria-label="Next day"
+          aria-label={t('intel.next_day_aria')}
           className="btn btn-ghost btn-sm"
         >
           Next ▶
@@ -1224,7 +1504,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               value={quickFoodInput}
               onChange={e => { setQuickFoodInput(e.target.value); setQuickFoodResult(null); }}
               onKeyDown={e => { if (e.key === 'Enter') handleQuickFoodLog(); }}
-              placeholder="I had chicken breast and rice..."
+              placeholder={t('intel.meal_freeform_placeholder')}
               className="ds-input"
               style={{ flex: 1, borderColor: 'rgba(250, 204, 21, 0.3)', fontFamily: 'var(--mono)' }}
             />
@@ -1422,7 +1702,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               value={usdaSearch}
               onChange={e => setUsdaSearch(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleUsdaSearch(); }}
-              placeholder="Search: chicken breast, brown rice, almonds..."
+              placeholder={t('intel.food_search_placeholder')}
               className="ds-input"
               style={{ flex: 1, borderColor: 'rgba(74, 222, 128, 0.3)', fontFamily: 'var(--mono)' }}
             />
@@ -1929,6 +2209,116 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           </div>
         )}
       </div>
+
+      {/* Supplement Stack — COMMANDER+ tier-gated. Renders Generate
+          Stack CTA if no recommendation yet, or the existing stack if
+          previously generated. Persists on operator.nutrition.supplementStack. */}
+      <div style={{ marginTop: 20 }}>
+        <SupplementStack
+          operator={operator}
+          currentUser={currentUser}
+          onUpdateOperator={onUpdateOperator}
+          onOpenBilling={() => setActiveTab('PROFILE')}
+        />
+      </div>
+
+      {/* ─── DIETARY PROFILE ────────────────────────────────────────
+          Three intake fields surfaced together: nutritionHabits,
+          dietaryRestrictions, supplements. Captured during onboarding
+          but had no UI surface — Gunny was making meal recommendations
+          and macro advice without the operator being able to verify
+          the assumptions baked in. Each field saves to operator.intake
+          (canonical read source for buildGunnyContext). */}
+      <div className="ds-card bracket" style={{ marginTop: 20, padding: 16 }}>
+        <span className="bl" /><span className="br" />
+        <span className="t-eyebrow" style={{ marginBottom: 12, display: 'inline-flex' }}>
+          Dietary Profile
+        </span>
+
+        {/* Nutrition Habits — 4-tier dropdown matching IntakeForm. */}
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label htmlFor="intel-nutrition-habits">Nutrition Habits</label>
+          <select
+            id="intel-nutrition-habits"
+            value={state.intakeFields.nutritionHabits}
+            onChange={(e) => handleIntakeFieldChange('nutritionHabits', e.target.value)}
+            className="ds-input"
+          >
+            <option value="poor">Poor — fast food, irregular meals</option>
+            <option value="fair">Fair — some structure, room to improve</option>
+            <option value="good">Good — mostly whole foods, consistent</option>
+            <option value="excellent">Excellent — tracked macros, dialed in</option>
+          </select>
+        </div>
+
+        {/* Dietary Restrictions — chip toggle from the canonical
+            DIETARY_RESTRICTIONS list in IntakeForm. 'None' clears. */}
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label>Dietary Restrictions (select all that apply)</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {[
+              'Gluten Free', 'Dairy Free', 'Nut Allergy', 'Soy Free', 'Shellfish Allergy',
+              'Egg Allergy', 'Halal', 'Kosher', 'Low Sodium', 'None',
+            ].map((r) => {
+              const active = (state.intakeFields.dietaryRestrictions || []).includes(r);
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => toggleIntakeArrayItem('dietaryRestrictions', r)}
+                  style={{
+                    padding: '6px 10px',
+                    fontFamily: 'Chakra Petch, sans-serif',
+                    fontSize: 12,
+                    background: active ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.02)',
+                    border: `1px solid ${active ? 'rgba(0,255,65,0.55)' : 'rgba(0,255,65,0.15)'}`,
+                    color: active ? '#00ff41' : '#888',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {r}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Supplements — chip toggle from the canonical
+            SUPPLEMENT_OPTIONS list in IntakeForm. 'None' clears. */}
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label>Supplements (select all that apply)</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {[
+              'Protein Powder', 'Creatine', 'Pre-Workout', 'BCAAs', 'Fish Oil / Omega-3',
+              'Multivitamin', 'Vitamin D', 'Magnesium', 'Caffeine', 'Collagen', 'None',
+            ].map((s) => {
+              const active = (state.intakeFields.supplements || []).includes(s);
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => toggleIntakeArrayItem('supplements', s)}
+                  style={{
+                    padding: '6px 10px',
+                    fontFamily: 'Chakra Petch, sans-serif',
+                    fontSize: 12,
+                    background: active ? 'rgba(0,255,65,0.12)' : 'rgba(0,255,65,0.02)',
+                    border: `1px solid ${active ? 'rgba(0,255,65,0.55)' : 'rgba(0,255,65,0.15)'}`,
+                    color: active ? '#00ff41' : '#888',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 
@@ -2099,13 +2489,28 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               padding: '3px 8px', background: 'rgba(255,184,0,0.1)', border: '1px solid rgba(255,184,0,0.2)',
               borderRadius: 3, fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
             }}>
-              <span style={{ color: '#ffb800' }}>BASELINE</span>
+              <span style={{ color: '#ffb800' }}>{t('intel.baseline')}</span>
               <span style={{ color: '#888', marginLeft: 6 }}>{baseline.weight}x{baseline.reps}</span>
             </div>
           )}
           {prs.map((pr, i) => {
             const isPeak = pr.weight === maxWeight;
             const isNew = (Date.now() - new Date(pr.date).getTime()) / (1000 * 60 * 60 * 24) < 7;
+            // Path abbreviation. Apr 2026: PRs are stamped with the
+            // operator's training path at log time (Planner auto-detect +
+            // GunnyChat <pr_json>). gunny_pick is hidden — it means
+            // "operator hasn't picked a path yet," not a real path.
+            const pathAbbr = (() => {
+              switch (pr.path) {
+                case 'bodybuilding': return 'BB';
+                case 'crossfit': return 'CF';
+                case 'powerlifting': return 'PL';
+                case 'athletic': return 'ATH';
+                case 'tactical': return 'TAC';
+                case 'hybrid': return 'HYB';
+                default: return null; // undefined or gunny_pick
+              }
+            })();
             return (
               <div key={pr.id} style={{
                 padding: '3px 8px',
@@ -2115,7 +2520,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               }}>
                 <span style={{ color: isPeak ? '#00ff41' : '#888' }}>{pr.weight}x{pr.reps}</span>
                 <span style={{ color: '#555', marginLeft: 6 }}>{pr.date.slice(5)}</span>
-                {isNew && <span style={{ color: '#ffb800', marginLeft: 4 }}>NEW</span>}
+                {pathAbbr && <span style={{ color: '#5a8a5a', marginLeft: 6 }}>{pathAbbr}</span>}
+                {isNew && <span style={{ color: '#ffb800', marginLeft: 4 }}>{t('intel.new_tag')}</span>}
               </div>
             );
           })}
@@ -2674,7 +3080,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                       marginBottom: 8,
                       outline: 'none',
                     }}
-                    placeholder="Injury name"
+                    placeholder={t('intel.injury_name_placeholder')}
                   />
 
                   {/* Status pill — solid danger/warn/green per state.
@@ -2708,9 +3114,9 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                         letterSpacing: 2,
                       }}
                     >
-                      <option value="active">ACTIVE</option>
-                      <option value="recovering">RECOVERING</option>
-                      <option value="cleared">CLEARED</option>
+                      <option value="active">{t('intel.injury_status_active')}</option>
+                      <option value="recovering">{t('intel.injury_status_recovering')}</option>
+                      <option value="cleared">{t('intel.injury_status_cleared')}</option>
                     </select>
                   </div>
 
@@ -2718,7 +3124,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                   <textarea
                     value={injury.notes}
                     onChange={(e) => updateInjury(injuryIndex, 'notes', e.target.value)}
-                    placeholder="Description, mechanism, what hurts, what helps…"
+                    placeholder={t('intel.injury_desc_placeholder')}
                     className="ds-textarea"
                     style={{ marginBottom: 12, minHeight: 60, resize: 'vertical' }}
                   />
@@ -2789,6 +3195,12 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     // Per the handoff Intel/Preferences spec: training split + duration
     // + days/week fields, Equipment Arsenal grid (tap-to-select chips
     // + custom add input), Weak Points + Movements to Avoid sections.
+    //
+    // Apr 2026: trainingPath + preferredWorkoutTime added to the top of
+    // this tab. They were captured during intake but had no UI surface,
+    // which broke the user→Gunny feedback loop and caused recurring
+    // drift complaints. Editing here writes to both preferences (legacy
+    // mirror) and intake (canonical, read by buildGunnyContext).
     <div
       className="stack-4"
       style={{
@@ -2797,9 +3209,49 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         gap: 14,
       }}
     >
+      {/* Training Path — span full width, dropdown of the 7 options
+          captured during intake. Showing this lets the operator verify
+          and correct what Gunny is using to pick programming templates. */}
+      <div className="field" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
+        <label htmlFor="prefs-training-path">Training Path</label>
+        <select
+          id="prefs-training-path"
+          value={state.preferences.trainingPath}
+          onChange={(e) => handlePreferencesChange('trainingPath', e.target.value)}
+          className="ds-input"
+        >
+          <option value="bodybuilding">Bodybuilding / Hypertrophy</option>
+          <option value="crossfit">Functional Fitness / CrossFit</option>
+          <option value="powerlifting">Powerlifting</option>
+          <option value="athletic">Athletic Performance</option>
+          <option value="tactical">Tactical / Military</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="gunny_pick">Let Gunny Decide</option>
+        </select>
+      </div>
+
+      {/* Preferred Workout Time — captured during intake, no UI surface
+          before. Affects when Gunny suggests training and how it phrases
+          recovery/wake/post-workout advice. */}
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="prefs-workout-time">Preferred Workout Time</label>
+        <select
+          id="prefs-workout-time"
+          value={state.preferences.preferredWorkoutTime}
+          onChange={(e) => handlePreferencesChange('preferredWorkoutTime', e.target.value)}
+          className="ds-input"
+        >
+          <option value="morning">Morning</option>
+          <option value="midday">Midday</option>
+          <option value="afternoon">Afternoon</option>
+          <option value="evening">Evening</option>
+          <option value="late_night">Late Night</option>
+        </select>
+      </div>
+
       {/* Training Split */}
       <div className="field" style={{ marginBottom: 0 }}>
-        <label htmlFor="prefs-split">Training Split</label>
+        <label htmlFor="prefs-split">{t('intel.training_split')}</label>
         <input
           id="prefs-split"
           type="text"
@@ -2823,7 +3275,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
       {/* Days Per Week */}
       <div className="field" style={{ marginBottom: 0 }}>
-        <label htmlFor="prefs-days">Days Per Week</label>
+        <label htmlFor="prefs-days">{t('intel.days_per_week')}</label>
         <input
           id="prefs-days"
           type="number"
@@ -2831,6 +3283,36 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           max={7}
           value={state.preferences.daysPerWeek}
           onChange={(e) => handlePreferencesChange('daysPerWeek', parseInt(e.target.value))}
+          className="ds-input"
+        />
+      </div>
+
+      {/* Default Rest Period (seconds) — WS2. When a workout's
+          prescription doesn't carry an explicit rest hint, the timer
+          auto-starts using this value after every set. Set to 0 to
+          opt out (manage rest manually). Empty string → undefined →
+          falls back to APP_DEFAULT_REST_SEC (120s in restTimer.ts). */}
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="prefs-rest">{t('intel.default_rest_sec') || 'Default rest (seconds)'}</label>
+        <input
+          id="prefs-rest"
+          type="number"
+          min={0}
+          max={600}
+          step={15}
+          placeholder="120"
+          value={
+            typeof state.preferences.defaultRestSec === 'number'
+              ? state.preferences.defaultRestSec
+              : ''
+          }
+          onChange={(e) => {
+            const v = e.target.value;
+            handlePreferencesChange(
+              'defaultRestSec',
+              v === '' ? undefined : Math.max(0, Math.min(600, parseInt(v) || 0)),
+            );
+          }}
           className="ds-input"
         />
       </div>
@@ -2923,7 +3405,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             type="text"
-            placeholder="Type equipment name or describe it (e.g. 'the dual cable pulley machine')…"
+            placeholder={t('intel.equipment_placeholder')}
             value={state.newEquipment}
             onChange={(e) => setState((prev) => ({ ...prev, newEquipment: e.target.value }))}
             onKeyPress={(e) => { if (e.key === 'Enter') addEquipment(); }}
@@ -2946,7 +3428,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
       {/* Weak Points — amber chip group, full-width row. */}
       <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
-        <label htmlFor="prefs-new-weak">Weak Points</label>
+        <label htmlFor="prefs-new-weak">{t('intel.weak_points')}</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           {state.preferences.weakPoints.length === 0 && (
             <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
@@ -2978,7 +3460,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <input
             id="prefs-new-weak"
             type="text"
-            placeholder="Add weak point…"
+            placeholder={t('intel.add_weak_point_placeholder')}
             value={state.newWeakPoint}
             onChange={(e) => setState((prev) => ({ ...prev, newWeakPoint: e.target.value }))}
             onKeyPress={(e) => { if (e.key === 'Enter') addWeakPoint(); }}
@@ -2997,7 +3479,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
       {/* Movements to Avoid — danger chip group. */}
       <div className="field" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
-        <label htmlFor="prefs-new-avoid">Movements to Avoid</label>
+        <label htmlFor="prefs-new-avoid">{t('intel.movements_avoid')}</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           {state.preferences.movementsToAvoid.length === 0 && (
             <span className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>
@@ -3029,7 +3511,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
           <input
             id="prefs-new-avoid"
             type="text"
-            placeholder="Add movement…"
+            placeholder={t('intel.add_avoid_placeholder')}
             value={state.newMovementToAvoid}
             onChange={(e) => setState((prev) => ({ ...prev, newMovementToAvoid: e.target.value }))}
             onKeyPress={(e) => { if (e.key === 'Enter') addMovementToAvoid(); }}
@@ -3056,15 +3538,95 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       case 'NUTRITION':
         return renderNutritionTab();
       case 'PR_BOARD':
+        // Junior operators (with the flag on) see sport-performance metrics
+        // (10m sprint, CMJ, agility T, mile, etc.) instead of the adult
+        // 1RM-centric PR board. Per docs/youth-soccer-corpus.md §11: no
+        // maximal 1RM testing for unsupervised juniors.
+        if (operator.isJunior === true && isJuniorOperatorEnabledClient()) {
+          return <JuniorPRBoard operator={operator} onUpdateOperator={onUpdateOperator} />;
+        }
         return renderPRBoardTab();
       case 'ANALYTICS':
-        return <ProgressCharts operator={operator} />;
+        // Pass currentUser so the OPERATOR+ tier gate uses the viewer's
+        // tier (a trainer viewing a client always has access). Upgrade
+        // CTA bounces back to the PROFILE tab where BillingPanel lives.
+        return (
+          <ProgressCharts
+            operator={operator}
+            currentUser={currentUser}
+            onOpenBilling={() => setActiveTab('PROFILE')}
+          />
+        );
       case 'INJURIES':
         return renderInjuriesTab();
+      case 'MACROCYCLE':
+        return <MacrocyclePanel operator={operator} onUpdateOperator={onUpdateOperator} />;
       case 'PREFERENCES':
         return renderPreferencesTab();
       case 'WEARABLES':
-        return <WearableConnect operator={operator} onUpdateOperator={onUpdateOperator} />;
+        // Pass currentUser so the COMMANDER+ tier gate uses the viewer's
+        // tier (a trainer viewing a client always has access). Upgrade
+        // CTA bounces back to the PROFILE tab where BillingPanel lives.
+        //
+        // Layout:
+        //   1. WearableConnect — connect/disconnect providers
+        //   2. ReadinessPanel  — always-on engine state (Day X of N,
+        //                        confidence, ACWR, factors)
+        //   3. RecoveryReadout — on-demand action surface (GO_HARD/
+        //                        NORMAL/DELOAD/REST + LLM coaching)
+        return (
+          <div>
+            <WearableConnect
+              operator={operator}
+              onUpdateOperator={onUpdateOperator}
+              currentUser={currentUser}
+              onOpenBilling={() => setActiveTab('PROFILE')}
+            />
+            {/* CalendarConnect — Phase 1 Google Calendar integration.
+                Mounted alongside WearableConnect because both feed the
+                same Daily Ops PERSONALIZATION SIGNALS context block;
+                pairing them in the UI mirrors that they're peer
+                integrations. Self-suppresses behind tier-gate +
+                feature-flag, so non-Commander or pre-rollout users see
+                the appropriate fallback (UpgradeCard / Coming Soon). */}
+            <CalendarConnect
+              operator={operator}
+              currentUser={currentUser}
+              onOpenBilling={() => setActiveTab('PROFILE')}
+            />
+            <div style={{ marginTop: 20 }}>
+              <ReadinessPanel
+                operator={operator}
+                currentUser={currentUser}
+                onOpenBilling={() => setActiveTab('PROFILE')}
+              />
+            </div>
+            <div style={{ marginTop: 20 }}>
+              <RecoveryReadout
+                operator={operator}
+                currentUser={currentUser}
+                onOpenBilling={() => setActiveTab('PROFILE')}
+              />
+            </div>
+          </div>
+        );
+      case 'MANUAL':
+        // User-facing operating manual — every feature explained.
+        // Bilingual via internal language hook (no operator data
+        // needed). Mirrors the OpsCenter ROADMAP tab in chrome.
+        return <OperatingManual />;
+      case 'FORM_CHECK':
+        // AI Form Analysis (Video) — feature #47. Operator uploads a
+        // short clip; client-side frame extraction + Claude vision
+        // returns a structured form review. WARFIGHTER tier-gated;
+        // upgrade CTA bounces to PROFILE → BillingPanel.
+        return (
+          <FormAnalysis
+            operator={operator}
+            currentUser={currentUser}
+            onOpenBilling={() => setActiveTab('PROFILE')}
+          />
+        );
       default:
         return null;
     }
@@ -3076,8 +3638,11 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PR_BOARD: '▶',
     ANALYTICS: '◉',
     INJURIES: '▦',
+    MACROCYCLE: '⟁',
     PREFERENCES: '◇',
     WEARABLES: '◎',
+    FORM_CHECK: '◊',
+    MANUAL: '☰',
   };
 
   const getTabLabels = (): Record<SubTab, string> => ({
@@ -3086,8 +3651,14 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PR_BOARD: t('intel.pr_board'),
     ANALYTICS: 'ANALYTICS',
     INJURIES: t('intel.injuries'),
+    MACROCYCLE: 'MACROCYCLE',
     PREFERENCES: t('intel.preferences'),
-    WEARABLES: 'WEARABLES',
+    WEARABLES: 'INTEGRATIONS',
+    FORM_CHECK: 'FORM CHECK',
+    // MANUAL is the user-facing operating manual — every feature
+    // explained, parallel to OPS Center's ROADMAP tab. Translated
+    // inline by OperatingManual based on operator language.
+    MANUAL: t('intel.manual') || 'MANUAL',
   });
 
   const [isMobile, setIsMobile] = useState(false);
@@ -3117,22 +3688,78 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
         position: 'relative',
       }}
     >
-      {/* Sidebar (desktop) / Top tabs (mobile). The mobile strip uses
-          the canonical .subtabs utility — horizontal scrollable, 2px
-          glowing underline on active, hidden scrollbar — so it
-          matches Planner's sub-nav and any future tabbed screens. */}
+      {/* Sidebar (desktop) / 3x3 grid (mobile).
+          The previous mobile design was a single-row .subtabs strip,
+          horizontal-scrollable. That hid 5 of 9 tabs offscreen by
+          default — the operator literally didn't know FORM_CHECK or
+          MACROCYCLE existed (Apr 2026 reproduction). Switched to a
+          3-column × 3-row grid: all 9 tabs visible above the fold,
+          icon + label per cell, no cramming. Uses ~225px of vertical
+          real estate but the tabs bar is the operator's only entry
+          point to half the IntelCenter surface — discoverability
+          dominates compactness here. */}
       {isMobile ? (
-        <nav className="subtabs" aria-label="Intel sub-navigation">
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
+        <nav
+          aria-label={t('intel.subnav_aria')}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '6px',
+            padding: '12px',
+            borderBottom: '1px solid rgba(0,255,65,0.06)',
+            background: 'linear-gradient(180deg, rgba(8,8,8,0.5) 0%, rgba(3,3,3,0.5) 100%)',
+          }}
+        >
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'MACROCYCLE', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
                 key={tab}
                 type="button"
-                className={isActive ? 'active' : ''}
                 onClick={() => setActiveTab(tab)}
+                style={{
+                  // Cell: icon top, label bottom. On a 375px-wide phone
+                  // each cell is ~115px wide — readable, not cramped.
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '14px 6px',
+                  minHeight: '70px',
+                  // Active: tinted bg + bright green border/glow.
+                  // Inactive: subtle fill + dim border so cells still
+                  // read as tappable instead of vanishing into the bg.
+                  background: isActive ? 'rgba(0,255,65,0.08)' : 'rgba(0,255,65,0.015)',
+                  border: isActive
+                    ? '1px solid rgba(0,255,65,0.55)'
+                    : '1px solid rgba(0,255,65,0.12)',
+                  borderRadius: '4px',
+                  color: isActive ? '#00ff41' : '#777',
+                  fontFamily: 'Orbitron, sans-serif',
+                  fontSize: '10px',
+                  fontWeight: isActive ? 700 : 400,
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease',
+                  boxShadow: isActive
+                    ? '0 0 12px rgba(0,255,65,0.18), inset 0 0 12px rgba(0,255,65,0.04)'
+                    : 'none',
+                }}
               >
-                {getTabLabels()[tab]}
+                <span
+                  aria-hidden
+                  style={{
+                    fontSize: '22px',
+                    lineHeight: 1,
+                    opacity: isActive ? 1 : 0.45,
+                  }}
+                >
+                  {tabIcons[tab]}
+                </span>
+                <span style={{ lineHeight: 1.1 }}>{getTabLabels()[tab]}</span>
               </button>
             );
           })}
@@ -3154,7 +3781,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             </div>
           </div>
 
-          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'PREFERENCES', 'WEARABLES'] as const).map((tab) => {
+          {(['PROFILE', 'NUTRITION', 'PR_BOARD', 'ANALYTICS', 'INJURIES', 'MACROCYCLE', 'PREFERENCES', 'WEARABLES', 'FORM_CHECK'] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button

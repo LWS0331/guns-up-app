@@ -13,19 +13,42 @@ import { LanguageProvider } from "@/lib/i18n";
 // Authed users see AppShell where these tags don't matter — their flow is
 // private. If we add tier-specific or campaign-specific landings later, give
 // them their own layout with overriding metadata.
+//
+// i18n (Phase 5): Next.js metadata is server-rendered, so the client
+// `useLanguage` hook is not available here. Strategy:
+//   - Primary tags stay English (matches the `<html lang="en">` default
+//     until the client toggle flips it). Spanish-speaking searchers
+//     using Google still match because Google indexes the rendered DOM
+//     after the client hydrates.
+//   - `alternates.languages` advertises the Spanish version via hreflang
+//     so search engines that respect the tag can serve the right listing
+//     (rendered ES strings live in src/lib/i18n.tsx under `seo.*`).
+//   - Spanish copy is keyword-aware ("entrenador personal IA", "rutinas
+//     de gimnasio IA") so it stays searchable, not literal.
+//
+// Known gap: a true server-side ES landing would need either a /es/ route
+// segment (Next.js i18n routing) or middleware-level locale detection. We
+// don't have either yet — the ES title/description below are baked in
+// here as static fallbacks for the hreflang tag, not served from a
+// separate route. That's tracked as a follow-up ("Spanish-locale route
+// segment for SEO parity").
 const SITE_URL = 'https://gunnyai.fit';
-const TITLE = 'GUNS UP — Military-precision fitness. AI-powered training.';
-const DESCRIPTION =
+const TITLE_EN = 'GUNS UP — Military-precision fitness. AI-powered training.';
+const DESCRIPTION_EN =
   'Your personal AI operator (Gunny) knows every rep, every meal, every PR, every injury. ' +
   'Built on Claude. USMC discipline + 16 expert sources. Start at $2/mo.';
+const TITLE_ES = 'GUNS UP — Fitness con precisión militar. Entrenador personal IA.';
+const DESCRIPTION_ES =
+  'Tu operador IA personal (Gunny) conoce cada repetición, cada comida, cada PR, cada lesión. ' +
+  'Rutinas de gimnasio IA construidas sobre Claude. Disciplina USMC + 16 fuentes expertas. Desde $2/mes.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: TITLE,
+    default: TITLE_EN,
     template: '%s · GUNS UP',
   },
-  description: DESCRIPTION,
+  description: DESCRIPTION_EN,
   manifest: '/manifest.json',
   applicationName: 'GUNS UP',
   keywords: [
@@ -39,14 +62,29 @@ export const metadata: Metadata = {
     'crossfit AI',
     'bodybuilding AI',
     'military fitness',
+    // Spanish-keyword surface area for ES searchers
+    'entrenador personal IA',
+    'rutinas de gimnasio IA',
+    'app de fitness con IA',
+    'macros con IA',
+    'fitness militar',
   ],
   authors: [{ name: 'GUNS UP FITNESS' }],
+  alternates: {
+    canonical: SITE_URL,
+    languages: {
+      'en-US': SITE_URL,
+      'es-US': SITE_URL,
+    },
+  },
   openGraph: {
     type: 'website',
     url: SITE_URL,
     siteName: 'GUNS UP',
-    title: TITLE,
-    description: DESCRIPTION,
+    title: TITLE_EN,
+    description: DESCRIPTION_EN,
+    locale: 'en_US',
+    alternateLocale: ['es_US'],
     images: [
       {
         url: '/logo-glow.png',
@@ -58,8 +96,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: TITLE,
-    description: DESCRIPTION,
+    title: TITLE_EN,
+    description: DESCRIPTION_EN,
     images: ['/logo-glow.png'],
   },
   robots: {
@@ -70,6 +108,12 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'GUNS UP',
+  },
+  // Other tools (e.g. social cards, RSS preview generators) sometimes pick
+  // up `other.title-es` as a hint; harmless for browsers that don't.
+  other: {
+    'title:es': TITLE_ES,
+    'description:es': DESCRIPTION_ES,
   },
 };
 

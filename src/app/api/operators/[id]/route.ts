@@ -15,6 +15,9 @@ const ADMIN_FIELDS = new Set([
   'tierLocked', 'promoActive', 'promoType', 'promoExpiry',
   'intake', 'profile', 'nutrition', 'prs', 'injuries', 'preferences',
   'workouts', 'dayTags', 'sitrep', 'dailyBrief',
+  // Junior Operator program — admin owns identity-level junior fields
+  // (isJunior toggle, juniorAge, parent linking) and can override anything.
+  'isJunior', 'juniorAge', 'parentIds', 'sportProfile', 'juniorConsent', 'juniorSafety',
 ]);
 
 const SELF_FIELDS = new Set([
@@ -27,6 +30,10 @@ const SELF_FIELDS = new Set([
   'coupleWith', 'trainerId',
   // Feedback submissions (beta-feedback API is canonical, but keep writable here for compatibility)
   'betaFeedback',
+  // Junior self-update: the kid can save their own intake answers
+  // (sportProfile gets written from JuniorIntakeForm.onComplete) and
+  // the consent step. Admin still controls isJunior/parentIds.
+  'sportProfile', 'juniorConsent',
 ]);
 
 const TRAINER_FIELDS = new Set([
@@ -34,6 +41,9 @@ const TRAINER_FIELDS = new Set([
   'trainerNotes',
   'intake', 'profile', 'nutrition', 'prs', 'injuries', 'preferences',
   'workouts', 'dayTags', 'sitrep', 'dailyBrief',
+  // Trainer of a junior owns the sport profile (coachNotes, maturationStage)
+  // and resolves entries in juniorSafety.events as they're addressed.
+  'sportProfile', 'juniorSafety',
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

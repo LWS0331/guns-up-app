@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { prisma } from '@/lib/db';
 import Stripe from 'stripe';
+import { fireImmediateActivationEmail } from '@/lib/activationEmails';
 
 // POST /api/stripe/webhook — Handle Stripe webhook events
 export async function POST(req: NextRequest) {
@@ -47,8 +48,21 @@ export async function POST(req: NextRequest) {
               data: {
                 tier,
                 billing: JSON.parse(JSON.stringify(billing)),
+                // PaywallSpec §6 Email 1 trigger — set on FIRST web purchase
+                // only. Re-purchases (e.g. canceling and re-subscribing)
+                // shouldn't reset the activation cadence cursor.
+                webPurchaseAt: operator.webPurchaseAt || new Date(),
               },
             });
+
+            // Fire the immediate Email 1. Best-effort — failure here
+            // shouldn't kill the webhook (cron will pick it up at next
+            // 30-min tick if this throws).
+            try {
+              await fireImmediateActivationEmail(operatorId);
+            } catch (err) {
+              console.error('[stripe webhook] activation email fire failed', err);
+            }
           }
         }
         break;

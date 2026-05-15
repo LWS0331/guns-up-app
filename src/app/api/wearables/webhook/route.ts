@@ -92,7 +92,17 @@ export async function POST(req: NextRequest) {
 
     // Handle daily data events — auto-update sync data
     if (eventType?.startsWith('daily.data.') || eventType?.startsWith('historical.data.')) {
-      const resource = eventType.split('.')[2]; // sleep, activity, body, etc.
+      const resource = eventType.split('.')[2]; // sleep, activity, body, hrv, workouts, etc.
+
+      // Snapshot-table write: every daily/historical data event upserts
+      // one row per (operatorId, calendar_date) into WearableSnapshot.
+      // The baselines cron reads from these rows for true 14-/28-day
+      // rolling math (replacing the v1 incremental-mean approximation).
+      // Each event fills in only the columns it knows about — sleep
+      // events set sleepHours/sleepEfficiency, recovery events set
+      // hrv/restingHr/recoveryScore, etc. Other events still upsert
+      // the row to keep the timeline complete.
+      await writeWearableSnapshot(operatorId, resource, data);
 
       // Find operator's wearable connection
       const connection = await prisma.wearableConnection.findFirst({
@@ -198,5 +208,101 @@ export async function POST(req: NextRequest) {
     console.error('[Webhook] Error:', error);
     // Always return 200 to prevent Junction from retrying
     return NextResponse.json({ ok: false, error: String(error) });
+  }
+}
+
+// Upsert a WearableSnapshot row keyed on (operatorId, calendar_date).
+// Each event type fills the columns it can extract; missing fields stay
+// null. The cron reads these rows to compute proper rolling baselines.
+//
+// Vital field placement varies by provider — some put HRV under
+// `recovery.hrv`, some under `score.hrv`, some inside the sleep payload
+// as `hrv_average`. We probe the obvious paths and shrug at the rest.
+async function writeWearableSnapshot(
+  operatorId: string,
+  resource: string,
+  data: Record<string, unknown> | null,
+): Promise<void> {
+  if (!data) return;
+
+  // Calendar date from provider — falls back to today (UTC) for events
+  // that don't carry one (rare, but defensive).
+  const syncDate =
+    (typeof data.calendar_date === 'string' && data.calendar_date) ||
+    (typeof data.calendarDate === 'string' && data.calendarDate) ||
+    new Date().toISOString().slice(0, 10);
+
+  // Extract every column we can from this event. Each is wrapped in a
+  // typeof check so a malformed payload doesn't crash the webhook.
+  const updates: {
+    hrv?: number;
+    restingHr?: number;
+    sleepHours?: number;
+    sleepEfficiency?: number;
+    recoveryScore?: number;
+  } = {};
+
+  if (resource === 'sleep') {
+    if (typeof data.duration === 'number') {
+      // Vital sleep.duration is seconds; webhook elsewhere converts to
+      // hours when writing syncData.sleep — we store hours in the
+      // snapshot table to match what the readiness engine reads.
+      updates.sleepHours = Math.round((Number(data.duration) / 3600) * 100) / 100;
+    }
+    if (typeof data.efficiency === 'number') {
+      // Vital reports efficiency 0-1 in some providers, 0-100 in others.
+      // Normalize to 0-100.
+      const eff = Number(data.efficiency);
+      updates.sleepEfficiency = eff <= 1 ? Math.round(eff * 100) : Math.round(eff);
+    }
+    // Some providers expose HRV inside the sleep object (Oura, Whoop).
+    if (typeof data.hrv === 'number') updates.hrv = Number(data.hrv);
+    else if (typeof data.hrv_average === 'number') updates.hrv = Number(data.hrv_average);
+    if (typeof data.resting_hr === 'number') updates.restingHr = Number(data.resting_hr);
+  }
+
+  if (resource === 'hrv') {
+    if (typeof data.value === 'number') updates.hrv = Number(data.value);
+    else if (typeof data.hrv === 'number') updates.hrv = Number(data.hrv);
+  }
+
+  if (resource === 'workouts' || resource === 'body' || resource === 'activity') {
+    // Some providers stuff a daily resting-HR reading on these events.
+    if (typeof data.resting_hr === 'number') updates.restingHr = Number(data.resting_hr);
+  }
+
+  // Provider-computed recovery score (Whoop, Garmin Body Battery, Oura
+  // readiness). Vital normalizes to a `score` field on supported events.
+  if (typeof data.score === 'number') {
+    const score = Number(data.score);
+    // Whoop/Oura report 0-100. Garmin Body Battery is 0-100. Sleep
+    // efficiency also collides with `score` in some payloads; only
+    // accept on resource types we know mean recovery.
+    if (resource === 'recovery' || resource === 'readiness') {
+      updates.recoveryScore = score;
+    }
+  }
+
+  // Skip the upsert if this event yielded no readiness-relevant data —
+  // an empty row provides no value, and we don't want activity events
+  // (steps, etc.) to mint blank rows.
+  if (Object.keys(updates).length === 0) return;
+
+  try {
+    await prisma.wearableSnapshot.upsert({
+      where: { operatorId_syncDate: { operatorId, syncDate } },
+      update: { ...updates, raw: JSON.parse(JSON.stringify(data)) },
+      create: {
+        operatorId,
+        syncDate,
+        ...updates,
+        raw: JSON.parse(JSON.stringify(data)),
+      },
+    });
+  } catch (err) {
+    // Snapshot writes are best-effort — never fail the webhook because
+    // the snapshot side fell over. Log + continue so the main syncData
+    // update still happens.
+    console.warn('[Webhook] WearableSnapshot upsert failed:', err);
   }
 }

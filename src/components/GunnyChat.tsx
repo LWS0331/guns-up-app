@@ -1,22 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
-import { Operator, Meal, Workout, WorkoutBlock, TIER_CONFIGS } from '@/lib/types';
+import { Operator, Meal, Workout, WorkoutBlock, ExerciseBlock, TIER_CONFIGS } from '@/lib/types';
 import Icon from './Icons';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
-import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext } from '@/lib/tts';
+import { setTtsEnabled, isTtsEnabled, onTtsEnabledChange, unlockAudioContext, speak as gunnySpeak, stopSpeaking, onSpeechDone, offSpeechDone } from '@/lib/tts';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
 import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
-import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, formatLocalDateKey } from '@/lib/dateUtils';
+import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, formatLocalDateKey, getLocalHourMinute, getLocalTimeOfDayBand } from '@/lib/dateUtils';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getAuthToken } from '@/lib/authClient';
+import { loadNotificationPrefs, saveNotificationPrefs, type NotificationPreferences } from '@/lib/notifications';
+import { compressImageForVision } from '@/lib/imageCompress';
 
 interface GunnyChatProps {
   operator: Operator;
@@ -495,13 +497,35 @@ const saveChatLocal = (opId: string, serialized: ReturnType<typeof serializeMess
 
 // Async API write. `keepalive` lets the request complete even if the document
 // unmounts or navigates away — critical because loadChat prefers API over local.
+//
+// Errors are LOGGED, not swallowed. The previous .catch(()=>{}) silently lost
+// every PUT failure (auth expiry, mobile background-kill aborts, network
+// flakes, 4xx/5xx). A user chatting on mobile would have their conversation
+// stuck on that device because the save never reached the DB and they'd never
+// know — desktop login on the same account would show an empty chat. The
+// trace evidence: a POST(/PUT) to /api/chat with status 0 and 0μs across
+// every phase = aborted-before-flight, exactly the scenario .catch hid.
 const saveChatRemote = (opId: string, chatType: string, serialized: ReturnType<typeof serializeMessages>) => {
   fetch('/api/chat', {
     method: 'PUT',
     keepalive: true,
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
     body: JSON.stringify({ operatorId: opId, chatType, messages: serialized }),
-  }).catch(() => { /* API unavailable — localStorage will cover it */ });
+  })
+    .then(res => {
+      if (!res.ok) {
+        // Body intentionally not parsed — keepalive responses are often
+        // truncated/discarded by the browser anyway. Status alone tells us
+        // enough to flag in the console.
+        console.warn(`[GunnyChat:saveChatRemote] PUT /api/chat returned ${res.status} (${chatType})`);
+      }
+    })
+    .catch(err => {
+      // localStorage already wrote synchronously, so the user's history isn't
+      // lost on THIS device — but cross-device sync is broken until the next
+      // successful save. Logging this surfaces the failure mode.
+      console.error('[GunnyChat:saveChatRemote] PUT /api/chat failed:', err);
+    });
 };
 
 const saveChatToStorage = (opId: string, chatType: string, msgs: Message[]) => {
@@ -558,7 +582,15 @@ const needsOnboarding = (op: Operator): boolean => {
 };
 
 export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, onUpdateOperator }) => {
-  const { t } = useLanguage();
+  // Pull `language` alongside `t` so we can pass the operator's actual UI
+  // language preference into Gunny's API calls. Previously every send
+  // hardcoded `language: 'en'` (3 places below + 1 in a legacy comment),
+  // so Gunny's prompt never saw 'es' even when the operator had toggled
+  // Spanish — the toggle was UI-only theater. Wiring this through unlocks
+  // the prompt-side Spanish behavior that already exists in route.ts
+  // (lines ~574, 1025, 1135: "respond entirely in Spanish with the same
+  // military tone").
+  const { t, language } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
@@ -595,6 +627,70 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     const unsub = onTtsEnabledChange((enabled) => setTtsOn(enabled));
     return unsub;
   }, []);
+
+  // Track which Gunny message is currently being read aloud so we can
+  // (a) toggle the per-bubble play/stop affordance icon, and (b) cancel
+  // the previous message's playback when the user taps a different one.
+  // Null when nothing is playing.
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+
+  // Subscribe to lib/tts's queue-empty signal. Fires when the audio
+  // finishes naturally OR when stopSpeaking() runs — either way the
+  // HEAR IT button needs to flip back from STOP. Replaces the earlier
+  // 600ms DOM polling which was unreliable (Audio elements created
+  // via `new Audio(url)` aren't attached to the DOM, so the poll
+  // immediately decided playback was done while the audio kept
+  // playing).
+  useEffect(() => {
+    const cb = () => setSpeakingMessageId(null);
+    onSpeechDone(cb);
+    return () => offSpeechDone(cb);
+  }, []);
+
+  // Per-message play handler. Routes through the shared lib/tts speak()
+  // pipeline (OpenAI TTS → browser speechSynthesis fallback). ALWAYS
+  // user-initiated, which is critical: iOS Safari blocks any
+  // audio.play() that doesn't trace back to a tap, so per-message
+  // buttons survive autoplay restrictions even when the auto-speak
+  // path is silently blocked.
+  //
+  // Bypasses the global TTS-mute flag because the user explicitly
+  // asked to hear THIS message — muting was about not getting auto-
+  // spoken bombarded, not about disabling on-demand playback. We
+  // temporarily re-enable around the speak() call so isTtsEnabled()
+  // inside speak() doesn't short-circuit, then restore the prior
+  // state. Restore happens after the audio finishes (onSpeechDone),
+  // not just after speak() returns — speak() resolves once the
+  // request is queued, not when playback ends.
+  const playMessage = useCallback((id: string, text: string) => {
+    if (!text || !text.trim()) return;
+    // If THIS message is already playing → tap acts as stop.
+    if (speakingMessageId === id) {
+      stopSpeaking();
+      // setSpeakingMessageId(null) gets fired by the onSpeechDone
+      // subscription above when stopSpeaking() emits the empty event.
+      return;
+    }
+    // Otherwise switch playback to this message — cancel any prior.
+    stopSpeaking();
+    unlockAudioContext();
+    const wasMuted = !isTtsEnabled();
+    if (wasMuted) setTtsEnabled(true);
+    setSpeakingMessageId(id);
+    gunnySpeak(text)
+      .catch((err) => console.warn('[gunny-chat] play-message failed:', err));
+    // Restore muted state once the audio actually finishes (not when
+    // gunnySpeak() returns). The onSpeechDone callback above already
+    // clears the button state; we hook in here just for the mute
+    // restore. One-shot subscription so we don't restore twice.
+    if (wasMuted) {
+      const restore = () => {
+        setTtsEnabled(false);
+        offSpeechDone(restore);
+      };
+      onSpeechDone(restore);
+    }
+  }, [speakingMessageId]);
 
   const toggleTts = () => {
     const next = !ttsOn;
@@ -680,6 +776,44 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
           },
         };
       }
+    }
+
+    // Intake patch (Apr 2026 audit feature). Server-side intake audit
+    // emits gap questions; when the operator answers, Gunny includes the
+    // captured fields under "intake": {...}. Merge into operator.intake
+    // so the next request's audit reflects them and stops re-asking.
+    if (profileData.intake && typeof profileData.intake === 'object') {
+      const i = profileData.intake as Record<string, unknown>;
+      const existingIntake = (updated.intake || {}) as Record<string, unknown>;
+      const patched: Record<string, unknown> = { ...existingIntake };
+      const stringFields = [
+        'trainingPath', 'primaryGoal', 'currentActivity', 'exerciseHistory',
+        'currentDiet',
+      ];
+      const numberFields = [
+        'experienceYears', 'estimatedCalories', 'mealsPerDay', 'dailyWaterOz',
+        'sleepQuality', 'stressLevel',
+      ];
+      const arrayFields = ['healthConditions', 'injuryHistory', 'dietaryRestrictions'];
+      for (const f of stringFields) {
+        if (typeof i[f] === 'string' && (i[f] as string).trim().length > 0) {
+          patched[f] = (i[f] as string).trim();
+        }
+      }
+      for (const f of numberFields) {
+        const n = Number(i[f]);
+        if (Number.isFinite(n) && n > 0) patched[f] = n;
+      }
+      for (const f of arrayFields) {
+        if (Array.isArray(i[f])) {
+          patched[f] = (i[f] as unknown[]).map((v) => String(v));
+        }
+      }
+      // Cast through `unknown` first: TS rejects a direct cast from
+      // Record<string, unknown> to IntakeAssessment because the source
+      // and target types don't overlap sufficiently. The runtime shape
+      // is enforced by the typed-field copy loops above.
+      updated.intake = patched as unknown as typeof updated.intake;
     }
 
     if (profileData.prs && Array.isArray(profileData.prs)) {
@@ -773,6 +907,10 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
               clientDate: getLocalDateStr(),
               clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
               clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — current clock + coarse band so Gunny
+          // has time-of-day awareness in every response.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
               operatorContext: {
                 callsign: operator.callsign,
                 name: operator.name,
@@ -783,7 +921,7 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
                 prs: 'None',
                 injuries: 'None',
                 trainerNotes: operator.trainerNotes || 'None',
-                language: 'en',
+                language,
               },
             }),
           });
@@ -880,10 +1018,36 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
     }, 600);
   }, [messages, operator.id, isOnboarding]);
 
-  // On unmount, flush any pending debounced save using keepalive so the final stream
-  // content reaches the API even if the tab was switched / page navigated away.
+  // Flush any pending debounced save with keepalive so the final stream content
+  // reaches the API even if the tab was switched, page navigated away, or — on
+  // mobile — the OS killed the backgrounded tab before React could unmount.
+  //
+  // We listen on three signals (most-reliable first):
+  //
+  //   1. `pagehide`              — fires when the page is being unloaded OR
+  //                                going into bfcache. iOS Safari fires this
+  //                                aggressively on tab-switch / app-background;
+  //                                MUCH more reliable than relying on React
+  //                                unmount, which the OS can skip if it kills
+  //                                the tab process. Spec-mandated.
+  //   2. `visibilitychange`      — fires whenever the document becomes hidden
+  //      (→ hidden)                (tab-switch, minimize, screen-lock).
+  //                                Catches the "user switched apps" case
+  //                                BEFORE the tab is at risk of being killed.
+  //   3. React unmount cleanup   — backstop for SPA navigation away from the
+  //                                Gunny tab while the document stays alive.
+  //
+  // All three call the same flushPending function, which is idempotent: once
+  // it consumes lastPendingSaveRef.current, subsequent calls are no-ops. So
+  // double-firing (e.g. visibilitychange→pagehide on iOS background) is fine.
+  //
+  // Without these handlers, a debounced save sitting at e.g. 400ms-of-600ms
+  // when the user backgrounds the mobile app gets canceled by the OS killing
+  // the tab — that's the exact scenario behind cross-device chat history not
+  // syncing (mobile chat exists in localStorage but never reached /api/chat;
+  // desktop login on same account sees nothing).
   useEffect(() => {
-    return () => {
+    const flushPending = () => {
       if (saveDebounceRef.current) {
         clearTimeout(saveDebounceRef.current);
         saveDebounceRef.current = null;
@@ -893,6 +1057,31 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
         saveChatRemote(operator.id, pending.chatType, pending.serialized);
         lastPendingSaveRef.current = null;
       }
+    };
+
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        flushPending();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', flushPending);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', flushPending);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
+      // Backstop: in-SPA unmount (e.g. user navigates from Gunny to Planner
+      // without leaving the document) won't fire pagehide, but will fire here.
+      flushPending();
     };
   }, [operator.id]);
 
@@ -1185,7 +1374,7 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string } } | null> => {
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>; hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null; readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null; injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>; dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>; nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null; goals?: Array<{ action?: string; value?: string; match?: string }>; dietary?: Array<{ field?: string; action?: string; values?: string[] }>; macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>; prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>; prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>; wearable?: { provider: string; affected: number } | null; notification?: Record<string, unknown> | null; trainerNote?: { targetOperatorId: string; targetCallsign?: string; op: 'set' | 'append' } | null } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1234,10 +1423,10 @@ ${mealSuggestion}`;
 
       // Tasks 12/13: delegate to the shared context builder. AppShell uses
       // the same function, so the main chat and side panel no longer drift.
-      const operatorContext = buildFullGunnyContext(operator, { language: 'en' });
+      const operatorContext = buildFullGunnyContext(operator, { language });
       /* LEGACY inline builder preserved for reference:
       const _legacyContext = {
-        callsign: operator.callsign, name: operator.name, role: operator.role, language: 'en',
+        callsign: operator.callsign, name: operator.name, role: operator.role, language,
         weight: prof?.weight, height: prof?.height, age: prof?.age, bodyFat: prof?.bodyFat, trainingAge: prof?.trainingAge,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         fitnessLevel: (operator as any).fitnessLevel || intake?.fitnessLevel || prof?.fitnessLevel,
@@ -1331,6 +1520,10 @@ ${mealSuggestion}`;
           clientDate: getLocalDateStr(),
           clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
           clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — current clock + coarse band so Gunny
+          // has time-of-day awareness in every response.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
           ...(apiMode && { mode: apiMode }),
           ...(trainerData && { trainerData }),
         }),
@@ -1342,7 +1535,31 @@ ${mealSuggestion}`;
         const errMsg = data?.error || 'Gunny AI temporarily offline.';
         return { response: errMsg };
       }
-      return { response: data.response, workoutData: data.workoutData, workoutModification: data.workoutModification, profileData: data.profileData, mealData: data.mealData };
+      return {
+        response: data.response,
+        workoutData: data.workoutData,
+        workoutModification: data.workoutModification,
+        workoutModifications: data.workoutModifications,
+        workoutDelete: data.workoutDelete,
+        workoutDeletes: data.workoutDeletes,
+        profileData: data.profileData,
+        mealData: data.mealData,
+        prData: data.prData,
+        mealDeletes: data.mealDeletes,
+        hydration: data.hydration || null,
+        readiness: data.readiness || null,
+        injuryModifications: Array.isArray(data.injuryModifications) ? data.injuryModifications : [],
+        dayTags: Array.isArray(data.dayTags) ? data.dayTags : [],
+        nutritionTargets: data.nutritionTargets || null,
+        goals: Array.isArray(data.goals) ? data.goals : [],
+        dietary: Array.isArray(data.dietary) ? data.dietary : [],
+        macrocycles: Array.isArray(data.macrocycles) ? data.macrocycles : [],
+        prModifications: Array.isArray(data.prModifications) ? data.prModifications : [],
+        prDeletes: Array.isArray(data.prDeletes) ? data.prDeletes : [],
+        wearable: data.wearable || null,
+        notification: data.notification || null,
+        trainerNote: data.trainerNote || null,
+      };
     } catch {
       return { response: 'Network error — check your internet connection and try again.' };
     }
@@ -1371,19 +1588,85 @@ ${mealSuggestion}`;
      * for the first entry so pre-migration callers still compile.
      */
     workoutModifications?: Array<Record<string, unknown>>;
+    /**
+     * Workout-day deletions emitted via <workout_delete> blocks. Plural
+     * for batch deletes ("wipe this week"); singular alias retained.
+     */
+    workoutDelete?: { date: string };
+    workoutDeletes?: Array<{ date: string }>;
     profileData?: Record<string, unknown>;
     mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string };
+    /** Apr 2026: Gunny <pr_json> fallback channel — see /api/gunny PR LOGGING PROTOCOL.
+     *  Primary path is the auto-detect in Planner workout-mode debrief. */
+    prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string };
+    /**
+     * <meal_delete> — descriptors of meals that the server actually removed
+     * from operator.nutrition.meals[date]. Mirror of <workout_delete>.
+     * Apr 2026: added because Gunny was acknowledging duplicate-meal cleanup
+     * in plain text but had no channel to actually delete.
+     */
+    mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>;
+    /** Tier-1 chat-driven channels (Apr 2026). Each is the server-applied
+     *  diff for a single channel — null/empty when the channel didn't fire. */
+    hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null;
+    readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null;
+    injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>;
+    dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>;
+    nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null;
+    /** Tier-2 chat-driven channels (Apr 2026). */
+    goals?: Array<{ action?: string; value?: string; match?: string }>;
+    dietary?: Array<{ field?: string; action?: string; values?: string[] }>;
+    macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>;
+    prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>;
+    prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>;
+    /** Tier-3 chat-driven channels (Apr 2026). */
+    wearable?: { provider: string; affected: number } | null;
+    notification?: Record<string, unknown> | null;
+    trainerNote?: { targetOperatorId: string; targetCallsign?: string; op: 'set' | 'append' } | null;
     voiceControl?: { action?: string };
   } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map((m) => ({
         role: m.role,
-        text: m.text,
+        // Strip the structured tags Gunny emits (meal_json / workout_json /
+        // profile_json / etc.) before sending the conversation back to the
+        // model. Without this, Gunny sees its own prior <meal_json> in the
+        // transcript and can re-emit the same payload on a follow-up turn,
+        // double-logging the same meal — see beta hotfix bundle (Apr 2026).
+        text: (m.text || '')
+          .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
+          .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
+          .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
+          .replace(/<workout_json>[\s\S]*?<\/workout_json>/g, '')
+          .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
+          .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
+          .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
+          .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+          .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+          .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+          .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+          .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+          .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+          .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+          .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+          .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+          .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+          .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+          .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+          .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+          // Daily Ops: <daily_ops_json> = full plan, <daily_ops_block_override>
+          // = single-block edit. Both ship as structured-data tags Gunny
+          // emits at the END of a reply (server saves to DailyOpsPlan via
+          // /api/daily-ops). Without these strips, the raw JSON +
+          // closing tag leak into the chat bubble. Reported May 2026.
+          .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+          .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
+          .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, ''),
         ...(m.image ? { image: m.image } : {}),
         ...(m.images && m.images.length > 0 ? { images: m.images } : {}),
       }));
 
-      const operatorContext = buildFullGunnyContext(operator, { language: 'en' });
+      const operatorContext = buildFullGunnyContext(operator, { language });
       const apiMode = opts.forceMode || (isOnboarding ? 'onboarding' : undefined);
 
       const trainer = operator.trainerId ? allOperators.find(op => op.id === operator.trainerId) : null;
@@ -1409,6 +1692,10 @@ ${mealSuggestion}`;
           clientDate: getLocalDateStr(),
           clientDateLong: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
           clientTimezone: getLocalTimezone(),
+          // WS5 (May 2026) — current clock + coarse band so Gunny
+          // has time-of-day awareness in every response.
+          clientTime: getLocalHourMinute(),
+          clientTimeOfDay: getLocalTimeOfDayBand(),
           ...(apiMode && { mode: apiMode }),
           ...(trainerData && { trainerData }),
         }),
@@ -1434,8 +1721,25 @@ ${mealSuggestion}`;
           workoutData: data.workoutData,
           workoutModification: data.workoutModification,
           workoutModifications: Array.isArray(data.workoutModifications) ? data.workoutModifications : (data.workoutModification ? [data.workoutModification] : []),
+          workoutDelete: data.workoutDelete,
+          workoutDeletes: Array.isArray(data.workoutDeletes) ? data.workoutDeletes : (data.workoutDelete ? [data.workoutDelete] : []),
           profileData: data.profileData,
           mealData: data.mealData,
+          prData: data.prData,
+          mealDeletes: Array.isArray(data.mealDeletes) ? data.mealDeletes : [],
+          hydration: data.hydration || null,
+          readiness: data.readiness || null,
+          injuryModifications: Array.isArray(data.injuryModifications) ? data.injuryModifications : [],
+          dayTags: Array.isArray(data.dayTags) ? data.dayTags : [],
+          nutritionTargets: data.nutritionTargets || null,
+          goals: Array.isArray(data.goals) ? data.goals : [],
+          dietary: Array.isArray(data.dietary) ? data.dietary : [],
+          macrocycles: Array.isArray(data.macrocycles) ? data.macrocycles : [],
+          prModifications: Array.isArray(data.prModifications) ? data.prModifications : [],
+          prDeletes: Array.isArray(data.prDeletes) ? data.prDeletes : [],
+          wearable: data.wearable || null,
+          notification: data.notification || null,
+          trainerNote: data.trainerNote || null,
           voiceControl: data.voiceControl,
         };
       }
@@ -1478,10 +1782,51 @@ ${mealSuggestion}`;
                 .replace(/<workout_json>[\s\S]*$/, '')
                 .replace(/<workout_modification>[\s\S]*?<\/workout_modification>/g, '')
                 .replace(/<workout_modification>[\s\S]*$/, '')
+                .replace(/<workout_delete>[\s\S]*?<\/workout_delete>/g, '')
+                .replace(/<workout_delete>[\s\S]*$/, '')
                 .replace(/<profile_json>[\s\S]*?<\/profile_json>/g, '')
                 .replace(/<profile_json>[\s\S]*$/, '')
                 .replace(/<meal_json>[\s\S]*?<\/meal_json>/g, '')
                 .replace(/<meal_json>[\s\S]*$/, '')
+                .replace(/<meal_delete>[\s\S]*?<\/meal_delete>/g, '')
+                .replace(/<meal_delete>[\s\S]*$/, '')
+                .replace(/<pr_json>[\s\S]*?<\/pr_json>/g, '')
+                .replace(/<pr_json>[\s\S]*$/, '')
+                .replace(/<hydration_json>[\s\S]*?<\/hydration_json>/g, '')
+                .replace(/<hydration_json>[\s\S]*$/, '')
+                .replace(/<readiness_json>[\s\S]*?<\/readiness_json>/g, '')
+                .replace(/<readiness_json>[\s\S]*$/, '')
+                .replace(/<injury_modification>[\s\S]*?<\/injury_modification>/g, '')
+                .replace(/<injury_modification>[\s\S]*$/, '')
+                .replace(/<day_tag_json>[\s\S]*?<\/day_tag_json>/g, '')
+                .replace(/<day_tag_json>[\s\S]*$/, '')
+                .replace(/<nutrition_targets_json>[\s\S]*?<\/nutrition_targets_json>/g, '')
+                .replace(/<nutrition_targets_json>[\s\S]*$/, '')
+                .replace(/<goal_json>[\s\S]*?<\/goal_json>/g, '')
+                .replace(/<goal_json>[\s\S]*$/, '')
+                .replace(/<dietary_json>[\s\S]*?<\/dietary_json>/g, '')
+                .replace(/<dietary_json>[\s\S]*$/, '')
+                .replace(/<macrocycle_json>[\s\S]*?<\/macrocycle_json>/g, '')
+                .replace(/<macrocycle_json>[\s\S]*$/, '')
+                .replace(/<pr_modification>[\s\S]*?<\/pr_modification>/g, '')
+                .replace(/<pr_modification>[\s\S]*$/, '')
+                .replace(/<pr_delete>[\s\S]*?<\/pr_delete>/g, '')
+                .replace(/<pr_delete>[\s\S]*$/, '')
+                .replace(/<wearable_control>[\s\S]*?<\/wearable_control>/g, '')
+                .replace(/<wearable_control>[\s\S]*$/, '')
+                .replace(/<notification_json>[\s\S]*?<\/notification_json>/g, '')
+                .replace(/<notification_json>[\s\S]*$/, '')
+                .replace(/<trainer_note_json>[\s\S]*?<\/trainer_note_json>/g, '')
+                .replace(/<trainer_note_json>[\s\S]*$/, '')
+                // Daily Ops: full-plan + per-block override tags. The
+                // half-streamed `[\s\S]*$` variant is critical — the
+                // daily_ops_json payload is hundreds of lines, so until
+                // the closing tag arrives, the raw JSON streams visibly
+                // into the chat bubble (the original reported bug).
+                .replace(/<daily_ops_json>[\s\S]*?<\/daily_ops_json>/g, '')
+                .replace(/<daily_ops_json>[\s\S]*$/, '')
+                .replace(/<daily_ops_block_override>[\s\S]*?<\/daily_ops_block_override>/g, '')
+                .replace(/<daily_ops_block_override>[\s\S]*$/, '')
                 .replace(/<voice_control>[\s\S]*?<\/voice_control>/g, '')
                 .replace(/<voice_control>[\s\S]*$/, '')
                 // Strip trailing half-streamed markdown table row (pipe-led line missing its closing pipe)
@@ -1510,8 +1855,25 @@ ${mealSuggestion}`;
           workoutData: finalPayload.workoutData,
           workoutModification: finalPayload.workoutModification,
           workoutModifications: Array.isArray(finalPayload.workoutModifications) ? finalPayload.workoutModifications : (finalPayload.workoutModification ? [finalPayload.workoutModification] : []),
+          workoutDelete: finalPayload.workoutDelete,
+          workoutDeletes: Array.isArray(finalPayload.workoutDeletes) ? finalPayload.workoutDeletes : (finalPayload.workoutDelete ? [finalPayload.workoutDelete] : []),
           profileData: finalPayload.profileData,
           mealData: finalPayload.mealData,
+          prData: finalPayload.prData,
+          mealDeletes: Array.isArray(finalPayload.mealDeletes) ? finalPayload.mealDeletes : [],
+          hydration: finalPayload.hydration || null,
+          readiness: finalPayload.readiness || null,
+          injuryModifications: Array.isArray(finalPayload.injuryModifications) ? finalPayload.injuryModifications : [],
+          dayTags: Array.isArray(finalPayload.dayTags) ? finalPayload.dayTags : [],
+          nutritionTargets: finalPayload.nutritionTargets || null,
+          goals: Array.isArray(finalPayload.goals) ? finalPayload.goals : [],
+          dietary: Array.isArray(finalPayload.dietary) ? finalPayload.dietary : [],
+          macrocycles: Array.isArray(finalPayload.macrocycles) ? finalPayload.macrocycles : [],
+          prModifications: Array.isArray(finalPayload.prModifications) ? finalPayload.prModifications : [],
+          prDeletes: Array.isArray(finalPayload.prDeletes) ? finalPayload.prDeletes : [],
+          wearable: finalPayload.wearable || null,
+          notification: finalPayload.notification || null,
+          trainerNote: finalPayload.trainerNote || null,
           voiceControl: finalPayload.voiceControl,
         };
       }
@@ -1723,39 +2085,457 @@ ${mealSuggestion}`;
 
       applyVoiceControl(apiResult?.voiceControl);
 
+      // WORKOUT DELETE — when Gunny emits <workout_delete>, remove the
+      // workout for those date(s) from operator.workouts. Without this
+      // the model would say "deleted from planner" in chat but the
+      // planner state never updated (the bug the operator hit on a
+      // move-workout request). Apply BEFORE block-shape mods so a move
+      // (delete source + add target) lands cleanly.
+      const deletesList = ((apiResult?.workoutDeletes && apiResult.workoutDeletes.length > 0)
+        ? apiResult.workoutDeletes
+        : (apiResult?.workoutDelete ? [apiResult.workoutDelete] : [])) as Array<{ date: string }>;
+      let wasDeletion = false;
+      if (deletesList.length > 0 && onUpdateOperator) {
+        let workingOp = operator;
+        let touched = false;
+        for (const del of deletesList) {
+          if (!del?.date || !isValidDateStr(del.date)) continue;
+          if (!workingOp.workouts || !workingOp.workouts[del.date]) continue;
+          const nextWorkouts = { ...workingOp.workouts };
+          delete nextWorkouts[del.date];
+          workingOp = { ...workingOp, workouts: nextWorkouts };
+          touched = true;
+          wasDeletion = true;
+        }
+        if (touched) onUpdateOperator(workingOp);
+      }
+
+      // MEAL DELETE — server already mutated nutrition.meals[date] when it
+      // saw <meal_delete>. We mirror that mutation in the local operator
+      // snapshot so the Nutrition tab reflects the cleanup without waiting
+      // for a /me refetch. Server returns ONLY the entries it actually
+      // matched, so we apply the same precedence here against the latest
+      // in-memory bucket. See applyMealDeletes in /api/gunny/route.ts.
+      const mealDeletesList = (apiResult?.mealDeletes || []) as Array<{ id?: string; name?: string; calories?: number; date?: string }>;
+      let mealsDeletedCount = 0;
+      if (mealDeletesList.length > 0 && onUpdateOperator) {
+        const today = getLocalDateStr();
+        let workingOp = operator;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (workingOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const meals = { ...(nutri.meals || {}) } as Record<string, Meal[]>;
+        let touched = false;
+        for (const del of mealDeletesList) {
+          const targetDate = del.date && isValidDateStr(del.date) ? del.date : today;
+          const bucket = meals[targetDate];
+          if (!Array.isArray(bucket) || bucket.length === 0) continue;
+          let removeIdx = -1;
+          if (del.id) removeIdx = bucket.findIndex((m: Meal) => m.id === del.id);
+          if (removeIdx < 0 && del.name && Number.isFinite(del.calories)) {
+            const wantName = del.name.toLowerCase().trim();
+            const wantCal = del.calories as number;
+            removeIdx = bucket.findIndex((m: Meal) =>
+              (m.name || '').toLowerCase().trim() === wantName &&
+              Math.abs((m.calories || 0) - wantCal) <= 5,
+            );
+          }
+          if (removeIdx < 0 && del.name) {
+            const wantName = del.name.toLowerCase().trim();
+            for (let i = bucket.length - 1; i >= 0; i--) {
+              if ((bucket[i].name || '').toLowerCase().trim() === wantName) {
+                removeIdx = i;
+                break;
+              }
+            }
+          }
+          if (removeIdx < 0) continue;
+          const next = [...bucket];
+          next.splice(removeIdx, 1);
+          meals[targetDate] = next;
+          touched = true;
+          mealsDeletedCount++;
+        }
+        if (touched) {
+          workingOp = { ...workingOp, nutrition: { ...nutri, meals } };
+          onUpdateOperator(workingOp);
+        }
+      }
+
+      // ─── Tier-1 chat-driven channels (Apr 2026) ─────────────────────────
+      // Server already persisted each diff. We mirror into the local
+      // operator snapshot so UI tabs reflect the change without a /me
+      // refetch — same pattern as MEAL DELETE above.
+
+      let hydrationLogged = false;
+      const hydration = apiResult?.hydration;
+      if (hydration && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const hydMap = { ...(nutri.hydration || {}) } as Record<string, number>;
+        hydMap[hydration.date] = hydration.total;
+        onUpdateOperator({ ...operator, nutrition: { ...nutri, hydration: hydMap } });
+        hydrationLogged = true;
+      }
+
+      let readinessLogged = false;
+      const readiness = apiResult?.readiness;
+      if (readiness && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dailyReadiness = { ...((operator as any).dailyReadiness || {}) } as Record<string, unknown>;
+        dailyReadiness[readiness.date] = readiness;
+        const today = getLocalDateStr();
+        const profile = { ...operator.profile };
+        if (readiness.date === today) {
+          if (typeof readiness.readiness === 'number') profile.readiness = readiness.readiness;
+          if (typeof readiness.sleep === 'number') profile.sleep = readiness.sleep;
+          if (typeof readiness.stress === 'number') profile.stress = readiness.stress;
+        }
+        onUpdateOperator({ ...operator, profile, dailyReadiness } as typeof operator);
+        readinessLogged = true;
+      }
+
+      let injuriesChangedCount = 0;
+      const injuryMods = apiResult?.injuryModifications || [];
+      if (injuryMods.length > 0 && onUpdateOperator) {
+        let injuries = [...(operator.injuries || [])];
+        for (const mod of injuryMods) {
+          const action = mod.action || 'update';
+          if (action === 'add') {
+            const name = mod.patch?.name?.trim();
+            if (!name) continue;
+            const status = (['active', 'recovering', 'cleared'].includes(mod.patch?.status || '')
+              ? mod.patch?.status
+              : 'active') as 'active' | 'recovering' | 'cleared';
+            injuries.push({
+              id: `inj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              name,
+              status,
+              notes: mod.patch?.notes || '',
+              restrictions: Array.isArray(mod.patch?.restrictions) ? mod.patch!.restrictions! : [],
+            });
+            injuriesChangedCount++;
+            continue;
+          }
+          const matchId = mod.match?.id;
+          const matchName = (mod.match?.name || '').toLowerCase().trim();
+          const idx = injuries.findIndex((inj) => {
+            if (matchId && inj.id === matchId) return true;
+            if (matchName && (inj.name || '').toLowerCase().trim() === matchName) return true;
+            return false;
+          });
+          if (idx < 0) continue;
+          if (action === 'remove') { injuries.splice(idx, 1); injuriesChangedCount++; continue; }
+          if (action === 'clear') {
+            injuries[idx] = { ...injuries[idx], status: 'cleared' };
+            injuriesChangedCount++;
+            continue;
+          }
+          // update
+          const patch: Record<string, unknown> = {};
+          if (mod.patch?.name) patch.name = mod.patch.name;
+          if (mod.patch?.status && ['active', 'recovering', 'cleared'].includes(mod.patch.status)) patch.status = mod.patch.status;
+          if (typeof mod.patch?.notes === 'string') patch.notes = mod.patch.notes;
+          if (Array.isArray(mod.patch?.restrictions)) patch.restrictions = mod.patch!.restrictions;
+          if (Object.keys(patch).length === 0) continue;
+          injuries[idx] = { ...injuries[idx], ...patch };
+          injuriesChangedCount++;
+        }
+        if (injuriesChangedCount > 0) onUpdateOperator({ ...operator, injuries });
+      }
+
+      let dayTagsChangedCount = 0;
+      const dayTagDiffs = apiResult?.dayTags || [];
+      if (dayTagDiffs.length > 0 && onUpdateOperator) {
+        const dayTags = { ...(operator.dayTags || {}) };
+        for (const diff of dayTagDiffs) {
+          if (!diff?.date || !isValidDateStr(diff.date)) continue;
+          if (diff.op === 'clear') { delete dayTags[diff.date]; dayTagsChangedCount++; continue; }
+          const color = (['green', 'amber', 'red', 'cyan'].includes(diff.color || '')
+            ? diff.color
+            : 'amber') as 'green' | 'amber' | 'red' | 'cyan';
+          dayTags[diff.date] = { color, note: diff.note || '' };
+          dayTagsChangedCount++;
+        }
+        if (dayTagsChangedCount > 0) onUpdateOperator({ ...operator, dayTags });
+      }
+
+      let targetsChanged = false;
+      const newTargets = apiResult?.nutritionTargets;
+      if (newTargets && onUpdateOperator) {
+        const existing = operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+        const targets = { ...existing.targets, ...newTargets };
+        onUpdateOperator({ ...operator, nutrition: { ...existing, targets } });
+        targetsChanged = true;
+      }
+
+      // ─── Tier-2 mirrors (Apr 2026) ──────────────────────────────────────
+      let goalsChangedCount = 0;
+      const goalDiffs = apiResult?.goals || [];
+      if (goalDiffs.length > 0 && onUpdateOperator) {
+        let goals = [...(operator.profile?.goals || [])];
+        for (const d of goalDiffs) {
+          if (d.action === 'add' && d.value) {
+            if (!goals.some((g) => g.toLowerCase() === d.value!.toLowerCase())) {
+              goals.push(d.value);
+              goalsChangedCount++;
+            }
+          } else if (d.action === 'remove' && d.match) {
+            const m = d.match.toLowerCase();
+            const before = goals.length;
+            goals = goals.filter((g) => !g.toLowerCase().includes(m));
+            if (goals.length !== before) goalsChangedCount++;
+          } else if (d.action === 'replace' && d.match && d.value) {
+            const m = d.match.toLowerCase();
+            const idx = goals.findIndex((g) => g.toLowerCase().includes(m));
+            if (idx >= 0) { goals[idx] = d.value; goalsChangedCount++; }
+          }
+        }
+        if (goalsChangedCount > 0) onUpdateOperator({ ...operator, profile: { ...operator.profile, goals } });
+      }
+
+      let dietaryChangedCount = 0;
+      const dietaryDiffs = apiResult?.dietary || [];
+      if (dietaryDiffs.length > 0 && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const intake = ({ ...(operator.intake || {}) }) as any;
+        let restrictions = Array.isArray(intake.dietaryRestrictions) ? [...intake.dietaryRestrictions] : [];
+        let supplements = Array.isArray(intake.supplements) ? [...intake.supplements] : [];
+        for (const d of dietaryDiffs) {
+          const target = d.field === 'supplements' ? supplements : restrictions;
+          const values = (d.values || []).map((v) => String(v).trim()).filter(Boolean);
+          if (d.action === 'replace_all') {
+            const seen = new Set<string>();
+            const dedup: string[] = [];
+            for (const v of values) { const k = v.toLowerCase(); if (!seen.has(k)) { seen.add(k); dedup.push(v); } }
+            if (d.field === 'supplements') supplements = dedup; else restrictions = dedup;
+            dietaryChangedCount++;
+          } else if (d.action === 'add') {
+            const seen = new Set(target.map((v) => v.toLowerCase()));
+            for (const v of values) {
+              if (!seen.has(v.toLowerCase())) { target.push(v); seen.add(v.toLowerCase()); }
+            }
+            dietaryChangedCount++;
+          } else if (d.action === 'remove') {
+            const drop = new Set(values.map((v) => v.toLowerCase()));
+            const filtered = target.filter((v) => !drop.has(v.toLowerCase()));
+            if (filtered.length !== target.length) {
+              if (d.field === 'supplements') supplements = filtered; else restrictions = filtered;
+              dietaryChangedCount++;
+            }
+          }
+        }
+        if (dietaryChangedCount > 0) {
+          onUpdateOperator({ ...operator, intake: { ...intake, dietaryRestrictions: restrictions, supplements } });
+        }
+      }
+
+      // For macrocycles + PR mods/deletes, server-side mutation is the
+      // source of truth — we don't have the full Postgres-resolved
+      // operator on the client at this point (the server returned only
+      // applied diff descriptors). The next /me refetch (or a manual
+      // refresh on the relevant tab) reflects the change. We only stamp
+      // a confirmation suffix here so the operator gets visible feedback.
+      const macrocyclesChanged = (apiResult?.macrocycles || []).length;
+      const prMods = apiResult?.prModifications || [];
+      const prDels = apiResult?.prDeletes || [];
+
+      // PR mods + deletes — apply locally for snappier feedback. Server
+      // already wrote canonical state; we just sync our in-memory copy.
+      let prsChangedCount = 0;
+      if ((prMods.length > 0 || prDels.length > 0) && onUpdateOperator) {
+        let prs = [...(operator.prs || [])];
+        const findIdx = (match: { id?: string; exercise?: string; date?: string } | undefined) => {
+          if (!match) return -1;
+          if (match.id) {
+            const i = prs.findIndex((p) => p.id === match.id);
+            if (i >= 0) return i;
+          }
+          const ex = (match.exercise || '').toLowerCase().trim();
+          const date = (match.date || '').trim();
+          if (!ex || !date) return -1;
+          return prs.findIndex((p) => (p.exercise || '').toLowerCase().trim() === ex && p.date === date);
+        };
+        for (const m of prMods) {
+          const idx = findIdx(m.match);
+          if (idx < 0) continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          prs[idx] = { ...prs[idx], ...(m.patch as any) };
+          prsChangedCount++;
+        }
+        for (const d of prDels) {
+          const idx = findIdx(d.match);
+          if (idx < 0) continue;
+          prs.splice(idx, 1);
+          prsChangedCount++;
+        }
+        if (prsChangedCount > 0) onUpdateOperator({ ...operator, prs });
+      }
+
+      // ─── Tier-3 mirrors (Apr 2026) ──────────────────────────────────────
+      let wearableDisconnected: { provider: string; affected: number } | null = apiResult?.wearable || null;
+      // Server already disconnected the wearable. The wearable list is
+      // fetched separately via /api/wearables, so no operator-level state
+      // to mirror here — just keep the diff for the suffix stamp.
+
+      let notificationApplied: Record<string, unknown> | null = null;
+      const notifPatch = apiResult?.notification;
+      if (notifPatch && typeof notifPatch === 'object') {
+        // Notification prefs are localStorage-only. Merge the patch into
+        // the active prefs and persist. Other components reading these
+        // re-load from localStorage on tab focus, so no event bus needed.
+        try {
+          const current = loadNotificationPrefs(operator.id);
+          const merged: NotificationPreferences = { ...current, ...(notifPatch as Partial<NotificationPreferences>) };
+          saveNotificationPrefs(operator.id, merged);
+          notificationApplied = notifPatch;
+        } catch (e) {
+          console.error('Failed to apply notification patch:', e);
+        }
+      }
+
+      let trainerNoteApplied = apiResult?.trainerNote || null;
+      // For self-writes, mirror locally so the next request's context
+      // sees the fresh trainerNotes without a /me round-trip. For
+      // cross-account writes, the change is on the OTHER operator's row
+      // and only visible after that operator's session re-fetches.
+      if (trainerNoteApplied && trainerNoteApplied.targetOperatorId === operator.id && onUpdateOperator) {
+        // We don't know the exact merged string from the diff (server
+        // computed append-with-timestamp), so the safest UI signal is
+        // just to flag that something changed and let the next /me
+        // settle the actual value.
+      }
+
       // SURGICAL MODIFICATION — apply each targeted change Gunny emitted. Gunny
       // can emit multiple <workout_modification> blocks (e.g. prefill_weights
       // for every exercise on today's workout); we iterate and apply them in
       // order. For block-shape mods (swap/add/remove/update), we fold them all
       // into a single operator update to avoid a render storm.
-      let wasModification = false;
+      let wasModification = wasDeletion;
       const mods = (apiResult?.workoutModifications || []) as unknown as WorkoutModification[];
       if (mods.length > 0) {
         const today = getLocalDateStr();
         let workingOp = operator;
         let touched = false;
+        // Track silent-no-op modifications so we can surface them to
+        // the user. Without this, Gunny's confirmation text in the
+        // chat ("done, added it back!") would lie when the actual
+        // apply path matched nothing — see workoutModification.ts
+        // ApplyWorkoutModificationResult.changed for why this matters.
+        const silentlyDropped: string[] = [];
         for (const mod of mods) {
           if (!mod || typeof mod !== 'object') continue;
           if (mod.type === 'prefill_weights') {
-            // Live prefill of workout-mode inputs — Planner's listener handles
-            // it. Does not mutate the persisted workout.
             dispatchPrefillWeights(mod as PrefillWeightsMod);
             wasModification = true;
             continue;
           }
-          // Block-shape mods write to the persisted workout.
-          const current = workingOp.workouts?.[today];
-          if (!current) continue;
+          // Block-shape mods write to the persisted workout. Resolve
+          // which date to write to in this priority:
+          //   1. mod.targetDate explicit (Gunny emitted YYYY-MM-DD because
+          //      the operator named a specific day)
+          //   2. today
+          //   3. fallback walk-back across recent NON-COMPLETED workouts
+          //      (only when no explicit date — never when the operator
+          //      named a day, because the walk-back would silently land
+          //      on the wrong session)
+          //
+          // CRITICAL — never walk back into a completed workout. May 1
+          // bug: "add barbell squats to Saturday's workout" landed on
+          // Friday's COMPLETED workout because Saturday was empty and
+          // the walk-back grabbed the most recent workout-with-blocks.
+          // Modifying completed sessions corrupts logged history.
+          const explicitDate = (mod as { targetDate?: string }).targetDate;
+          let targetDate = explicitDate || today;
+          let current = workingOp.workouts?.[targetDate];
+
+          if (!current && !explicitDate) {
+            // No workout at the resolved date AND no explicit date hint —
+            // fall back to scanning recent dates so requests like
+            // "add curls back to my last workout" still work. Skip
+            // completed workouts: they're history, not edit targets.
+            const wantedName = (mod as { targetExerciseName?: string; afterExerciseName?: string }).targetExerciseName
+              ?? (mod as { afterExerciseName?: string }).afterExerciseName
+              ?? '';
+            const lowered = wantedName.toLowerCase().trim();
+            const allDates = Object.keys(workingOp.workouts || {}).sort().reverse();
+            for (const d of allDates.slice(0, 14)) {
+              const w = workingOp.workouts?.[d];
+              if (!w?.blocks?.length) continue;
+              if (w.completed) continue;
+              if (mod.type === 'add_block') {
+                // For adds, the most recent non-completed workout.
+                targetDate = d;
+                current = w;
+                break;
+              }
+              // For swap/remove/update, prefer a workout that
+              // actually contains the named block.
+              const hit = w.blocks.some((b) =>
+                b.type === 'exercise' &&
+                lowered.length > 0 &&
+                (b as ExerciseBlock).exerciseName?.toLowerCase().trim() === lowered,
+              );
+              if (hit) {
+                targetDate = d;
+                current = w;
+                break;
+              }
+            }
+          }
+
+          if (current?.completed) {
+            // The resolved date IS a completed workout — refuse rather
+            // than corrupt logged history. Surface to the user so Gunny
+            // doesn't lie about applying the change.
+            console.warn('[gunny-mod] refusing to modify completed workout for', mod);
+            silentlyDropped.push(`${targetDate} workout is already completed — modifications would corrupt logged sets. Ask for a new workout instead.`);
+            continue;
+          }
+          if (!current) {
+            console.warn('[gunny-mod] no target workout found for', mod);
+            silentlyDropped.push(
+              explicitDate
+                ? `No workout planned for ${explicitDate} — nothing to ${mod.type}.`
+                : `No workout to target (Gunny tried ${mod.type})`
+            );
+            continue;
+          }
           try {
-            const modified = applyWorkoutModification(current, mod);
-            workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-            touched = true;
-            wasModification = true;
+            const result = applyWorkoutModification(current, mod);
+            if (result.changed) {
+              workingOp = {
+                ...workingOp,
+                workouts: { ...workingOp.workouts, [targetDate]: result.workout },
+              };
+              touched = true;
+              wasModification = true;
+            } else {
+              // Gunny's apply was a no-op (block name didn't match,
+              // empty payload, etc.). Log the reason and queue a
+              // user-visible warning so the chat doesn't lie.
+              console.warn('[gunny-mod] apply was a no-op:', result.reason, mod);
+              silentlyDropped.push(result.reason || 'modification did not match anything in your workout');
+            }
           } catch (e) {
             console.error('applyWorkoutModification failed:', e);
+            silentlyDropped.push('applyWorkoutModification threw — see console');
           }
         }
         if (touched && onUpdateOperator) onUpdateOperator(workingOp);
+        // If Gunny acknowledged but the apply silently failed, append
+        // a clarifying note to the chat so the user knows to retry
+        // with a more specific name. Without this, the user sees
+        // Gunny's confirmation, looks at the workout, sees nothing
+        // changed, and thinks the feature is broken.
+        if (silentlyDropped.length > 0 && !touched) {
+          const note = silentlyDropped[0];
+          setMessages(prev => [...prev, {
+            id: 'gunny-mod-note-' + Date.now(),
+            role: 'gunny',
+            text: `⚠ Heads up — I tried to apply that change but couldn't find the right exercise to act on. ${note}. Try naming the exercise exactly as it appears in your workout, or open the workout and tell me which one.`,
+            timestamp: new Date(),
+          }]);
+        }
       }
 
       // Store workout data if AI generated a NEW complete workout
@@ -1793,19 +2573,22 @@ ${mealSuggestion}`;
           const existingMeals = existingNutrition.meals || {};
           const prevBucket = existingMeals[targetDate] || [];
 
-          // DEDUP: reject if same name + calories logged within 60 seconds
-          const nowMs = Date.now();
+          // DEDUP: reject if the same meal (by name + calories) is already in
+          // today's bucket — broader than the prior 60-second window because
+          // Gunny was re-emitting <meal_json> from earlier turns and the
+          // duplicate would land minutes later, past the 60s guard. The user
+          // can still log a true repeat by saying "log another serving" —
+          // that flows through a different path (the model emits a fresh
+          // meal_json with a slightly different name like "Steak (2nd
+          // serving)") which won't match.
           const recentDup = prevBucket.find((existing: Meal) => {
-            if ((existing.name || '').toLowerCase() !== (meal.name || '').toLowerCase()) return false;
-            if (Math.abs((existing.calories || 0) - meal.calories) > 5) return false;
-            const idMatch = existing.id.match(/^meal-(\d+)$/);
-            if (!idMatch) return false;
-            return (nowMs - Number(idMatch[1])) < 60_000;
+            if ((existing.name || '').toLowerCase().trim() !== (meal.name || '').toLowerCase().trim()) return false;
+            return Math.abs((existing.calories || 0) - meal.calories) <= 5;
           });
           if (recentDup) {
             const dupMsg: Message = {
               id: 'gunny-dedup-' + Date.now(), role: 'gunny',
-              text: `Hold up, champ — I just logged "${meal.name}" under a minute ago. If that was a second helping, say "log another serving" and I'll stack it.`,
+              text: `Hold up, champ — "${meal.name}" is already in today's log. If that was a second helping, say "log another serving" and I'll stack it.`,
               timestamp: new Date(),
             };
             setMessages((prev) => [...prev, dupMsg]);
@@ -1829,9 +2612,64 @@ ${mealSuggestion}`;
         }
       }
 
+      // PR LOGGING — Gunny emitted <pr_json>; append to operator.prs.
+      // Fallback channel: Workout Mode debrief auto-detects PRs and writes
+      // them directly. This block handles the OUTSIDE-workout-mode case
+      // (retroactive logs, gym sessions not logged via the app, etc.).
+      // Dedup against existing prs by exercise (case-insensitive) + weight
+      // — same exercise + same weight on the same day is treated as a
+      // duplicate and silently dropped.
+      let prLogged = false;
+      const prPayload = apiResult?.prData;
+      if (prPayload && onUpdateOperator) {
+        const exercise = (prPayload.exercise || '').trim();
+        const weight = Number(prPayload.weight);
+        const reps = Number.isFinite(Number(prPayload.reps))
+          ? Math.max(1, Math.floor(Number(prPayload.reps)))
+          : 1;
+        const valid = exercise.length > 0 && Number.isFinite(weight) && weight > 0;
+        if (valid) {
+          const today = getLocalDateStr();
+          const targetDate = isValidDateStr(prPayload.date) ? prPayload.date! : today;
+          const existingPRs = operator.prs || [];
+          const exKey = exercise.toLowerCase();
+          const dupe = existingPRs.find(p =>
+            (p.exercise || '').trim().toLowerCase() === exKey &&
+            Math.abs((p.weight || 0) - weight) < 0.5 &&
+            p.date === targetDate
+          );
+          if (!dupe) {
+            const newPR = {
+              id: `pr-gunny-${Date.now()}`,
+              exercise,
+              weight: Math.round(weight),
+              reps,
+              date: targetDate,
+              notes: prPayload.notes || 'Logged via Gunny chat',
+              type: (prPayload.type as 'strength' | 'consistency' | 'endurance' | 'milestone' | undefined) || 'strength',
+              // Stamp current training path — mirrors Planner auto-detect
+              // (Planner.tsx::handleSaveResults). PRs logged outside Workout
+              // Mode still belong to whichever path the operator is on.
+              path: operator.intake?.trainingPath,
+            };
+            const updatedOp = {
+              ...operator,
+              prs: [...existingPRs, newPR],
+            };
+            onUpdateOperator(updatedOp);
+            prLogged = true;
+          }
+        }
+      }
+
       // Final pass — stamp the workout suffix if a workout was generated
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      if (hasWorkout || wasModification || mealLogged) {
+      const tier1Touched = hydrationLogged || readinessLogged
+        || injuriesChangedCount > 0 || dayTagsChangedCount > 0 || targetsChanged;
+      const tier2Touched = goalsChangedCount > 0 || dietaryChangedCount > 0
+        || macrocyclesChanged > 0 || prsChangedCount > 0;
+      const tier3Touched = !!wearableDisconnected || !!notificationApplied || !!trainerNoteApplied;
+      if (hasWorkout || wasModification || mealLogged || prLogged || mealsDeletedCount > 0 || tier1Touched || tier2Touched || tier3Touched) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -1840,7 +2678,21 @@ ${mealSuggestion}`;
                   text: (apiResult?.response || m.text)
                     + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
                     + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
-                    + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : ''),
+                    + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : '')
+                    + (prLogged ? '\n\n[PR LOGGED TO PR BOARD]' : '')
+                    + (mealsDeletedCount > 0 ? `\n\n[${mealsDeletedCount === 1 ? 'MEAL REMOVED' : `${mealsDeletedCount} MEALS REMOVED`}]` : '')
+                    + (hydrationLogged && apiResult?.hydration ? `\n\n[HYDRATION ${apiResult.hydration.op === 'set' ? 'SET' : 'LOGGED'} — ${apiResult.hydration.total}oz TOTAL]` : '')
+                    + (readinessLogged ? '\n\n[READINESS CHECK-IN LOGGED]' : '')
+                    + (injuriesChangedCount > 0 ? `\n\n[${injuriesChangedCount === 1 ? 'INJURY UPDATED' : `${injuriesChangedCount} INJURIES UPDATED`}]` : '')
+                    + (dayTagsChangedCount > 0 ? `\n\n[${dayTagsChangedCount === 1 ? 'DAY TAGGED' : `${dayTagsChangedCount} DAYS TAGGED`}]` : '')
+                    + (targetsChanged ? '\n\n[MACRO TARGETS UPDATED]' : '')
+                    + (goalsChangedCount > 0 ? `\n\n[${goalsChangedCount === 1 ? 'GOAL UPDATED' : `${goalsChangedCount} GOALS UPDATED`}]` : '')
+                    + (dietaryChangedCount > 0 ? '\n\n[DIETARY PROFILE UPDATED]' : '')
+                    + (macrocyclesChanged > 0 ? `\n\n[${macrocyclesChanged === 1 ? 'MACROCYCLE UPDATED' : `${macrocyclesChanged} MACROCYCLES UPDATED`}]` : '')
+                    + (prsChangedCount > 0 ? `\n\n[${prsChangedCount === 1 ? 'PR UPDATED' : `${prsChangedCount} PRS UPDATED`}]` : '')
+                    + (wearableDisconnected ? `\n\n[${wearableDisconnected.provider.toUpperCase()} DISCONNECTED]` : '')
+                    + (notificationApplied ? '\n\n[NOTIFICATION PREFERENCES UPDATED — this device only]' : '')
+                    + (trainerNoteApplied ? `\n\n[TRAINER NOTE ${trainerNoteApplied.op === 'append' ? 'APPENDED' : 'SET'}${trainerNoteApplied.targetCallsign ? ` for ${trainerNoteApplied.targetCallsign}` : ''}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
@@ -1850,9 +2702,25 @@ ${mealSuggestion}`;
 
       // If the API returned nothing at all, show the fallback
       if (!apiResult) {
-        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
-          ? formatOwnerDiagnostic(errorInfo)
-          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        // Build a more useful fallback message. RAMPAGE (admin) gets the
+        // full diagnostic dump for debugging. Everyone else gets a hint
+        // about the failure type when we can — image uploads in
+        // particular benefit from "try a smaller photo" guidance because
+        // the most common failure mode is the Anthropic vision payload
+        // limit. The actual error.message is logged server-side
+        // (Railway) so we can correlate; we don't surface it raw to
+        // users because it can include internal details.
+        const hadImage = !!pendingImage;
+        let fallbackText: string;
+        if (operator.callsign === 'RAMPAGE' && errorInfo) {
+          fallbackText = formatOwnerDiagnostic(errorInfo);
+        } else if (errorInfo?.errorType === 'stream_error') {
+          fallbackText = hadImage
+            ? `⚠ The image couldn't be processed. Try a smaller photo (under 5MB) or retry without the image, ${operator.callsign}.`
+            : `⚠ Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
+        } else {
+          fallbackText = `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        }
         setMessages((prev) =>
           prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
@@ -1907,15 +2775,302 @@ ${mealSuggestion}`;
 
       applyVoiceControl(apiResult?.voiceControl);
 
+      // QA-path workout deletes — same handling as the normal-mode
+      // path above. Apply BEFORE block-shape mods so a move
+      // (delete source + add target) lands cleanly.
+      const qaDeletes = ((apiResult?.workoutDeletes && apiResult.workoutDeletes.length > 0)
+        ? apiResult.workoutDeletes
+        : (apiResult?.workoutDelete ? [apiResult.workoutDelete] : [])) as Array<{ date: string }>;
+      let qaWasDeletion = false;
+      if (qaDeletes.length > 0 && onUpdateOperator) {
+        let workingOp = operator;
+        let touched = false;
+        for (const del of qaDeletes) {
+          if (!del?.date || !isValidDateStr(del.date)) continue;
+          if (!workingOp.workouts || !workingOp.workouts[del.date]) continue;
+          const nextWorkouts = { ...workingOp.workouts };
+          delete nextWorkouts[del.date];
+          workingOp = { ...workingOp, workouts: nextWorkouts };
+          touched = true;
+          qaWasDeletion = true;
+        }
+        if (touched) onUpdateOperator(workingOp);
+      }
+
+      // QA-path meal-delete mirror — see normal-mode handler for rationale.
+      const qaMealDeletes = (apiResult?.mealDeletes || []) as Array<{ id?: string; name?: string; calories?: number; date?: string }>;
+      let qaMealsDeletedCount = 0;
+      if (qaMealDeletes.length > 0 && onUpdateOperator) {
+        const today = getLocalDateStr();
+        let workingOp = operator;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (workingOp.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const meals = { ...(nutri.meals || {}) } as Record<string, Meal[]>;
+        let touched = false;
+        for (const del of qaMealDeletes) {
+          const targetDate = del.date && isValidDateStr(del.date) ? del.date : today;
+          const bucket = meals[targetDate];
+          if (!Array.isArray(bucket) || bucket.length === 0) continue;
+          let removeIdx = -1;
+          if (del.id) removeIdx = bucket.findIndex((m: Meal) => m.id === del.id);
+          if (removeIdx < 0 && del.name && Number.isFinite(del.calories)) {
+            const wantName = del.name.toLowerCase().trim();
+            const wantCal = del.calories as number;
+            removeIdx = bucket.findIndex((m: Meal) =>
+              (m.name || '').toLowerCase().trim() === wantName &&
+              Math.abs((m.calories || 0) - wantCal) <= 5,
+            );
+          }
+          if (removeIdx < 0 && del.name) {
+            const wantName = del.name.toLowerCase().trim();
+            for (let i = bucket.length - 1; i >= 0; i--) {
+              if ((bucket[i].name || '').toLowerCase().trim() === wantName) {
+                removeIdx = i;
+                break;
+              }
+            }
+          }
+          if (removeIdx < 0) continue;
+          const next = [...bucket];
+          next.splice(removeIdx, 1);
+          meals[targetDate] = next;
+          touched = true;
+          qaMealsDeletedCount++;
+        }
+        if (touched) {
+          workingOp = { ...workingOp, nutrition: { ...nutri, meals } };
+          onUpdateOperator(workingOp);
+        }
+      }
+
+      // QA-path Tier-1 mirrors — same handlers as the normal-mode path.
+      let qaHydrationLogged = false;
+      const qaHydration = apiResult?.hydration;
+      if (qaHydration && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nutri = (operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} }) as any;
+        const hydMap = { ...(nutri.hydration || {}) } as Record<string, number>;
+        hydMap[qaHydration.date] = qaHydration.total;
+        onUpdateOperator({ ...operator, nutrition: { ...nutri, hydration: hydMap } });
+        qaHydrationLogged = true;
+      }
+
+      let qaReadinessLogged = false;
+      const qaReadiness = apiResult?.readiness;
+      if (qaReadiness && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dailyReadiness = { ...((operator as any).dailyReadiness || {}) } as Record<string, unknown>;
+        dailyReadiness[qaReadiness.date] = qaReadiness;
+        const today = getLocalDateStr();
+        const profile = { ...operator.profile };
+        if (qaReadiness.date === today) {
+          if (typeof qaReadiness.readiness === 'number') profile.readiness = qaReadiness.readiness;
+          if (typeof qaReadiness.sleep === 'number') profile.sleep = qaReadiness.sleep;
+          if (typeof qaReadiness.stress === 'number') profile.stress = qaReadiness.stress;
+        }
+        onUpdateOperator({ ...operator, profile, dailyReadiness } as typeof operator);
+        qaReadinessLogged = true;
+      }
+
+      let qaInjuriesChangedCount = 0;
+      const qaInjuryMods = apiResult?.injuryModifications || [];
+      if (qaInjuryMods.length > 0 && onUpdateOperator) {
+        let injuries = [...(operator.injuries || [])];
+        for (const mod of qaInjuryMods) {
+          const action = mod.action || 'update';
+          if (action === 'add') {
+            const name = mod.patch?.name?.trim();
+            if (!name) continue;
+            const status = (['active', 'recovering', 'cleared'].includes(mod.patch?.status || '')
+              ? mod.patch?.status
+              : 'active') as 'active' | 'recovering' | 'cleared';
+            injuries.push({
+              id: `inj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              name,
+              status,
+              notes: mod.patch?.notes || '',
+              restrictions: Array.isArray(mod.patch?.restrictions) ? mod.patch!.restrictions! : [],
+            });
+            qaInjuriesChangedCount++;
+            continue;
+          }
+          const matchId = mod.match?.id;
+          const matchName = (mod.match?.name || '').toLowerCase().trim();
+          const idx = injuries.findIndex((inj) => {
+            if (matchId && inj.id === matchId) return true;
+            if (matchName && (inj.name || '').toLowerCase().trim() === matchName) return true;
+            return false;
+          });
+          if (idx < 0) continue;
+          if (action === 'remove') { injuries.splice(idx, 1); qaInjuriesChangedCount++; continue; }
+          if (action === 'clear') {
+            injuries[idx] = { ...injuries[idx], status: 'cleared' };
+            qaInjuriesChangedCount++;
+            continue;
+          }
+          const patch: Record<string, unknown> = {};
+          if (mod.patch?.name) patch.name = mod.patch.name;
+          if (mod.patch?.status && ['active', 'recovering', 'cleared'].includes(mod.patch.status)) patch.status = mod.patch.status;
+          if (typeof mod.patch?.notes === 'string') patch.notes = mod.patch.notes;
+          if (Array.isArray(mod.patch?.restrictions)) patch.restrictions = mod.patch!.restrictions;
+          if (Object.keys(patch).length === 0) continue;
+          injuries[idx] = { ...injuries[idx], ...patch };
+          qaInjuriesChangedCount++;
+        }
+        if (qaInjuriesChangedCount > 0) onUpdateOperator({ ...operator, injuries });
+      }
+
+      let qaDayTagsChangedCount = 0;
+      const qaDayTagDiffs = apiResult?.dayTags || [];
+      if (qaDayTagDiffs.length > 0 && onUpdateOperator) {
+        const dayTags = { ...(operator.dayTags || {}) };
+        for (const diff of qaDayTagDiffs) {
+          if (!diff?.date || !isValidDateStr(diff.date)) continue;
+          if (diff.op === 'clear') { delete dayTags[diff.date]; qaDayTagsChangedCount++; continue; }
+          const color = (['green', 'amber', 'red', 'cyan'].includes(diff.color || '')
+            ? diff.color
+            : 'amber') as 'green' | 'amber' | 'red' | 'cyan';
+          dayTags[diff.date] = { color, note: diff.note || '' };
+          qaDayTagsChangedCount++;
+        }
+        if (qaDayTagsChangedCount > 0) onUpdateOperator({ ...operator, dayTags });
+      }
+
+      let qaTargetsChanged = false;
+      const qaNewTargets = apiResult?.nutritionTargets;
+      if (qaNewTargets && onUpdateOperator) {
+        const existing = operator.nutrition || { targets: { calories: 2500, protein: 150, carbs: 300, fat: 80 }, meals: {} };
+        const targets = { ...existing.targets, ...qaNewTargets };
+        onUpdateOperator({ ...operator, nutrition: { ...existing, targets } });
+        qaTargetsChanged = true;
+      }
+
+      // Tier-2 mirrors (QA path).
+      let qaGoalsChangedCount = 0;
+      const qaGoalDiffs = apiResult?.goals || [];
+      if (qaGoalDiffs.length > 0 && onUpdateOperator) {
+        let goals = [...(operator.profile?.goals || [])];
+        for (const d of qaGoalDiffs) {
+          if (d.action === 'add' && d.value) {
+            if (!goals.some((g) => g.toLowerCase() === d.value!.toLowerCase())) {
+              goals.push(d.value);
+              qaGoalsChangedCount++;
+            }
+          } else if (d.action === 'remove' && d.match) {
+            const m = d.match.toLowerCase();
+            const before = goals.length;
+            goals = goals.filter((g) => !g.toLowerCase().includes(m));
+            if (goals.length !== before) qaGoalsChangedCount++;
+          } else if (d.action === 'replace' && d.match && d.value) {
+            const m = d.match.toLowerCase();
+            const idx = goals.findIndex((g) => g.toLowerCase().includes(m));
+            if (idx >= 0) { goals[idx] = d.value; qaGoalsChangedCount++; }
+          }
+        }
+        if (qaGoalsChangedCount > 0) onUpdateOperator({ ...operator, profile: { ...operator.profile, goals } });
+      }
+
+      let qaDietaryChangedCount = 0;
+      const qaDietaryDiffs = apiResult?.dietary || [];
+      if (qaDietaryDiffs.length > 0 && onUpdateOperator) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const intake = ({ ...(operator.intake || {}) }) as any;
+        let restrictions = Array.isArray(intake.dietaryRestrictions) ? [...intake.dietaryRestrictions] : [];
+        let supplements = Array.isArray(intake.supplements) ? [...intake.supplements] : [];
+        for (const d of qaDietaryDiffs) {
+          const target = d.field === 'supplements' ? supplements : restrictions;
+          const values = (d.values || []).map((v) => String(v).trim()).filter(Boolean);
+          if (d.action === 'replace_all') {
+            const seen = new Set<string>();
+            const dedup: string[] = [];
+            for (const v of values) { const k = v.toLowerCase(); if (!seen.has(k)) { seen.add(k); dedup.push(v); } }
+            if (d.field === 'supplements') supplements = dedup; else restrictions = dedup;
+            qaDietaryChangedCount++;
+          } else if (d.action === 'add') {
+            const seen = new Set(target.map((v) => v.toLowerCase()));
+            for (const v of values) {
+              if (!seen.has(v.toLowerCase())) { target.push(v); seen.add(v.toLowerCase()); }
+            }
+            qaDietaryChangedCount++;
+          } else if (d.action === 'remove') {
+            const drop = new Set(values.map((v) => v.toLowerCase()));
+            const filtered = target.filter((v) => !drop.has(v.toLowerCase()));
+            if (filtered.length !== target.length) {
+              if (d.field === 'supplements') supplements = filtered; else restrictions = filtered;
+              qaDietaryChangedCount++;
+            }
+          }
+        }
+        if (qaDietaryChangedCount > 0) {
+          onUpdateOperator({ ...operator, intake: { ...intake, dietaryRestrictions: restrictions, supplements } });
+        }
+      }
+
+      const qaMacrocyclesChanged = (apiResult?.macrocycles || []).length;
+      const qaPrMods = apiResult?.prModifications || [];
+      const qaPrDels = apiResult?.prDeletes || [];
+      let qaPrsChangedCount = 0;
+      if ((qaPrMods.length > 0 || qaPrDels.length > 0) && onUpdateOperator) {
+        let prs = [...(operator.prs || [])];
+        const findIdx = (match: { id?: string; exercise?: string; date?: string } | undefined) => {
+          if (!match) return -1;
+          if (match.id) {
+            const i = prs.findIndex((p) => p.id === match.id);
+            if (i >= 0) return i;
+          }
+          const ex = (match.exercise || '').toLowerCase().trim();
+          const date = (match.date || '').trim();
+          if (!ex || !date) return -1;
+          return prs.findIndex((p) => (p.exercise || '').toLowerCase().trim() === ex && p.date === date);
+        };
+        for (const m of qaPrMods) {
+          const idx = findIdx(m.match);
+          if (idx < 0) continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          prs[idx] = { ...prs[idx], ...(m.patch as any) };
+          qaPrsChangedCount++;
+        }
+        for (const d of qaPrDels) {
+          const idx = findIdx(d.match);
+          if (idx < 0) continue;
+          prs.splice(idx, 1);
+          qaPrsChangedCount++;
+        }
+        if (qaPrsChangedCount > 0) onUpdateOperator({ ...operator, prs });
+      }
+
+      // QA-path Tier-3 mirrors.
+      const qaWearableDisconnected: { provider: string; affected: number } | null = apiResult?.wearable || null;
+      let qaNotificationApplied: Record<string, unknown> | null = null;
+      const qaNotifPatch = apiResult?.notification;
+      if (qaNotifPatch && typeof qaNotifPatch === 'object') {
+        try {
+          const current = loadNotificationPrefs(operator.id);
+          const merged: NotificationPreferences = { ...current, ...(qaNotifPatch as Partial<NotificationPreferences>) };
+          saveNotificationPrefs(operator.id, merged);
+          qaNotificationApplied = qaNotifPatch;
+        } catch (e) {
+          console.error('Failed to apply notification patch:', e);
+        }
+      }
+      const qaTrainerNoteApplied = apiResult?.trainerNote || null;
+
       // Same loop pattern as the normal-mode path above — apply every
       // workout_modification Gunny emitted, prefills via event bus, block
       // mods folded into a single operator update.
-      let wasModification = false;
+      let wasModification = qaWasDeletion;
       const qaMods = (apiResult?.workoutModifications || []) as unknown as WorkoutModification[];
       if (qaMods.length > 0) {
         const today = getLocalDateStr();
         let workingOp = operator;
         let touched = false;
+        // WS3 fix — quick-action path was the second silent-failure
+        // site for workout mods (the main chat-handler path already
+        // notifies via setMessages, but this path only console.warn'd).
+        // Same pattern: collect failures, surface one to the user
+        // via the same chat-note channel the main handler uses when
+        // nothing was actually applied.
+        const qaFailures: string[] = [];
         for (const mod of qaMods) {
           if (!mod || typeof mod !== 'object') continue;
           if (mod.type === 'prefill_weights') {
@@ -1924,24 +3079,57 @@ ${mealSuggestion}`;
             continue;
           }
           const current = workingOp.workouts?.[today];
-          if (!current) continue;
+          if (!current) {
+            qaFailures.push(
+              `No workout planned for today — couldn't ${mod.type.replace(/_/g, ' ')}.`,
+            );
+            continue;
+          }
           try {
-            const modified = applyWorkoutModification(current, mod);
-            workingOp = { ...workingOp, workouts: { ...workingOp.workouts, [today]: modified } };
-            touched = true;
-            wasModification = true;
+            // Quick-action path mirrors the chat-handler updates above:
+            // unwrap the result + log/skip silent no-ops.
+            const result = applyWorkoutModification(current, mod);
+            if (result.changed) {
+              workingOp = {
+                ...workingOp,
+                workouts: { ...workingOp.workouts, [today]: result.workout },
+              };
+              touched = true;
+              wasModification = true;
+            } else {
+              console.warn('[gunny-mod:quick-action] no-op:', result.reason, mod);
+              qaFailures.push(result.reason || `${mod.type} didn't match anything in your workout.`);
+            }
           } catch (e) {
             console.error('applyWorkoutModification (quick action) failed:', e);
+            qaFailures.push(`${mod.type} threw an error — see console.`);
           }
         }
         if (touched && onUpdateOperator) onUpdateOperator(workingOp);
+        // Surface only when nothing was applied — same convention as
+        // the main chat-handler path above. Avoids spam on partial
+        // batches where some mods succeeded.
+        if (qaFailures.length > 0 && !touched) {
+          const note = qaFailures[0];
+          setMessages(prev => [...prev, {
+            id: 'gunny-qa-mod-note-' + Date.now(),
+            role: 'gunny',
+            text: `⚠ Heads up — I tried to apply that quick action but couldn't find the right exercise to act on. ${note} Try naming the exercise exactly as it appears, or open the workout and tell me which one.`,
+            timestamp: new Date(),
+          }]);
+        }
       }
 
       if (!wasModification && apiResult?.workoutData) {
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
-      if (hasWorkout || wasModification) {
+      const qaTier1Touched = qaHydrationLogged || qaReadinessLogged
+        || qaInjuriesChangedCount > 0 || qaDayTagsChangedCount > 0 || qaTargetsChanged;
+      const qaTier2Touched = qaGoalsChangedCount > 0 || qaDietaryChangedCount > 0
+        || qaMacrocyclesChanged > 0 || qaPrsChangedCount > 0;
+      const qaTier3Touched = !!qaWearableDisconnected || !!qaNotificationApplied || !!qaTrainerNoteApplied;
+      if (hasWorkout || wasModification || qaMealsDeletedCount > 0 || qaTier1Touched || qaTier2Touched || qaTier3Touched) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === placeholderId
@@ -1949,7 +3137,20 @@ ${mealSuggestion}`;
                   ...m,
                   text: (apiResult?.response || m.text)
                     + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
-                    + (wasModification ? '\n\n[WORKOUT UPDATED]' : ''),
+                    + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
+                    + (qaMealsDeletedCount > 0 ? `\n\n[${qaMealsDeletedCount === 1 ? 'MEAL REMOVED' : `${qaMealsDeletedCount} MEALS REMOVED`}]` : '')
+                    + (qaHydrationLogged && apiResult?.hydration ? `\n\n[HYDRATION ${apiResult.hydration.op === 'set' ? 'SET' : 'LOGGED'} — ${apiResult.hydration.total}oz TOTAL]` : '')
+                    + (qaReadinessLogged ? '\n\n[READINESS CHECK-IN LOGGED]' : '')
+                    + (qaInjuriesChangedCount > 0 ? `\n\n[${qaInjuriesChangedCount === 1 ? 'INJURY UPDATED' : `${qaInjuriesChangedCount} INJURIES UPDATED`}]` : '')
+                    + (qaDayTagsChangedCount > 0 ? `\n\n[${qaDayTagsChangedCount === 1 ? 'DAY TAGGED' : `${qaDayTagsChangedCount} DAYS TAGGED`}]` : '')
+                    + (qaTargetsChanged ? '\n\n[MACRO TARGETS UPDATED]' : '')
+                    + (qaGoalsChangedCount > 0 ? `\n\n[${qaGoalsChangedCount === 1 ? 'GOAL UPDATED' : `${qaGoalsChangedCount} GOALS UPDATED`}]` : '')
+                    + (qaDietaryChangedCount > 0 ? '\n\n[DIETARY PROFILE UPDATED]' : '')
+                    + (qaMacrocyclesChanged > 0 ? `\n\n[${qaMacrocyclesChanged === 1 ? 'MACROCYCLE UPDATED' : `${qaMacrocyclesChanged} MACROCYCLES UPDATED`}]` : '')
+                    + (qaPrsChangedCount > 0 ? `\n\n[${qaPrsChangedCount === 1 ? 'PR UPDATED' : `${qaPrsChangedCount} PRS UPDATED`}]` : '')
+                    + (qaWearableDisconnected ? `\n\n[${qaWearableDisconnected.provider.toUpperCase()} DISCONNECTED]` : '')
+                    + (qaNotificationApplied ? '\n\n[NOTIFICATION PREFERENCES UPDATED — this device only]' : '')
+                    + (qaTrainerNoteApplied ? `\n\n[TRAINER NOTE ${qaTrainerNoteApplied.op === 'append' ? 'APPENDED' : 'SET'}${qaTrainerNoteApplied.targetCallsign ? ` for ${qaTrainerNoteApplied.targetCallsign}` : ''}]` : ''),
                   isWorkout: hasWorkout,
                 }
               : m
@@ -1957,9 +3158,17 @@ ${mealSuggestion}`;
         );
       }
       if (!apiResult) {
-        const fallbackText = operator.callsign === 'RAMPAGE' && errorInfo
-          ? formatOwnerDiagnostic(errorInfo)
-          : `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        // Quick-action path (no image attach surface) — same fallback
+        // tiering as the main-message path. Stream errors get a more
+        // specific hint; pure network drops keep the generic message.
+        let fallbackText: string;
+        if (operator.callsign === 'RAMPAGE' && errorInfo) {
+          fallbackText = formatOwnerDiagnostic(errorInfo);
+        } else if (errorInfo?.errorType === 'stream_error') {
+          fallbackText = `⚠ Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
+        } else {
+          fallbackText = `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+        }
         setMessages((prev) =>
           prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
         );
@@ -1969,7 +3178,14 @@ ${mealSuggestion}`;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter inserts a newline so users can build multi-paragraph
+    // messages (Apr 30 beta note: "Currently you can only send a
+    // paragraph at time"). Sending requires the SEND button or
+    // Cmd/Ctrl+Enter for desktop power users — same convention as
+    // most modern chat composers (Slack, Discord with the right pref,
+    // etc.). The textarea's default behavior already handles plain
+    // Enter as newline, so we only intercept the modifier shortcut.
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -1981,26 +3197,49 @@ ${mealSuggestion}`;
   // stays emoji-free per the canonical April 24 design — the
   // tactical military aesthetic doesn't tolerate emoji renders
   // that vary across iOS/Android/desktop.
+  // Preset set refreshed May 2026 to surface Gunny's deeper capabilities
+  // (battle plan / daily ops scheduling / readiness brief / form-check
+  // vision / recovery protocol). The original presets — MY CLIENTS,
+  // WEEKLY PLAN, TRAINER WOD, MACRO CHECK, COOL DOWN — were all
+  // pulling on a thin slice of what Gunny actually does. New set
+  // exposes the high-value pulls operators were missing because
+  // nothing in the UI hinted they existed.
+  //
+  // i18n keys for old labels are preserved in i18n.tsx so any
+  // out-of-tree references keep resolving; this surface no longer
+  // emits hardcoded English strings either.
   const quickActions: { id: string; label: string; icon: React.ReactNode }[] = operator.role === 'trainer'
     ? [
         { id: 'build_wod', label: t('gunny.build_wod'), icon: <Icon.Play size={12} /> },
-        { id: 'my_clients', label: 'MY CLIENTS', icon: <Icon.User size={12} /> },
+        { id: 'battle_plan', label: t('gunny.battle_plan'), icon: <Icon.Sword size={12} /> },
         { id: 'goal_paths', label: t('gunny.goal_paths'), icon: <Icon.Target size={12} /> },
-        { id: 'weekly_plan', label: t('gunny.weekly_plan'), icon: <Icon.Calendar size={12} /> },
-        { id: 'cool_down', label: 'COOL DOWN', icon: <Icon.Snowflake size={12} /> },
+        { id: 'daily_ops', label: t('gunny.daily_ops'), icon: <Icon.Calendar size={12} /> },
+        { id: 'readiness_brief', label: t('gunny.readiness_brief'), icon: <Icon.Stats size={12} /> },
       ]
     : [
         { id: 'build_wod', label: t('gunny.build_wod'), icon: <Icon.Play size={12} /> },
-        { id: 'trainer_wod', label: 'TRAINER WOD', icon: <Icon.Trophy size={12} /> },
-        { id: 'check_readiness', label: t('gunny.check_readiness'), icon: <Icon.Heart size={12} /> },
+        { id: 'daily_ops', label: t('gunny.daily_ops'), icon: <Icon.Calendar size={12} /> },
+        { id: 'readiness', label: t('gunny.readiness'), icon: <Icon.Heart size={12} /> },
         { id: 'goal_paths', label: t('gunny.goal_paths'), icon: <Icon.Target size={12} /> },
-        { id: 'macro_check', label: t('gunny.macro_check'), icon: <Icon.Food size={12} /> },
-        { id: 'cool_down', label: 'COOL DOWN', icon: <Icon.Snowflake size={12} /> },
+        { id: 'form_check', label: t('gunny.form_check'), icon: <Icon.Camera size={12} /> },
+        { id: 'recovery', label: t('gunny.recovery'), icon: <Icon.Snowflake size={12} /> },
       ];
 
   const handleQuickActionById = (actionId: string) => {
+    // Each preset maps to the literal message Gunny sees. New preset
+    // set (May 2026) leans on Gunny's deeper capabilities. Legacy IDs
+    // are still accepted in case a stale cached client posts them.
     let actionText = 'BUILD A WORKOUT';
+    // Refreshed presets
+    if (actionId === 'battle_plan') actionText = 'REVIEW MY BATTLE PLAN';
+    if (actionId === 'daily_ops') actionText = 'BUILD MY DAILY OPS SCHEDULE';
+    if (actionId === 'readiness_brief') actionText = "GIVE ME TODAY'S READINESS BRIEF";
+    if (actionId === 'readiness') actionText = 'CHECK MY READINESS';
+    if (actionId === 'form_check') actionText = 'ANALYZE MY FORM';
+    if (actionId === 'recovery') actionText = 'BUILD ME A RECOVERY PROTOCOL';
+    // Shared
     if (actionId === 'goal_paths') actionText = 'SHOW ME GOAL PATHS';
+    // Legacy IDs (kept so cached clients still work after the rollout)
     if (actionId === 'check_readiness') actionText = 'CHECK MY READINESS';
     if (actionId === 'weekly_plan') actionText = 'PLAN MY WEEK';
     if (actionId === 'macro_check') actionText = 'CHECK MACROS';
@@ -2241,6 +3480,7 @@ ${mealSuggestion}`;
               className="gunny-quick"
               onClick={() => handleQuickActionById(action.id)}
               disabled={isTyping}
+              aria-label={action.label}
               style={{ flexShrink: 0 }}
             >
               <span style={{ color: 'var(--green)', opacity: 0.7, marginRight: 6, display: 'inline-flex', verticalAlign: 'middle' }}>
@@ -2357,78 +3597,25 @@ ${mealSuggestion}`;
               {message.image && (
                 <img src={message.image} alt="User upload" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 4, marginBottom: 8, display: 'block' }} />
               )}
-              {/* Render text — workout cards keep the line-split with VIDEO links; other messages render as tactical markdown */}
-              {message.isWorkout ? (
-                message.text.split('\n').map((line, lineIdx) => {
-                // Phase headers — style them prominently
-                const isPhaseHeader = /^(PHASE \d|OPERATION:|TARGET:|GOAL PATH:|COOLDOWN:|━+$|PRIMER|COMPLEX|STRENGTH|ISOLATION|METCON)/i.test(line.trim());
-                const isSectionDivider = /^━+$/.test(line.trim());
-                const isAddItPrompt = line.includes('Say "ADD IT"');
-
-                if (isSectionDivider) {
-                  return <div key={lineIdx} style={{ height: '1px', background: 'linear-gradient(90deg, transparent, rgba(255,184,0,0.4), transparent)', margin: '8px 0' }} />;
-                }
-
-                if (isAddItPrompt) {
-                  return (
-                    <div key={lineIdx} style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        onClick={() => {
-                          if (lastWorkoutDataRef.current) {
-                            saveWorkoutToPlanner(lastWorkoutDataRef.current);
-                            const title = (lastWorkoutDataRef.current.title as string) || 'workout';
-                            lastWorkoutDataRef.current = null;
-                            const confirmMsg: Message = { id: 'gunny-confirm-' + Date.now(), role: 'gunny', text: `LOCKED IN. "${title}" saved to your PLANNER. Go execute, champ.`, timestamp: new Date() };
-                            setMessages(prev => [...prev, confirmMsg]);
-                          }
-                        }}
-                        style={{
-                          padding: '10px 24px', fontFamily: '"Orbitron", sans-serif', fontSize: '13px',
-                          fontWeight: 800, letterSpacing: '2px', color: '#030303', background: '#ffb800',
-                          border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-                          boxShadow: '0 0 12px rgba(255,184,0,0.3)',
-                        }}
-                      >
-                        ◆ ADD TO PLANNER
-                      </button>
-                      <span style={{ fontSize: '12px', color: '#666', fontFamily: '"Share Tech Mono", monospace' }}>or type "add it"</span>
-                    </div>
-                  );
-                }
-
-                // Check for VIDEO links within the line
-                const parts = line.split(/(\[VIDEO: [^\]]+\]\([^)]+\))/);
+              {/* Render text — both workout and non-workout messages
+                  go through the same ReactMarkdown pipeline. The
+                  legacy line-by-line render for isWorkout broke
+                  markdown (`**bold**` / `## headers` / `1. ordered`
+                  rendered as raw text whenever Gunny appended a
+                  workout JSON to a markdown reply). The "Say 'ADD IT'"
+                  footer is stripped from the body and replaced with a
+                  separate ADD TO PLANNER button below.
+                  Section dividers (━━━) and phase headers from the
+                  legacy line-renderer are no longer special-cased —
+                  Gunny's prompt now uses standard markdown for these. */}
+              {(() => {
+                // Strip the "Say 'ADD IT'" footer line from the body
+                // so it renders cleanly in markdown — the action moves
+                // to the dedicated button below.
+                const bodyText = message.isWorkout
+                  ? message.text.replace(/\n*━+\n*\s*Say "ADD IT"[^\n]*\n?/i, '\n').trim()
+                  : message.text;
                 return (
-                  <div key={lineIdx} style={{
-                    ...(isPhaseHeader ? {
-                      color: '#ffb800', fontFamily: '"Orbitron", sans-serif', fontSize: '13px',
-                      fontWeight: 700, letterSpacing: '2px', marginTop: '12px', marginBottom: '4px',
-                      textShadow: '0 0 6px rgba(255,184,0,0.3)',
-                    } : {}),
-                    minHeight: line.trim() === '' ? '8px' : undefined,
-                  }}>
-                    {parts.map((part, i) => {
-                      const videoMatch = part.match(/\[VIDEO: ([^\]]+)\]\(([^)]+)\)/);
-                      if (videoMatch) {
-                        return (
-                          <a key={i} href={videoMatch[2]} target="_blank" rel="noopener noreferrer"
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px',
-                              fontFamily: '"Share Tech Mono", monospace', fontSize: '11px', color: '#ff4444',
-                              background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.2)',
-                              cursor: 'pointer', textDecoration: 'none', margin: '2px 4px 2px 0',
-                              transition: 'all 0.2s',
-                            }}>
-                            ▶ {videoMatch[1]}
-                          </a>
-                        );
-                      }
-                      return <span key={i}>{part}</span>;
-                    })}
-                  </div>
-                );
-                })
-              ) : (
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -2517,20 +3704,122 @@ ${mealSuggestion}`;
                     ),
                   }}
                 >
-                  {message.text}
+                  {bodyText}
                 </ReactMarkdown>
+                );
+              })()}
+              {/* ADD TO PLANNER button — only on workout messages where
+                  Gunny emitted <workout_json>. Wired to lastWorkoutDataRef
+                  which holds the parsed workout from the last response.
+                  Sits below the markdown body so the prose renders
+                  correctly above it. */}
+              {message.isWorkout && lastWorkoutDataRef.current && (
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => {
+                      if (lastWorkoutDataRef.current) {
+                        saveWorkoutToPlanner(lastWorkoutDataRef.current);
+                        const title = (lastWorkoutDataRef.current.title as string) || 'workout';
+                        lastWorkoutDataRef.current = null;
+                        const confirmMsg: Message = {
+                          id: 'gunny-confirm-' + Date.now(),
+                          role: 'gunny',
+                          text: `LOCKED IN. "${title}" saved to your PLANNER. Go execute, champ.`,
+                          timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, confirmMsg]);
+                      }
+                    }}
+                    style={{
+                      padding: '10px 24px',
+                      fontFamily: '"Orbitron", sans-serif',
+                      fontSize: 13,
+                      fontWeight: 800,
+                      letterSpacing: 2,
+                      color: '#030303',
+                      background: '#ffb800',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 0 12px rgba(255,184,0,0.3)',
+                    }}
+                  >
+                    ◆ ADD TO PLANNER
+                  </button>
+                  <span style={{ fontSize: 12, color: '#666', fontFamily: '"Share Tech Mono", monospace' }}>
+                    or type &quot;add it&quot;
+                  </span>
+                </div>
               )}
-              {/* Timestamp — small mono caption pinned right for
-                  user, left for gunny per the handoff bubble layout. */}
+              {/* Timestamp + per-message play button (Gunny only).
+                  The play button gives users an explicit way to hear
+                  the message — works even when the global TTS mute
+                  is on and (more importantly) survives iOS Safari's
+                  autoplay block because it's a direct user gesture.
+                  Tapping the same button while playing acts as stop;
+                  tapping a different message stops the prior one and
+                  starts the new one. */}
               <div
                 className="t-mono-sm"
                 style={{
                   marginTop: 6,
-                  textAlign: isUser ? 'right' : 'left',
+                  display: 'flex',
+                  justifyContent: isUser ? 'flex-end' : 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
                   color: 'var(--text-tertiary)',
                 }}
               >
-                {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                <span>
+                  {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                {!isUser && message.text && message.text.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playMessage(message.id, message.text);
+                    }}
+                    aria-label={
+                      speakingMessageId === message.id
+                        ? 'Stop reading message'
+                        : 'Read message aloud'
+                    }
+                    title={
+                      speakingMessageId === message.id
+                        ? 'Stop'
+                        : 'Hear Gunny say this'
+                    }
+                    style={{
+                      background: speakingMessageId === message.id
+                        ? 'rgba(0,255,65,0.18)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${
+                        speakingMessageId === message.id
+                          ? 'rgba(0,255,65,0.6)'
+                          : 'rgba(0,255,65,0.2)'
+                      }`,
+                      color: speakingMessageId === message.id
+                        ? '#00ff41'
+                        : 'var(--text-secondary)',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      padding: '3px 8px',
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      transition: 'all 0.15s ease',
+                      boxShadow: speakingMessageId === message.id
+                        ? '0 0 8px rgba(0,255,65,0.25)'
+                        : 'none',
+                    }}
+                  >
+                    {speakingMessageId === message.id ? '◼ STOP' : '▶ HEAR IT'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -2559,7 +3848,7 @@ ${mealSuggestion}`;
         <button
           type="button"
           onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })}
-          aria-label="Scroll to latest message"
+          aria-label={t('gunnychat.scroll_to_latest')}
           style={{
             position: 'absolute',
             right: 18,
@@ -2637,8 +3926,8 @@ ${mealSuggestion}`;
               e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
             }}
             onKeyDown={handleKeyDown}
-            placeholder="What's the mission, champ?"
-            rows={1}
+            placeholder={t('gunny.placeholder')}
+            rows={2}
             style={{
               flex: 1,
               background: 'transparent',
@@ -2653,6 +3942,11 @@ ${mealSuggestion}`;
               resize: 'none',
               overflow: 'hidden',
               lineHeight: 1.4,
+              // Min-height = 2 lines so the placeholder ("What's the
+              // mission, champ?") never clips when wrapping at narrow
+              // mobile widths. The auto-resize onChange still grows
+              // beyond this when the user types longer messages.
+              minHeight: 52,
             }}
           />
 
@@ -2679,7 +3973,8 @@ ${mealSuggestion}`;
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
-              // Reset the input early so picking the same file twice still fires onChange.
+              // Reset the input early so picking the same file twice still
+              // fires onChange (matters for both image and video paths).
               e.target.value = '';
 
               const isVideo = file.type.startsWith('video/');
@@ -2701,14 +3996,22 @@ ${mealSuggestion}`;
                 return;
               }
 
-              // Single image (legacy path).
-              if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return; }
-              const reader = new FileReader();
-              reader.onload = () => {
+              // Single image path. Hard cap at 25 MB raw — beyond that,
+              // decoding into a canvas can OOM mobile Safari. Below that,
+              // compressImageForVision resizes + recompresses so the base64
+              // payload fits the Anthropic 5 MB API limit.
+              if (file.size > 25 * 1024 * 1024) {
+                alert('Image is too large (max 25 MB raw). Try a smaller photo.');
+                return;
+              }
+              try {
+                const dataUrl = await compressImageForVision(file);
                 setPendingFrames(null);
-                setPendingImage(reader.result as string);
-              };
-              reader.readAsDataURL(file);
+                setPendingImage(dataUrl);
+              } catch (err) {
+                console.error('[GunnyChat:imageAttach] failed:', err);
+                alert("Couldn't process that image. Try a different photo.");
+              }
             }}
           />
 
@@ -2722,8 +4025,8 @@ ${mealSuggestion}`;
               <button
                 type="button"
                 onClick={() => imageInputRef.current?.click()}
-                title="Attach image or short form-check video"
-                aria-label="Attach image or short form-check video"
+                title={t('gunnychat.attach_image')}
+                aria-label={t('gunnychat.attach_image')}
                 disabled={extractingVideo}
                 style={{
                   background: hasMedia ? 'rgba(255,107,53,0.4)' : 'rgba(0,255,65,0.08)',

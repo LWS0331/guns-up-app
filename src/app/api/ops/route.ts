@@ -44,6 +44,12 @@ export async function GET(req: Request) {
       const preferences = (op.preferences as Record<string, unknown>) || {};
       const nutrition = (op.nutrition as Record<string, unknown>) || {};
       const meals = (nutrition.meals as Record<string, unknown[]>) || {};
+      // Stripe billing status — used by OpsCenter Revenue tab to gate
+      // PAID/MRR math. Only `billing.status === 'active'` counts as
+      // generating revenue. During closed beta this is universally
+      // empty; it lights up the moment a Stripe webhook flips status.
+      const billing = (op.billing as Record<string, unknown>) || {};
+      const billingStatus = typeof billing.status === 'string' ? billing.status : null;
 
       const workoutDates = Object.keys(workouts);
       const workoutCount = workoutDates.length;
@@ -68,7 +74,24 @@ export async function GET(req: Request) {
         name: op.name,
         role: op.role,
         tier: op.tier,
+        // Closed-beta visibility fields — added so OpsCenter roster can
+        // render the full operator state (allowlist activated? google
+        // linked? vanguard? tier locked?) directly from /api/ops without
+        // falling back to the stale `operators` prop.
+        email: op.email,
+        googleId: op.googleId,
+        tierLocked: op.tierLocked,
+        isVanguard: op.isVanguard,
+        promoActive: op.promoActive,
+        trainerId: op.trainerId,
         betaUser: op.betaUser,
+        billingStatus,
+        // Admin kill switch — surfaced so the USERS tab can render
+        // a DISABLED badge + flip the action button between
+        // DISABLE and ENABLE without an extra fetch.
+        disabled: op.disabled,
+        disabledAt: op.disabledAt,
+        disabledReason: op.disabledReason,
         workoutCount,
         mealCount,
         prCount: prs.length,

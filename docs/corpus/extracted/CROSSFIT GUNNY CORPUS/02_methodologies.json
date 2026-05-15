@@ -1,0 +1,242 @@
+{
+  "methodologies": [
+    {
+      "id": "opex",
+      "name": "OPEX Fitness",
+      "lead_coaches": ["James FitzGerald"],
+      "philosophy": "Individualized program design rooted in assessment-driven prescription. Train the individual, not the methodology. Lifestyle, sleep, nutrition, and stress are programmed alongside training.",
+      "periodization": "Annual macrocycle broken into Gain, Pain, Sustain phases. Mesocycles 4-12 weeks. Microcycles built around the individual's recovery capacity and life demands.",
+      "weekly_template": {
+        "structure": "5 days on / 2 off OR 3 on / 1 off variants based on athlete profile",
+        "session_layout": "Aerobic warm-up -> Skill/Strength -> Conditioning -> Aerobic cool-down or Z2 piece",
+        "typical_split": ["Strength + Mixed Modal", "Aerobic Power", "Skill + Strength", "Aerobic Threshold or MAP", "Mixed Modal Long", "Off", "Off or Z2 Recovery"]
+      },
+      "energy_system_approach": "MAP 1-10 framework. MAP 1 = aerobic recovery (Z1-Z2). MAP 3-5 = aerobic power/threshold. MAP 6-8 = anaerobic lactic. MAP 9-10 = alactic power. Programmed by HR zones, RPE, and pacing rather than blind intensity.",
+      "strength_approach": "Percentage-based with bias toward absolute strength early in cycles, transitioning to strength-endurance and contextual strength (loaded carries, odd-object) as competition approaches. Tempo and pause work emphasized.",
+      "accessory_work": "Body Building (BB) blocks for structural balance. Posterior chain, single-leg, midline, and pulling volume targeted by individual assessment. 2-4 accessory pieces per week.",
+      "signature_elements": [
+        "CCP (Coaching Certificate Program) methodology",
+        "The Assessment - movement, body composition, energy system testing",
+        "Lifestyle programming as first-class citizen",
+        "Z2/MAP 1 aerobic base building (often 30-60 min)",
+        "Body Building blocks separated from metabolic work"
+      ],
+      "athlete_tiers": {
+        "general_fitness": "3-4 days/week, balanced GPP, lifestyle emphasis",
+        "intermediate": "5 days/week, structured strength + energy system blocks",
+        "competitor": "6 days/week with multiple sessions, individualized weakness focus, year-round periodization"
+      },
+      "recovery_lifestyle": "Sleep, nutrition, stress management programmed explicitly. RPE and HRV-informed deloads. Strong emphasis on year-round training age accumulation rather than peaking.",
+      "source_urls": ["https://www.opexfit.com/opex-method", "https://www.opexfit.com"]
+    },
+    {
+      "id": "hwpo",
+      "name": "HWPO (Hard Work Pays Off)",
+      "lead_coaches": ["Mat Fraser"],
+      "philosophy": "Brutal consistency. Identify weaknesses, attack them daily. The work that wins is the work nobody wants to do. High volume, high intensity, with structured deload to prevent burnout.",
+      "periodization": "12-week cycles with a 4-week deload/recovery block built in. Linear progression on primary lifts. Mesocycles align to Open/Quarterfinals/Semifinals/Games calendar for competitors.",
+      "weekly_template": {
+        "structure": "5-6 days on, 1-2 off",
+        "session_layout": "Tabata buy-in -> Strength -> WOD -> Tabata buy-out -> Optional accessory",
+        "typical_split": ["Strength + Mid-length WOD", "Engine + Skill", "Heavy Olympic + Short WOD", "Active recovery or Endurance", "Long WOD + Strength", "Mixed Modal + Tabata", "Off"]
+      },
+      "energy_system_approach": "Heavy emphasis on aerobic capacity and threshold. Long pieces (20-40 min) programmed weekly. Anaerobic lactic work concentrated mid-week. Tabata format used as aerobic 'sandwich' around main work.",
+      "strength_approach": "Percentage-based linear progression. Squat/Deadlift/Press/Snatch/Clean & Jerk cycled across the year. Heavy singles, doubles, triples in primary lifts. Weakness-specific accessory volume.",
+      "accessory_work": "Targeted weakness work prescribed by track. Pulling volume, midline, single-arm/single-leg, gymnastics-specific strength.",
+      "signature_elements": [
+        "Tabata buy-in / buy-out signature format",
+        "Track ecosystem: PRO, Flagship, STRONG, RUN",
+        "Daily mental cue / mindset emphasis",
+        "Built-in 4-week deload after every 8-week push",
+        "Volume tolerance over hero-day intensity"
+      ],
+      "athlete_tiers": {
+        "flagship": "5-6 days/week competitive CrossFit programming for intermediate/advanced",
+        "pro": "Highest volume, multi-session days, Games-level athletes",
+        "strong": "Strength-bias track for those wanting powerlifting/Olympic emphasis with conditioning",
+        "run": "Endurance-focused track for runners or hybrid athletes"
+      },
+      "recovery_lifestyle": "Mandatory deload weeks. Sleep emphasized as #1 recovery tool. Mat Fraser openly programs recovery as 'work' equal to training.",
+      "source_urls": ["https://www.hwpotraining.com", "https://www.hwpo-training.com"]
+    },
+    {
+      "id": "ttt",
+      "name": "Training Think Tank",
+      "lead_coaches": ["Max El-Hag", "Travis Mayer", "Noah Ohlsen (athlete-coach)"],
+      "philosophy": "Develop the complete CrossFit athlete through balanced programming, deep movement understanding, and culture-driven gym training. Every athlete is built from FIVES: Strength, Stamina, Power, Skill, Mobility.",
+      "periodization": "A/B week split alternating focus blocks. Mesocycles built around the FIVES model. Macrocycles peak for Open/Quarterfinals/Semifinals/Games.",
+      "weekly_template": {
+        "structure": "6 days on, 1 off (typically Sunday)",
+        "session_layout": "Warm-up -> Skill/Movement Prep -> Strength -> Conditioning -> Accessory or Cooldown",
+        "typical_split": ["Olympic Lift Focus + WOD", "Squat Focus + Engine", "Skill/Gymnastics + Mid WOD", "Aerobic Threshold Day", "Press/Pull Focus + Mixed", "Long WOD / Throwdown", "Off"]
+      },
+      "energy_system_approach": "Balanced across all three. Aerobic threshold day is non-negotiable. Anaerobic intervals programmed mid-week. Alactic work paired with skill sessions.",
+      "strength_approach": "Olympic lift technical proficiency prioritized. Pause work, tempo work, and complex variations. Squat/press/pull volume periodized in 4-week waves.",
+      "accessory_work": "Movement-specific. Deep emphasis on positional integrity, hip/ankle/shoulder mobility, midline. Often programmed as 'Movement Snacks' (5-10 min focused work).",
+      "signature_elements": [
+        "FIVES model (Strength, Stamina, Power, Skill, Mobility)",
+        "Throwdown culture - Saturday testing days",
+        "A/B week alternation",
+        "4-tier athlete progression system",
+        "Movement-first philosophy"
+      ],
+      "athlete_tiers": {
+        "tier_1_foundations": "Movement quality and base fitness; 3-4 days/week",
+        "tier_2_developmental": "Adding volume and complexity; 5 days/week",
+        "tier_3_competitive": "Open-level athletes; 6 days/week",
+        "tier_4_elite": "Quarterfinals/Semifinals/Games-level; multi-session days"
+      },
+      "recovery_lifestyle": "Sunday off mandatory. Movement quality over output - if positions break, scale. Mobility programmed in micro-doses daily.",
+      "source_urls": ["https://www.trainingthinktank.com"]
+    },
+    {
+      "id": "mayhem",
+      "name": "Mayhem Athlete",
+      "lead_coaches": ["Rich Froning", "Darren Hunsucker"],
+      "philosophy": "Train hard, train consistently, train with community. Mayhem culture is built on team-style training, faith, family, and fitness. Programming is varied, high-volume, and competition-tested.",
+      "periodization": "5 named annual mesocycles: Freedom, Hulk Out, Into the Storm, Nerves of Steel, Nimble & Quick. Each cycle has distinct focus and intensity profile. Cycles align with Open, Quarterfinals, Semifinals, Games.",
+      "weekly_template": {
+        "structure": "6 days on, 1 off",
+        "session_layout": "Strength -> WOD -> Optional second session (extra credit)",
+        "typical_split": ["Olympic + Mid WOD", "Squat + Long WOD", "Skill + Short Sprint", "Press/Pull + Mixed", "Heavy Day or Tester", "Long Aerobic / Team WOD", "Off"]
+      },
+      "energy_system_approach": "Heavy mixed modal volume. Aerobic capacity built through long team-style WODs. Anaerobic capacity through repeated sprint format. Alactic less emphasized - built from Olympic lifting load.",
+      "strength_approach": "Olympic lifting prioritized year-round. Squat strength built in dedicated cycles. Percentage-based with heavy Wednesday and heavy weekend tradition. Strict gymnastics strength integrated.",
+      "accessory_work": "Posterior chain, midline, and pulling volume. Often programmed as 'extra credit' optional pieces. Bodybuilding accessories occasionally programmed.",
+      "signature_elements": [
+        "5 named mesocycles per year",
+        "Team/partner WOD culture",
+        "10+ track ecosystem (Compete, Performance, Masters, Teens, Engine, Bodybuilding, etc.)",
+        "Sunday Funday tradition",
+        "Faith and family integrated into culture"
+      ],
+      "athlete_tiers": {
+        "performance": "Affiliate-level athletes, 4-5 days/week, Rx and scaled options",
+        "compete": "Competitive athletes targeting Open/Quarterfinals, 6 days/week",
+        "elite": "Semifinals/Games-level, multi-session days, individualized weakness work",
+        "masters_teens": "Age-appropriate volume and intensity adjustments",
+        "engine": "Aerobic capacity track for hybrid/runner athletes"
+      },
+      "recovery_lifestyle": "One day off weekly. Sleep, nutrition, faith/family time emphasized as recovery pillars. Deload weeks built into mesocycle transitions.",
+      "source_urls": ["https://www.mayhemathletes.com", "https://www.mayhemathletes.com/programming-cycles-overview/"]
+    },
+    {
+      "id": "misfit",
+      "name": "Misfit Athletics",
+      "lead_coaches": ["Drew Mackenzie", "Hunter Britt"],
+      "philosophy": "Competitor-focused programming. Build relentless engines, brutal capacity, and competition-ready athletes. Train the work nobody else will do.",
+      "periodization": "Four 7-week phases per year + Comp Blocks aligned to Open/Quarterfinals/Semifinals. Phases build progressively toward competition peak. Comp Blocks shift to testing and competition-specific stimulus.",
+      "weekly_template": {
+        "structure": "6 days on, 1 off",
+        "session_layout": "Strength -> Bitch Work (aerobic) -> Conditioning -> Weakness Template piece",
+        "typical_split": ["Heavy Strength + Sprint", "Aerobic Power Day", "Olympic + Mid WOD", "Threshold Day", "Heavy Day + Mixed", "Long Grinder", "Off"]
+      },
+      "energy_system_approach": "Aerobic dominant. 'Bitch Work' is the signature aerobic capacity element - long, sustained, sub-threshold work that builds the engine. Anaerobic lactic concentrated 1-2 days/week. Alactic woven into strength work.",
+      "strength_approach": "Percentage-based with heavy bias toward absolute strength and contextual strength (under fatigue). Olympic lifting volume high. Squat and pull cycles run concurrent with conditioning blocks.",
+      "accessory_work": "Weakness Templates layer - athlete identifies gaps from assessment, picks weakness templates that overlay onto base programming. Common weaknesses: HSPU, MU, double-unders, breathing under load.",
+      "signature_elements": [
+        "'Bitch Work' aerobic capacity signature",
+        "Weakness Templates overlay system",
+        "Four 7-week phases + Comp Blocks structure",
+        "MFT vs Hatchet tier system",
+        "Competitor-first programming philosophy"
+      ],
+      "athlete_tiers": {
+        "hatchet": "Affiliate-level, 5 days/week, Rx/scaled, lower volume",
+        "mft_full": "Misfit Full programming, 6 days/week, full competitor volume",
+        "mft_competitor": "Quarterfinals/Semifinals-level, multi-session days, weakness templates required"
+      },
+      "recovery_lifestyle": "Deload weeks at end of each 7-week phase. Sleep prioritized. Active recovery on rest day encouraged.",
+      "source_urls": ["https://misfitathletics.com", "https://misfitathletics.com/getting-started/"]
+    },
+    {
+      "id": "comptrain",
+      "name": "CompTrain",
+      "lead_coaches": ["Ben Bergeron"],
+      "philosophy": "Concurrent training - simultaneously develop strength, power, and engine. Mindset is the foundation of fitness. Train the person, not just the body.",
+      "periodization": "Concurrent model - all energy systems and strength qualities trained year-round with shifting emphasis. Open/Quarterfinals/Semifinals/Games peaks layered on top of base.",
+      "weekly_template": {
+        "structure": "5 days on, 2 off (Sunday + flex day)",
+        "session_layout": "Mindset Minute -> Warm-up -> Strength -> WOD -> Cooldown",
+        "typical_split": ["Olympic + Mid WOD", "Squat + Engine", "Skill + Sprint", "Heavy Press/Pull + Mixed", "Long WOD", "Off / Active Recovery", "Off"]
+      },
+      "energy_system_approach": "Concurrent - all three trained weekly. Aerobic threshold programmed 1-2x/week. Anaerobic lactic 1x/week. Alactic woven into strength sessions.",
+      "strength_approach": "Percentage-based. Squat, deadlift, press, Olympic lifts cycled. Tempo and pause work used for technical refinement. Heavy days prescribed weekly.",
+      "accessory_work": "Movement quality and 5-Tool development. Gymnastics strength (strict pulls, strict presses, midline) integrated.",
+      "signature_elements": [
+        "Mindset Minute - daily mental performance prompt",
+        "5-Tool Athlete model (Strength, Stamina, Speed, Skill, Mindset)",
+        "Deep Health 5 pillars (Physical, Mental, Emotional, Existential, Relational)",
+        "Concurrent training model",
+        "Coach development emphasis"
+      ],
+      "athlete_tiers": {
+        "comptrain_class": "Affiliate-level, 5 days/week, scalable for all levels",
+        "comptrain_individual": "Competitive athlete track, 6 days/week",
+        "masters_teens": "Age-adjusted volume and load",
+        "comptrain_endurance": "Aerobic-bias track"
+      },
+      "recovery_lifestyle": "Mindset and Deep Health framework treats recovery as integral. Sleep, nutrition, relationships programmed as performance variables.",
+      "source_urls": ["https://www.comptrain.com"]
+    },
+    {
+      "id": "prvn",
+      "name": "PRVN Fitness",
+      "lead_coaches": ["Shane Orr", "Tia-Clair Toomey-Orr"],
+      "philosophy": "Proven programming. Built around what worked for the most decorated CrossFit athlete in history. Volume tolerance and technical proficiency are the two pillars.",
+      "periodization": "One-week-behind Compete model - PRVN Compete runs the actual programming Tia/team is doing one week behind real-time. Mesocycles align to competition calendar.",
+      "weekly_template": {
+        "structure": "6 days on, 1 off",
+        "session_layout": "Warm-up -> Strength -> WOD -> Accessory / Pump -> Optional engine piece",
+        "typical_split": ["Olympic + WOD", "Squat + Engine", "Skill + Mid WOD", "Aerobic Threshold + Pump", "Heavy Day + Tester", "Long WOD or Tester", "Off"]
+      },
+      "energy_system_approach": "Aerobic capacity prioritized - threshold and Z2 work programmed weekly. Anaerobic lactic via repeat sprint format. Alactic via Olympic lifting and short sprints.",
+      "strength_approach": "Percentage-based, Olympic lifting heavy. Squat and pull volume high. Tempo and complex work for technical proficiency.",
+      "accessory_work": "PRVN Pump track is dedicated bodybuilding accessory. Within Compete, accessories target Tia-style weakness work - midline, posterior chain, single-arm/single-leg.",
+      "signature_elements": [
+        "One-week-behind Compete model",
+        "Modular ecosystem: Compete, Burn, Pump, Engine, HYROX",
+        "3 daily levels (Rx, Intermediate, Beginner)",
+        "Tia-Clair Toomey blueprint",
+        "Competition calendar peaking"
+      ],
+      "athlete_tiers": {
+        "prvn_burn": "GPP/conditioning track, 5 days/week",
+        "prvn_compete": "Competitive CrossFit, 6 days/week, three daily levels",
+        "prvn_pump": "Bodybuilding/aesthetic accessory track",
+        "prvn_engine": "Aerobic-focused track",
+        "prvn_hyrox": "HYROX competition track"
+      },
+      "recovery_lifestyle": "One day off per week. Sleep, nutrition, mobility emphasized. Tia's openly programmed recovery practices (sauna, contrast, mobility) referenced.",
+      "source_urls": ["https://www.prvnfitness.com", "https://marketplace.trainheroic.com/workout-plan/team/prvn-compete"]
+    },
+    {
+      "id": "linchpin",
+      "name": "Linchpin",
+      "lead_coaches": ["Pat Sherwood"],
+      "philosophy": "Brutally elegant. Sustainable fitness for the long haul. Programming for the everyday athlete who wants to train hard, stay healthy, and still be doing this in 30 years.",
+      "periodization": "Non-periodized by design. No peaks, no testing weeks, no Open/Games focus. Daily variety, sustainable intensity, longevity bias.",
+      "weekly_template": {
+        "structure": "5 days on, 2 off (typically weekend)",
+        "session_layout": "Warm-up -> Single WOD or Strength + WOD -> Cooldown",
+        "typical_split": ["Mixed Modal", "Strength + Conditioning", "Mono-structural / Engine", "Mixed Modal", "Strength or Long WOD", "Off", "Off"]
+      },
+      "energy_system_approach": "Balanced. Time domains rotate naturally - some sub-5min days, some 20-40min days. No formal energy system periodization.",
+      "strength_approach": "Mixed - Olympic, powerlifting, gymnastics strength all rotate. No formal percentage waves. Heavy days when programmed but no peaking blocks.",
+      "accessory_work": "Minimal formal accessory. Movement quality through varied programming rather than dedicated accessory blocks.",
+      "signature_elements": [
+        "Brutally elegant simplicity",
+        "Non-periodized by design",
+        "Longevity bias for 25-65 demographic",
+        "No peaking, no testing",
+        "Sustainable intensity philosophy"
+      ],
+      "athlete_tiers": {
+        "linchpin_main": "Single track for general fitness adults, scalable",
+        "linchpin_garage": "Minimal-equipment variant for home gyms"
+      },
+      "recovery_lifestyle": "Weekends off. Sustainable pace prioritized over peak performance. Designed for athletes balancing training with full life.",
+      "source_urls": ["https://www.crossfitlinchpin.com", "https://programs.btwb.com/linchpin/gym"]
+    }
+  ]
+}

@@ -7,6 +7,27 @@ const nextConfig = {
   optimizeFonts: true,
   experimental: {
     optimizePackageImports: ['@mui/material', '@mui/icons-material', 'recharts', 'posthog-js'],
+    // node-ical pulls in temporal-polyfill + rrule-temporal, both of
+    // which lean on BigInt. When webpack bundles them for the
+    // /api/calendars/connect/ical route's server-side page-data
+    // collection, the minifier mangles the global BigInt reference
+    // and the build dies with "TypeError: o.BigInt is not a function".
+    // Keeping these external means Next.js leaves them as runtime
+    // require()s in the server bundle, untouched by the minifier.
+    serverComponentsExternalPackages: ['node-ical', 'temporal-polyfill', 'rrule-temporal'],
+  },
+  // Redirects — defensive routing for retired URLs
+  async redirects() {
+    return [
+      {
+        // Old marketing campaigns linked to /trainers — route to the
+        // /trainer-apply coming-soon screen until the new license
+        // program goes public. Permanent (301) so search engines update.
+        source: '/trainers',
+        destination: '/trainer-apply',
+        permanent: true,
+      },
+    ];
   },
   // Security + caching headers
   async headers() {

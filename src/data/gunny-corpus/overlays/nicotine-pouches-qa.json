@@ -1,0 +1,404 @@
+{
+  "knowledge_id": "nicotine_pouches_oral_health_qa_v1",
+  "version": "1.0.0",
+  "last_updated": "2026-05-01",
+  "topic": "Nicotine pouches and oral/dental health",
+  "format": "Q&A pairs for retrieval and response matching",
+  "voice": "Gunny — tactical, direct, no-BS. Respects user autonomy. Distinguishes proven from extrapolated. Flags evidence gaps.",
+  "companion_kb": "gunny_kb_nicotine_pouches_oral_health.json",
+
+  "qa_pairs": [
+    {
+      "id": "qa_001",
+      "question": "Will nicotine pouches stain my teeth?",
+      "alt_questions": [
+        "Do Zyns stain teeth?",
+        "Are pouches going to mess up my smile?",
+        "Will Zyn turn my teeth yellow?"
+      ],
+      "answer": "Way less than cigarettes or dip. Direct comparison study exposed enamel for 86 days: cigarettes scored 28.5 on color change, snus 18.3, modern pouch (LYFT 10mg) 4.1 — basically indistinguishable from saline at 2.17. Pouches lack tobacco leaf, tar, and combustion byproducts, which are the main chromogens. If staining shows up, it's usually from coffee/tea/wine alongside the pouch, not the pouch itself. Bottom line: this is one area where pouches genuinely deliver.",
+      "tags": ["staining", "cosmetic", "comparison"],
+      "evidence_level": "strong",
+      "sources": ["Dalrymple et al., American Journal of Dentistry 2021", "Eliades et al. systematic review"]
+    },
+    {
+      "id": "qa_002",
+      "question": "Will pouches damage my enamel?",
+      "alt_questions": [
+        "Do pouches erode teeth?",
+        "Are pouches acidic?",
+        "Will Zyn wreck my enamel?"
+      ],
+      "answer": "Direct enamel erosion from the pouch itself is biologically implausible. Pouch pH runs 6.86 to 10.5, median around 8.8 — alkaline. Critical pH for enamel demineralization is 5.5. Pouches sit on the opposite side of that line. Caveat: chronic dry mouth from heavy use reduces salivary buffering, which can indirectly weaken enamel defense over time. No published clinical study has measured enamel loss in pouch users yet.",
+      "tags": ["enamel", "pH", "erosion"],
+      "evidence_level": "strong",
+      "sources": ["Stanfill CDC 2021 (37 products)", "Mallock 2024 (44 products)", "Bäck 2023"]
+    },
+    {
+      "id": "qa_003",
+      "question": "Do nicotine pouches cause cavities?",
+      "alt_questions": [
+        "Will Zyns give me cavities?",
+        "Are sugar-free pouches safe for teeth?",
+        "Do pouches rot teeth?"
+      ],
+      "answer": "Pouches are sugar-free, so direct cariogenic load from the formulation is essentially zero. Some even contain xylitol, which is anti-cavity. But nicotine itself promotes Streptococcus mutans virulence — rat studies showed nicotine in drinking water raised cavity incidence and increased S. mutans attachment to enamel. Combine that with chronic dry mouth (less saliva to buffer acid), and theoretical cavity risk goes up — especially root cavities on surfaces newly exposed by gum recession. No clinical study has measured cavity rates in pouch users yet. Risk is plausibly elevated but unquantified.",
+      "tags": ["cavities", "caries", "sugar"],
+      "evidence_level": "moderate",
+      "sources": ["Liu et al., Journal of Dental Sciences 2018 (rat study)", "Huang et al. 2012, 2015 (in vitro)"]
+    },
+    {
+      "id": "qa_004",
+      "question": "Will pouches cause gum recession?",
+      "alt_questions": [
+        "Do Zyns make your gums recede?",
+        "Will my gums shrink from pouches?",
+        "Why is my gum pulling back where I put my pouch?"
+      ],
+      "answer": "Yes — and it shows up exactly where you keep parking the pouch. The strongest data comes from snus (close cousin to pouches): 19-year-old Swedish snuff users showed 42% recession vs 17% in non-users, odds ratio 5.1. Maxillary anterior zone (where most pouches sit) hit 33% vs 10%. Case reports in pouch users specifically: 22- and 25-year-old men, daily use for 11-18 months, came in with localized buccal recession at exact placement sites. South Asian smokeless tobacco users averaged 2.99mm of recession vs 1.05mm in controls. Recession established this way doesn't bounce back fast — six weeks of switching wasn't enough to improve it.",
+      "tags": ["recession", "gums", "placement"],
+      "evidence_level": "strong",
+      "sources": ["Montén, Wennström, Ramberg, J Clin Periodontol 2006", "BMC Oral Health 2025 case reports", "Alizadehgharib 2022"]
+    },
+    {
+      "id": "qa_005",
+      "question": "Should I rotate where I put my pouch?",
+      "alt_questions": [
+        "Does it matter where I put the pouch?",
+        "Can I just leave it in the same spot?",
+        "Best place to put a Zyn?"
+      ],
+      "answer": "Rotate. Same-site placement is the single strongest predictor of localized damage — recession, white lesions, chronic ulceration. Mechanism is straightforward: same square centimeter of tissue gets repeated mechanical pressure plus high free-base nicotine concentration, hour after hour, day after day. Note: rotation is dentist-consensus advice based on the smokeless tobacco literature — it's never been formally tested in a clinical trial. But the biology is solid, and the cost of rotating is zero. Just do it.",
+      "tags": ["placement", "harm_reduction", "rotation"],
+      "evidence_level": "moderate",
+      "sources": ["Smokeless tobacco literature", "Dental clinical consensus"]
+    },
+    {
+      "id": "qa_006",
+      "question": "How long should I keep a pouch in my mouth?",
+      "alt_questions": [
+        "How long is too long for a Zyn?",
+        "Should I keep the pouch in until it's done?",
+        "Duration for nicotine pouches?"
+      ],
+      "answer": "Manufacturers say 20-30 minutes. Real-world average is closer to 75 minutes — more than double the recommendation. Every extra minute adds cumulative free-base nicotine exposure to the same patch of tissue. If you're going to use them, treat 30 minutes as the ceiling, not the suggestion.",
+      "tags": ["duration", "harm_reduction", "use_pattern"],
+      "evidence_level": "moderate",
+      "sources": ["Use behavior studies"]
+    },
+    {
+      "id": "qa_007",
+      "question": "Are pouches safer than cigarettes?",
+      "alt_questions": [
+        "Is Zyn safer than smoking?",
+        "Are pouches better than cigarettes?",
+        "Should I switch from cigarettes to Zyn?"
+      ],
+      "answer": "For oral health specifically, yes — by a meaningful margin. Tobacco-specific nitrosamines (the main carcinogens driving smokeless tobacco oral cancer) are 1-3 orders of magnitude lower in pouches than in snus or cigarettes. FDA's January 2025 authorization of 20 Zyn products found 36 of 42 measured harmful constituents were below quantification, and concluded pouches 'pose lower risk of cancer and other serious health conditions' than cigarettes. Smokers who fully switched showed gingival index improvements of 20-28% over 24 weeks. Caveat: dual use (pouches plus cigarettes) erases the benefit. And 'safer than cigarettes' isn't the same as 'safe.'",
+      "tags": ["comparison", "cigarettes", "harm_reduction", "FDA"],
+      "evidence_level": "strong",
+      "sources": ["FDA PMTA decision January 16, 2025", "Liu et al. 2025", "Mallock 2024"]
+    },
+    {
+      "id": "qa_008",
+      "question": "Are pouches safer than dip or snus?",
+      "alt_questions": [
+        "Is Zyn better than chew?",
+        "Should I switch from snus to pouches?",
+        "Pouches vs dip oral health?"
+      ],
+      "answer": "Probably — though the gap is smaller than pouches vs cigarettes. Carcinogen content: US moist snuff up to ~1190 ng NNN per unit. Swedish snus 50-250 ng. Modern pouches 0-12.9 ng, mostly below quantification. Switching from snus to pouches improves lesions and recession over time. The big distinction: snus is IARC Group 1 (carcinogenic). Pouches aren't classified yet. Snus also doesn't show elevated periodontitis risk in Swedish cohorts, just localized recession — pouches likely follow the same pattern.",
+      "tags": ["comparison", "snus", "dip", "harm_reduction"],
+      "evidence_level": "moderate",
+      "sources": ["Mallock 2024", "Solberg meta-analysis 2025", "Alizadehgharib 2022"]
+    },
+    {
+      "id": "qa_009",
+      "question": "Are pouches safe?",
+      "alt_questions": [
+        "Are nicotine pouches healthy?",
+        "Is Zyn safe?",
+        "Are pouches harmless?"
+      ],
+      "answer": "No. Safer than cigarettes and probably safer than snus — that's not the same as safe. Documented localized risks: gum recession at placement sites, white mucosal lesions (leukoplakia-like), dry mouth, oral microbiome shifts toward gum-disease bacteria, and silent periodontitis progression hidden by nicotine vasoconstriction. Long-term cancer, tooth loss, and bone loss data in pouch users don't exist yet — products have only been mainstream since ~2019, longest study is 24 weeks. If you're not already a nicotine user, no oral health upside exists from starting.",
+      "tags": ["safety", "overall_risk", "evidence_gaps"],
+      "evidence_level": "strong",
+      "sources": ["Rungraungrayabkul BMC Oral Health 2024 systematic review", "La Rosa Frontiers 2026"]
+    },
+    {
+      "id": "qa_010",
+      "question": "What's the deal with nicotine and gum disease?",
+      "alt_questions": [
+        "Do pouches cause periodontitis?",
+        "Are my gums getting damaged from Zyn?",
+        "Why don't my gums bleed when I floss anymore?"
+      ],
+      "answer": "Here's the part most users miss — and it's the most important one: nicotine is a powerful vasoconstrictor. It shrinks the blood vessels in your gums. That suppresses bleeding, the warning sign that normally tells you (and your dentist) gum disease is brewing. Heavy nicotine users walk in with pale, fibrotic, healthy-LOOKING gums while attachment loss is happening underneath. Smokers in long-term studies had 2.06mm of bone loss vs 1.6mm in lighter smokers — despite cleaner-looking gums. Add in nicotine suppressing your immune response (neutrophil function drops) and stunting fibroblast growth (48% at 50µM, 86% at 200µM), and you have silent disease progression. If you're a daily user, you can't trust the visual check. Get cleanings every 3-4 months and ask for periodontal probing.",
+      "tags": ["periodontitis", "vasoconstriction", "masking", "critical"],
+      "evidence_level": "strong",
+      "sources": ["Bergström periodontal cohort", "MacFarlane J Periodontol 1995", "Johnson and Hill, Periodontology 2000, 2004"]
+    },
+    {
+      "id": "qa_011",
+      "question": "I have a white patch in my mouth where I put my pouch. Should I worry?",
+      "alt_questions": [
+        "White spot in mouth from Zyn",
+        "Leukoplakia from pouches",
+        "There's a white lesion where I keep my pouch"
+      ],
+      "answer": "Get it looked at. Case reports document leukoplakia (precancerous white lesions) developing within 11 months of daily pouch use at exact placement sites. Histopathology shows parakeratosis, epithelial thickening, edema, and chronic inflammatory infiltration — same pattern as classical smokeless tobacco keratosis. Good news from snus data: in 27-29 year follow-up of 1,115 patients, lesions disappeared in 100% (62/62) of those who fully quit, and zero oral cancers occurred at original lesion sites. But that requires actually quitting and getting it monitored. Any non-resolving white lesion gets biopsied, period. Don't wait it out.",
+      "tags": ["leukoplakia", "lesions", "cancer_risk", "action_required"],
+      "evidence_level": "strong",
+      "sources": ["BMC Oral Health 2025 case reports", "Roosaar et al., Int J Cancer 2006", "Miluna-Meldere Diagnostic Pathology 2024"]
+    },
+    {
+      "id": "qa_012",
+      "question": "I'm getting a dental implant. Should I quit pouches?",
+      "alt_questions": [
+        "Are pouches okay before implant surgery?",
+        "Will Zyn mess up my implant?",
+        "Nicotine and dental implants"
+      ],
+      "answer": "Quit before the procedure and stay off through healing. No pouch-specific implant data exists yet, but isolating nicotine alone (no combustion) shows statistically significant reduction in bone-to-implant contact. Smokers see implant failure rates roughly double non-smokers (6.35% vs 3.18% across 80,000+ implants). Larger 2022 meta-analysis: odds ratio 2.40 for failure, 0.58mm extra marginal bone loss. Mechanism: nicotine vasoconstriction during the critical osseointegration window, plus suppressed osteoblasts, activated osteoclasts, impaired angiogenesis. Same logic applies to extractions and any periodontal surgery. The healing window is when nicotine does the most damage.",
+      "tags": ["implants", "surgery", "healing", "cessation_indication"],
+      "evidence_level": "strong",
+      "sources": ["Javed et al. J Periodontol 2017", "Chrcanovic, Albrektsson, Wennerberg 2015 meta-analysis", "2022 meta-analysis (35,511 implants)"]
+    },
+    {
+      "id": "qa_013",
+      "question": "Why is my mouth so dry from pouches?",
+      "alt_questions": [
+        "Pouches give me dry mouth",
+        "Xerostomia from Zyn",
+        "Saliva problems with nicotine pouches"
+      ],
+      "answer": "Nicotine reduces saliva production. That's standard pharmacology, not a fluke. Beyond the comfort issue, low saliva matters because saliva is your mouth's main acid buffer and remineralizing system. Less saliva means less defense against cavity-causing acids and slower clearance of food particles. Counter it: drink water actively throughout the day (not just when thirsty), use alcohol-free mouthwash (alcohol makes dry mouth worse), and don't skip the fluoride toothpaste.",
+      "tags": ["xerostomia", "dry_mouth", "saliva", "harm_reduction"],
+      "evidence_level": "strong",
+      "sources": ["Nicotine pharmacology literature"]
+    },
+    {
+      "id": "qa_014",
+      "question": "Should I use 3mg or 6mg pouches?",
+      "alt_questions": [
+        "What strength pouch is safest?",
+        "Are stronger pouches more dangerous?",
+        "3mg vs 6mg Zyn"
+      ],
+      "answer": "Lower strength when you can. 30mg pouches in pharmacokinetic studies hit peak plasma nicotine of 29.4 ng/mL — higher than a cigarette (15.2 ng/mL) — with greater area under the curve. Higher strength means more local exposure to oral tissue, more vasoconstriction, more cellular stress. US sales since 2019 have shifted toward 6mg and 8mg faster than 3mg, which is the wrong direction from a tissue-exposure standpoint. If you're using pouches recreationally and not as cigarette replacement, 3mg makes sense.",
+      "tags": ["strength", "dose", "harm_reduction"],
+      "evidence_level": "moderate",
+      "sources": ["Mallock-Ohnesorg pharmacokinetic studies"]
+    },
+    {
+      "id": "qa_015",
+      "question": "Will my gums grow back if I quit pouches?",
+      "alt_questions": [
+        "Can recession from Zyn reverse?",
+        "Do gums heal after quitting nicotine?",
+        "Will my mouth recover if I stop?"
+      ],
+      "answer": "Soft tissue lesions: yes. Recession: probably not without surgery. Snus lesion data shows complete clinical reversal in 100% of patients who fully quit, sometimes within 14 days. White patches and inflammation back off when the chronic insult stops. But established gum recession — once the gum tissue and bone have receded — doesn't spontaneously regrow. That's structural. The case reports of pouch users with localized recession needed gingival grafting to restore coverage. So: quit before recession sets in.",
+      "tags": ["reversibility", "quitting", "recession"],
+      "evidence_level": "moderate",
+      "sources": ["Roosaar et al. Int J Cancer 2006", "Frithiof 1983 cohort", "BMC Oral Health 2025 case reports"]
+    },
+    {
+      "id": "qa_016",
+      "question": "Do pouches cause oral cancer?",
+      "alt_questions": [
+        "Cancer risk from Zyn",
+        "Are pouches carcinogenic?",
+        "Will I get cancer from nicotine pouches?"
+      ],
+      "answer": "Direct answer: not classified as carcinogenic, but evidence is incomplete. IARC has not classified pouches. Smokeless tobacco (including snus) is IARC Group 1. Nicotine alone isn't classified as a carcinogen. Pouches contain 1-3 orders of magnitude lower TSNAs (the carcinogens driving smokeless tobacco oral cancer) than snus or cigarettes — most below quantification limits in independent testing. FDA explicitly cited 'lower risk of cancer' in its 2025 authorization decisions. Caveat: chemical screens identified 186 distinct compounds in 48 pouches, with 8 hazardous under EU CLP, and some plant-based pouches contained formaldehyde at 3-4x snus levels. Long-term cancer outcome data in pouch users doesn't exist — products too new. Best current answer: substantially lower risk than tobacco, not zero, not fully characterized.",
+      "tags": ["cancer", "carcinogens", "TSNA", "long_term_risk"],
+      "evidence_level": "moderate",
+      "sources": ["Mallock 2024", "Mallock-Ohnesorg 2023 chemical screen", "FDA PMTA 2025", "IARC monographs"]
+    },
+    {
+      "id": "qa_017",
+      "question": "How often should I see the dentist if I use pouches?",
+      "alt_questions": [
+        "Dentist visits for nicotine pouch users",
+        "Cleaning frequency for Zyn users",
+        "Should I go to the dentist more often if I use pouches?"
+      ],
+      "answer": "Every 3-4 months if you're a daily user. Standard 6-month interval doesn't account for the masking effect — nicotine vasoconstriction hides bleeding and inflammation that would otherwise flag developing periodontitis. More frequent periodontal probing catches attachment loss before it gets serious. Tell your dentist you use pouches and where you place them, so they can examine those sites specifically. Don't make them guess.",
+      "tags": ["dental_visits", "harm_reduction", "monitoring"],
+      "evidence_level": "moderate",
+      "sources": ["British Dental Journal Jackson et al. 2023", "ADA continuing education materials"]
+    },
+    {
+      "id": "qa_018",
+      "question": "What is Hippotine? Is it the same as Zyn?",
+      "alt_questions": [
+        "What's MG nicotine?",
+        "Are nicotine analogs safe?",
+        "What's 6-methyl nicotine?"
+      ],
+      "answer": "Not the same. Hippotine, MG, and similar 'Imotine' branded products contain 6-methyl nicotine — a synthetic nicotine analog, not nicotine itself. Sold as 'tobacco-free' to dodge nicotine regulation. Doses are 8-25mg per pouch and the neurotoxicity profile is worse than nicotine. These are NOT the same category as PMTA-authorized pouches like Zyn or On!. Treat them as a separate, less-studied, more-concerning class of product.",
+      "tags": ["nicotine_analogs", "Hippotine", "regulation", "warning"],
+      "evidence_level": "moderate",
+      "sources": ["Jordt and Jabba 2024"]
+    },
+    {
+      "id": "qa_019",
+      "question": "Can pouches mess up my oral microbiome?",
+      "alt_questions": [
+        "Do pouches change mouth bacteria?",
+        "Oral microbiome and Zyn",
+        "Bad bacteria from nicotine pouches"
+      ],
+      "answer": "Yes, measurably. Saliva analysis in pouch users detected periodontopathogens — Tannerella forsythia, Fusobacterium nucleatum, Porphyromonas gingivalis, Prevotella intermedia, Rothia mucilaginosa. Same bacteria were absent in non-tobacco controls. T. forsythia dominated specifically in pouch users. These are the bug families that drive periodontitis progression. Smokeless tobacco users show similar dysbiotic patterns: more Fusobacterium, Haemophilus, Leptotrichia, Neisseria, Porphyromonas, and fewer beneficial Lactobacillus, Prevotella, Veillonella. Microbiome shift is part of why gum disease risk goes up even when surface inflammation is suppressed.",
+      "tags": ["microbiome", "bacteria", "periodontitis", "mechanism"],
+      "evidence_level": "moderate",
+      "sources": ["Miluna-Meldere et al. Microorganisms 2024", "Scientific Reports 2024 (smokeless tobacco)"]
+    },
+    {
+      "id": "qa_020",
+      "question": "Should I brush right after using a pouch?",
+      "alt_questions": [
+        "When to brush after Zyn",
+        "Brush after pouch?",
+        "Oral hygiene timing with pouches"
+      ],
+      "answer": "Wait a bit. Pouches leave an alkaline environment locally, and immediate mechanical brushing in that altered pH state isn't ideal — the same logic applies as not brushing immediately after acidic foods (just for the opposite reason). Rinse with water, give it 20-30 minutes, then brush normally. Two daily brushings with fluoride toothpaste, soft-bristle brush, alcohol-free mouthwash. This recommendation is plausible based on enamel chemistry but hasn't been clinically tested specifically for pouches.",
+      "tags": ["oral_hygiene", "brushing", "harm_reduction"],
+      "evidence_level": "preliminary",
+      "sources": ["Dental hygiene literature, extrapolated"]
+    },
+    {
+      "id": "qa_021",
+      "question": "What's the worst pouch use pattern?",
+      "alt_questions": [
+        "Most dangerous way to use pouches",
+        "What makes pouches more harmful?",
+        "Bad pouch habits"
+      ],
+      "answer": "Five behaviors stack the risk: (1) Same-site placement every time — strongest predictor of localized damage. (2) High strength (6mg+) — peak nicotine exposure dramatically higher. (3) Long duration in mouth (75+ minutes vs the 30-minute recommendation). (4) Dual use with cigarettes — erases harm reduction entirely. (5) Using unregulated nicotine analog products (Hippotine, MG) instead of PMTA-authorized pouches. Hit all five and you've maximized your risk profile. Reverse all five and you've minimized it within the constraint of still using.",
+      "tags": ["use_patterns", "risk_factors", "harm_reduction"],
+      "evidence_level": "strong",
+      "sources": ["Synthesis"]
+    },
+    {
+      "id": "qa_022",
+      "question": "Are pouches FDA approved?",
+      "alt_questions": [
+        "Did FDA approve Zyn?",
+        "Is Zyn legal?",
+        "FDA decision on nicotine pouches"
+      ],
+      "answer": "Authorized, not 'approved' — different categories. FDA issued a Premarket Tobacco Application marketing-granted order on January 16, 2025, for 20 Zyn products. December 2025 followed with authorization for six On! PLUS products. The agency found pouches 'pose lower risk of cancer and other serious health conditions' than cigarettes or most smokeless tobacco. PMTA authorization means legal marketing, not endorsement of safety, and definitely not 'safe.' Swedish Match has a separate Modified Risk Tobacco Product application under FDA Advisory Committee review (January 2026). FDA reviews are population-level, not personal medical guidance.",
+      "tags": ["FDA", "regulation", "PMTA"],
+      "evidence_level": "strong",
+      "sources": ["FDA PMTA decisions January 2025 and December 2025"]
+    },
+    {
+      "id": "qa_023",
+      "question": "I'm not a smoker. Should I try pouches?",
+      "alt_questions": [
+        "Should I start using Zyn for energy?",
+        "Pouches for non-smokers?",
+        "Are pouches good for focus?"
+      ],
+      "answer": "No oral health upside exists if you're starting from a non-using baseline. The harm reduction case for pouches is built entirely on smokers replacing cigarettes. Compared to no nicotine at all, pouches add: dry mouth, microbiome dysbiosis, localized recession risk at placement sites, possible white lesions, masked periodontitis warning signs, and addiction. There's no oral health study showing pouches are better than nothing. If you want focus or energy without the dental downside, caffeine, sleep, and protein are better-studied options.",
+      "tags": ["non_smoker", "starting_use", "guidance"],
+      "evidence_level": "strong",
+      "sources": ["Synthesis"]
+    },
+    {
+      "id": "qa_024",
+      "question": "What does the dentist see when I use pouches?",
+      "alt_questions": [
+        "Can my dentist tell I use Zyn?",
+        "Dental signs of pouch use",
+        "What does a dentist look for in pouch users?"
+      ],
+      "answer": "Trained dentists can spot it. Common findings at placement sites: localized buccal recession, white lesions ranging from mild keratosis to frank leukoplakia, and the characteristic histology if biopsied — parakeratosis, acanthotic epithelium, edema, chronic inflammation. Beyond placement sites: pale, fibrotic, non-bleeding gums (the vasoconstriction effect), reduced salivary flow on exam, and microbiome-driven changes in plaque composition. Tell your dentist proactively. Don't make them detective the case.",
+      "tags": ["dental_exam", "diagnosis", "transparency"],
+      "evidence_level": "moderate",
+      "sources": ["BMC Oral Health 2025 case reports", "Miluna-Meldere Diagnostic Pathology 2024"]
+    },
+    {
+      "id": "qa_025",
+      "question": "How long until pouches damage my mouth?",
+      "alt_questions": [
+        "When do pouch side effects start?",
+        "Timeline for pouch oral damage",
+        "How fast do gums recede from pouches?"
+      ],
+      "answer": "Faster than most users expect. Documented case reports show localized recession and leukoplakia at placement sites within 11-18 months of daily use in young adults. Inflammatory and microbiome changes likely show up within weeks. Snus literature shows mucosal lesions developing within months of regular use. The timeline isn't decades — it's months. The longer-term outcomes (cancer, bone loss, tooth loss) take decades and aren't quantified yet for pouches because the products haven't been around long enough.",
+      "tags": ["timeline", "onset", "progression"],
+      "evidence_level": "moderate",
+      "sources": ["BMC Oral Health 2025 case reports", "Snus literature"]
+    },
+    {
+      "id": "qa_026",
+      "question": "Do pouches cause bad breath?",
+      "alt_questions": [
+        "Halitosis from Zyn",
+        "Will pouches give me bad breath?",
+        "Pouches and breath"
+      ],
+      "answer": "Indirectly, yes. Two mechanisms: dry mouth (less saliva to clear bacteria and food particles) and microbiome shifts toward periodontitis-associated bacteria, several of which produce volatile sulfur compounds — the main source of bad breath. Pouches themselves aren't strongly odor-producing the way tobacco is, but the downstream oral environment changes contribute to halitosis over time.",
+      "tags": ["halitosis", "bad_breath", "downstream_effects"],
+      "evidence_level": "moderate",
+      "sources": ["Microbiome literature", "Xerostomia literature"]
+    },
+    {
+      "id": "qa_027",
+      "question": "What should I tell my dentist about pouches?",
+      "alt_questions": [
+        "How to talk to dentist about Zyn",
+        "Honesty with dentist about nicotine",
+        "Dentist visit pouch user"
+      ],
+      "answer": "Tell them straight: what brand, what strength (mg), how many pouches per day, how long each one stays in, and where you typically place them. That last part matters most — it tells them where to look closely. Also flag any white spots, recession you've noticed, dry mouth, or bleeding changes. They'll adjust cleaning frequency, do targeted periodontal probing at placement sites, and biopsy anything suspicious. The masking effect of nicotine means visual exam alone is unreliable — they need data from you to do their job.",
+      "tags": ["communication", "dental_visit", "harm_reduction"],
+      "evidence_level": "strong",
+      "sources": ["Clinical practice guidance"]
+    },
+    {
+      "id": "qa_028",
+      "question": "What's the single most important thing to know about pouches and teeth?",
+      "alt_questions": [
+        "Most important pouch oral health fact",
+        "Bottom line on Zyn dental risks",
+        "What should I really worry about?"
+      ],
+      "answer": "Nicotine masks gum disease. That's the headline. Vasoconstriction shrinks the blood vessels in your gums, suppresses bleeding, and hides the warning signs that normally flag periodontitis. Heavy users walk in with healthy-looking gums while attachment loss is happening underneath. Standard self-checks (does it bleed when I floss? do my gums look inflamed?) become unreliable. The fix is professional monitoring — periodontal probing every 3-4 months, not just visual inspection. Everything else (staining, recession, lesions, dry mouth) is real but more visible. The masking effect is the silent risk.",
+      "tags": ["critical", "summary", "vasoconstriction", "key_takeaway"],
+      "evidence_level": "strong",
+      "sources": ["Bergström cohort", "Palmer et al. 2005", "Synthesis"]
+    },
+    {
+      "id": "qa_029",
+      "question": "Is research on pouches solid or sketchy?",
+      "alt_questions": [
+        "Are pouch studies reliable?",
+        "Quality of nicotine pouch research",
+        "Should I trust pouch oral health data?"
+      ],
+      "answer": "Honest answer: limited. Pouches have only been mainstream since around 2019. The most recent systematic review (Rungraungrayabkul, BMC Oral Health 2024) found only 3 eligible human studies covering 190 total participants — all rated high risk of bias. Longest published clinical study followed users for 24 weeks. Most long-term claims (cancer risk, tooth loss, bone loss) are extrapolated from snus epidemiology, smoking research, or nicotine pharmacology — not measured directly in pouch users. Industry-funded and independent studies roughly agree on chemistry but diverge on clinical interpretation. Real long-term data won't arrive before the early 2030s. Anyone giving you definitive long-term answers right now is reaching beyond what the evidence supports.",
+      "tags": ["evidence_quality", "limitations", "transparency"],
+      "evidence_level": "strong",
+      "sources": ["Rungraungrayabkul 2024 systematic review", "La Rosa Frontiers 2026", "Scherer Harm Reduction Journal 2024"]
+    },
+    {
+      "id": "qa_030",
+      "question": "Quickest harm-reduction checklist for pouch users?",
+      "alt_questions": [
+        "How do I use pouches safely?",
+        "Pouch best practices",
+        "Reduce damage from Zyn"
+      ],
+      "answer": "Six moves. (1) Rotate placement sites every time — never the same spot twice in a row. (2) Cap each pouch at 30 minutes max. (3) Use lowest strength that works — 3mg over 6mg+. (4) Drink water actively all day to fight dry mouth. (5) Brush twice daily with fluoride, alcohol-free mouthwash, soft-bristle brush. (6) Dental cleaning every 3-4 months with periodontal probing — tell them where you place pouches. Bonus: biopsy any white lesion that doesn't resolve. Skip dual use with cigarettes — that erases the harm reduction benefit entirely.",
+      "tags": ["harm_reduction", "checklist", "summary"],
+      "evidence_level": "strong",
+      "sources": ["Synthesis"]
+    }
+  ],
+
+  "fallback_response_for_unmatched_queries": "I don't have evidence-backed data on that specific question about nicotine pouches and oral health. The research base is limited — pouches have only been mainstream since around 2019, and most long-term claims are extrapolated from snus or smoking research, not measured directly. For specifics outside what I can confirm, talk to your dentist."
+}

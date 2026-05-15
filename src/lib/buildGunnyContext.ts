@@ -4,9 +4,11 @@
 // so responses never regress to generic advice because one caller forgot
 // to include a field.
 
-import type { Operator } from './types';
+import type { Operator, SportProfile, JuniorConsent } from './types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from './workoutAnalysis';
 import { getLocalDateStr, toLocalDateStr } from './dateUtils';
+import { buildMacroBriefContext } from './macrocycle';
+import { getIntakeGaps, intakeCompletenessPercent } from './intakeAudit';
 
 // Matches the in-progress Workout Mode UI state consumed by AppShell
 export interface WorkoutExecutionState {
@@ -92,6 +94,68 @@ export interface GunnyOperatorContext {
    */
   completedWorkoutLogs: string[];
   workoutExecution: string | null;
+
+  /** Macrocycle context for the active long-horizon goal(s). Apr 2026 spec.
+   *  Pre-formatted as a string for direct injection into the Gunny system
+   *  prompt; null when the operator has no active macrocycle. The shape
+   *  encodes block name, week-of-block, days-to-goal, intensity/volume
+   *  scalers, secondary-goal status, and any block-transition hints so
+   *  Gunny can answer "what should this week look like" in calendar terms. */
+  macrocycle: string | null;
+
+  /** Intake audit string — pre-formatted multi-line block listing missing
+   *  intake fields by tier (critical/important/useful) so Gunny can ask
+   *  for the gaps conversationally before producing programming advice
+   *  that depends on them. Null when the operator's intake is fully
+   *  filled. See src/lib/intakeAudit.ts. */
+  intakeAudit: string | null;
+
+  // Junior Operator surface — undefined for adult operators. When isJunior
+  // is true the gunny route swaps SYSTEM_PROMPT for SOCCER_YOUTH_PROMPT and
+  // the contextBlock is rewritten to drop body-comp / 1RM fields and add the
+  // sport profile + parent-visibility note.
+  isJunior?: boolean;
+  juniorAge?: number;
+  parentIds?: string[];
+  sportProfile?: SportProfile;
+  juniorConsent?: JuniorConsent;
+
+  // Surfaces intake fields the server uses to select the Gunny corpus
+  // (src/lib/gunnyCorpus.ts). Both must travel with the operatorContext so
+  // route.ts can resolve them without a separate DB round-trip.
+  trainingPath?: string;
+  lifeStage?: 'pregnancy' | 'postpartum';
+
+  // ──── WS5 (May 2026) — context personalization ────
+  // Today's readiness check-in (sleep/stress/mood/readiness/energy on
+  // 1-10 scales). Gunny used to see only the static profile.readiness
+  // / profile.sleep / profile.stress (last-known values from intake),
+  // which made coaching deaf to "I slept like crap last night" without
+  // an explicit chat mention. Surfacing the dated check-in lets Gunny
+  // ratchet intensity recommendations on actual today-state.
+  todayReadiness: {
+    date: string;
+    sleep?: number;
+    stress?: number;
+    mood?: number;
+    readiness?: number;
+    energy?: number;
+    notes?: string;
+  } | null;
+
+  // Compliance signal — completed vs scheduled in the last 7 days.
+  // workoutStreak counts forward (consecutive completed days) and
+  // misses the "missed 3 of last 5" pattern. recentCompliance fills
+  // that gap so Gunny can downshift recommendations after a slacker
+  // week instead of blindly stacking volume.
+  recentCompliance: {
+    scheduledLast7d: number;
+    completedLast7d: number;
+    /** scheduled-but-not-completed-and-in-the-past */
+    missedLast7d: number;
+    /** 0-100; null when nothing was scheduled */
+    compliancePct: number | null;
+  };
 }
 
 export function buildFullGunnyContext(
@@ -110,6 +174,21 @@ export function buildFullGunnyContext(
   const recentWorkoutHistory = (() => {
     const dates = Object.keys(workouts).sort().reverse().slice(0, 7);
     if (!dates.length) return 'No workouts logged yet';
+    // Prepend the day-of-week explicitly. Without it, the LLM derives
+    // weekday from the date string AND its training-data sense of
+    // "what day was 2026-05-11?" — and gets it consistently wrong by
+    // one day (operator report May 12: "you called Monday Sunday").
+    // Stamping the canonical weekday here means Gunny just reads it.
+    const weekdayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'long' });
+    const dayOfWeek = (yyyyMmDd: string): string => {
+      try {
+        // T12:00:00 keeps us in the middle of the day so timezone
+        // shifts can't flip us across midnight to the wrong weekday.
+        return weekdayFmt.format(new Date(yyyyMmDd + 'T12:00:00'));
+      } catch {
+        return '';
+      }
+    };
     return dates
       .map(date => {
         const w = workouts[date];
@@ -117,26 +196,57 @@ export function buildFullGunnyContext(
           .filter((b: { type: string }) => b.type === 'exercise')
           .map((b: { exerciseName?: string; prescription?: string }) => `${b.exerciseName} (${b.prescription})`)
           .join(', ');
-        return `${date}: "${w.title || 'Untitled'}" — ${ex}${w.completed ? ' ✅' : ''}`;
+        const wd = dayOfWeek(date);
+        return `${wd ? wd + ' ' : ''}${date}: "${w.title || 'Untitled'}" — ${ex}${w.completed ? ' ✅' : ''}`;
       })
       .join('\n');
   })();
 
   const recentMealHistory = (() => {
+    // 7 days of nutrition is the canonical "this week" window beta users
+    // ask about. Was 3 days; that left "yesterday" workable but anything
+    // earlier was invisible — Gunny would hallucinate totals when asked.
+    // Includes per-meal name + calories so Gunny can answer "what did I
+    // eat for X" without guessing.
+    //
+    // ALWAYS prepend today's bucket explicitly, even when zero meals are
+    // logged. Otherwise dates with no entries are silently absent from
+    // the block, and the LLM has to *infer* "today is empty" from the
+    // absence of a row. RAMPAGE May 8 caught a duplicate-detection false
+    // positive from this: with no row for today, Opus pattern-matched a
+    // fresh Power Shake log against yesterday's identical Power Shake
+    // entry and refused to log, claiming "you already logged this today."
+    // Emitting "TODAY: 0 meals — 0cal" removes the ambiguity — Gunny can
+    // see, literally, that today has no entries yet.
     const meals = (operator.nutrition as AnyRec | undefined)?.meals || {};
-    const dates = Object.keys(meals).sort().reverse().slice(0, 3);
-    if (!dates.length) return 'No meals logged';
-    return dates
+    const dates = Object.keys(meals).sort().reverse().slice(0, 7);
+    const includesToday = dates[0] === today;
+    if (!dates.length && !includesToday) {
+      // No meals at all — but still call out today explicitly so the
+      // LLM doesn't fall back on chat-history pattern matching.
+      return `${today} (TODAY): 0 meals — 0cal, 0g P / 0g C / 0g F`;
+    }
+    // Cap at 7 buckets total so prepending today doesn't bloat the prompt.
+    const orderedDates = includesToday ? dates : [today, ...dates.slice(0, 6)];
+    return orderedDates
       .map(date => {
         const dm = (meals as AnyRec)[date] || [];
         const t = dm.reduce(
-          (a: { calories: number; protein: number }, m: { calories?: number; protein?: number }) => ({
+          (a: { calories: number; protein: number; carbs: number; fat: number }, m: { calories?: number; protein?: number; carbs?: number; fat?: number }) => ({
             calories: a.calories + (m.calories || 0),
             protein: a.protein + (m.protein || 0),
+            carbs: a.carbs + (m.carbs || 0),
+            fat: a.fat + (m.fat || 0),
           }),
-          { calories: 0, protein: 0 }
+          { calories: 0, protein: 0, carbs: 0, fat: 0 }
         );
-        return `${date}: ${dm.length} meals — ${t.calories}cal, ${t.protein}g P`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const itemList = (dm as Array<{ name?: string; calories?: number }>)
+          .map(m => `${m.name || 'meal'} (${m.calories || 0}cal)`)
+          .join(', ');
+        const todayTag = date === today ? ' (TODAY)' : '';
+        const itemLine = dm.length > 0 ? `\n  · ${itemList}` : '';
+        return `${date}${todayTag}: ${dm.length} meals — ${t.calories}cal, ${t.protein}g P / ${t.carbs}g C / ${t.fat}g F${itemLine}`;
       })
       .join('\n');
   })();
@@ -201,6 +311,51 @@ export function buildFullGunnyContext(
       lines.push(row);
     });
     return lines.join('\n');
+  })();
+
+  // WS5 — today's readiness check-in.
+  const todayReadiness: GunnyOperatorContext['todayReadiness'] = (() => {
+    const dr = (operator.dailyReadiness || {}) as AnyRec;
+    const entry = dr[today];
+    if (!entry || typeof entry !== 'object') return null;
+    return {
+      date: today,
+      sleep: typeof entry.sleep === 'number' ? entry.sleep : undefined,
+      stress: typeof entry.stress === 'number' ? entry.stress : undefined,
+      mood: typeof entry.mood === 'number' ? entry.mood : undefined,
+      readiness: typeof entry.readiness === 'number' ? entry.readiness : undefined,
+      energy: typeof entry.energy === 'number' ? entry.energy : undefined,
+      notes: typeof entry.notes === 'string' ? entry.notes : undefined,
+    };
+  })();
+
+  // WS5 — 7-day compliance (scheduled vs completed vs missed-in-past).
+  const recentCompliance: GunnyOperatorContext['recentCompliance'] = (() => {
+    const todayMs = new Date(today + 'T12:00:00').getTime();
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    let scheduled = 0;
+    let completed = 0;
+    let missed = 0;
+    for (const [date, w] of Object.entries(workouts) as Array<[string, AnyRec]>) {
+      if (!w || typeof w !== 'object') continue;
+      const dayMs = new Date(date + 'T12:00:00').getTime();
+      if (Number.isNaN(dayMs)) continue;
+      const ageMs = todayMs - dayMs;
+      if (ageMs < 0 || ageMs > SEVEN_DAYS) continue;
+      // Only count days where a workout was actually scheduled (the
+      // operator opened a planner entry). Empty days don't count
+      // toward "missed" — they're just rest days.
+      scheduled++;
+      if (w.completed === true) {
+        completed++;
+      } else if (ageMs > 0) {
+        // Past day, not completed → missed
+        missed++;
+      }
+      // ageMs === 0 → today, scheduled but not yet attempted; not missed
+    }
+    const pct = scheduled > 0 ? Math.round((completed / scheduled) * 100) : null;
+    return { scheduledLast7d: scheduled, completedLast7d: completed, missedLast7d: missed, compliancePct: pct };
   })();
 
   return {
@@ -314,5 +469,93 @@ export function buildFullGunnyContext(
     lastCompletedWorkout,
     completedWorkoutLogs,
     workoutExecution,
+    macrocycle: (() => {
+      // Apr 2026 macrocycle engine — see src/lib/macrocycle.ts. Returns
+      // null for operators with no active long-horizon goal so Gunny's
+      // existing context isn't bloated for the typical case.
+      const ctx = buildMacroBriefContext(operator, today);
+      if (!ctx) return null;
+      const lines: string[] = [];
+      lines.push('═══ MACROCYCLE — ACTIVE GOAL ═══');
+      lines.push(
+        `Goal: ${ctx.primaryGoal.name} · ${ctx.primaryGoal.type.replace(/_/g, ' ')} · target ${ctx.primaryGoal.targetDate} (${ctx.primaryGoal.daysToGoal} days out)`,
+      );
+      lines.push(
+        `Block: ${ctx.primaryBlock.name} · Week ${ctx.primaryBlock.weekOfBlock} of ${ctx.primaryBlock.weeksInBlock}`,
+      );
+      lines.push(`Intent: ${ctx.primaryBlock.description}`);
+      lines.push(
+        `Scalers: volume ×${ctx.primaryBlock.volumeMultiplier.toFixed(2)} · intensity ×${ctx.primaryBlock.intensityMultiplier.toFixed(2)}`,
+      );
+      if (ctx.primaryBlock.performanceMarker) {
+        lines.push(`Marker to advance: ${ctx.primaryBlock.performanceMarker}`);
+      }
+      if (ctx.primaryBlock.gunnyNotes) {
+        lines.push(`Notes: ${ctx.primaryBlock.gunnyNotes}`);
+      }
+      if (ctx.secondaryGoal && ctx.secondaryBlock) {
+        lines.push('');
+        lines.push(
+          `Secondary goal: ${ctx.secondaryGoal.name} · ${ctx.secondaryBlock.name} (vol ×${ctx.secondaryBlock.volumeMultiplier.toFixed(2)}, int ×${ctx.secondaryBlock.intensityMultiplier.toFixed(2)})`,
+        );
+      }
+      if (ctx.pausedNotes) {
+        lines.push('');
+        lines.push(`Note: ${ctx.pausedNotes}`);
+      }
+      return lines.join('\n');
+    })(),
+    intakeAudit: (() => {
+      // Intake gap audit. Surfaces missing fields (tiered: critical/
+      // important/useful) so Gunny can ask for them in chat instead of
+      // assuming defaults. Null when intake is 100% filled — keeps the
+      // typical fully-onboarded operator's prompt clean.
+      const audit = getIntakeGaps(operator);
+      const totalGaps = audit.critical.length + audit.important.length + audit.useful.length;
+      if (totalGaps === 0) return null;
+      const pct = intakeCompletenessPercent(audit);
+      const lines: string[] = [];
+      lines.push(`═══ INTAKE AUDIT — ${pct}% COMPLETE ═══`);
+      lines.push('Missing fields, ranked by priority. When the operator\'s next message');
+      lines.push('would benefit from any of these (workout, nutrition, programming advice),');
+      lines.push('ask for the missing ones FIRST — one or two at a time, conversationally.');
+      lines.push('Don\'t flood with all gaps. When the operator answers, emit <profile_json>');
+      lines.push('with their answer in the appropriate slot (intake / preferences / profile).');
+      if (audit.critical.length) {
+        lines.push('');
+        lines.push('CRITICAL (workout shape — must have):');
+        for (const g of audit.critical) lines.push(`  - ${g.field} → "${g.prompt}" (write to ${g.target})`);
+      }
+      if (audit.important.length) {
+        lines.push('');
+        lines.push('IMPORTANT (programming quality + safety):');
+        for (const g of audit.important) lines.push(`  - ${g.field} → "${g.prompt}" (write to ${g.target})`);
+      }
+      if (audit.useful.length) {
+        lines.push('');
+        lines.push('USEFUL (nutrition + recovery sanity):');
+        for (const g of audit.useful) lines.push(`  - ${g.field} → "${g.prompt}" (write to ${g.target})`);
+      }
+      return lines.join('\n');
+    })(),
+    isJunior: operator.isJunior,
+    juniorAge: operator.juniorAge,
+    parentIds: operator.parentIds,
+    sportProfile: operator.sportProfile,
+    juniorConsent: operator.juniorConsent,
+    // Backward-compat fallback: pre-fix IntakeForm wrote trainingPath to
+    // preferences.trainingPath (line 277 read from intake state directly,
+    // bypassing fullIntake's incomplete enumeration) but never to
+    // intake.trainingPath. Existing operators who completed intake under
+    // that code path have prefs.trainingPath populated and intake.trainingPath
+    // missing — falling back to prefs lets Gunny respect their selection
+    // without forcing a re-intake. New intakes (post-fix) populate both.
+    trainingPath: intake?.trainingPath || prefs?.trainingPath,
+    lifeStage:
+      intake?.lifeStage === 'pregnancy' || intake?.lifeStage === 'postpartum'
+        ? intake.lifeStage
+        : undefined,
+    todayReadiness,
+    recentCompliance,
   };
 }

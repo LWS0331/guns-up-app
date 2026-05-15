@@ -3,18 +3,27 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
-import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
+import { hasCommanderAccess } from '@/lib/tierGates';
+import { EXERCISE_LIBRARY, getVideoUrl, resolveExerciseName } from '@/data/exercises';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import { VoiceCommand } from '@/components/VoiceInput';
 import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice } from '@/lib/tts';
+import { resolveRestSeconds } from '@/lib/restTimer';
+import PostWorkoutAnalysis from '@/components/PostWorkoutAnalysis';
 import VideoModal from '@/components/VideoModal';
 import WarmupMovementCard from '@/components/WarmupMovementCard';
 import HRZoneGauge from '@/components/HRZoneGauge';
 import VitalsSticky from '@/components/VitalsSticky';
 import Icon from '@/components/Icons';
-import WorkoutPTT from '@/components/WorkoutPTT';
+// WorkoutPTT (right-side mic FAB) was removed per the canonical spec —
+// the only floating element on Workout Mode is the GunnyFab on the LEFT.
+// Voice commands are still parsed via VoiceInput.tsx wherever they're
+// triggered (chat composer long-press, Gunny panel) — see
+// src/components/VoiceInput.tsx for the parser. Form-check video upload
+// is handled inside the per-exercise NotesFormPopover instead.
+import NotesFormPopover from '@/components/NotesFormPopover';
 import { parseMovementText } from '@/lib/parseMovementText';
 import { buildSearchUrl } from '@/lib/videoUrl';
 import { getAuthToken } from '@/lib/authClient';
@@ -223,13 +232,21 @@ interface PlannerProps {
   operator: Operator;
   onUpdateOperator: (updated: Operator) => void;
   onOpenGunny?: () => void;
-  onSendGunnyMessage?: (text: string) => void;
+  /** Send a message to Gunny from inside Workout Mode. Opts.image is a
+   *  data-URL (base64) that gets attached as a Claude vision content
+   *  block — used by the form-check upload path in NotesFormPopover. */
+  onSendGunnyMessage?: (text: string, opts?: { image?: string }) => void;
   gunnyVoiceResponse?: string | null; // Gunny's spoken response — show as overlay
   onDismissGunnyResponse?: () => void;
   onWorkoutModeChange?: (state: WorkoutModeState) => void;
+  /** Fired AFTER handleSaveWorkout commits — gives the parent a chance to
+   *  keep the planner tab active. Per beta hotfix (Apr 2026): some users
+   *  reported the save bouncing them back to the COC dashboard; the parent
+   *  should respond by ensuring activeTab stays 'planner'. */
+  onWorkoutSaved?: () => void;
 }
 
-const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, gunnyVoiceResponse, onDismissGunnyResponse, onWorkoutModeChange }) => {
+const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, gunnyVoiceResponse, onDismissGunnyResponse, onWorkoutModeChange, onWorkoutSaved }) => {
   const { t, language } = useLanguage();
   // ============================================================================
   // STATE
@@ -261,6 +278,23 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // Drag and drop state
   const [dragDate, setDragDate] = useState<string | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  // Touch drag-and-drop state. HTML5 native drag (the `draggable`
+  // attribute + onDragStart/onDrop) does NOT fire on mobile touch
+  // devices — iOS Safari and most Android browsers only synthesize
+  // drag events from mouse input. So we emulate drag on touch via a
+  // long-press → touchmove → touchend pipeline. The long-press timer
+  // ref distinguishes a tap (which should still navigate to Day view)
+  // from an intent-to-drag (~250ms hold).
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchDragActiveRef = useRef(false);
+  // Records where the finger first landed so we can apply a movement
+  // threshold before cancelling the long-press. iOS Safari fires
+  // touchmove for sub-pixel jitter just from placing a finger on the
+  // screen — without a threshold the long-press timer was getting
+  // cancelled before the 250ms hold ever finished, so drag never
+  // activated. 10px tolerance is generous enough to absorb finger
+  // jitter but tight enough that a real drag-intent registers as one.
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Workout builder state
   const [builderData, setBuilderData] = useState<Workout>({
@@ -279,6 +313,20 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [autocompleteFor, setAutocompleteFor] = useState<number | null>(null);
   const [workoutMode, setWorkoutMode] = useState(false); // Workout execution mode
   const [activeBlockIdx, setActiveBlockIdx] = useState(0);
+
+  // ─── Workout-mode stepped flow ──────────────────────────────────────────
+  // Per the canonical spec, Workout Mode is a guided stepper — one screen at
+  // a time so the active phase always fits on iPhone + iPad without
+  // truncation or scroll-hidden affordances. Steps are derived from the
+  // workout's warmup / blocks / cooldown shape on each render. The stepIdx
+  // here is just the cursor; the steps[] array is computed inside
+  // renderWorkoutMode() so it stays in sync with the live workout edits
+  // (Add Exercise / Remove Last during execution).
+  const [stepIdx, setStepIdx] = useState(0);
+
+  // Notes / Form-Demo / Photo-Upload popover. Holds the active block id
+  // when open so the popover knows which exercise's notes to bind to.
+  const [notesPopoverFor, setNotesPopoverFor] = useState<string | null>(null);
   const [restTimer, setRestTimer] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
   const [restTimerMax, setRestTimerMax] = useState(0); // for progress ring calculation
@@ -287,8 +335,43 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const fallbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string }>>({});
 
+  // REMOVE THIS — confirm-then-delete + undo toast.
+  //
+  // Old behavior: single tap = instant delete with no undo. Users
+  // were accidentally removing exercises mid-workout and asking
+  // Gunny to add them back (which was its own hit-or-miss path —
+  // see workoutModification.ts comments). New flow:
+  //   1. First tap → button label + style flips to confirm. 3-sec
+  //      timeout reverts back to the safe state.
+  //   2. Second tap (within 3 sec) → actually removes, snapshots
+  //      the removed block + its results into removedSnapshot, and
+  //      shows a 10-sec UNDO toast.
+  //   3. Tap UNDO on the toast → restore the block at its original
+  //      array position with its original results intact.
+  const [removeConfirmAt, setRemoveConfirmAt] = useState<number | null>(null);
+  const [removedSnapshot, setRemovedSnapshot] = useState<{
+    dateStr: string;
+    block: WorkoutBlock;
+    insertAt: number;
+    resultsForBlock: { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string } | null;
+    removedAt: number;
+  } | null>(null);
+  const removeConfirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Mission Complete overlay — shown after COMPLETE WORKOUT, before returning to day view
   const [showCompletionScreen, setShowCompletionScreen] = useState(false);
+
+  // In-workout "Ask Gunny" overlay (Apr 2026 hotfix). Replaces the
+  // "tap-to-open-Gunny-tab" button that was kicking operators out of
+  // workout mode mid-session and dropping their timer/progress. The
+  // overlay sits on top of the workout view so the underlying state
+  // (timer, set log, current step) keeps running. Submission goes via
+  // the existing onSendGunnyMessage prop; the response comes back
+  // through gunnyVoiceResponse and renders in the existing amber
+  // overlay above the active block.
+  const [showAskGunnyOverlay, setShowAskGunnyOverlay] = useState(false);
+  const [askGunnyDraft, setAskGunnyDraft] = useState('');
   const [completionData, setCompletionData] = useState<{
     title: string;
     duration: number;       // minutes
@@ -296,7 +379,21 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     totalVolume: number;    // lbs
     completionRate: number; // 0-100
     gunnyMessage: string;
+    /** Auto-detected PRs from this session (Apr 2026 hotfix). Surfaced
+     *  in the completion screen so the operator sees the wins they hit;
+     *  also already appended to operator.prs by handleSaveResults. */
+    newPRs?: Array<{ exercise: string; weight: number; reps: number; isBaseline: boolean }>;
+    /** Workout date — needed to write sessionRpe back from the
+     *  autoregulation completion overlay. */
+    dateStr?: string;
   } | null>(null);
+  // Post-workout sRPE capture — Foster's session RPE 1-10. Bound to
+  // the completion overlay; persisted to Workout.sessionRpe when the
+  // user dismisses with DEBRIEF COMPLETE. Drives the autoregulation
+  // engine (ACWR + load monitoring). Default to 7 (typical "challenging
+  // but doable" working session) so a single tap = capture; user can
+  // adjust before dismissing.
+  const [pendingSrpe, setPendingSrpe] = useState<number>(7);
 
   // Voice command state
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
@@ -307,6 +404,24 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   useEffect(() => {
     setSelectedVoice(getPreferredVoice());
   }, []);
+
+  // ─── Touch-drag scroll suppression ────────────────────────────────────
+  // React (since 17) attaches touch listeners as PASSIVE by default,
+  // which means `e.preventDefault()` inside an onTouchMove handler is
+  // silently ignored on mobile browsers. To stop the page from scrolling
+  // while a drag is active, we attach a NON-passive document-level
+  // touchmove listener that calls preventDefault for the duration of
+  // the drag. The listener auto-detaches on drag end (effect cleanup).
+  useEffect(() => {
+    if (!dragDate) return;
+    const onMove = (e: TouchEvent) => {
+      if (touchDragActiveRef.current) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('touchmove', onMove, { passive: false });
+    return () => document.removeEventListener('touchmove', onMove);
+  }, [dragDate]);
   const voiceFeedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
   const showVoiceFeedback = useCallback((msg: string) => {
@@ -382,9 +497,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         const blockData = workoutResults[exerciseBlocks[i].id];
         if (!blockData || blockData.sets.some(s => !s.completed)) {
           setActiveBlockIdx(i);
-          const exName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName || 'Next exercise';
-          showVoiceFeedback(`NEXT: ${exName}`);
-          speak(`Moving to ${exName}.`);
+          // Resolve to ES name when the operator is on Spanish so
+          // both the on-screen banner and the TTS voice match the
+          // language they're using everywhere else.
+          const rawName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName;
+          const exName = rawName
+            ? resolveExerciseName(rawName, language)
+            : (language === 'es' ? 'Siguiente ejercicio' : 'Next exercise');
+          showVoiceFeedback(`${language === 'es' ? 'SIGUIENTE' : 'NEXT'}: ${exName}`);
+          speak(language === 'es' ? `Pasando a ${exName}.` : `Moving to ${exName}.`);
           break;
         }
       }
@@ -403,7 +524,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const [currentHR, setCurrentHR] = useState<number | null>(null);
   const [targetZone, setTargetZone] = useState<number>(3); // default Zone 3
   const [hrSource, setHrSource] = useState<'wearable' | 'manual' | 'none'>('none');
-  const [showHrPanel, setShowHrPanel] = useState(true);
+  // showHrPanel was the toggle for the legacy expanded HR panel that
+  // was deleted when the HUD became the source of truth for HR data.
+  // State removed — kept the comment for future-grep.
   // ═══ Task 20/21: WARMUP + COOLDOWN collapsible + in-app video modal ═══
   const [videoModalState, setVideoModalState] = useState<{ url: string; title: string } | null>(null);
   const [warmupExpanded, setWarmupExpanded] = useState(true);
@@ -418,11 +541,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // HR Zone definitions based on max HR (220 - age)
   const maxHR = 220 - (operator.profile?.age || 30);
   const HR_ZONES = [
-    { zone: 1, name: 'RECOVERY', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
-    { zone: 2, name: 'FAT BURN', min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
-    { zone: 3, name: 'CARDIO', min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
-    { zone: 4, name: 'THRESHOLD', min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
-    { zone: 5, name: 'MAX EFFORT', min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
+    { zone: 1, name: t('planner.hr_zone_recovery'),  min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
+    { zone: 2, name: t('planner.hr_zone_fat_burn'),  min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
+    { zone: 3, name: t('planner.hr_zone_cardio'),    min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
+    { zone: 4, name: t('planner.hr_zone_threshold'), min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
+    { zone: 5, name: t('planner.hr_zone_max_effort'),min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
   ];
 
   const getCurrentZone = (hr: number) => {
@@ -911,7 +1034,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     setShowWorkoutBuilder(false);
     setWorkoutMode(false);
     /* activeListening removed — use Radio tab */
-    // Stay on day view so user can review the saved workout — don't clear selectedDate
+    // Stay on day view so user can review the saved workout. Per beta hotfix
+    // (Apr 2026): explicitly force viewMode='day' AND notify the parent so
+    // it can keep the planner tab active. Some operators reported the save
+    // bouncing them back to the COC dashboard; the defensive fix here is to
+    // re-assert the day view + lock the active tab via the callback.
+    setViewMode('day');
+    onWorkoutSaved?.();
   };
 
   const handleCancelWorkout = () => {
@@ -1100,7 +1229,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               type="button"
               className="btn btn-sm btn-ghost"
               onClick={handleExportJson}
-              aria-label="Export training plan as JSON"
+              aria-label={t('planner.export_aria')}
             >
               Export
             </button>
@@ -1117,7 +1246,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             marginBottom: isMobile ? 2 : 4,
           }}
         >
-          {(isMobile ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']).map((day, i) => (
+          {(isMobile
+            ? [t('planner.day_min_mon'), t('planner.day_min_tue'), t('planner.day_min_wed'), t('planner.day_min_thu'), t('planner.day_min_fri'), t('planner.day_min_sat'), t('planner.day_min_sun')]
+            : [t('planner.day_short_mon'), t('planner.day_short_tue'), t('planner.day_short_wed'), t('planner.day_short_thu'), t('planner.day_short_fri'), t('planner.day_short_sat'), t('planner.day_short_sun')]
+          ).map((day, i) => (
             <div
               key={`${day}-${i}`}
               className="t-label"
@@ -1162,7 +1294,25 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               return (
                 <div
                   key={dateStr}
-                  onClick={() => { setSelectedDate(dateStr); setViewMode('day'); }}
+                  /* data-cal attributes power the touch-drag path —
+                     during a touch drag we use document.elementFromPoint
+                     to find the cell under the finger, then read its
+                     dataset.calDate to know the drop target. The HTML5
+                     drag path doesn't need them but they're harmless. */
+                  data-cal-cell="true"
+                  data-cal-date={dateStr}
+                  onClick={() => {
+                    // Suppress the click that fires after a touch drag
+                    // releases over a different cell (iOS Safari fires
+                    // the synthetic click on touchend → would navigate
+                    // the operator into Day view of the drop target).
+                    if (touchDragActiveRef.current) {
+                      touchDragActiveRef.current = false;
+                      return;
+                    }
+                    setSelectedDate(dateStr);
+                    setViewMode('day');
+                  }}
                   onContextMenu={e => { e.preventDefault(); setShowDayMenu(dateStr); }}
                   onDragOver={e => { e.preventDefault(); setDragOverDate(dateStr); }}
                   onDragEnter={e => { e.preventDefault(); setDragOverDate(dateStr); }}
@@ -1175,8 +1325,103 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     setDragDate(null);
                     setDragOverDate(null);
                   }}
+                  /* ─── Touch drag emulation, cell-level ─────────────
+                     Moved up from the workout-title div in PR #54
+                     because (a) the title is a 12px hit target —
+                     unreliably tappable on phone, and (b) the previous
+                     handler cancelled the long-press timer on ANY
+                     touchmove, but iOS fires touchmove for sub-pixel
+                     finger jitter just from placing a finger. The
+                     long-press never reached 250ms.
+                     New behavior:
+                       • touchstart → record finger origin, start 250ms
+                                       long-press timer (only when the
+                                       cell has a workout to drag)
+                       • touchmove  → if finger moved >10px from origin,
+                                       cancel the long-press (treat as
+                                       scroll); otherwise let the timer
+                                       fire and activate drag. After
+                                       activation, track elementFromPoint
+                                       to update dragOverDate.
+                       • touchend   → if drag landed on a different cell,
+                                       handleMoveWorkout. Suppress the
+                                       iOS-synthesized click via
+                                       touchDragActiveRef.
+                       • touchcancel → wash all state.
+                     A short tap (no long-press) still bubbles to onClick
+                     above and navigates to Day view. */
+                  onTouchStart={workout ? e => {
+                    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                    const t = e.touches[0];
+                    if (t) touchStartPosRef.current = { x: t.clientX, y: t.clientY };
+                    longPressTimerRef.current = setTimeout(() => {
+                      longPressTimerRef.current = null;
+                      touchDragActiveRef.current = true;
+                      setDragDate(dateStr);
+                      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                        try { navigator.vibrate(40); } catch { /* noop */ }
+                      }
+                    }, 250);
+                  } : undefined}
+                  onTouchMove={workout ? e => {
+                    // Pre-activation: only cancel timer once finger
+                    // moves more than 10px from origin. Below that =
+                    // jitter, treat as still-holding.
+                    if (longPressTimerRef.current) {
+                      const t = e.touches[0];
+                      const start = touchStartPosRef.current;
+                      if (t && start) {
+                        const dx = t.clientX - start.x;
+                        const dy = t.clientY - start.y;
+                        if (Math.hypot(dx, dy) > 10) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }
+                      return;
+                    }
+                    // Post-activation: track the cell under the finger.
+                    // Scroll suppression is handled by the document-
+                    // level non-passive listener (effect attached when
+                    // dragDate is set).
+                    if (!touchDragActiveRef.current) return;
+                    const touch = e.touches[0];
+                    if (!touch) return;
+                    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const cell = (el as HTMLElement | null)?.closest('[data-cal-cell]') as HTMLElement | null;
+                    const targetDate = cell?.dataset.calDate ?? null;
+                    if (targetDate !== dragOverDate) setDragOverDate(targetDate);
+                  } : undefined}
+                  onTouchEnd={workout ? () => {
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                      touchDragActiveRef.current = false;
+                      touchStartPosRef.current = null;
+                      return; // tap, not a drag — let onClick fire
+                    }
+                    if (touchDragActiveRef.current && dragOverDate && dragOverDate !== dateStr) {
+                      handleMoveWorkout(dateStr, dragOverDate);
+                    }
+                    setDragDate(null);
+                    setDragOverDate(null);
+                    touchStartPosRef.current = null;
+                    Promise.resolve().then(() => {
+                      touchDragActiveRef.current = false;
+                    });
+                  } : undefined}
+                  onTouchCancel={workout ? () => {
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                    }
+                    touchDragActiveRef.current = false;
+                    setDragDate(null);
+                    setDragOverDate(null);
+                    touchStartPosRef.current = null;
+                  } : undefined}
                   style={{
-                    minHeight: isMobile ? 60 : 90,
+                    minHeight: isMobile ? 60 : 110,
                     padding: isMobile ? 4 : 8,
                     backgroundColor: cellBg,
                     border: cellBorder,
@@ -1184,6 +1429,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     position: 'relative',
                     transition: 'all 0.2s ease',
                     overflow: 'hidden',
+                    // Disable native long-press text-selection / magnifier
+                    // on cells that are draggable so iOS doesn't fight
+                    // the long-press-to-drag gesture.
+                    ...(workout ? {
+                      WebkitUserSelect: 'none' as const,
+                      userSelect: 'none' as const,
+                      WebkitTouchCallout: 'none' as const,
+                      touchAction: 'manipulation' as const,
+                    } : {}),
                   }}
                 >
                   {/* Today left accent stripe — kept as a separate
@@ -1223,58 +1477,108 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   </div>
 
                   {workout && (
-                    <div
-                      draggable={true}
-                      onDragStart={e => {
-                        setDragDate(dateStr);
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
-                      style={{
-                        fontFamily: 'var(--body)',
-                        fontSize: 12,
-                        color: 'var(--green)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        marginBottom: 4,
-                        paddingLeft: 6,
-                        borderLeft: '1px solid var(--border-green-strong)',
-                        cursor: dragDate === dateStr ? 'grabbing' : 'grab',
-                        opacity: dragDate === dateStr ? 0.6 : 1,
-                        transition: 'opacity 0.2s ease',
-                      }}
-                    >
-                      {workout.title}
-                    </div>
+                    <>
+                      {/* Workout title strip — green-bordered green-text
+                          line. Keeps the HTML5 draggable + onDragStart/
+                          onDragEnd handlers for the DESKTOP path (mouse
+                          drag). The TOUCH drag pipeline lives on the
+                          parent cell so the whole cell is the long-press
+                          hit target on phone/iPad — see the cell's
+                          onTouchStart/Move/End above. */}
+                      <div
+                        draggable={true}
+                        onDragStart={e => {
+                          setDragDate(dateStr);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
+                        style={{
+                          fontFamily: 'var(--body)',
+                          fontSize: 12,
+                          color: 'var(--green)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          marginBottom: 4,
+                          paddingLeft: 6,
+                          borderLeft: '1px solid var(--border-green-strong)',
+                          cursor: dragDate === dateStr ? 'grabbing' : 'grab',
+                          opacity: dragDate === dateStr ? 0.6 : 1,
+                          transition: 'opacity 0.2s ease',
+                        }}
+                      >
+                        {workout.title}
+                      </div>
+                      {/* Abbreviated movement list per the user's
+                          CoachRX reference — top 3 exercise names with
+                          a tight prescription crumb. Phone cells are
+                          too small (~60-70px tall) to fit this without
+                          overflow, so it only renders at iPad+ widths
+                          (cell minHeight: 110px there, ~3 lines fit).
+                          Conditioning blocks render their format label
+                          (EMOM × 6) instead of an exercise name.
+                          Letter prefixes (A) / B) / C)) match the
+                          report-style Day view so the Month and Day
+                          views read as the same vocabulary. */}
+                      {!isMobile && workout.blocks && workout.blocks.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 6 }}>
+                          {workout.blocks.slice(0, 3).map((block, bi) => {
+                            const label = getBlockLabels(workout.blocks)[bi];
+                            const isExercise = block.type === 'exercise';
+                            const name = isExercise
+                              ? resolveExerciseName((block as ExerciseBlock).exerciseName, language)
+                              : (block as ConditioningBlock).format;
+                            const rx = isExercise ? (block as ExerciseBlock).prescription : '';
+                            // Pull just the sets-x-reps fragment out of
+                            // the prescription for the crumb (e.g.
+                            // "4x6-8" out of "4x6-8 @ 195-225 lbs · RPE 7-9 · ...").
+                            const setsReps = rx?.match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i)?.[0] || '';
+                            return (
+                              <div
+                                key={block.id}
+                                style={{
+                                  fontFamily: 'var(--mono)',
+                                  fontSize: 9,
+                                  lineHeight: 1.3,
+                                  color: isExercise ? 'var(--text-secondary)' : 'var(--amber)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                <span style={{ color: 'var(--green)', marginRight: 4 }}>{label})</span>
+                                {name}
+                                {setsReps && (
+                                  <span style={{ color: 'var(--text-tertiary)', marginLeft: 4 }}>
+                                    · {setsReps}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {workout.blocks.length > 3 && (
+                            <div
+                              style={{
+                                fontFamily: 'var(--mono)',
+                                fontSize: 9,
+                                color: 'var(--text-dim)',
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              + {workout.blocks.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
 
-                  {/* "DAY" stencil — canonical spec marks workout days
-                      with a bottom-aligned stencil glyph so the
-                      calendar reads at-a-glance which days are loaded.
-                      Uses Orbitron 800 + heavy letter-spacing for the
-                      stenciled feel; ghosts the green token to ~22%
-                      so it sits behind the title without competing. */}
-                  {workout && (
-                    <div
-                      aria-hidden
-                      style={{
-                        position: 'absolute',
-                        left: 0,
-                        right: 0,
-                        bottom: isMobile ? 2 : 4,
-                        textAlign: 'center',
-                        fontFamily: '"Orbitron", sans-serif',
-                        fontWeight: 800,
-                        fontSize: isMobile ? 9 : 11,
-                        letterSpacing: isMobile ? 2 : 3,
-                        color: 'rgba(0,255,65,0.22)',
-                        pointerEvents: 'none',
-                      }}
-                    >
-                      DAY
-                    </div>
-                  )}
+                  {/* The "DAY" stencil watermark (added in PR #48) was
+                      removed per user feedback — it sat behind the
+                      truncated workout title and competed visually
+                      with the title text. The green-bordered title
+                      strip itself is sufficient at-a-glance evidence
+                      that a day is loaded. */}
 
                   {tag && (
                     <span
@@ -1379,19 +1683,75 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
                 {workout ? (
                   <div>
-                    <div className="t-display-m" style={{ color: 'var(--green)', fontSize: 12, marginBottom: 4 }}>
+                    <div
+                      className="t-display-m"
+                      style={{
+                        color: 'var(--green)',
+                        fontSize: 12,
+                        marginBottom: 8,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
                       {workout.title}
                     </div>
-                    <div className="t-mono-sm">
-                      {workout.blocks.length} blocks
-                    </div>
+                    {/* Abbreviated movement list — same vocabulary as
+                        the Month cell version + the Day-view report
+                        list. Letter prefix in mono green, exercise name
+                        + sets-x-reps fragment for the crumb. Up to 5
+                        movements fit comfortably in the 200px Week cell
+                        on iPad+; phone gets fewer rows naturally
+                        through cell width compression. */}
+                    {workout.blocks.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {workout.blocks.slice(0, 5).map((block, bi) => {
+                          const label = getBlockLabels(workout.blocks)[bi];
+                          const isExercise = block.type === 'exercise';
+                          const name = isExercise
+                            ? resolveExerciseName((block as ExerciseBlock).exerciseName, language)
+                            : (block as ConditioningBlock).format;
+                          const rx = isExercise ? (block as ExerciseBlock).prescription : '';
+                          const setsReps = rx?.match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i)?.[0] || '';
+                          return (
+                            <div
+                              key={block.id}
+                              className="t-mono-sm"
+                              style={{
+                                fontSize: 10,
+                                lineHeight: 1.35,
+                                color: isExercise ? 'var(--text-secondary)' : 'var(--amber)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              <span style={{ color: 'var(--green)', marginRight: 4, fontWeight: 700 }}>
+                                {label})
+                              </span>
+                              {name}
+                              {setsReps && (
+                                <span style={{ color: 'var(--text-tertiary)', marginLeft: 4 }}>
+                                  · {setsReps}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {workout.blocks.length > 5 && (
+                          <div className="t-mono-sm" style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+                            + {workout.blocks.length - 5} more
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : tag ? (
                   <div className="t-body-sm" style={{ color: getTagColor(tag.color) }}>
                     {tag.note}
                   </div>
                 ) : (
-                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>No workout</div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>{t('planner.no_workout_short')}</div>
                 )}
               </div>
             );
@@ -1446,46 +1806,140 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     } catch { /* vibrate API unavailable — silent */ }
   };
 
-  // Rest timer countdown
+  // Rest timer countdown — wall-clock anchored.
+  //
+  // Why anchored to a wall-clock timestamp instead of a tick counter:
+  // setInterval(..., 1000) is NOT wall-clock-accurate. When the JS
+  // thread is blocked (Gunny chat fetch, big re-render, Markdown
+  // parse) or the mobile tab is backgrounded, ticks get throttled
+  // or batched. The previous implementation decremented `restTimer`
+  // once per tick, so any missed tick = countdown drifted out of
+  // sync with the user's actual perception of time. Worse: when a
+  // backgrounded tab returned, the browser sometimes fired multiple
+  // ticks in a burst, blowing past the prev<=1 threshold and
+  // sometimes triggering the completion alarm at the wrong wall-
+  // clock moment. That's the "fires off randomly" symptom.
+  //
+  // New shape: store the END TIMESTAMP. Each tick recomputes
+  // secondsLeft from `now`. Drift-proof and burst-proof.
+  //
+  // Side effects (alarm + TTS + beeps) moved to a separate effect
+  // that watches secondsLeft transitions. Putting side effects
+  // inside the setState updater (the old shape) was the second bug:
+  // React can invoke an updater multiple times (StrictMode in dev,
+  // concurrent rendering in prod) — each invocation re-fired the
+  // alarm, double-played the TTS, and queued duplicate haptics.
+  // Updaters must be pure; the effect handles the impure work and
+  // uses a ref to fire each side-effect exactly once per cycle.
+  const restEndTimeRef = useRef<number | null>(null);
+  const restAlarmedAtRef = useRef<number | null>(null); // timestamp the cycle ended; idempotency guard
+  const lastBeepSecondRef = useRef<number | null>(null); // dedupe the 3-2-1 beeps so each second beeps once
+  const beepCtxRef = useRef<AudioContext | null>(null); // single shared AudioContext for the per-second beeps
+
+  // Lifecycle: when the user starts/restarts the timer (or adds 30s),
+  // recompute the end timestamp from the CURRENT restTimer value.
+  // setRestTimer + setRestRunning(true) is the only entry point;
+  // pause sets restRunning=false; reset clears restTimer and stops.
   useEffect(() => {
-    if (!restRunning || restTimer <= 0) {
-      if (restTimer <= 0 && restRunning) {
-        setRestRunning(false);
-        playCompletionAlarm();
-        // Visual alarm pulse for 5 seconds
-        setTimerAlarm(true);
-        setTimeout(() => setTimerAlarm(false), 5000);
-        speak('Time. Next set.');
-      }
+    if (!restRunning) {
+      // Cleared / paused — drop the anchor so the next start gets a
+      // fresh end timestamp.
+      restEndTimeRef.current = null;
+      lastBeepSecondRef.current = null;
+      restAlarmedAtRef.current = null;
       return;
     }
-    // Louder beep at 3, 2, 1
-    if (restTimer <= 3 && restTimer > 0) {
-      try {
-        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square';
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 520;
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.01);
-        gain.gain.setValueAtTime(0.6, ctx.currentTime + 0.22);
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.25);
-      } catch { /* AudioContext unavailable — skip countdown beep */ }
-      // Short vibration tick on final countdown (if supported)
-      try {
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-          navigator.vibrate(80);
-        }
-      } catch { /* vibrate API unavailable */ }
-    }
-    const interval = setInterval(() => setRestTimer(prev => prev - 1), 1000);
-    return () => clearInterval(interval);
+    // (Re)anchor whenever the timer flips on or restTimer was changed
+    // externally (e.g. +30s tap during an active rest). Compute end
+    // from now + remaining.
+    restEndTimeRef.current = Date.now() + restTimer * 1000;
+    lastBeepSecondRef.current = null;
+    restAlarmedAtRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restRunning, restTimer]);
+
+  // Tick — pure: reads the wall clock, derives secondsLeft, writes
+  // it to state. No side effects beyond the state write. Runs at
+  // 250ms so the UI display is smoother than 1Hz; the alarm timing
+  // stays accurate because everything is wall-clock derived.
+  useEffect(() => {
+    if (!restRunning) return;
+    const tick = () => {
+      const endAt = restEndTimeRef.current;
+      if (endAt == null) return;
+      const remaining = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      setRestTimer((prev) => (prev === remaining ? prev : remaining));
+      if (remaining <= 0) {
+        setRestRunning(false);
+      }
+    };
+    // Tick immediately so a freshly-started 0-second timer doesn't
+    // wait 250ms to fire its alarm.
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [restRunning]);
+
+  // Side effects — single source of truth. Watches restTimer and
+  // fires beeps at 3/2/1 (deduped via lastBeepSecondRef so a burst
+  // tick pattern can't trigger the same second's beep twice) and
+  // the completion alarm + TTS exactly once per timer cycle (deduped
+  // via restAlarmedAtRef).
+  useEffect(() => {
+    // Beep on each of the final 3 seconds — once per second value.
+    if (restRunning && restTimer > 0 && restTimer <= 3) {
+      if (lastBeepSecondRef.current !== restTimer) {
+        lastBeepSecondRef.current = restTimer;
+        try {
+          const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          // Reuse a single shared context — creating one per beep
+          // exhausts the browser's per-page AudioContext quota
+          // (capped around 6 on Chromium). Lazily create on first
+          // beep so we don't pay the suspend/resume cost on every
+          // page load.
+          if (!beepCtxRef.current) beepCtxRef.current = new AudioCtx();
+          const ctx = beepCtxRef.current;
+          // Some browsers suspend the context after period of
+          // inactivity; resume() is a no-op if running.
+          if (ctx.state === 'suspended') void ctx.resume();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 520;
+          const t = ctx.currentTime;
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.6, t + 0.01);
+          gain.gain.setValueAtTime(0.6, t + 0.22);
+          gain.gain.linearRampToValueAtTime(0, t + 0.25);
+          osc.start(t);
+          osc.stop(t + 0.25);
+        } catch { /* AudioContext unavailable */ }
+        try {
+          if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            navigator.vibrate(80);
+          }
+        } catch { /* vibrate unavailable */ }
+      }
+    }
+
+    // Completion alarm + TTS — fire exactly once when the cycle
+    // ends. restAlarmedAtRef is set with the end-timestamp; a new
+    // timer cycle resets the ref so the next alarm can fire.
+    if (restTimer === 0 && restEndTimeRef.current != null) {
+      const cycleId = restEndTimeRef.current;
+      if (restAlarmedAtRef.current !== cycleId) {
+        restAlarmedAtRef.current = cycleId;
+        playCompletionAlarm();
+        setTimerAlarm(true);
+        const dismissId = window.setTimeout(() => setTimerAlarm(false), 5000);
+        speak('Time. Next set.');
+        return () => window.clearTimeout(dismissId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restTimer, restRunning]);
 
   // Wake lock — keep screen awake during rest timer and workout mode
   useEffect(() => {
@@ -1661,6 +2115,73 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         ),
       };
       const updated = { ...operator };
+
+      // ─── AUTO-PR DETECTION ────────────────────────────────────────────────
+      // Scan every exercise block in the just-completed workout. For each
+      // block, find the heaviest completed set; if it beats the operator's
+      // prior best for that exercise (case-insensitive match) — or there
+      // is no prior best for the exercise — append a fresh PRRecord.
+      // Mirrors lib/workoutAnalysis.ts:76 isPR semantics so the "PR flag in
+      // Gunny's context" and "PR row in the PR Board" can't drift.
+      const existingPRs = updated.prs || [];
+      const newPRs: import('@/lib/types').PRRecord[] = [];
+      const todayStr = getLocalDateStr();
+      workout.blocks.forEach(block => {
+        if (block.type !== 'exercise') return;
+        const exerciseName = (block as ExerciseBlock).exerciseName?.trim();
+        if (!exerciseName) return;
+        const blockResult = savedResults.blockResults[block.id];
+        if (!blockResult) return;
+        const completedSets = (blockResult.sets || []).filter(s => s.completed && (s.weight || 0) > 0 && (s.reps || 0) > 0);
+        if (completedSets.length === 0) return;
+        // Heaviest set this session — ties broken by higher reps so logging
+        // 225×8 doesn't get masked by 225×5 on the same day.
+        let topWeight = 0;
+        let topReps = 0;
+        for (const s of completedSets) {
+          const w = s.weight || 0;
+          const r = s.reps || 0;
+          if (w > topWeight || (w === topWeight && r > topReps)) {
+            topWeight = w;
+            topReps = r;
+          }
+        }
+        if (topWeight === 0) return;
+
+        const exNameKey = exerciseName.toLowerCase();
+        const priorPR = existingPRs.find(
+          p => (p.exercise || '').trim().toLowerCase() === exNameKey
+        );
+        const isStrengthPR = priorPR
+          ? topWeight > priorPR.weight ||
+            (topWeight === priorPR.weight && topReps > (priorPR.reps || 0))
+          : true; // first time logging this exercise → baseline PR
+
+        if (!isStrengthPR) return;
+
+        newPRs.push({
+          id: `pr-auto-${Date.now()}-${block.id}`,
+          exercise: exerciseName,
+          weight: topWeight,
+          reps: topReps,
+          date: todayStr,
+          notes: priorPR
+            ? `Auto-detected from ${workout.title || 'workout'} (prev best ${priorPR.weight} × ${priorPR.reps || 0})`
+            : `Auto-detected baseline from ${workout.title || 'workout'}`,
+          type: 'strength',
+          // Stamp the operator's current training path so the PR Board
+          // can group lifetime bests by path (a 405 deadlift on
+          // powerlifting and a 315 deadlift on tactical are both "best
+          // for that path"). Falls back to undefined when intake
+          // hasn't been completed.
+          path: operator.intake?.trainingPath,
+        });
+      });
+
+      if (newPRs.length > 0) {
+        updated.prs = [...existingPRs, ...newPRs];
+      }
+
       updated.workouts[dateStr] = { ...workout, results: savedResults, completed: true };
       onUpdateOperator(updated);
 
@@ -1724,7 +2245,16 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         totalVolume,
         completionRate,
         gunnyMessage,
+        newPRs: newPRs.map(pr => ({
+          exercise: pr.exercise,
+          weight: pr.weight,
+          reps: pr.reps,
+          // pr.notes starts with "Auto-detected baseline" for first-time entries.
+          isBaseline: (pr.notes || '').startsWith('Auto-detected baseline'),
+        })),
+        dateStr,
       });
+      setPendingSrpe(7);  // reset to default for each new completion
       setShowCompletionScreen(true);
 
       // Ascending victory chord
@@ -1772,6 +2302,66 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
       });
     };
 
+    // ─── Stepped flow scaffolding ──────────────────────────────────────────
+    // The canonical Workout Mode is a guided stepper. Steps are derived
+    // each render from the workout's warmup / blocks / cooldown shape so
+    // mid-workout edits (Add Exercise / Remove Last) re-flow cleanly.
+    type WorkoutStep =
+      | { kind: 'warmup' }
+      | { kind: 'exercise'; blockIdx: number }
+      | { kind: 'cooldown' };
+
+    const hasWarmup = !!workout.warmup && parseMovementText(workout.warmup).length > 0;
+    const hasCooldown = !!workout.cooldown && parseMovementText(workout.cooldown).length > 0;
+
+    const steps: WorkoutStep[] = [];
+    if (hasWarmup) steps.push({ kind: 'warmup' });
+    workout.blocks.forEach((_, i) => steps.push({ kind: 'exercise', blockIdx: i }));
+    if (hasCooldown) steps.push({ kind: 'cooldown' });
+    if (steps.length === 0) steps.push({ kind: 'exercise', blockIdx: 0 }); // fallback
+
+    const safeStepIdx = Math.max(0, Math.min(stepIdx, steps.length - 1));
+    const currentStep = steps[safeStepIdx];
+    const isLastStep = safeStepIdx === steps.length - 1;
+    const isFirstStep = safeStepIdx === 0;
+
+    // Sync activeBlockIdx with the cursor when we're on an exercise step
+    // so the existing "active block" highlighting + voice-command targeting
+    // stay aligned with the stepper position.
+    if (currentStep.kind === 'exercise' && currentStep.blockIdx !== activeBlockIdx) {
+      // Defer to a microtask to avoid a setState-during-render warning.
+      Promise.resolve().then(() => setActiveBlockIdx(currentStep.blockIdx));
+    }
+
+    const goPrev = () => {
+      if (!isFirstStep) setStepIdx(safeStepIdx - 1);
+    };
+    const goNext = () => {
+      if (!isLastStep) {
+        setStepIdx(safeStepIdx + 1);
+      } else {
+        // Last step's Next is "Complete Workout" — fire the existing save flow.
+        handleSaveResults();
+      }
+    };
+
+    // Compute % progress for the stepper readout. Counts logged sets across
+    // all exercise blocks plus a 1-step bonus each for warmup/cooldown
+    // when the user has scrolled past them.
+    const totalSets = workout.blocks.reduce((acc, b) => {
+      if (b.type === 'exercise') {
+        const ps = parseInt(b.prescription?.match(/(\d+)\s*x/)?.[1] || '3');
+        return acc + ps;
+      }
+      return acc + 1; // conditioning block counts as 1
+    }, 0);
+    const completedSetsCount = Object.values(results).reduce((acc, blockData) => {
+      return acc + (blockData.sets || []).filter(s => s.completed).length;
+    }, 0);
+    const progressPct = totalSets > 0
+      ? Math.round((completedSetsCount / totalSets) * 100)
+      : 0;
+
     return (
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
         {/* Fallback HTML5 audio — short data-URI beep (pure tone via WAV header) */}
@@ -1805,9 +2395,37 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             </button>
           </div>
         </div>
-        <h3 className="t-display-l" style={{ color: 'var(--green)', marginBottom: 12 }}>
+        <h3
+          className="t-display-l"
+          style={{
+            color: 'var(--green)',
+            marginBottom: 4,
+            textShadow: '0 0 12px rgba(0,255,65,0.5)', // canonical glow on accent text
+          }}
+        >
           {workout.title}
         </h3>
+        {/* Workout sub-line — mono metadata strip below the H1 per
+            the canonical screenshot 3. Composes the day tag note
+            (from operator.dayTags) + the active voice (Onyx /
+            Atlas / etc.) so the user sees the live "context strip"
+            for this session at a glance. Renders only the fragments
+            that have data — no orphan separators. */}
+        {(() => {
+          const tag = getDayTag(dateStr);
+          const fragments: string[] = [];
+          if (tag?.note) fragments.push(tag.note.toUpperCase());
+          if (selectedVoice) fragments.push(`Voice: ${selectedVoice}`);
+          if (fragments.length === 0) return null;
+          return (
+            <div
+              className="t-mono-sm"
+              style={{ color: 'var(--text-secondary)', marginBottom: 12, letterSpacing: 1 }}
+            >
+              {fragments.join(' · ')}
+            </div>
+          );
+        })()}
 
         {/* ═══ TACTICAL HUD — handoff .vitals-sticky module ═══
             The canonical Workout Mode mockup DOES use this sticky
@@ -1852,12 +2470,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   ? () => openExerciseVideo(activeBlock.exerciseName, activeBlock.videoUrl)
                   : undefined
               }
-              hrExpanded={showHrPanel}
-              onToggleHrExpanded={() => setShowHrPanel(v => !v)}
               workoutStartTime={workout.results?.startTime}
               onPauseTimer={restRunning ? () => setRestRunning(false) : undefined}
               onAddRest={restRunning ? () => setRestTimer(t => t + 30) : undefined}
               onResetTimer={restRunning || restTimer > 0 ? () => { setRestTimer(0); setRestRunning(false); } : undefined}
+              // Live HR + zone strip + sparkline are COMMANDER+ per
+              // pricing model. RECON / OPERATOR users see a small lock
+              // placeholder in the center HUD slot; rest timer + set
+              // indicator stay open for all tiers.
+              canViewHR={hasCommanderAccess(operator)}
             />
           );
         })()}
@@ -1874,6 +2495,147 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             color: '#00ff41', letterSpacing: 1, fontWeight: 700,
           }}>
             {voiceFeedback}
+          </div>
+        )}
+
+        {/* ═══ ASK GUNNY OVERLAY (Apr 2026 hotfix) ═══
+            Fixed-position bottom sheet so the workout view stays
+            mounted beneath. Operator types a question, taps Send,
+            the message goes via onSendGunnyMessage (no tab switch),
+            and the response renders in the existing amber voice-
+            response overlay below this one. */}
+        {showAskGunnyOverlay && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('planner.ask_gunny_aria')}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowAskGunnyOverlay(false);
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.55)',
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: 12,
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 520,
+                background: '#0a0a0a',
+                border: '1px solid rgba(255,140,0,0.55)',
+                borderRadius: 8,
+                padding: 14,
+                boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#FF8C00', letterSpacing: 2 }}>
+                  ⚡ ASK GUNNY · MID-WORKOUT
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAskGunnyOverlay(false)}
+                  aria-label={t('planner.close_ask_gunny_aria')}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-tertiary)',
+                    fontFamily: 'Share Tech Mono, monospace',
+                    fontSize: 14,
+                    cursor: 'pointer',
+                    padding: 4,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: '#a0a0a0', marginBottom: 8 }}>
+                Quick prompts:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {[
+                  'Form check — what should I focus on?',
+                  'This is too heavy — how should I scale?',
+                  'Substitute this exercise',
+                  'Should I push another set?',
+                ].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setAskGunnyDraft(p)}
+                    style={{
+                      padding: '4px 8px',
+                      background: 'rgba(255,140,0,0.06)',
+                      border: '1px solid rgba(255,140,0,0.3)',
+                      borderRadius: 4,
+                      color: '#FF8C00',
+                      fontFamily: 'Share Tech Mono, monospace',
+                      fontSize: 10,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={askGunnyDraft}
+                onChange={(e) => setAskGunnyDraft(e.target.value)}
+                placeholder={t('planner.ask_gunny_placeholder')}
+                rows={3}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  background: '#000',
+                  color: '#e0e0e0',
+                  border: '1px solid rgba(255,140,0,0.3)',
+                  borderRadius: 4,
+                  fontFamily: 'Share Tech Mono, monospace',
+                  fontSize: 13,
+                  resize: 'vertical',
+                  marginBottom: 10,
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAskGunnyOverlay(false)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!askGunnyDraft.trim() || !onSendGunnyMessage}
+                  onClick={() => {
+                    const text = askGunnyDraft.trim();
+                    if (!text || !onSendGunnyMessage) return;
+                    onSendGunnyMessage(text);
+                    setAskGunnyDraft('');
+                    setShowAskGunnyOverlay(false);
+                  }}
+                  className="btn btn-amber btn-sm"
+                  style={{ flex: 2 }}
+                >
+                  Send to Gunny
+                </button>
+              </div>
+
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: 'var(--text-dim)', marginTop: 8, textAlign: 'center' }}>
+                Workout, timer, and set log stay running underneath. Response shows up here.
+              </div>
+            </div>
           </div>
         )}
 
@@ -1920,327 +2682,42 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* ═══ VOICE SELECTOR — design-system .chip group.
-            Each option is a .chip; the active voice gets the
-            green tone treatment. The label trigger is also a .chip
-            so the whole row reads as a chip group. */}
-        {workoutMode && (
-          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setShowVoiceSelect(!showVoiceSelect)}
-              className={`chip ${showVoiceSelect ? 'green' : ''}`}
-              aria-expanded={showVoiceSelect}
-              aria-label={`Voice: ${selectedVoice}, click to change`}
-            >
-              Voice: {selectedVoice.toUpperCase()}
-            </button>
-            {showVoiceSelect && (
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {VOICE_OPTIONS.map(v => (
-                  <button
-                    type="button"
-                    key={v.id}
-                    onClick={() => {
-                      setSelectedVoice(v.id);
-                      setPreferredVoice(v.id);
-                      setShowVoiceSelect(false);
-                      // Play a preview
-                      speak('Copy that.', v.id);
-                    }}
-                    className={`chip ${v.id === selectedVoice ? 'green' : ''}`}
-                    title={v.desc}
-                  >
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Voice selector lives inline in the workout sub-line above
+            now (just the active voice as readout). The picker chip
+            row was an orphan in the canonical layout — voice changes
+            move into a settings popover (TODO: add icon button in
+            the workout-mode header that pops a chip group). */}
 
-        {/* Rest Timer card — handoff treatment: bracket card that
-            shifts tone with state.
-              idle    → default green soft bracket
-              running → amber-tone bracket (matches the active-vital
-                        "in-progress" tone elsewhere in the system)
-              alarm   → danger-tone with a soft pulse animation
-            The card is `position: sticky` to the top of the workout
-            scroll area so the rest timer stays visible no matter
-            how far down the operator has scrolled into the
-            exercise blocks — this is the practical equivalent of
-            the handoff `.vitals-sticky` HUD bar without restructuring
-            the layout. Z-index sits above the cards but below the
-            modal/overlays.
-            The countdown digits use .t-num-display sized big when
-            running. Preset chips use .btn.btn-amber.btn-sm. */}
-        <div
-          className={`ds-card bracket ${
-            timerAlarm ? 'danger danger-tone' : restRunning ? 'amber amber-tone' : ''
-          }`}
-          style={{
-            textAlign: 'center',
-            marginBottom: 20,
-            padding: 16,
-            position: 'relative',
-            // Sticky positioning was removed when VitalsSticky landed
-            // — the HUD's left slot now owns the always-visible
-            // countdown. This card stays in the scroll flow as the
-            // "rest controls" panel: preset chips + Stop button +
-            // big readout for at-rest reference.
-            transition: 'all 0.3s',
-            animation: timerAlarm ? 'timerAlarmPulse 0.5s ease-in-out infinite' : undefined,
-            boxShadow: timerAlarm ? '0 0 24px rgba(255, 68, 68, 0.6)' : undefined,
-          }}
-        >
-          <span className="bl" /><span className="br" />
-          <style>{`@keyframes timerAlarmPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }`}</style>
+        {/* Inner Rest Timer card was removed — the VitalsSticky HUD
+            up top owns the rest countdown (left slot) AND the
+            preset duration controls (the +30s button + the rest
+            timer chips that activate from the prescription's
+            "Rest 2:30" string when the user logs a set). The
+            duplicate card was redundant in screenshots from
+            production. Preset durations are still reachable
+            through the rest-timer auto-start logic in
+            logCurrentSet — manual preset selection is queued for
+            the HUD redesign if the team wants quick-pick chips
+            inside the HUD itself. */}
 
-          {restRunning && restTimerMax > 0 && (
-            <svg
-              width="100"
-              height="100"
-              viewBox="0 0 100 100"
-              style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', opacity: 0.3 }}
-            >
-              <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
-              <circle
-                cx="50"
-                cy="50"
-                r="44"
-                fill="none"
-                stroke={restTimer <= 10 ? 'var(--danger)' : 'var(--amber)'}
-                strokeWidth="4"
-                strokeDasharray={`${2 * Math.PI * 44}`}
-                strokeDashoffset={`${2 * Math.PI * 44 * (1 - restTimer / restTimerMax)}`}
-                strokeLinecap="round"
-                transform="rotate(-90 50 50)"
-                style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s' }}
-              />
-            </svg>
-          )}
-
-          <div
-            style={{
-              fontFamily: 'var(--mono)',
-              fontSize: restRunning ? 48 : 24,
-              color: restTimer <= 3 && restRunning
-                ? 'var(--danger)'
-                : restTimer <= 10 && restRunning
-                  ? 'var(--amber)'
-                  : 'var(--amber)',
-              textShadow: restRunning ? '0 0 12px rgba(255,140,0,0.5)' : undefined,
-              transition: 'all 0.3s',
-              position: 'relative',
-              zIndex: 1,
-              lineHeight: 1,
-            }}
-          >
-            {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}
-          </div>
-
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 12, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
-            {[30, 60, 90, 120, 180].map(sec => (
-              <button
-                key={sec}
-                type="button"
-                onClick={() => { setRestTimer(sec); setRestTimerMax(sec); setRestRunning(true); }}
-                className="btn btn-amber btn-sm"
-                style={{ padding: '6px 10px' }}
-              >
-                {sec < 60 ? `${sec}s` : `${sec / 60}m`}
-              </button>
-            ))}
-            {restRunning && (
-              <button
-                type="button"
-                onClick={() => { setRestRunning(false); setRestTimer(0); }}
-                className="btn btn-danger btn-sm"
-                style={{ padding: '6px 10px' }}
-              >
-                Stop
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* The expanded HR Zone Tracker card now lives inside the
-            VitalsSticky HUD's .vitals-expand region above (toggled
-            via the ▼ HUD action button). The duplicate render here
-            was removed — it would otherwise show two HR gauges
-            stacked on top of each other. */}
-        {/* legacy inline HR panel — kept commented for reference */}
-        {false && (
-          <div style={{ marginBottom: 16, padding: 12, background: '#0a0a0a', border: `1px solid ${currentHR ? getCurrentZone(currentHR).color : '#333'}`, borderRadius: 8, transition: 'all 0.3s' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ fontFamily: 'Orbitron', fontSize: 11, color: '#888', letterSpacing: 1 }}>HR ZONE TRACKER</div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#555' }}>
-                  {hrSource === 'wearable' ? 'LIVE' : hrSource === 'manual' ? 'MANUAL' : 'NO DEVICE'}
-                </span>
-                <button onClick={() => setShowHrPanel(false)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
-              </div>
-            </div>
-
-            {/* Current HR display */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-              <div style={{ textAlign: 'center' }}>
-                {currentHR ? (
-                  <>
-                    <div style={{ fontFamily: 'Orbitron', fontSize: 36, color: getCurrentZone(currentHR).color, fontWeight: 700 }}>{currentHR}</div>
-                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: 10, color: '#666' }}>BPM</div>
-                  </>
-                ) : (
-                  <div style={{ fontFamily: 'Share Tech Mono', fontSize: 13, color: '#555' }}>
-                    <input type="number" placeholder="Enter HR"
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          const val = parseInt((e.target as HTMLInputElement).value);
-                          if (val > 0) {
-                            setCurrentHR(val);
-                            setHrSource('manual');
-                            setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
-                            (e.target as HTMLInputElement).value = '';
-                          }
-                        }
-                      }}
-                      style={{ width: 80, padding: '6px 8px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 16, textAlign: 'center', borderRadius: 4 }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {currentHR && (
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: 'Orbitron', fontSize: 13, color: getCurrentZone(currentHR).color, marginBottom: 4 }}>
-                    ZONE {getCurrentZone(currentHR).zone}: {getCurrentZone(currentHR).name}
-                  </div>
-                  {/* Zone alert — flash if outside target */}
-                  {getCurrentZone(currentHR).zone !== targetZone && (
-                    <div style={{
-                      fontFamily: 'Share Tech Mono', fontSize: 11,
-                      color: getCurrentZone(currentHR).zone > targetZone ? '#ff4444' : '#00ff41',
-                      animation: 'pulse 1s infinite',
-                    }}>
-                      {getCurrentZone(currentHR).zone > targetZone ? 'ABOVE TARGET — SLOW DOWN' : 'BELOW TARGET — PUSH HARDER'}
-                    </div>
-                  )}
-                  {getCurrentZone(currentHR).zone === targetZone && (
-                    <div style={{ fontFamily: 'Share Tech Mono', fontSize: 11, color: '#00ff41' }}>ON TARGET</div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Zone bar visualization */}
-            <div style={{ display: 'flex', gap: 2, height: 24, borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-              {HR_ZONES.map(z => {
-                const isActive = currentHR ? getCurrentZone(currentHR).zone === z.zone : false;
-                const isTarget = z.zone === targetZone;
-                return (
-                  <div key={z.zone} onClick={() => setTargetZone(z.zone)} style={{
-                    flex: 1, background: isActive ? z.color : `${z.color}22`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    border: isTarget ? `2px solid ${z.color}` : '2px solid transparent',
-                    transition: 'all 0.3s', position: 'relative',
-                  }}>
-                    <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: isActive ? '#000' : z.color, fontWeight: isActive ? 700 : 400 }}>
-                      Z{z.zone}
-                    </span>
-                    {isTarget && (
-                      <div style={{ position: 'absolute', bottom: -1, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: `4px solid ${z.color}` }} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Zone range labels */}
-            <div style={{ display: 'flex', gap: 2 }}>
-              {HR_ZONES.map(z => (
-                <div key={z.zone} style={{ flex: 1, textAlign: 'center', fontFamily: 'Share Tech Mono', fontSize: 8, color: '#555' }}>
-                  {z.min}-{z.max}
-                </div>
-              ))}
-            </div>
-
-            {/* Manual HR update button when already has HR */}
-            {currentHR && hrSource === 'manual' && (
-              <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input type="number" placeholder="Update HR"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      const val = parseInt((e.target as HTMLInputElement).value);
-                      if (val > 0) {
-                        setCurrentHR(val);
-                        setHrHistory(prev => [...prev.slice(-60), { hr: val, time: Date.now() }]);
-                        (e.target as HTMLInputElement).value = '';
-                      }
-                    }
-                  }}
-                  style={{ width: 70, padding: '4px 6px', background: '#000', border: '1px solid #333', color: '#e0e0e0', fontFamily: 'Share Tech Mono', fontSize: 12, textAlign: 'center', borderRadius: 4 }}
-                />
-                <span style={{ fontFamily: 'Share Tech Mono', fontSize: 9, color: '#555' }}>press Enter</span>
-              </div>
-            )}
-
-            {/* Mini HR history sparkline */}
-            {hrHistory.length > 1 && (
-              <div style={{ marginTop: 8 }}>
-                <svg width="100%" height="60" viewBox="0 0 200 60" preserveAspectRatio="none" style={{ display: 'block' }}>
-                  {(() => {
-                    const data = hrHistory.slice(-30);
-                    const minH = Math.min(...data.map(x => x.hr)) - 5;
-                    const maxH = Math.max(...data.map(x => x.hr)) + 5;
-                    const range = maxH - minH || 1;
-                    const points = data.map((h, i) => {
-                      const x = (i / (data.length - 1)) * 200;
-                      const y = 55 - ((h.hr - minH) / range) * 50;
-                      return `${x},${y}`;
-                    }).join(' ');
-                    const fillPoints = `0,55 ${points} 200,55`;
-                    const lastHr = data[data.length - 1];
-                    const lastColor = lastHr ? getCurrentZone(lastHr.hr).color : '#FF8C00';
-                    return (
-                      <>
-                        <defs>
-                          <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={lastColor} stopOpacity="0.3" />
-                            <stop offset="100%" stopColor={lastColor} stopOpacity="0" />
-                          </linearGradient>
-                        </defs>
-                        <polygon points={fillPoints} fill="url(#hrGrad)" />
-                        <polyline points={points} fill="none" stroke={lastColor} strokeWidth="2" strokeLinejoin="round" />
-                        {lastHr && (
-                          <circle cx={200} cy={55 - ((lastHr.hr - minH) / range) * 50} r="3" fill={lastColor} />
-                        )}
-                      </>
-                    );
-                  })()}
-                </svg>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Share Tech Mono', fontSize: 8, color: '#555' }}>
-                  <span>{hrHistory.length > 30 ? `${Math.round((Date.now() - hrHistory[hrHistory.length - 30].time) / 60000)}min ago` : 'start'}</span>
-                  <span>now</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* HR panel toggle when hidden */}
-        {!showHrPanel && workoutMode && (
-          <button onClick={() => setShowHrPanel(true)} style={{
-            marginBottom: 12, padding: '4px 10px', background: '#0a0a0a', border: '1px solid #333',
-            color: '#888', fontFamily: 'Share Tech Mono', fontSize: 10, cursor: 'pointer', borderRadius: 4,
-          }}>SHOW HR TRACKER</button>
-        )}
+        {/* Legacy inline HR panel + SHOW HR TRACKER toggle were
+            deleted in this cleanup pass. HR data lives entirely in
+            the VitalsSticky HUD center slot now (BPM digits + mini
+            sparkline + IN RANGE/ABOVE/BELOW range label) — there
+            was no longer a reason to keep the dead-code reference
+            block or the toggle button mounting empty UI.
+            If a richer HR panel is wanted later, build it as a
+            modal triggered from a HUD-level action — don't bring
+            back the inline render. */}
 
         {/* ═══ WARMUP — single shared amber bracket card per spec.
             Canonical handoff renders the warmup as ONE card holding
             the entire movement list (eyebrow + Demo buttons inline),
-            not a card-per-movement. The header doubles as the
-            collapse/expand control. */}
-        {workout.warmup && parseMovementText(workout.warmup).length > 0 && (
+            not a card-per-movement. Per the stepped-flow spec,
+            warmup is its own step — only renders when stepIdx is on
+            the warmup phase. Always-expanded on its dedicated step
+            (collapse control becomes a no-op visual cue). */}
+        {currentStep.kind === 'warmup' && workout.warmup && parseMovementText(workout.warmup).length > 0 && (
           <div className="ds-card bracket amber amber-tone" style={{ marginBottom: 12, padding: 0 }}>
             <button
               onClick={() => setWarmupExpanded(v => !v)}
@@ -2289,8 +2766,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* Exercise blocks in execution mode */}
-        {workout.blocks.map((block, idx) => {
+        {/* Exercise blocks in execution mode — stepped: only the
+            block matching the current step renders. Inactive blocks
+            are skipped entirely (the stepper footer is the only
+            way to switch). The "click an inactive card to focus it"
+            affordance from the legacy long-scroll layout no longer
+            applies because there's only ever one card on screen. */}
+        {currentStep.kind === 'exercise' && workout.blocks.map((block, idx) => {
+          if (idx !== currentStep.blockIdx) return null;
           if (block.type !== 'exercise') {
             const condBlock = block as ConditioningBlock;
             const blockData = results[block.id] || { sets: [{ weight: 0, reps: 0, completed: false }] };
@@ -2307,7 +2790,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               >
                 <span className="bl" /><span className="br" />
                 <div className="row-between" style={{ marginBottom: 8 }}>
-                  <span className="t-eyebrow amber">GO TIME</span>
+                  <span className="t-eyebrow amber">{t('planner.go_time')}</span>
                   <span className="t-mono-data" style={{ color: 'var(--amber)' }}>
                     {condBlock.format}
                   </span>
@@ -2329,7 +2812,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input
                     type="text"
-                    placeholder="Time / Rounds / Score"
+                    placeholder={t('planner.score_placeholder')}
                     value={blockData.sets[0]?.reps ? `${blockData.sets[0].reps}` : ''}
                     onChange={e => {
                       const val = e.target.value;
@@ -2391,7 +2874,12 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           // Auto-start rest timer + advance "now" pointer when
           // the user logs the active set. Extracted as a callback
           // so the LOG SET button + Enter-key path can both call it.
+          // After the LAST set of the block is logged, auto-advance
+          // the stepper cursor to the next step (next exercise or
+          // cooldown) — fewer taps per the canonical "active set is
+          // the primary item, navigate to the next" flow.
           const logCurrentSet = () => {
+            const isLastSetOfBlock = nowSetIdx === parsedSets - 1;
             setResults(prev => {
               const blockData = { ...(prev[block.id] || { sets: [] }) };
               const sets = [...blockData.sets];
@@ -2399,17 +2887,31 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               sets[nowSetIdx] = { ...sets[nowSetIdx], completed: true };
               return { ...prev, [block.id]: { ...blockData, sets } };
             });
-            // Auto-start rest from the prescription string.
-            const restMatch = block.prescription?.match(/(?:rest|Rest|REST)\s*:?\s*(\d+)\s*:?\s*(\d+)?/i);
-            if (restMatch) {
-              const mins = restMatch[2] !== undefined ? parseInt(restMatch[1]) : 0;
-              const secs = restMatch[2] !== undefined ? parseInt(restMatch[2]) : parseInt(restMatch[1]);
-              const totalSecs = mins * 60 + secs;
-              if (totalSecs > 0) {
-                setRestTimer(totalSecs);
-                setRestTimerMax(totalSecs);
-                setRestRunning(true);
-              }
+            // Auto-start rest (WS2). Resolver checks the prescription
+            // string with a broadened regex bank, falls back to the
+            // operator's defaultRestSec preference, then to the app
+            // default. Single positive number unless the operator has
+            // opted out by setting defaultRestSec=0. Replaces the old
+            // inline regex which only matched "rest 2:00" style hints
+            // — anything else silently no-op'd, leaving the operator
+            // to time their own rest.
+            const rest = resolveRestSeconds(
+              block.prescription,
+              operator.preferences?.defaultRestSec,
+            );
+            if (rest.seconds > 0) {
+              setRestTimer(rest.seconds);
+              setRestTimerMax(rest.seconds);
+              setRestRunning(true);
+            }
+            // Stepped flow: if this was the last set of the block,
+            // auto-advance the stepper cursor to the next step. Defer
+            // by one tick so the rest timer + completion state finish
+            // committing first. If we're already on the final step,
+            // do nothing — the user explicitly hits "Complete" via
+            // the stepper footer to save and exit.
+            if (isLastSetOfBlock && !isLastStep) {
+              setTimeout(() => setStepIdx(prev => Math.min(prev + 1, steps.length - 1)), 50);
             }
           };
 
@@ -2462,27 +2964,86 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     marginBottom: 12,
                   }}
                 >
-                  ✓ ALL SETS COMPLETE
+                  ✓ {t('planner.all_sets_complete')}
                 </div>
               )}
 
-              <div className="row-between" style={{ marginBottom: 4, gap: 8, flexWrap: 'wrap' }}>
-                <div className="t-display-l" style={{ color: 'var(--green)', fontSize: 18 }}>
-                  {block.exerciseName}
+              <div className="row-between" style={{ marginBottom: 4, gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <div className="t-display-l" style={{ color: 'var(--green)', fontSize: 18, flex: 1, minWidth: 0 }}>
+                  {/* Defensive fallback: if exerciseName is empty (Gunny
+                      emitted a block with no name, or the workout data
+                      got malformed), show "Exercise N" so the user can
+                      still see what set they're on. Without this, the
+                      title slot collapses to 0 height and the user has
+                      no idea which exercise they're doing.
+                      Phase B i18n: resolveExerciseName looks up the ES
+                      form from EXERCISE_LIBRARY when the operator's
+                      language is 'es' and the name matches a library
+                      entry. AI-generated or freeform names that don't
+                      match the library fall through to the EN string
+                      (workout JSON stores the EN name canonically). */}
+                  {block.exerciseName?.trim()
+                    ? resolveExerciseName(block.exerciseName, language)
+                    : `Exercise ${idx + 1}`}
                 </div>
+                {/* Form Demo button — surfaced in the card header next
+                    to the exercise name so beginners see it at first
+                    glance instead of hunting inside the Notes popover.
+                    Beta feedback Apr 2026 (VALKYRIE): "should be more
+                    visible on the name of the movement rather than
+                    under Notes section. Should be first look." Kept
+                    conditional on an actual demo URL existing so cards
+                    without a video don't render an inert button. The
+                    popover still has its own demo trigger as a backup
+                    for users who already learned the Notes path. */}
+                {isActive && (block.videoUrl || getVideoUrl(block.exerciseName)) && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
+                    className="btn btn-ghost btn-sm"
+                    aria-label={`Watch form demo for ${block.exerciseName}`}
+                    style={{ padding: '6px 10px', flexShrink: 0 }}
+                  >
+                    <Icon.Play size={11} /> DEMO
+                  </button>
+                )}
+                {/* Notes / Form Check icon — single tap opens the
+                    NotesFormPopover holding the legacy inline notes
+                    field and the "upload form check photo to Gunny"
+                    path. Form Demo is now in the header above (was
+                    also in this popover; kept there as a backup). */}
+                {isActive && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setNotesPopoverFor(block.id); }}
+                    className="btn btn-ghost btn-sm"
+                    aria-label={t('planner.notes_aria')}
+                    style={{ padding: '6px 10px', flexShrink: 0 }}
+                  >
+                    <Icon.Edit size={11} /> Notes
+                  </button>
+                )}
               </div>
               <div className="t-mono-sm" style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
-                {block.prescription}
+                {/* Same defensive fallback — empty prescription was
+                    rendering as a 0-height row, leaving the user with
+                    no spec for the active set. */}
+                {block.prescription?.trim() || '— spec missing —'}
               </div>
 
-              {(block.videoUrl || getVideoUrl(block.exerciseName)) && (
+              {/* Inline Form Demo button kept ONLY for inactive blocks
+                  (out-of-step exercise cards rendered for any future
+                  case where multi-block render returns). For the
+                  active block, demo lives inside the NotesFormPopover
+                  to free up vertical space. */}
+              {!isActive && (block.videoUrl || getVideoUrl(block.exerciseName)) && (
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
-                  className="btn btn-amber btn-sm"
+                  className="btn btn-ghost btn-sm"
                   style={{ marginBottom: 8, padding: '6px 10px' }}
                 >
-                  <Icon.Play size={11} /> Form Demo
+                  <Icon.Play size={11} /> DEMO
                 </button>
               )}
 
@@ -2501,15 +3062,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     }}
                   >
                     {[
-                      { label: 'WEIGHT', placeholder: 'lbs', value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
-                      { label: 'REPS',   placeholder: 'reps', value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
+                      { label: t('planner.weight'), placeholder: t('planner.weight_input_placeholder'), value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
+                      { label: t('planner.reps'),   placeholder: t('planner.reps_input_placeholder'), value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
                         const bd = { ...(prev[block.id] || { sets: [] }) };
                         const ss = [...bd.sets];
                         while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
                         ss[nowSetIdx] = { ...ss[nowSetIdx], reps: v };
                         return { ...prev, [block.id]: { ...bd, sets: ss } };
                       }) },
-                      { label: 'RPE',    placeholder: '0-10', value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
+                      { label: t('planner.rpe'),    placeholder: t('planner.rpe_input_placeholder'), value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
                         const bd = { ...(prev[block.id] || { sets: [] }) };
                         const ss = [...bd.sets];
                         while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
@@ -2548,13 +3109,19 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               )}
 
               {/* "SETS · THIS EXERCISE" history — every previously-
-                  logged set in this block, dimmed mono. Helps the
-                  user remember what they just hit before logging
-                  the next set. */}
+                  logged set in this block. Per beta hotfix (Apr 2026):
+                  these rows are now INLINE-EDITABLE so an operator who
+                  fat-fingers a weight or reps can correct the entry
+                  without abandoning workout mode. Inputs mutate
+                  workoutResults[block.id].sets[si] directly; the
+                  on-completion writeback in the workout-mode lifecycle
+                  picks up the corrected values when the session ends.
+                  Keeping the same layout + amber RPE accent so it
+                  still reads as a "logged set" row, just clickable. */}
               {isActive && blockResults.sets.some(s => s.completed) && (
                 <>
                   <div className="t-eyebrow" style={{ marginTop: 8, marginBottom: 6 }}>
-                    Sets · This Exercise
+                    Sets · This Exercise <span style={{ color: 'var(--green)', fontSize: 9, marginLeft: 6, fontWeight: 700 }}>✎ TAP A CELL TO EDIT</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {blockResults.sets.slice(0, parsedSets).map((set, si) => set.completed && (
@@ -2563,71 +3130,177 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                         className="t-mono-data"
                         style={{
                           display: 'flex',
-                          gap: 12,
+                          gap: 8,
                           padding: '4px 6px',
                           color: 'var(--text-secondary)',
                           borderLeft: '2px solid var(--border-green-strong)',
                           paddingLeft: 8,
+                          alignItems: 'center',
                         }}
                       >
-                        <span style={{ color: 'var(--text-tertiary)', minWidth: 32 }}>S{si + 1}</span>
-                        <span>{set.weight} lbs</span>
-                        <span style={{ color: 'var(--text-dim)' }}>×</span>
-                        <span>{set.reps} reps</span>
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {rpeOf(set as any) > 0 && (
-                          <span style={{ color: 'var(--amber)' }}>
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                            RPE {rpeOf(set as any)}
-                          </span>
-                        )}
+                        <span style={{ color: 'var(--text-tertiary)', minWidth: 28 }}>S{si + 1}</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={set.weight}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) ss[si] = { ...ss[si], weight: v };
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} weight`}
+                          style={{
+                            width: 70, textAlign: 'right',
+                            background: 'rgba(0,255,65,0.04)', border: '1px solid rgba(0,255,65,0.5)',
+                            borderRadius: 3, color: 'var(--text-primary)', padding: '4px 6px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
+                        <span style={{ color: 'var(--text-dim)' }}>lbs ×</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={set.reps}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) ss[si] = { ...ss[si], reps: v };
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} reps`}
+                          style={{
+                            width: 54, textAlign: 'right',
+                            background: 'rgba(0,255,65,0.04)', border: '1px solid rgba(0,255,65,0.5)',
+                            borderRadius: 3, color: 'var(--text-primary)', padding: '4px 6px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
+                        <span style={{ color: 'var(--text-dim)' }}>reps</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          value={rpeOf(set as any) || ''}
+                          placeholder={t('planner.rpe_placeholder')}
+                          onChange={(e) => {
+                            const v = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                (ss[si] as any).rpe = v;
+                              }
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} RPE`}
+                          style={{
+                            width: 50, textAlign: 'right',
+                            background: 'rgba(255,140,0,0.06)', border: '1px solid rgba(255,140,0,0.55)',
+                            borderRadius: 3, color: 'var(--amber)', padding: '4px 6px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
                       </div>
                     ))}
                   </div>
                 </>
               )}
 
-              {/* Notes — intel for Gunny. Always visible on active
-                  block, hidden on inactive. */}
-              {isActive && (
-                <input
-                  type="text"
-                  placeholder="Notes (e.g. banded felt hard, left knee tight)"
-                  value={(results[block.id] as { sets: unknown[]; notes?: string })?.notes || ''}
-                  onChange={e => {
-                    const notes = e.target.value;
-                    setResults(prev => ({
-                      ...prev,
-                      [block.id]: { ...prev[block.id], notes }
-                    }));
-                  }}
-                  className="ds-input"
-                  style={{
-                    marginTop: 12,
-                    padding: '6px 10px',
-                    fontSize: 11,
-                    fontFamily: 'var(--mono)',
-                    color: 'var(--text-secondary)',
-                    borderColor: 'var(--border-green-soft)',
-                  }}
-                />
-              )}
+              {/* Inline notes input was removed — relocated into
+                  NotesFormPopover, opened via the "Notes" icon
+                  button in the card header. Keeps the active card
+                  focused on WEIGHT / REPS / RPE / LOG. */}
             </div>
           );
         })}
 
         {/* Mid-workout edit controls — secondary affordances styled
-            as ghost (add) and danger-outline (remove) buttons. The
-            dashed-border treatment from the legacy is preserved
-            via inline style since it's a subtle "in-progress edit"
-            cue not in the canonical .btn variants. */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 4 }}>
+            as ghost (add) and danger-outline (remove) buttons. Only
+            rendered on exercise steps so warmup/cooldown screens
+            stay focused on the movement list.
+            Move Up / Move Down let users reorder the current exercise
+            within the blocks array. Disabled at the array edges. */}
+        {currentStep.kind === 'exercise' && (() => {
+          // Shared swap helper for the Up / Down buttons. Pulled out
+          // of the inline onClick handlers so the swap + sortOrder
+          // normalization + cursor-shift logic only lives in one
+          // place. sortOrder is reset after every reorder to match
+          // the convention in src/lib/workoutModification.ts (which
+          // does `blocks = blocks.map((b, i) => ({ ...b, sortOrder: i }))`
+          // after every move). Nothing currently reads sortOrder
+          // for display ordering — array position is canonical — but
+          // keeping the field consistent means a future feature that
+          // sorts by it (e.g. an undo log, an analytics by-position
+          // chart, a Gunny analysis) can trust the value.
+          const swapBlocks = (direction: -1 | 1) => {
+            if (currentStep.kind !== 'exercise') return;
+            const targetIdx = currentStep.blockIdx;
+            const swapWith = targetIdx + direction;
+            if (swapWith < 0 || swapWith >= workout.blocks.length) return;
+            const dateStr = selectedDate || formatDate(currentDate);
+            const next = [...workout.blocks];
+            [next[targetIdx], next[swapWith]] = [next[swapWith], next[targetIdx]];
+            // Renumber sortOrder so it mirrors array position. Same
+            // pattern workoutModification.ts uses after a reorder.
+            const normalized = next.map((b, i) => ({ ...b, sortOrder: i }));
+            const updated = { ...operator };
+            updated.workouts = { ...updated.workouts };
+            updated.workouts[dateStr] = { ...workout, blocks: normalized };
+            onUpdateOperator(updated);
+            // Cursor follows the block so the user keeps viewing the
+            // same exercise, now in its new position.
+            setStepIdx(prev => Math.max(0, prev + direction));
+          };
+
+          const isFirstExercise = currentStep.blockIdx <= 0;
+          const isLastExercise = currentStep.blockIdx >= workout.blocks.length - 1;
+
+          return (
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => swapBlocks(-1)}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
+            disabled={isFirstExercise}
+            aria-label="Move exercise up"
+            title={isFirstExercise ? 'Already first' : 'Shift this exercise earlier in the workout'}
+          >
+            ↑ Up
+          </button>
+          <button
+            type="button"
+            onClick={() => swapBlocks(1)}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
+            disabled={isLastExercise}
+            aria-label="Move exercise down"
+            title={isLastExercise ? 'Already last' : 'Shift this exercise later in the workout'}
+          >
+            ↓ Down
+          </button>
           <button
             type="button"
             onClick={() => {
+              // Default to "New Exercise" so the active-block card has
+              // a visible title even before the user fills it in. The
+              // previous empty-string default produced phantom blocks
+              // (no title rendered → user couldn't see they had added
+              // anything → kept clicking → ended up with a 34-step
+              // workout of mostly nameless 3x10 blocks). The user can
+              // rename via the Notes popover.
               const newBlock: ExerciseBlock = {
                 type: 'exercise', id: `block-live-${Date.now()}`, sortOrder: workout.blocks.length,
-                exerciseName: '', prescription: '3x10', isLinkedToNext: false,
+                exerciseName: 'New Exercise', prescription: '3x10', isLinkedToNext: false,
               };
               const dateStr = selectedDate || formatDate(currentDate);
               const updated = { ...operator };
@@ -2637,35 +3310,111 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               setWorkoutResults(prev => ({ ...prev, [newBlock.id]: { sets: [{ weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }], notes: '' } }));
             }}
             className="btn btn-ghost btn-sm"
-            style={{ flex: 1, borderStyle: 'dashed' }}
+            style={{ flex: '1 1 100px', borderStyle: 'dashed' }}
           >
             + Add Exercise
           </button>
+          {/* REMOVE THIS — two-tap confirm to prevent accidental
+              deletes mid-workout. The first tap arms the button;
+              a second tap within 3 sec actually removes. After
+              removal, an UNDO toast appears below for 10 sec. */}
           <button
             type="button"
             onClick={() => {
               if (workout.blocks.length <= 1) return;
+              if (currentStep.kind !== 'exercise') return;
+
+              // FIRST TAP — arm the button, set 3-sec auto-revert.
+              if (removeConfirmAt === null) {
+                setRemoveConfirmAt(Date.now());
+                if (removeConfirmTimeoutRef.current) {
+                  clearTimeout(removeConfirmTimeoutRef.current);
+                }
+                removeConfirmTimeoutRef.current = setTimeout(() => {
+                  setRemoveConfirmAt(null);
+                  removeConfirmTimeoutRef.current = null;
+                }, 3000);
+                return;
+              }
+
+              // SECOND TAP — actually remove. Snapshot the block +
+              // its results so the user can undo within 10 sec.
+              const targetIdx = currentStep.blockIdx;
               const dateStr = selectedDate || formatDate(currentDate);
-              const removedId = workout.blocks[workout.blocks.length - 1].id;
+              const removedBlock = workout.blocks[targetIdx];
+              if (!removedBlock) return;
+
+              if (removeConfirmTimeoutRef.current) {
+                clearTimeout(removeConfirmTimeoutRef.current);
+                removeConfirmTimeoutRef.current = null;
+              }
+              setRemoveConfirmAt(null);
+
+              setRemovedSnapshot({
+                dateStr,
+                block: removedBlock,
+                insertAt: targetIdx,
+                resultsForBlock: workoutResults[removedBlock.id] || null,
+                removedAt: Date.now(),
+              });
+
               const updated = { ...operator };
               updated.workouts = { ...updated.workouts };
-              updated.workouts[dateStr] = { ...workout, blocks: workout.blocks.slice(0, -1) };
+              updated.workouts[dateStr] = {
+                ...workout,
+                blocks: workout.blocks.filter((_, i) => i !== targetIdx),
+              };
               onUpdateOperator(updated);
               setWorkoutResults(prev => {
                 const next = { ...prev };
-                delete next[removedId];
+                delete next[removedBlock.id];
                 return next;
               });
+
+              // Auto-clear the undo toast after 10 sec.
+              if (undoToastTimeoutRef.current) {
+                clearTimeout(undoToastTimeoutRef.current);
+              }
+              undoToastTimeoutRef.current = setTimeout(() => {
+                setRemovedSnapshot(null);
+                undoToastTimeoutRef.current = null;
+              }, 10_000);
+
+              // safeStepIdx in render clamps automatically when the
+              // removed block was the tail, but if the removed block
+              // was mid-list and was also the last step, defensively
+              // decrement so the user sees the previous exercise
+              // instead of jumping straight to the cooldown.
+              const wasTailExercise = targetIdx === workout.blocks.length - 1;
+              if (wasTailExercise) {
+                setStepIdx(prev => Math.max(0, prev - 1));
+              }
             }}
-            className="btn btn-danger-outline btn-sm"
-            style={{ borderStyle: 'dashed' }}
+            className={removeConfirmAt !== null ? 'btn btn-danger btn-sm' : 'btn btn-danger-outline btn-sm'}
+            style={{
+              flex: '1 1 100px',
+              borderStyle: removeConfirmAt !== null ? 'solid' : 'dashed',
+              animation: removeConfirmAt !== null ? 'workoutCardGlow 1.5s ease-in-out infinite' : undefined,
+            }}
+            disabled={workout.blocks.length <= 1}
+            title={
+              workout.blocks.length <= 1
+                ? 'At least one exercise must remain'
+                : removeConfirmAt !== null
+                  ? 'Tap again to confirm — auto-cancels in 3s'
+                  : 'Remove this exercise'
+            }
           >
-            − Remove Last
+            {removeConfirmAt !== null ? '✕ TAP AGAIN TO CONFIRM' : '− Remove This'}
           </button>
         </div>
+          );
+        })()}
 
-        {/* ═══ COOLDOWN — collapsible, auto-expands when last exercise set is completed ═══ */}
-        {workout.cooldown && parseMovementText(workout.cooldown).length > 0 && (() => {
+        {/* ═══ COOLDOWN — single amber bracket card per the stepped
+            flow spec. Only renders when the cursor is on the
+            cooldown phase. Same shape as warmup. */}
+        {currentStep.kind === 'cooldown' && workout.cooldown && parseMovementText(workout.cooldown).length > 0 && (() => {
           const lastExercise = [...workout.blocks].reverse().find(b => b.type === 'exercise') as ExerciseBlock | undefined;
           const lastDone = lastExercise ? (results[lastExercise.id]?.sets?.every(s => s.completed) ?? false) : false;
           const isExpanded = cooldownExpanded || lastDone;
@@ -2701,12 +3450,19 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           title={videoModalState?.title}
         />
 
-        {/* Ask Gunny — mid-workout coaching access. Uses .btn-amber
-            full-width to match the floating GUNNY pill's tone. */}
-        {onOpenGunny && (
+        {/* Ask Gunny — mid-workout coaching access. Apr 2026 hotfix:
+            opens an IN-PLACE overlay instead of switching to the Gunny
+            tab. Operators were losing timer/progress when they got
+            kicked to the chat tab; the overlay keeps Workout Mode
+            mounted underneath. Falls back to onOpenGunny only when
+            onSendGunnyMessage isn't wired (legacy callers). */}
+        {(onSendGunnyMessage || onOpenGunny) && (
           <button
             type="button"
-            onClick={onOpenGunny}
+            onClick={() => {
+              if (onSendGunnyMessage) setShowAskGunnyOverlay(true);
+              else if (onOpenGunny) onOpenGunny();
+            }}
             className="btn btn-amber btn-block"
             style={{ marginTop: 12 }}
           >
@@ -2714,25 +3470,100 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </button>
         )}
 
-        {/* Complete Workout — primary save action. Bigger padding
-            via inline override since this is a high-stakes action
-            and visually anchors the bottom of the screen. */}
-        <button
-          type="button"
-          onClick={handleSaveResults}
-          className="btn btn-primary btn-block"
-          style={{ marginTop: 12, padding: 14, fontSize: 12, letterSpacing: 2 }}
-        >
-          Complete Workout
-        </button>
-
-        {/* ═══ Floating Push-To-Talk — voice to Gunny without leaving workout mode ═══ */}
-        <WorkoutPTT
-          onSend={(text) => {
-            if (onSendGunnyMessage) onSendGunnyMessage(text);
+        {/* ═══ STEPPER FOOTER — ← BACK · STEP X / Y · NEXT → ═══
+            Replaces the legacy "Complete Workout" CTA. The Next
+            button on the last step IS the Complete Workout action,
+            so the user always advances forward through the same
+            affordance. Sits in normal flow at the bottom of the
+            scroll container — combined with the sticky VitalsSticky
+            HUD at top, the active card is always sandwiched
+            between two anchors. */}
+        <div
+          className="workout-stepper"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto 1fr',
+            alignItems: 'center',
+            gap: 8,
+            marginTop: 16,
+            marginBottom: 12,
+            padding: '12px 0',
+            borderTop: '1px solid var(--border-green-soft)',
           }}
-          onLocalCommand={(cmd) => handleVoiceCommand(cmd)}
-        />
+        >
+          <button
+            type="button"
+            onClick={goPrev}
+            disabled={isFirstStep}
+            className="btn btn-ghost btn-sm"
+            aria-label={t('common.previous')}
+            style={{ justifySelf: 'start' }}
+          >
+            <Icon.ArrowLeft size={12} /> Back
+          </button>
+          <div
+            className="t-mono-sm"
+            style={{
+              color: 'var(--text-secondary)',
+              textAlign: 'center',
+              letterSpacing: 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ color: 'var(--green)' }}>STEP {safeStepIdx + 1}</span>
+            <span style={{ color: 'var(--text-dim)' }}> / {steps.length}</span>
+            <span style={{ color: 'var(--text-tertiary)', marginLeft: 8 }}>· {progressPct}%</span>
+          </div>
+          <button
+            type="button"
+            onClick={goNext}
+            className={`btn btn-sm ${isLastStep ? 'btn-primary' : 'btn-amber'}`}
+            aria-label={isLastStep ? 'Complete workout' : 'Next step'}
+            style={{ justifySelf: 'end' }}
+          >
+            {isLastStep ? 'Complete' : 'Next'} <Icon.ArrowRight size={12} />
+          </button>
+        </div>
+
+        {/* ═══ NOTES / FORM-DEMO / FORM-CHECK popover ═══
+            Triggered by the "Notes" icon button on the active
+            exercise card. Bound to whichever block was the active
+            one at trigger time (notesPopoverFor stores its id). */}
+        {notesPopoverFor && (() => {
+          const popoverBlock = workout.blocks.find(b => b.id === notesPopoverFor);
+          if (!popoverBlock || popoverBlock.type !== 'exercise') return null;
+          const popoverNotes = (results[notesPopoverFor] as { sets: unknown[]; notes?: string })?.notes || '';
+          const hasVideo = !!(popoverBlock.videoUrl || getVideoUrl(popoverBlock.exerciseName));
+          return (
+            <NotesFormPopover
+              open={true}
+              onClose={() => setNotesPopoverFor(null)}
+              exerciseName={popoverBlock.exerciseName}
+              notes={popoverNotes}
+              onNotesChange={(next) => {
+                setResults(prev => ({
+                  ...prev,
+                  [notesPopoverFor]: { ...prev[notesPopoverFor], notes: next },
+                }));
+              }}
+              onPlayDemo={hasVideo
+                ? () => openExerciseVideo(popoverBlock.exerciseName, popoverBlock.videoUrl)
+                : undefined}
+              onUploadForm={onSendGunnyMessage
+                ? async (imageDataUrl, prompt) => {
+                    // Wire to the same Gunny chat sink the workout-mode
+                    // voice path uses — AppShell forwards the message
+                    // (with the image) to /api/gunny, which already
+                    // accepts base64 images on the user message
+                    // (route.ts:1090-1104). Open the panel so the
+                    // operator sees Gunny's reply land.
+                    onSendGunnyMessage(prompt, { image: imageDataUrl });
+                    if (onOpenGunny) onOpenGunny();
+                  }
+                : undefined}
+            />
+          );
+        })()}
 
         {/* ═══ MISSION COMPLETE overlay — shown after COMPLETE WORKOUT ═══ */}
         {showCompletionScreen && completionData && (
@@ -2788,10 +3619,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               {[
-                { label: 'DURATION', value: `${completionData.duration} MIN`, color: '#00ff41' },
-                { label: 'EXERCISES', value: String(completionData.exerciseCount), color: '#00ff41' },
-                { label: 'VOLUME', value: `${completionData.totalVolume.toLocaleString()} LBS`, color: '#FFB800' },
-                { label: 'COMPLETION', value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
+                { label: t('planner.stat_duration'), value: `${completionData.duration} ${t('planner.unit_min')}`, color: '#00ff41' },
+                { label: t('planner.stat_exercises'), value: String(completionData.exerciseCount), color: '#00ff41' },
+                { label: t('planner.stat_volume'), value: `${completionData.totalVolume.toLocaleString()} ${t('planner.unit_lbs')}`, color: '#FFB800' },
+                { label: t('planner.stat_completion'), value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
               ].map((stat) => (
                 <div
                   key={stat.label}
@@ -2807,6 +3638,59 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 </div>
               ))}
             </div>
+
+            {/* NEW PRs — auto-detected from this session and already
+                appended to operator.prs by handleSaveResults. Shown
+                only when the session produced at least one PR; not a
+                blocker, just a celebration. Distinguishes "baseline"
+                (first time logging this exercise) from "new best"
+                (beat a prior record). */}
+            {completionData.newPRs && completionData.newPRs.length > 0 && (
+              <div
+                style={{
+                  maxWidth: 400,
+                  width: '100%',
+                  padding: '14px 18px',
+                  background: 'rgba(0,255,65,0.05)',
+                  border: '1px solid rgba(0,255,65,0.25)',
+                  borderLeft: '3px solid #00ff41',
+                  borderRadius: 4,
+                  marginBottom: 16,
+                  fontFamily: 'Share Tech Mono, monospace',
+                  fontSize: 13,
+                  color: '#ccc',
+                  lineHeight: 1.6,
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#00ff41', letterSpacing: 1, marginBottom: 8 }}>
+                  ★ {completionData.newPRs.some(p => !p.isBaseline) ? 'NEW PRS HIT' : 'BASELINE PRS LOGGED'} ({completionData.newPRs.length})
+                </div>
+                {completionData.newPRs.map((pr, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span>{pr.exercise}</span>
+                    <span style={{ color: pr.isBaseline ? '#a0a0a0' : '#00ff41', fontWeight: 700 }}>
+                      {pr.weight} × {pr.reps}{pr.isBaseline ? ' · baseline' : ''}
+                    </span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  Saved to your PR Board automatically.
+                </div>
+              </div>
+            )}
+
+            {/* WS4 — post-workout analysis. Renders per-exercise progress
+                vs the prior session + adherence breakdown. Reads from the
+                just-saved workout on operator.workouts[dateStr]; falls back
+                gracefully (component returns null) when no exercises had
+                completed sets. */}
+            {completionData.dateStr && operator.workouts[completionData.dateStr] && (
+              <PostWorkoutAnalysis
+                workout={operator.workouts[completionData.dateStr]}
+                operator={operator}
+              />
+            )}
 
             <div
               style={{
@@ -2825,12 +3709,79 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 textAlign: 'left',
               }}
             >
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>GUNNY SAYS</div>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>{t('planner.gunny_says')}</div>
               {completionData.gunnyMessage}
+            </div>
+
+            {/* Session RPE capture — Foster's sRPE 1-10. One tap to
+                accept the default of 7, or pick a different value.
+                Drives the autoregulation engine. */}
+            <div style={{
+              padding: 16,
+              background: 'rgba(0,0,0,0.4)',
+              border: '1px solid rgba(255,140,0,0.2)',
+              borderRadius: 4,
+              marginBottom: 24,
+            }}>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 12, textAlign: 'center' }}>
+                {t('planner.session_rpe_question')}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4, marginBottom: 8 }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPendingSrpe(n)}
+                    style={{
+                      padding: '10px 0',
+                      background: pendingSrpe === n
+                        ? n <= 4 ? 'rgba(0,255,65,0.25)' : n <= 7 ? 'rgba(255,184,0,0.25)' : 'rgba(255,77,77,0.25)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: pendingSrpe === n
+                        ? n <= 4 ? '1px solid #00ff41' : n <= 7 ? '1px solid #ffb800' : '1px solid #ff4d4d'
+                        : '1px solid rgba(255,255,255,0.08)',
+                      color: pendingSrpe === n
+                        ? n <= 4 ? '#00ff41' : n <= 7 ? '#ffb800' : '#ff4d4d'
+                        : '#888',
+                      fontFamily: 'Orbitron, sans-serif',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      borderRadius: 3,
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#666', textAlign: 'center', lineHeight: 1.5 }}>
+                {pendingSrpe <= 3 && 'Easy — could have done much more.'}
+                {pendingSrpe >= 4 && pendingSrpe <= 6 && 'Moderate — some gas left in the tank.'}
+                {pendingSrpe === 7 && 'Challenging — solid working session.'}
+                {pendingSrpe === 8 && 'Hard — 2 reps left across most sets.'}
+                {pendingSrpe === 9 && 'Very hard — barely held form on last sets.'}
+                {pendingSrpe === 10 && 'Maximal — could not have done one more rep.'}
+              </div>
             </div>
 
             <button
               onClick={() => {
+                // Persist the sRPE to the workout record before closing.
+                // Two-step write (initial save above, sRPE follow-up here)
+                // means even if the user dismisses without rating we keep
+                // the completed workout — but if they did rate, the
+                // autoregulation engine has its primary input.
+                const ds = completionData?.dateStr;
+                if (ds && operator.workouts[ds]) {
+                  const updated = { ...operator };
+                  updated.workouts = { ...updated.workouts };
+                  updated.workouts[ds] = {
+                    ...updated.workouts[ds],
+                    sessionRpe: pendingSrpe,
+                    sessionDurationMin: completionData?.duration || undefined,
+                  };
+                  onUpdateOperator(updated);
+                }
                 setShowCompletionScreen(false);
                 setCompletionData(null);
                 setWorkoutMode(false);
@@ -2850,6 +3801,118 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               DEBRIEF COMPLETE
+            </button>
+          </div>
+        )}
+
+        {/* UNDO toast for accidental REMOVE THIS taps. Fixed-position
+            overlay so it's visible regardless of scroll. Auto-dismisses
+            after 10 sec; tapping UNDO restores the block at its
+            original index with logged results intact. */}
+        {removedSnapshot && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              position: 'fixed',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+              zIndex: 10_000,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              maxWidth: 'calc(100vw - 32px)',
+              padding: '12px 14px 12px 18px',
+              background: 'rgba(10, 10, 10, 0.96)',
+              border: '1px solid rgba(0,255,65,0.35)',
+              boxShadow: '0 0 32px rgba(0,255,65,0.18), 0 8px 24px rgba(0,0,0,0.5)',
+              borderRadius: 4,
+              fontFamily: 'var(--mono)',
+              fontSize: 13,
+              color: 'var(--text-primary)',
+              animation: 'msgSlideIn 0.25s ease-out',
+            }}
+          >
+            <span style={{ color: 'var(--text-secondary)' }}>
+              Removed{' '}
+              <span style={{ color: '#fff', fontWeight: 600 }}>
+                {removedSnapshot.block.type === 'exercise'
+                  ? (removedSnapshot.block as ExerciseBlock).exerciseName
+                  : (removedSnapshot.block as ConditioningBlock).format || 'conditioning block'}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (!removedSnapshot) return;
+                if (undoToastTimeoutRef.current) {
+                  clearTimeout(undoToastTimeoutRef.current);
+                  undoToastTimeoutRef.current = null;
+                }
+                // Restore block at its original position. operator
+                // may have changed since removal (other tabs, etc.) —
+                // re-clamp the insert index to current bounds.
+                const ds = removedSnapshot.dateStr;
+                const updated = { ...operator };
+                updated.workouts = { ...updated.workouts };
+                const liveDayWorkout = updated.workouts[ds] as Workout | undefined;
+                if (liveDayWorkout) {
+                  const next = [...liveDayWorkout.blocks];
+                  const insertIdx = Math.min(removedSnapshot.insertAt, next.length);
+                  next.splice(insertIdx, 0, removedSnapshot.block);
+                  updated.workouts[ds] = {
+                    ...liveDayWorkout,
+                    blocks: next.map((b, i) => ({ ...b, sortOrder: i })),
+                  };
+                  onUpdateOperator(updated);
+                }
+                // Restore logged results too if there were any.
+                if (removedSnapshot.resultsForBlock) {
+                  setWorkoutResults((prev) => ({
+                    ...prev,
+                    [removedSnapshot.block.id]: removedSnapshot.resultsForBlock!,
+                  }));
+                }
+                setRemovedSnapshot(null);
+              }}
+              style={{
+                padding: '6px 14px',
+                background: 'rgba(0,255,65,0.18)',
+                border: '1px solid var(--green)',
+                color: 'var(--green)',
+                fontFamily: 'var(--display)',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                cursor: 'pointer',
+                borderRadius: 2,
+                textTransform: 'uppercase',
+              }}
+            >
+              ↶ Undo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (undoToastTimeoutRef.current) {
+                  clearTimeout(undoToastTimeoutRef.current);
+                  undoToastTimeoutRef.current = null;
+                }
+                setRemovedSnapshot(null);
+              }}
+              aria-label="Dismiss"
+              style={{
+                padding: '6px 8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-tertiary)',
+                fontSize: 16,
+                cursor: 'pointer',
+                lineHeight: 1,
+              }}
+            >
+              ×
             </button>
           </div>
         )}
@@ -2918,6 +3981,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     unlockAudioContext();
                     setWorkoutMode(true);
                     setSelectedDate(dateStr);
+                    setStepIdx(0); // start the stepped flow at warmup (or first exercise if no warmup)
                   }}
                   className="btn btn-primary btn-sm"
                 >
@@ -2966,6 +4030,109 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               </>
             )}
 
+            {/* Movements — unified report list. Replaces the legacy
+                per-block bracket-card grid. Each row matches the
+                warmup numbered-list style: letter prefix in mono
+                green, name + Demo button on the same line, then
+                the prescription string as plain mono text below.
+                Conditioning blocks (EMOM / AMRAP / etc.) render
+                with an amber format label + their description body
+                in the same vertical rhythm — same report, no chips.
+                The colored-pill version had RPE pink / Tempo
+                purple / Rest blue, all out-of-palette per the
+                design system. Plain prescription text reads cleaner
+                anyway and matches the surrounding warmup/cooldown
+                treatment. */}
+            {workout.blocks.length > 0 && (
+              <>
+                <div className="t-label" style={{ color: 'var(--amber)', marginBottom: 8 }}>// Movements</div>
+                <ul style={{ listStyle: 'none', paddingLeft: 0, marginBottom: 16 }} className="stack-3">
+                  {workout.blocks.map((block, idx) => {
+                    const label = getBlockLabels(workout.blocks)[idx];
+                    if (block.type === 'exercise') {
+                      const vidUrl = block.videoUrl || getVideoUrl(block.exerciseName);
+                      return (
+                        <li key={block.id} className="stack-1">
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: 10,
+                              alignItems: 'baseline',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <span className="t-mono-sm" style={{ color: 'var(--green)', minWidth: 24, fontWeight: 700 }}>
+                              {label})
+                            </span>
+                            <span
+                              className="t-body-sm"
+                              style={{ color: 'var(--text-primary)', fontWeight: 600, flex: '1 1 auto' }}
+                            >
+                              {resolveExerciseName(block.exerciseName, language)}
+                            </span>
+                            {vidUrl && (
+                              <a
+                                href={vidUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: '4px 8px', fontSize: 9, flexShrink: 0 }}
+                              >
+                                <Icon.Play size={10} /> DEMO
+                              </a>
+                            )}
+                          </div>
+                          {block.prescription && (
+                            <div
+                              className="t-mono-sm"
+                              style={{
+                                color: 'var(--text-secondary)',
+                                marginLeft: 34,
+                                lineHeight: 1.5,
+                                letterSpacing: 0.3,
+                              }}
+                            >
+                              {block.prescription}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    }
+                    // Conditioning block — same indent rhythm, amber
+                    // format label + multi-line description body.
+                    return (
+                      <li key={block.id} className="stack-1">
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                          <span className="t-mono-sm" style={{ color: 'var(--amber)', minWidth: 24, fontWeight: 700 }}>
+                            {label})
+                          </span>
+                          <span
+                            className="t-body-sm"
+                            style={{ color: 'var(--amber)', fontWeight: 700, letterSpacing: 1 }}
+                          >
+                            {block.format}
+                          </span>
+                        </div>
+                        {block.description && (
+                          <div
+                            className="t-body-sm"
+                            style={{
+                              color: 'var(--text-primary)',
+                              marginLeft: 34,
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {block.description}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+
             {workout.cooldown && (
               <>
                 <div className="t-label" style={{ color: 'var(--amber)', marginBottom: 8 }}>// Cooldown</div>
@@ -2992,66 +4159,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </div>
         )}
 
-        {/* Workout blocks — each rendered as its own bracket card so
-            every movement reads as an independent HUD tile per the
-            handoff "Movement card" pattern. Lives outside the main
-            workout card to give each block visual breathing room. */}
-        {workout && !workoutMode && !showWorkoutBuilder && workout.blocks.length > 0 && (
-          <div className="stack-3">
-            {workout.blocks.map((block, idx) => {
-              const label = getBlockLabels(workout.blocks)[idx];
-              if (block.type === 'exercise') {
-                const vidUrl = block.videoUrl || getVideoUrl(block.exerciseName);
-                const parsed = parsePrescription(block.prescription);
-                return (
-                  <div key={block.id} className="ds-card bracket">
-                    <span className="bl" /><span className="br" />
-                    <div className="row-between" style={{ marginBottom: 12, alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
-                      <div className="t-display-m" style={{ color: 'var(--green)' }}>
-                        {label}) {block.exerciseName}
-                      </div>
-                      {vidUrl && (
-                        <a
-                          href={vidUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-amber btn-sm"
-                          style={{ padding: '7px 10px' }}
-                        >
-                          ▶ Demo
-                        </a>
-                      )}
-                    </div>
-                    {/* Each prescription tag as a chip. TagPill is the
-                        legacy renderer; render its parsed values as
-                        plain .chip elements to match the handoff. */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {parsed.length > 0
-                        ? parsed.map((tag, ti) => <TagPill key={ti} tag={tag} />)
-                        : block.prescription && (
-                            <span className="chip" title="Prescription">
-                              {block.prescription}
-                            </span>
-                          )}
-                    </div>
-                  </div>
-                );
-              } else {
-                return (
-                  <div key={block.id} className="ds-card bracket amber amber-tone">
-                    <span className="bl" /><span className="br" />
-                    <div className="t-display-m" style={{ color: 'var(--amber)', marginBottom: 6 }}>
-                      {block.format}
-                    </div>
-                    <div className="t-body-sm" style={{ whiteSpace: 'pre-wrap' }}>
-                      {block.description}
-                    </div>
-                  </div>
-                );
-              }
-            })}
-          </div>
-        )}
+        {/* The legacy per-block bracket-card grid was removed —
+            movements now render inside the main workout card above
+            as a unified report (Coach's Notes → Warmup → Movements
+            → Cooldown). Pulling them into the same card matches the
+            "this is the day's plan, top to bottom" mental model the
+            user wanted and drops the out-of-palette pill chips
+            (RPE pink / Tempo purple / Rest blue) that were leaking
+            colors outside the green / amber / danger system. */}
       </div>
     );
   };
@@ -3116,7 +4231,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           <textarea
             value={builderData.notes}
             onChange={e => setBuilderData({ ...builderData, notes: e.target.value })}
-            placeholder="Add coaching notes or cues..."
+            placeholder={t('planner.coaching_notes_placeholder')}
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -3234,7 +4349,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                             setExerciseSearchQuery(e.target.value);
                             setShowExerciseAutocomplete(e.target.value.length > 0);
                           }}
-                          placeholder="Search exercise..."
+                          placeholder={t('planner.search_exercise_placeholder')}
                           style={{
                             width: '100%',
                             padding: '6px 8px',
@@ -3729,10 +4844,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           type="button"
           onClick={handleNavigatePrevious}
           className="seg"
-          aria-label="Previous"
+          aria-label={t('common.previous')}
           style={{ padding: '9px 12px' }}
         >
-          ◀
+          <Icon.ChevronLeft size={14} />
         </button>
 
         <div className="segmented">
@@ -3766,10 +4881,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           type="button"
           onClick={handleNavigateNext}
           className="seg"
-          aria-label="Next"
+          aria-label={t('common.next')}
           style={{ padding: '9px 12px' }}
         >
-          ▶
+          <Icon.ChevronRight size={14} />
         </button>
       </div>
 

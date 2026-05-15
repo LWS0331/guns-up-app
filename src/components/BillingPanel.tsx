@@ -24,6 +24,7 @@ import { useState } from 'react';
 import { startCheckout, openBillingPortal, type BillingCycle } from '@/lib/stripeClient';
 import { trackEvent, EVENTS } from '@/lib/analytics';
 import type { Operator, AiTier } from '@/lib/types';
+import { useLanguage } from '@/lib/i18n';
 
 interface BillingPanelProps {
   operator: Pick<Operator, 'id' | 'email' | 'callsign' | 'tier' | 'betaUser'>;
@@ -33,20 +34,36 @@ interface TierOffer {
   key: AiTier | 'white_glove';
   name: string;
   monthly: number;
+  annual: number;
+  annualSavings: number;
   blurb: string;
   accent: string;
 }
 
-// Mirrors lib/stripe.ts → TIER_PRICES amounts. Annual price = ~17% off
-// (matches the landing page copy in /landing/page.tsx).
-const TIER_OFFERS: TierOffer[] = [
-  { key: 'haiku',       name: 'RECON',      monthly: 2,     blurb: 'Core Gunny AI · planner + macros',   accent: '#7dd3fc' },
-  { key: 'sonnet',      name: 'OPERATOR',   monthly: 5,     blurb: 'Sonnet brain · SITREP + history',    accent: '#22d3ee' },
-  { key: 'opus',        name: 'COMMANDER',  monthly: 15,    blurb: 'Opus brain · voice + wearable HR',   accent: '#facc15' },
-  { key: 'white_glove', name: 'WARFIGHTER', monthly: 49.99, blurb: 'Human trainer + weekly custom brief', accent: '#ff6b35' },
+// Mirrors lib/stripe.ts → TIER_PRICES amounts AND landing page copy in
+// /app/landing/page.tsx (the canonical pricing surface). Keep all three
+// in sync — landing copy + this in-app panel + stripe.ts → real Stripe
+// products. Annual = ~17% off the monthly equivalent.
+//
+// Pricing v3 (May 2026): RECON FREE with caps; OPERATOR $19.99,
+// COMMANDER $39.99, WARFIGHTER $149 (concierge, 25-seat cap). Junior
+// tiers ($24.99 / $49.99) are intentionally NOT in this array — separate
+// UI sprint.
+interface TierOfferV2 extends TierOffer {
+  free?: boolean;
+  caps?: string;
+}
+const TIER_OFFERS: TierOfferV2[] = [
+  { key: 'haiku',       name: 'RECON',      monthly: 0,      annual: 0,       annualSavings: 0,   blurb: 'Free entry — Haiku 4.5 · capped',                       accent: '#7dd3fc', free: true, caps: '30 chats / 24h · 5 workout gens / 7d' },
+  { key: 'sonnet',      name: 'OPERATOR',   monthly: 19.99,  annual: 199.90,  annualSavings: 40,  blurb: 'Sonnet brain · SITREP + history · soft 50 msg/day cap', accent: '#22d3ee' },
+  { key: 'opus',        name: 'COMMANDER',  monthly: 39.99,  annual: 399.90,  annualSavings: 80,  blurb: 'Sonnet unlimited + $15/mo Opus credits · web only',     accent: '#facc15' },
+  { key: 'white_glove', name: 'WARFIGHTER', monthly: 149.00, annual: 1490.00, annualSavings: 298, blurb: 'Unlimited Opus + monthly 1:1 with Ruben · 25-seat cap', accent: '#ff6b35' },
 ];
 
 export default function BillingPanel({ operator }: BillingPanelProps) {
+  // i18n hook — `t` is the translator. We rename the inner tier-map
+  // variable to `tier` below to avoid shadowing.
+  const { t } = useLanguage();
   const [busy, setBusy] = useState<string | null>(null); // tier key currently dispatching
   const [error, setError] = useState<string | null>(null);
   const [cycle, setCycle] = useState<BillingCycle>('monthly');
@@ -113,7 +130,7 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
           textTransform: 'uppercase',
         }}
       >
-        // Subscription
+        // {t('billing.subscription')}
       </div>
 
       {isPaid ? (
@@ -126,7 +143,7 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
               marginBottom: 10,
             }}
           >
-            Active tier:&nbsp;
+            {t('billing.current_tier')}:&nbsp;
             <span style={{ color: '#00ff41', textTransform: 'uppercase' }}>{operator.tier}</span>
           </div>
           <button
@@ -145,7 +162,7 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
               textTransform: 'uppercase',
             }}
           >
-            {busy === 'portal' ? 'Opening…' : 'Manage Subscription →'}
+            {busy === 'portal' ? t('common.loading') : `${t('billing.manage_billing')} →`}
           </button>
         </div>
       ) : (
@@ -158,8 +175,7 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
               marginBottom: 12,
             }}
           >
-            Beta access active. Lock in a tier to keep going past the trial — no
-            interruption to your data, plans, or PRs.
+            {t('billing.beta_active')}
           </div>
 
           {/* Cycle toggle — annual gets ~20% off, configured server-side. */}
@@ -181,7 +197,7 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
                   textTransform: 'uppercase',
                 }}
               >
-                {c}
+                {c === 'monthly' ? t('billing.monthly') : t('billing.annual')}
               </button>
             ))}
           </div>
@@ -193,13 +209,13 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
               gap: 10,
             }}
           >
-            {TIER_OFFERS.map((t) => {
-              const isCurrent = operator.tier === t.key;
+            {TIER_OFFERS.map((tier) => {
+              const isCurrent = operator.tier === tier.key;
               return (
                 <div
-                  key={t.key}
+                  key={tier.key}
                   style={{
-                    border: `1px solid ${isCurrent ? t.accent : 'rgba(255,255,255,0.06)'}`,
+                    border: `1px solid ${isCurrent ? tier.accent : 'rgba(255,255,255,0.06)'}`,
                     background: 'rgba(0,0,0,0.3)',
                     padding: 10,
                   }}
@@ -209,11 +225,11 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
                       fontFamily: 'Orbitron, sans-serif',
                       fontSize: 12,
                       letterSpacing: 2,
-                      color: t.accent,
+                      color: tier.accent,
                       marginBottom: 4,
                     }}
                   >
-                    {t.name}
+                    {tier.name}
                   </div>
                   <div
                     style={{
@@ -223,8 +239,24 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
                       marginBottom: 4,
                     }}
                   >
-                    ${t.monthly}/mo
+                    {tier.free
+                      ? 'FREE'
+                      : cycle === 'annual'
+                        ? `$${tier.annual.toFixed(2)}/${t('billing.year')}`
+                        : `$${tier.monthly.toFixed(2)}/${t('billing.month')}`}
                   </div>
+                  {!tier.free && cycle === 'annual' && (
+                    <div
+                      style={{
+                        fontFamily: 'Share Tech Mono, monospace',
+                        fontSize: 10,
+                        color: tier.accent,
+                        marginBottom: 4,
+                      }}
+                    >
+                      {t('billing.save')} ${tier.annualSavings}
+                    </div>
+                  )}
                   <div
                     style={{
                       fontFamily: 'Share Tech Mono, monospace',
@@ -234,27 +266,60 @@ export default function BillingPanel({ operator }: BillingPanelProps) {
                       lineHeight: 1.3,
                     }}
                   >
-                    {t.blurb}
+                    {tier.blurb}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleUpgrade(t.key)}
-                    disabled={busy === t.key}
-                    style={{
-                      width: '100%',
-                      fontFamily: 'Orbitron, sans-serif',
-                      fontSize: 10,
-                      letterSpacing: 1.5,
-                      padding: '6px 10px',
-                      border: `1px solid ${t.accent}`,
-                      background: busy === t.key ? `${t.accent}33` : 'transparent',
-                      color: t.accent,
-                      cursor: busy === t.key ? 'wait' : 'pointer',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {busy === t.key ? 'Loading…' : isCurrent ? 'Confirm This Tier' : 'Choose →'}
-                  </button>
+                  {tier.caps && (
+                    <div
+                      style={{
+                        fontFamily: 'Share Tech Mono, monospace',
+                        fontSize: 9,
+                        color: tier.accent,
+                        marginBottom: 8,
+                        lineHeight: 1.3,
+                        opacity: 0.7,
+                      }}
+                    >
+                      Caps: {tier.caps}
+                    </div>
+                  )}
+                  {tier.free ? (
+                    <div
+                      style={{
+                        width: '100%',
+                        fontFamily: 'Orbitron, sans-serif',
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        padding: '6px 10px',
+                        border: `1px solid ${tier.accent}33`,
+                        color: tier.accent,
+                        textAlign: 'center',
+                        opacity: 0.6,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {isCurrent ? 'Active' : 'No purchase needed'}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleUpgrade(tier.key)}
+                      disabled={busy === tier.key}
+                      style={{
+                        width: '100%',
+                        fontFamily: 'Orbitron, sans-serif',
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        padding: '6px 10px',
+                        border: `1px solid ${tier.accent}`,
+                        background: busy === tier.key ? `${tier.accent}33` : 'transparent',
+                        color: tier.accent,
+                        cursor: busy === tier.key ? 'wait' : 'pointer',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {busy === tier.key ? t('common.loading') : isCurrent ? t('billing.confirm') : `${t('billing.choose')} →`}
+                    </button>
+                  )}
                 </div>
               );
             })}

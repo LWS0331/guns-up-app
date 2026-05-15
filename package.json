@@ -7,8 +7,11 @@
     "dev": "next dev",
     "postinstall": "DATABASE_URL=${DATABASE_URL:-postgresql://dummy:dummy@localhost:5432/dummy} prisma generate",
     "build": "bash scripts/build.sh",
-    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
-    "lint": "next lint"
+    "start": "bash scripts/start.sh",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +25,7 @@
     "dotenv": "^17.3.1",
     "jsonwebtoken": "^9.0.3",
     "next": "^14.2.35",
+    "node-ical": "^0.26.1",
     "pg": "^8.20.0",
     "posthog-js": "^1.363.1",
     "prisma": "^7.5.0",
@@ -30,13 +34,21 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.0",
     "remark-gfm": "^4.0.1",
-    "stripe": "^20.4.1"
+    "stripe": "^20.4.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
-    "typescript": "^5.9.3"
+    "@types/web-push": "^3.6.4",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/ui": "^4.1.6",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
   }
 }
