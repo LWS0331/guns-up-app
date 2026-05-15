@@ -1081,25 +1081,59 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     }
 
     // Convert messages to Anthropic format — filter empty and ensure first msg is user role
-    // Support vision: if a message has an image field (base64 data URL), build content blocks
+    // Support vision: a user message may carry either a single `image` (legacy) or an
+    // `images` array (video form-check: client-extracted keyframes in temporal order).
+    // Both produce one Claude image content block per accepted frame.
     const anthropicMessages = messages
-      .map((msg: { role: string; text?: string; content?: string; image?: string }) => {
+      .map((msg: { role: string; text?: string; content?: string; image?: string; images?: string[] }) => {
         const role = msg.role === 'gunny' ? 'assistant' as const : 'user' as const;
         const text = msg.text || msg.content || '';
-        // If user message has an image, build multi-part content array
-        if (msg.image && role === 'user') {
+
+        // Collect frames in order: legacy `image` first, then any `images[]`.
+        // De-dupe so a client that double-sets both fields doesn't double-pay.
+        const rawFrames: string[] = [];
+        if (msg.image) rawFrames.push(msg.image);
+        if (Array.isArray(msg.images)) {
+          for (const f of msg.images) {
+            if (typeof f === 'string' && f && !rawFrames.includes(f)) rawFrames.push(f);
+          }
+        }
+
+        if (rawFrames.length > 0 && role === 'user') {
           type SupportedMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
           const ALLOWED_MEDIA: SupportedMediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-          const parts: Array<{ type: 'image'; source: { type: 'base64'; media_type: SupportedMediaType; data: string } } | { type: 'text'; text: string }> = [];
-          // Extract media type and base64 data from data URL
-          const match = msg.image.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-          if (match && ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) {
-            parts.push({ type: 'image', source: { type: 'base64', media_type: match[1] as SupportedMediaType, data: match[2] } });
+          const parts: Array<
+            | { type: 'image'; source: { type: 'base64'; media_type: SupportedMediaType; data: string } }
+            | { type: 'text'; text: string }
+          > = [];
+
+          for (const frame of rawFrames) {
+            const match = frame.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+            if (match && ALLOWED_MEDIA.includes(match[1] as SupportedMediaType)) {
+              parts.push({
+                type: 'image',
+                source: { type: 'base64', media_type: match[1] as SupportedMediaType, data: match[2] },
+              });
+            }
           }
-          if (text.trim()) {
-            parts.push({ type: 'text', text });
+
+          // If we couldn't decode any frames, fall back to a plain text message
+          // rather than sending an empty multi-part content array (Anthropic rejects).
+          if (parts.length === 0) {
+            return { role, content: text || 'Analyze this image.' };
+          }
+
+          // Multi-frame messages = client-side video keyframe extraction. Tell Gunny
+          // the frames are temporally ordered stills from a form-check clip so it
+          // critiques the movement across the sequence rather than each frame in
+          // isolation. Single-frame messages keep the legacy "Analyze this image"
+          // default.
+          if (parts.length > 1) {
+            const lead = `[Form-check video — ${parts.length} stills attached above in temporal order, earliest first. Comment on rep tempo, bar/limb path, depth/ROM, and any safety issues across the sequence. Treat the frames as a single movement, not as independent photos.]`;
+            const userText = text.trim() ? `${lead}\n\n${text}` : lead;
+            parts.push({ type: 'text', text: userText });
           } else {
-            parts.push({ type: 'text', text: 'Analyze this image.' });
+            parts.push({ type: 'text', text: text.trim() || 'Analyze this image.' });
           }
           return { role, content: parts };
         }
