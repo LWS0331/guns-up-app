@@ -5,6 +5,8 @@
 
 # testing
 /coverage
+test-results.junit.xml
+.vitest-cache/
 
 # next.js
 /.next/
