@@ -22,6 +22,16 @@ interface GunnyChatProps {
   operator: Operator;
   allOperators: Operator[];
   onUpdateOperator?: (updated: Operator) => void;
+  /**
+   * Currently active app tab. The Gunny tab and the floating panel both
+   * read/write the same backend thread, so when the user switches INTO
+   * the Gunny tab we re-pull the canonical thread to pick up writes the
+   * panel made while we were display:none. Without this the tab keeps
+   * rendering the snapshot it had at mount and silently overwrites the
+   * panel's newer messages on the next save. Optional so other call
+   * sites can mount this component standalone.
+   */
+  activeTab?: string;
 }
 
 interface Message {
@@ -463,7 +473,7 @@ const needsOnboarding = (op: Operator): boolean => {
   return false;
 };
 
-export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, onUpdateOperator }) => {
+export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, onUpdateOperator, activeTab }) => {
   const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -796,6 +806,68 @@ export const GunnyChat: React.FC<GunnyChatProps> = ({ operator, allOperators, on
       }
     };
   }, [operator.id]);
+
+  // ─── Cross-surface sync (tab side) ─────────────────────────────────────
+  // The floating Gunny panel and this tab write to the SAME backend thread
+  // ('gunny-tab') and the SAME localStorage key ('gunny-chat-${id}'). The
+  // tab is always-mounted (display-toggled) so its `messages` state can go
+  // stale: panel writes [A, B, C] while tab is display:none → tab still
+  // holds [A, B] in memory → user types in tab → C is overwritten.
+  //
+  // Fix: when the user switches INTO the Gunny tab, re-pull the canonical
+  // thread (and re-read localStorage, which the panel writes synchronously
+  // ahead of its 600ms-debounced API write) and replace local state with
+  // the freshest source. We pre-set prevSnapshotRef so the resulting state
+  // change short-circuits the persist effect — the data already lives in
+  // the API/localStorage, no need to re-PUT it.
+  const prevActiveTabRef = useRef<string | undefined>(activeTab);
+  useEffect(() => {
+    const prev = prevActiveTabRef.current;
+    prevActiveTabRef.current = activeTab;
+    // Only act on transitions INTO 'gunny' from another tab — the initial
+    // mount load is owned by the load effect above.
+    if (activeTab !== 'gunny' || prev === activeTab) return;
+    // Initial load for this operator hasn't completed yet; let it own the
+    // first read instead of racing it.
+    if (initOperatorRef.current !== operator.id) return;
+    // Don't disturb an in-flight stream — replacing messages mid-stream
+    // would wipe the placeholder Gunny is currently filling.
+    if (isTyping) return;
+    // Onboarding uses a different chatType ('gunny-onboarding') and the
+    // panel never writes there, so there's nothing to sync.
+    if (isOnboarding) return;
+
+    let cancelled = false;
+    (async () => {
+      const apiMessages = await loadChatFromAPI(operator.id, 'gunny-tab');
+      if (cancelled) return;
+      const localMessages = loadChatFromLocalStorage(operator.id);
+
+      const lastTs = (msgs: Message[] | null): number => {
+        if (!msgs || msgs.length === 0) return 0;
+        const last = msgs[msgs.length - 1];
+        const t = last?.timestamp ? new Date(last.timestamp).getTime() : 0;
+        return Number.isFinite(t) ? t : 0;
+      };
+
+      const apiHas = !!apiMessages && apiMessages.length > 0;
+      const localHas = !!localMessages && localMessages.length > 0;
+      if (!apiHas && !localHas) return;
+      const winner: Message[] =
+        apiHas && localHas
+          ? (lastTs(localMessages!) > lastTs(apiMessages!) ? localMessages! : apiMessages!)
+          : (apiHas ? apiMessages! : localMessages!);
+
+      // Skip a no-op replace by matching the persist effect's signature.
+      const winnerSnap = winner.map(m => `${m.id}:${m.text?.length ?? 0}`).join('|');
+      if (winnerSnap === prevSnapshotRef.current) return;
+      // Pre-seed the snapshot so the persist effect skips on this update.
+      prevSnapshotRef.current = winnerSnap;
+      setMessages(winner);
+    })();
+
+    return () => { cancelled = true; };
+  }, [activeTab, operator.id, isTyping, isOnboarding]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

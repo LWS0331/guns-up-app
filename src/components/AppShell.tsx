@@ -248,6 +248,12 @@ const AppShell: React.FC<AppShellProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
+  // Track which operator's initial panel load (migration + first fetch) has
+  // ACTUALLY completed — panelInitRef is set synchronously at the start of
+  // the load effect to gate re-entry, so it can't distinguish "load in
+  // flight" from "load done." The cross-surface refetch effect below uses
+  // this ref to avoid racing the initial load on the very first panel open.
+  const panelLoadCompletedForRef = useRef<string>('');
 
   // Initialize mounted state and responsive detection
   useEffect(() => {
@@ -543,7 +549,12 @@ const AppShell: React.FC<AppShellProps> = ({
         timestamp: Date.now(),
       }]);
     };
-    loadPanelChat();
+    loadPanelChat().finally(() => {
+      // Mark the initial migration + load done so the cross-surface
+      // refetch effect below knows it can safely take over for subsequent
+      // panel re-opens without racing the migration.
+      panelLoadCompletedForRef.current = opId;
+    });
   }, [showGunnyPanel, selectedOperator.id, selectedOperator.callsign, activeTab]);
 
   // Persist panel messages — split strategy:
@@ -614,6 +625,86 @@ const AppShell: React.FC<AppShellProps> = ({
       }
     };
   }, [selectedOperator.id]);
+
+  // ─── Cross-surface sync (panel side) ───────────────────────────────────
+  // Symmetric to the activeTab-driven refetch in GunnyChat.tsx. The panel
+  // and the GUNNY tab write to the same backend thread; on re-open the
+  // panel's `gunnyMessages` may be stale because the tab wrote to the
+  // canonical thread + localStorage while the panel was hidden. Refetch
+  // the canonical thread (and re-read localStorage, which the tab writes
+  // synchronously ahead of its 600ms-debounced API write) and pick the
+  // freshest source.
+  //
+  // First-open is owned by the load effect above (which also runs the
+  // one-time legacy → canonical migration); this effect only fires on
+  // SECOND-or-later opens, gated on panelLoadCompletedForRef. We also
+  // skip mid-stream (gunnyLoading) so we don't blow away a placeholder
+  // Gunny is filling in.
+  const prevShowGunnyPanelRef = useRef(false);
+  useEffect(() => {
+    const wasShown = prevShowGunnyPanelRef.current;
+    const isShown = showGunnyPanel;
+    prevShowGunnyPanelRef.current = isShown;
+
+    // Only act on false→true transitions.
+    if (!isShown || wasShown) return;
+    // Initial load hasn't completed for this operator — let it own the
+    // first read (and the migration) instead of racing it.
+    if (panelLoadCompletedForRef.current !== selectedOperator.id) return;
+    // Don't disturb an in-flight stream.
+    if (gunnyLoading) return;
+
+    const opId = selectedOperator.id;
+    const CANONICAL_TYPE = 'gunny-tab';
+    const CANONICAL_KEY = `gunny-chat-${opId}`;
+
+    let cancelled = false;
+    (async () => {
+      let apiMsgs: ChatMessage[] = [];
+      try {
+        const res = await fetch(`/api/chat?operatorId=${opId}&chatType=${CANONICAL_TYPE}`, {
+          headers: { 'Authorization': `Bearer ${getAuthToken()}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          apiMsgs = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+        }
+      } catch { /* fall through to local */ }
+      if (cancelled) return;
+
+      let localMsgs: ChatMessage[] = [];
+      try {
+        const raw = localStorage.getItem(CANONICAL_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) localMsgs = parsed as ChatMessage[];
+        }
+      } catch { /* ignore */ }
+
+      const lastTs = (msgs: ChatMessage[]): number => {
+        const last = msgs[msgs.length - 1];
+        return last?.timestamp ?? 0;
+      };
+
+      const apiHas = apiMsgs.length > 0;
+      const localHas = localMsgs.length > 0;
+      if (!apiHas && !localHas) return;
+      const winner: ChatMessage[] =
+        apiHas && localHas
+          ? (lastTs(localMsgs) > lastTs(apiMsgs) ? localMsgs : apiMsgs)
+          : (apiHas ? apiMsgs : localMsgs);
+
+      // Skip a no-op replace by matching the persist effect's signature.
+      const winnerSnap = winner.map(m => `${m.role}:${(m.text ?? '').length}:${m.timestamp}`).join('|');
+      if (winnerSnap === prevPanelSnapshotRef.current) return;
+      // Pre-seed the snapshot so the persist effect skips on this update —
+      // the data already lives in the API/local, no need to re-PUT it.
+      prevPanelSnapshotRef.current = winnerSnap;
+      setGunnyMessages(winner);
+    })();
+
+    return () => { cancelled = true; };
+  }, [showGunnyPanel, selectedOperator.id, gunnyLoading]);
 
   // Focus input when panel opens
   useEffect(() => {
@@ -2210,7 +2301,7 @@ const AppShell: React.FC<AppShellProps> = ({
         {renderTabContent()}
         {/* Always-mounted GunnyChat — display-toggled so streaming state & refs survive tab switches. */}
         <div style={{ display: activeTab === 'gunny' ? 'block' : 'none', height: '100%' }}>
-          <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} />
+          <GunnyChat operator={currentSelectedOp} allOperators={accessibleUsers} onUpdateOperator={onUpdateOperator} activeTab={activeTab} />
         </div>
       </main>
 
