@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Operator, TIER_CONFIGS, AiTier } from '@/lib/types';
+import { useLanguage } from '@/lib/i18n';
 
 interface ClientOnboardingProps {
   operator: Operator;
@@ -12,6 +13,7 @@ interface ClientOnboardingProps {
 type OnboardingStep = 1 | 2 | 3;
 
 const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperators, onUpdateOperator }) => {
+  const { t } = useLanguage();
   const [step, setStep] = useState<OnboardingStep>(1);
   const [selectedTrainerId, setSelectedTrainerId] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<AiTier | null>(null);
@@ -21,12 +23,12 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
   const trainers = allOperators.filter(op => op.role === 'trainer');
 
   // Get the selected trainer
-  const selectedTrainer = trainers.find(t => t.id === selectedTrainerId);
+  const selectedTrainer = trainers.find(tr => tr.id === selectedTrainerId);
 
   // Get tier config
   const tierConfig = selectedTier ? TIER_CONFIGS[selectedTier] : null;
   const price = isAnnual && tierConfig ? tierConfig.annualPrice : tierConfig?.monthlyPrice || 0;
-  const priceLabel = isAnnual ? 'per year' : 'per month';
+  const priceLabel = isAnnual ? t('onboarding.tier.per_year') : t('onboarding.tier.per_month');
 
   // Get client count for a trainer
   const getClientCount = (trainerId: string): number => {
@@ -107,7 +109,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
           letterSpacing: '2px',
           textAlign: 'center',
         }}>
-          OPERATOR ONBOARDING
+          {t('onboarding.title')}
         </h1>
 
         <p style={{
@@ -116,7 +118,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
           textAlign: 'center',
           margin: '0 0 30px 0',
         }}>
-          Complete your profile • Select a trainer • Choose your tier
+          {t('onboarding.subtitle')}
         </p>
 
         {/* Progress Bar */}
@@ -149,7 +151,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                 fontWeight: s === step ? 'bold' : 'normal',
               }}
             >
-              STEP {s}
+              {t('onboarding.step')} {s}
             </div>
           ))}
         </div>
@@ -165,7 +167,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
               textTransform: 'uppercase',
               letterSpacing: '1px',
             }}>
-              SELECT YOUR TRAINER
+              {t('onboarding.trainer.heading')}
             </h2>
 
             <p style={{
@@ -173,7 +175,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
               color: '#888',
               margin: '0 0 20px 0',
             }}>
-              Choose a trainer to guide your fitness journey
+              {t('onboarding.trainer.intro')}
             </p>
 
             <div style={{
@@ -192,7 +194,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                   textAlign: 'center',
                   color: '#888',
                 }}>
-                  No trainers available
+                  {t('onboarding.trainer.none')}
                 </div>
               ) : (
                 trainers.map(trainer => {
@@ -246,7 +248,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                         fontSize: '10px',
                         color: '#666',
                       }}>
-                        {clientCount} clients
+                        {clientCount} {t('onboarding.trainer.clients_suffix')}
                       </p>
                       {team && (
                         <p style={{
@@ -276,7 +278,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
               textTransform: 'uppercase',
               letterSpacing: '1px',
             }}>
-              CHOOSE YOUR TIER
+              {t('onboarding.tier.heading')}
             </h2>
 
             <p style={{
@@ -284,7 +286,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
               color: '#888',
               margin: '0 0 20px 0',
             }}>
-              Select the AI model that powers your Gunny experience
+              {t('onboarding.tier.intro')}
             </p>
 
             {/* Annual Toggle */}
@@ -295,7 +297,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
               gap: '15px',
               marginBottom: '30px',
             }}>
-              <span style={{ fontSize: '12px', color: isAnnual ? '#888' : '#00ff41' }}>Monthly</span>
+              <span style={{ fontSize: '12px', color: isAnnual ? '#888' : '#00ff41' }}>{t('onboarding.tier.monthly')}</span>
               <button
                 onClick={() => setIsAnnual(!isAnnual)}
                 style={{
@@ -311,9 +313,9 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                   transition: 'all 0.2s',
                 }}
               >
-                {isAnnual ? 'ANNUAL (17% OFF)' : 'SWITCH TO ANNUAL'}
+                {isAnnual ? t('onboarding.tier.annual_active') : t('onboarding.tier.switch_annual')}
               </button>
-              <span style={{ fontSize: '12px', color: !isAnnual ? '#888' : '#00ff41' }}>Annual</span>
+              <span style={{ fontSize: '12px', color: !isAnnual ? '#888' : '#00ff41' }}>{t('onboarding.tier.annual')}</span>
             </div>
 
             {/* Tier Cards */}
@@ -392,7 +394,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                       ))}
                       {tierConfig.features.length > 2 && (
                         <li style={{ marginBottom: '4px', color: '#666' }}>
-                          +{tierConfig.features.length - 2} more
+                          +{tierConfig.features.length - 2} {t('onboarding.tier.more_suffix')}
                         </li>
                       )}
                     </ul>
@@ -414,7 +416,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
               textTransform: 'uppercase',
               letterSpacing: '1px',
             }}>
-              CONFIRM & SUBSCRIBE
+              {t('onboarding.confirm.heading')}
             </h2>
 
             {/* Summary Card */}
@@ -433,7 +435,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                 textTransform: 'uppercase',
                 letterSpacing: '1px',
               }}>
-                YOUR SETUP
+                {t('onboarding.confirm.your_setup')}
               </h3>
 
               {/* Trainer Summary */}
@@ -442,7 +444,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                 paddingBottom: '20px',
                 borderBottom: '1px solid #1a1a2e',
               }}>
-                <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#888' }}>TRAINER</p>
+                <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#888' }}>{t('onboarding.confirm.trainer_label')}</p>
                 <p style={{ margin: 0, fontSize: '14px', color: '#00ff41', fontFamily: '"Orbitron", sans-serif' }}>
                   {selectedTrainer.callsign}
                 </p>
@@ -457,7 +459,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                 paddingBottom: '20px',
                 borderBottom: '1px solid #1a1a2e',
               }}>
-                <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#888' }}>TIER</p>
+                <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#888' }}>{t('onboarding.confirm.tier_label')}</p>
                 <p style={{ margin: 0, fontSize: '14px', color: '#00ff41', fontFamily: '"Orbitron", sans-serif' }}>
                   {tierConfig.name}
                 </p>
@@ -468,7 +470,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
 
               {/* Price Summary */}
               <div>
-                <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#888' }}>BILLING</p>
+                <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#888' }}>{t('onboarding.confirm.billing_label')}</p>
                 <div style={{
                   fontSize: '24px',
                   color: '#00ff41',
@@ -478,7 +480,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                   ${price.toFixed(2)}
                 </div>
                 <p style={{ margin: 0, fontSize: '10px', color: '#666' }}>
-                  {isAnnual ? 'Billed annually' : 'Billed monthly'}
+                  {isAnnual ? t('onboarding.confirm.billed_annually') : t('onboarding.confirm.billed_monthly')}
                 </p>
               </div>
             </div>
@@ -494,7 +496,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
               color: '#888',
               lineHeight: '1.6',
             }}>
-              You are currently in BETA. Click "START FREE BETA" to begin your onboarding without charge. Your trainer will guide you through intake and programming.
+              {t('onboarding.confirm.beta_notice')}
             </div>
           </div>
         )}
@@ -531,7 +533,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                 (e.currentTarget as HTMLButtonElement).style.color = '#888';
               }}
             >
-              BACK
+              {t('onboarding.btn.back')}
             </button>
           )}
 
@@ -577,7 +579,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                 (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
               }}
             >
-              NEXT
+              {t('onboarding.btn.next')}
             </button>
           ) : (
             <button
@@ -604,7 +606,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ operator, allOperat
                 (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
               }}
             >
-              START FREE BETA
+              {t('onboarding.btn.start_beta')}
             </button>
           )}
         </div>

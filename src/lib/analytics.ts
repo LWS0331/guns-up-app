@@ -52,4 +52,30 @@ export const EVENTS = {
   BETA_FEEDBACK_SUBMITTED: 'beta_feedback_submitted',
   ACHIEVEMENT_UNLOCKED: 'achievement_unlocked',
   TAB_CHANGED: 'tab_changed',
+
+  // ─── Early Access funnel ─────────────────────────────────────────────
+  // Founding-cohort marketing page (/early-access). Conversion happens
+  // entirely off-platform via Instagram DM — these events are how we see
+  // intent before it leaves our domain. Properties documented at each
+  // fire site in the page + chat components.
+  //
+  // EARLY_ACCESS_IG_CLICK: any IG-DM/IG-profile click on /early-access.
+  //   props: { cta: 'commander' | 'warfighter' | 'ops_helper' | 'closed_box',
+  //            tier?: 'commander' | 'warfighter' }
+  //
+  // EARLY_ACCESS_CHAT_MSG_SENT: user submits a Gunny-Lite question.
+  //   props: { msg_number: 1 | 2 }
+  //
+  // EARLY_ACCESS_CHAT_LIMIT_HIT: server flagged limitReached=true (either
+  // because the 2-msg cap is now exhausted, or because the Anthropic call
+  // failed and the fallback path triggered).
+  //   props: { via: 'cap_reached' | 'network_error' }
+  //
+  // EARLY_ACCESS_CHAT_FALLBACK_CLICK: user clicks the "DM @gunnyai_fit"
+  // button that replaces the input after limit hit.
+  //   props: {}
+  EARLY_ACCESS_IG_CLICK: 'early_access_ig_click',
+  EARLY_ACCESS_CHAT_MSG_SENT: 'early_access_chat_msg_sent',
+  EARLY_ACCESS_CHAT_LIMIT_HIT: 'early_access_chat_limit_hit',
+  EARLY_ACCESS_CHAT_FALLBACK_CLICK: 'early_access_chat_fallback_click',
 } as const;

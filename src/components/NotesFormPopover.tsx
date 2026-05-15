@@ -179,10 +179,10 @@ export default function NotesFormPopover({
             <button
               type="button"
               onClick={() => { onPlayDemo(); onClose(); }}
-              className="btn btn-amber btn-sm"
+              className="btn btn-ghost btn-sm"
               style={{ flex: '1 1 140px' }}
             >
-              <Icon.Play size={11} /> Form Demo
+              <Icon.Play size={11} /> DEMO
             </button>
           )}
           {onUploadForm && (

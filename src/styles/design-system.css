@@ -827,6 +827,33 @@
   z-index: 200;
   padding: 8px 0 calc(env(safe-area-inset-bottom, 0px) + 6px);
 }
+/* 6-col variant — enables Daily Ops + a power tab (OPS / PARENT_HUB)
+   to coexist at thumb-reach for admins / trainers who are also
+   Commander-tier. Buttons compress narrower (5 → 6 cols on a 390px
+   iPhone width = ~65px → ~54px per cell), still legible. */
+.ds-tabbar.six-col {
+  grid-template-columns: repeat(6, 1fr);
+}
+.ds-tabbar.six-col .lbl {
+  /* Slightly tighter label letter-spacing so 6-letter labels like
+     'PLANNER' don't truncate at narrower cell width. */
+  letter-spacing: 1px;
+}
+/* 7-col variant — trainer-parents who hold Daily Ops + OPS AND
+   Parent Hub need all three at thumb-reach (otherwise OPS would
+   shadow Parent Hub in the 6-col power-tab slot). At 390px iPhone
+   width that's ~46px per cell — labels stay legible because they're
+   all short (COC, GUNNY, INTEL, DAY OPS, PARENT, OPS). */
+.ds-tabbar.seven-col {
+  grid-template-columns: repeat(7, 1fr);
+}
+.ds-tabbar.seven-col .lbl {
+  letter-spacing: 0.5px;
+  font-size: 8px;
+}
+.ds-tabbar.seven-col button {
+  padding: 6px 2px 4px;
+}
 .ds-tabbar button {
   background: none;
   border: none;

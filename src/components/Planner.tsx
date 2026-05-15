@@ -3,12 +3,15 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, Workout, WorkoutBlock, ExerciseBlock, ConditioningBlock, DayTag, ViewMode, WorkoutResults, BlockResult, SetResult } from '@/lib/types';
-import { EXERCISE_LIBRARY, getVideoUrl } from '@/data/exercises';
+import { hasCommanderAccess } from '@/lib/tierGates';
+import { EXERCISE_LIBRARY, getVideoUrl, resolveExerciseName } from '@/data/exercises';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import BattlePlanRef from '@/components/BattlePlanRef';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import { VoiceCommand } from '@/components/VoiceInput';
 import { speak, unlockAudioContext, getPreferredVoice, setPreferredVoice, VOICE_OPTIONS, GunnyVoice } from '@/lib/tts';
+import { resolveRestSeconds } from '@/lib/restTimer';
+import PostWorkoutAnalysis from '@/components/PostWorkoutAnalysis';
 import VideoModal from '@/components/VideoModal';
 import WarmupMovementCard from '@/components/WarmupMovementCard';
 import HRZoneGauge from '@/components/HRZoneGauge';
@@ -236,9 +239,14 @@ interface PlannerProps {
   gunnyVoiceResponse?: string | null; // Gunny's spoken response — show as overlay
   onDismissGunnyResponse?: () => void;
   onWorkoutModeChange?: (state: WorkoutModeState) => void;
+  /** Fired AFTER handleSaveWorkout commits — gives the parent a chance to
+   *  keep the planner tab active. Per beta hotfix (Apr 2026): some users
+   *  reported the save bouncing them back to the COC dashboard; the parent
+   *  should respond by ensuring activeTab stays 'planner'. */
+  onWorkoutSaved?: () => void;
 }
 
-const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, gunnyVoiceResponse, onDismissGunnyResponse, onWorkoutModeChange }) => {
+const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGunny, onSendGunnyMessage, gunnyVoiceResponse, onDismissGunnyResponse, onWorkoutModeChange, onWorkoutSaved }) => {
   const { t, language } = useLanguage();
   // ============================================================================
   // STATE
@@ -270,6 +278,23 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // Drag and drop state
   const [dragDate, setDragDate] = useState<string | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  // Touch drag-and-drop state. HTML5 native drag (the `draggable`
+  // attribute + onDragStart/onDrop) does NOT fire on mobile touch
+  // devices — iOS Safari and most Android browsers only synthesize
+  // drag events from mouse input. So we emulate drag on touch via a
+  // long-press → touchmove → touchend pipeline. The long-press timer
+  // ref distinguishes a tap (which should still navigate to Day view)
+  // from an intent-to-drag (~250ms hold).
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchDragActiveRef = useRef(false);
+  // Records where the finger first landed so we can apply a movement
+  // threshold before cancelling the long-press. iOS Safari fires
+  // touchmove for sub-pixel jitter just from placing a finger on the
+  // screen — without a threshold the long-press timer was getting
+  // cancelled before the 250ms hold ever finished, so drag never
+  // activated. 10px tolerance is generous enough to absorb finger
+  // jitter but tight enough that a real drag-intent registers as one.
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Workout builder state
   const [builderData, setBuilderData] = useState<Workout>({
@@ -310,8 +335,43 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   const fallbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const [workoutResults, setWorkoutResults] = useState<Record<string, { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string }>>({});
 
+  // REMOVE THIS — confirm-then-delete + undo toast.
+  //
+  // Old behavior: single tap = instant delete with no undo. Users
+  // were accidentally removing exercises mid-workout and asking
+  // Gunny to add them back (which was its own hit-or-miss path —
+  // see workoutModification.ts comments). New flow:
+  //   1. First tap → button label + style flips to confirm. 3-sec
+  //      timeout reverts back to the safe state.
+  //   2. Second tap (within 3 sec) → actually removes, snapshots
+  //      the removed block + its results into removedSnapshot, and
+  //      shows a 10-sec UNDO toast.
+  //   3. Tap UNDO on the toast → restore the block at its original
+  //      array position with its original results intact.
+  const [removeConfirmAt, setRemoveConfirmAt] = useState<number | null>(null);
+  const [removedSnapshot, setRemovedSnapshot] = useState<{
+    dateStr: string;
+    block: WorkoutBlock;
+    insertAt: number;
+    resultsForBlock: { sets: { weight: number; reps: number; completed: boolean }[]; notes?: string } | null;
+    removedAt: number;
+  } | null>(null);
+  const removeConfirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Mission Complete overlay — shown after COMPLETE WORKOUT, before returning to day view
   const [showCompletionScreen, setShowCompletionScreen] = useState(false);
+
+  // In-workout "Ask Gunny" overlay (Apr 2026 hotfix). Replaces the
+  // "tap-to-open-Gunny-tab" button that was kicking operators out of
+  // workout mode mid-session and dropping their timer/progress. The
+  // overlay sits on top of the workout view so the underlying state
+  // (timer, set log, current step) keeps running. Submission goes via
+  // the existing onSendGunnyMessage prop; the response comes back
+  // through gunnyVoiceResponse and renders in the existing amber
+  // overlay above the active block.
+  const [showAskGunnyOverlay, setShowAskGunnyOverlay] = useState(false);
+  const [askGunnyDraft, setAskGunnyDraft] = useState('');
   const [completionData, setCompletionData] = useState<{
     title: string;
     duration: number;       // minutes
@@ -319,7 +379,21 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     totalVolume: number;    // lbs
     completionRate: number; // 0-100
     gunnyMessage: string;
+    /** Auto-detected PRs from this session (Apr 2026 hotfix). Surfaced
+     *  in the completion screen so the operator sees the wins they hit;
+     *  also already appended to operator.prs by handleSaveResults. */
+    newPRs?: Array<{ exercise: string; weight: number; reps: number; isBaseline: boolean }>;
+    /** Workout date — needed to write sessionRpe back from the
+     *  autoregulation completion overlay. */
+    dateStr?: string;
   } | null>(null);
+  // Post-workout sRPE capture — Foster's session RPE 1-10. Bound to
+  // the completion overlay; persisted to Workout.sessionRpe when the
+  // user dismisses with DEBRIEF COMPLETE. Drives the autoregulation
+  // engine (ACWR + load monitoring). Default to 7 (typical "challenging
+  // but doable" working session) so a single tap = capture; user can
+  // adjust before dismissing.
+  const [pendingSrpe, setPendingSrpe] = useState<number>(7);
 
   // Voice command state
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
@@ -330,6 +404,24 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   useEffect(() => {
     setSelectedVoice(getPreferredVoice());
   }, []);
+
+  // ─── Touch-drag scroll suppression ────────────────────────────────────
+  // React (since 17) attaches touch listeners as PASSIVE by default,
+  // which means `e.preventDefault()` inside an onTouchMove handler is
+  // silently ignored on mobile browsers. To stop the page from scrolling
+  // while a drag is active, we attach a NON-passive document-level
+  // touchmove listener that calls preventDefault for the duration of
+  // the drag. The listener auto-detaches on drag end (effect cleanup).
+  useEffect(() => {
+    if (!dragDate) return;
+    const onMove = (e: TouchEvent) => {
+      if (touchDragActiveRef.current) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('touchmove', onMove, { passive: false });
+    return () => document.removeEventListener('touchmove', onMove);
+  }, [dragDate]);
   const voiceFeedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
   const showVoiceFeedback = useCallback((msg: string) => {
@@ -405,9 +497,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         const blockData = workoutResults[exerciseBlocks[i].id];
         if (!blockData || blockData.sets.some(s => !s.completed)) {
           setActiveBlockIdx(i);
-          const exName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName || 'Next exercise';
-          showVoiceFeedback(`NEXT: ${exName}`);
-          speak(`Moving to ${exName}.`);
+          // Resolve to ES name when the operator is on Spanish so
+          // both the on-screen banner and the TTS voice match the
+          // language they're using everywhere else.
+          const rawName = (exerciseBlocks[i] as ExerciseBlock)?.exerciseName;
+          const exName = rawName
+            ? resolveExerciseName(rawName, language)
+            : (language === 'es' ? 'Siguiente ejercicio' : 'Next exercise');
+          showVoiceFeedback(`${language === 'es' ? 'SIGUIENTE' : 'NEXT'}: ${exName}`);
+          speak(language === 'es' ? `Pasando a ${exName}.` : `Moving to ${exName}.`);
           break;
         }
       }
@@ -443,11 +541,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
   // HR Zone definitions based on max HR (220 - age)
   const maxHR = 220 - (operator.profile?.age || 30);
   const HR_ZONES = [
-    { zone: 1, name: 'RECOVERY', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
-    { zone: 2, name: 'FAT BURN', min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
-    { zone: 3, name: 'CARDIO', min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
-    { zone: 4, name: 'THRESHOLD', min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
-    { zone: 5, name: 'MAX EFFORT', min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
+    { zone: 1, name: t('planner.hr_zone_recovery'),  min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#00ff41' },
+    { zone: 2, name: t('planner.hr_zone_fat_burn'),  min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#00ff41' },
+    { zone: 3, name: t('planner.hr_zone_cardio'),    min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#ffb800' },
+    { zone: 4, name: t('planner.hr_zone_threshold'), min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#ff6600' },
+    { zone: 5, name: t('planner.hr_zone_max_effort'),min: Math.round(maxHR * 0.90), max: maxHR, color: '#ff4444' },
   ];
 
   const getCurrentZone = (hr: number) => {
@@ -936,7 +1034,13 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     setShowWorkoutBuilder(false);
     setWorkoutMode(false);
     /* activeListening removed — use Radio tab */
-    // Stay on day view so user can review the saved workout — don't clear selectedDate
+    // Stay on day view so user can review the saved workout. Per beta hotfix
+    // (Apr 2026): explicitly force viewMode='day' AND notify the parent so
+    // it can keep the planner tab active. Some operators reported the save
+    // bouncing them back to the COC dashboard; the defensive fix here is to
+    // re-assert the day view + lock the active tab via the callback.
+    setViewMode('day');
+    onWorkoutSaved?.();
   };
 
   const handleCancelWorkout = () => {
@@ -1125,7 +1229,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               type="button"
               className="btn btn-sm btn-ghost"
               onClick={handleExportJson}
-              aria-label="Export training plan as JSON"
+              aria-label={t('planner.export_aria')}
             >
               Export
             </button>
@@ -1142,7 +1246,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             marginBottom: isMobile ? 2 : 4,
           }}
         >
-          {(isMobile ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']).map((day, i) => (
+          {(isMobile
+            ? [t('planner.day_min_mon'), t('planner.day_min_tue'), t('planner.day_min_wed'), t('planner.day_min_thu'), t('planner.day_min_fri'), t('planner.day_min_sat'), t('planner.day_min_sun')]
+            : [t('planner.day_short_mon'), t('planner.day_short_tue'), t('planner.day_short_wed'), t('planner.day_short_thu'), t('planner.day_short_fri'), t('planner.day_short_sat'), t('planner.day_short_sun')]
+          ).map((day, i) => (
             <div
               key={`${day}-${i}`}
               className="t-label"
@@ -1187,7 +1294,25 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               return (
                 <div
                   key={dateStr}
-                  onClick={() => { setSelectedDate(dateStr); setViewMode('day'); }}
+                  /* data-cal attributes power the touch-drag path —
+                     during a touch drag we use document.elementFromPoint
+                     to find the cell under the finger, then read its
+                     dataset.calDate to know the drop target. The HTML5
+                     drag path doesn't need them but they're harmless. */
+                  data-cal-cell="true"
+                  data-cal-date={dateStr}
+                  onClick={() => {
+                    // Suppress the click that fires after a touch drag
+                    // releases over a different cell (iOS Safari fires
+                    // the synthetic click on touchend → would navigate
+                    // the operator into Day view of the drop target).
+                    if (touchDragActiveRef.current) {
+                      touchDragActiveRef.current = false;
+                      return;
+                    }
+                    setSelectedDate(dateStr);
+                    setViewMode('day');
+                  }}
                   onContextMenu={e => { e.preventDefault(); setShowDayMenu(dateStr); }}
                   onDragOver={e => { e.preventDefault(); setDragOverDate(dateStr); }}
                   onDragEnter={e => { e.preventDefault(); setDragOverDate(dateStr); }}
@@ -1200,8 +1325,103 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     setDragDate(null);
                     setDragOverDate(null);
                   }}
+                  /* ─── Touch drag emulation, cell-level ─────────────
+                     Moved up from the workout-title div in PR #54
+                     because (a) the title is a 12px hit target —
+                     unreliably tappable on phone, and (b) the previous
+                     handler cancelled the long-press timer on ANY
+                     touchmove, but iOS fires touchmove for sub-pixel
+                     finger jitter just from placing a finger. The
+                     long-press never reached 250ms.
+                     New behavior:
+                       • touchstart → record finger origin, start 250ms
+                                       long-press timer (only when the
+                                       cell has a workout to drag)
+                       • touchmove  → if finger moved >10px from origin,
+                                       cancel the long-press (treat as
+                                       scroll); otherwise let the timer
+                                       fire and activate drag. After
+                                       activation, track elementFromPoint
+                                       to update dragOverDate.
+                       • touchend   → if drag landed on a different cell,
+                                       handleMoveWorkout. Suppress the
+                                       iOS-synthesized click via
+                                       touchDragActiveRef.
+                       • touchcancel → wash all state.
+                     A short tap (no long-press) still bubbles to onClick
+                     above and navigates to Day view. */
+                  onTouchStart={workout ? e => {
+                    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                    const t = e.touches[0];
+                    if (t) touchStartPosRef.current = { x: t.clientX, y: t.clientY };
+                    longPressTimerRef.current = setTimeout(() => {
+                      longPressTimerRef.current = null;
+                      touchDragActiveRef.current = true;
+                      setDragDate(dateStr);
+                      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                        try { navigator.vibrate(40); } catch { /* noop */ }
+                      }
+                    }, 250);
+                  } : undefined}
+                  onTouchMove={workout ? e => {
+                    // Pre-activation: only cancel timer once finger
+                    // moves more than 10px from origin. Below that =
+                    // jitter, treat as still-holding.
+                    if (longPressTimerRef.current) {
+                      const t = e.touches[0];
+                      const start = touchStartPosRef.current;
+                      if (t && start) {
+                        const dx = t.clientX - start.x;
+                        const dy = t.clientY - start.y;
+                        if (Math.hypot(dx, dy) > 10) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }
+                      return;
+                    }
+                    // Post-activation: track the cell under the finger.
+                    // Scroll suppression is handled by the document-
+                    // level non-passive listener (effect attached when
+                    // dragDate is set).
+                    if (!touchDragActiveRef.current) return;
+                    const touch = e.touches[0];
+                    if (!touch) return;
+                    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const cell = (el as HTMLElement | null)?.closest('[data-cal-cell]') as HTMLElement | null;
+                    const targetDate = cell?.dataset.calDate ?? null;
+                    if (targetDate !== dragOverDate) setDragOverDate(targetDate);
+                  } : undefined}
+                  onTouchEnd={workout ? () => {
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                      touchDragActiveRef.current = false;
+                      touchStartPosRef.current = null;
+                      return; // tap, not a drag — let onClick fire
+                    }
+                    if (touchDragActiveRef.current && dragOverDate && dragOverDate !== dateStr) {
+                      handleMoveWorkout(dateStr, dragOverDate);
+                    }
+                    setDragDate(null);
+                    setDragOverDate(null);
+                    touchStartPosRef.current = null;
+                    Promise.resolve().then(() => {
+                      touchDragActiveRef.current = false;
+                    });
+                  } : undefined}
+                  onTouchCancel={workout ? () => {
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                    }
+                    touchDragActiveRef.current = false;
+                    setDragDate(null);
+                    setDragOverDate(null);
+                    touchStartPosRef.current = null;
+                  } : undefined}
                   style={{
-                    minHeight: isMobile ? 60 : 90,
+                    minHeight: isMobile ? 60 : 110,
                     padding: isMobile ? 4 : 8,
                     backgroundColor: cellBg,
                     border: cellBorder,
@@ -1209,6 +1429,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     position: 'relative',
                     transition: 'all 0.2s ease',
                     overflow: 'hidden',
+                    // Disable native long-press text-selection / magnifier
+                    // on cells that are draggable so iOS doesn't fight
+                    // the long-press-to-drag gesture.
+                    ...(workout ? {
+                      WebkitUserSelect: 'none' as const,
+                      userSelect: 'none' as const,
+                      WebkitTouchCallout: 'none' as const,
+                      touchAction: 'manipulation' as const,
+                    } : {}),
                   }}
                 >
                   {/* Today left accent stripe — kept as a separate
@@ -1248,58 +1477,108 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   </div>
 
                   {workout && (
-                    <div
-                      draggable={true}
-                      onDragStart={e => {
-                        setDragDate(dateStr);
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
-                      style={{
-                        fontFamily: 'var(--body)',
-                        fontSize: 12,
-                        color: 'var(--green)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        marginBottom: 4,
-                        paddingLeft: 6,
-                        borderLeft: '1px solid var(--border-green-strong)',
-                        cursor: dragDate === dateStr ? 'grabbing' : 'grab',
-                        opacity: dragDate === dateStr ? 0.6 : 1,
-                        transition: 'opacity 0.2s ease',
-                      }}
-                    >
-                      {workout.title}
-                    </div>
+                    <>
+                      {/* Workout title strip — green-bordered green-text
+                          line. Keeps the HTML5 draggable + onDragStart/
+                          onDragEnd handlers for the DESKTOP path (mouse
+                          drag). The TOUCH drag pipeline lives on the
+                          parent cell so the whole cell is the long-press
+                          hit target on phone/iPad — see the cell's
+                          onTouchStart/Move/End above. */}
+                      <div
+                        draggable={true}
+                        onDragStart={e => {
+                          setDragDate(dateStr);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragEnd={() => { setDragDate(null); setDragOverDate(null); }}
+                        style={{
+                          fontFamily: 'var(--body)',
+                          fontSize: 12,
+                          color: 'var(--green)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          marginBottom: 4,
+                          paddingLeft: 6,
+                          borderLeft: '1px solid var(--border-green-strong)',
+                          cursor: dragDate === dateStr ? 'grabbing' : 'grab',
+                          opacity: dragDate === dateStr ? 0.6 : 1,
+                          transition: 'opacity 0.2s ease',
+                        }}
+                      >
+                        {workout.title}
+                      </div>
+                      {/* Abbreviated movement list per the user's
+                          CoachRX reference — top 3 exercise names with
+                          a tight prescription crumb. Phone cells are
+                          too small (~60-70px tall) to fit this without
+                          overflow, so it only renders at iPad+ widths
+                          (cell minHeight: 110px there, ~3 lines fit).
+                          Conditioning blocks render their format label
+                          (EMOM × 6) instead of an exercise name.
+                          Letter prefixes (A) / B) / C)) match the
+                          report-style Day view so the Month and Day
+                          views read as the same vocabulary. */}
+                      {!isMobile && workout.blocks && workout.blocks.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 6 }}>
+                          {workout.blocks.slice(0, 3).map((block, bi) => {
+                            const label = getBlockLabels(workout.blocks)[bi];
+                            const isExercise = block.type === 'exercise';
+                            const name = isExercise
+                              ? resolveExerciseName((block as ExerciseBlock).exerciseName, language)
+                              : (block as ConditioningBlock).format;
+                            const rx = isExercise ? (block as ExerciseBlock).prescription : '';
+                            // Pull just the sets-x-reps fragment out of
+                            // the prescription for the crumb (e.g.
+                            // "4x6-8" out of "4x6-8 @ 195-225 lbs · RPE 7-9 · ...").
+                            const setsReps = rx?.match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i)?.[0] || '';
+                            return (
+                              <div
+                                key={block.id}
+                                style={{
+                                  fontFamily: 'var(--mono)',
+                                  fontSize: 9,
+                                  lineHeight: 1.3,
+                                  color: isExercise ? 'var(--text-secondary)' : 'var(--amber)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                <span style={{ color: 'var(--green)', marginRight: 4 }}>{label})</span>
+                                {name}
+                                {setsReps && (
+                                  <span style={{ color: 'var(--text-tertiary)', marginLeft: 4 }}>
+                                    · {setsReps}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {workout.blocks.length > 3 && (
+                            <div
+                              style={{
+                                fontFamily: 'var(--mono)',
+                                fontSize: 9,
+                                color: 'var(--text-dim)',
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              + {workout.blocks.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
 
-                  {/* "DAY" stencil — canonical spec marks workout days
-                      with a bottom-aligned stencil glyph so the
-                      calendar reads at-a-glance which days are loaded.
-                      Uses Orbitron 800 + heavy letter-spacing for the
-                      stenciled feel; ghosts the green token to ~22%
-                      so it sits behind the title without competing. */}
-                  {workout && (
-                    <div
-                      aria-hidden
-                      style={{
-                        position: 'absolute',
-                        left: 0,
-                        right: 0,
-                        bottom: isMobile ? 2 : 4,
-                        textAlign: 'center',
-                        fontFamily: '"Orbitron", sans-serif',
-                        fontWeight: 800,
-                        fontSize: isMobile ? 9 : 11,
-                        letterSpacing: isMobile ? 2 : 3,
-                        color: 'rgba(0,255,65,0.22)',
-                        pointerEvents: 'none',
-                      }}
-                    >
-                      DAY
-                    </div>
-                  )}
+                  {/* The "DAY" stencil watermark (added in PR #48) was
+                      removed per user feedback — it sat behind the
+                      truncated workout title and competed visually
+                      with the title text. The green-bordered title
+                      strip itself is sufficient at-a-glance evidence
+                      that a day is loaded. */}
 
                   {tag && (
                     <span
@@ -1404,19 +1683,75 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
                 {workout ? (
                   <div>
-                    <div className="t-display-m" style={{ color: 'var(--green)', fontSize: 12, marginBottom: 4 }}>
+                    <div
+                      className="t-display-m"
+                      style={{
+                        color: 'var(--green)',
+                        fontSize: 12,
+                        marginBottom: 8,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
                       {workout.title}
                     </div>
-                    <div className="t-mono-sm">
-                      {workout.blocks.length} blocks
-                    </div>
+                    {/* Abbreviated movement list — same vocabulary as
+                        the Month cell version + the Day-view report
+                        list. Letter prefix in mono green, exercise name
+                        + sets-x-reps fragment for the crumb. Up to 5
+                        movements fit comfortably in the 200px Week cell
+                        on iPad+; phone gets fewer rows naturally
+                        through cell width compression. */}
+                    {workout.blocks.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {workout.blocks.slice(0, 5).map((block, bi) => {
+                          const label = getBlockLabels(workout.blocks)[bi];
+                          const isExercise = block.type === 'exercise';
+                          const name = isExercise
+                            ? resolveExerciseName((block as ExerciseBlock).exerciseName, language)
+                            : (block as ConditioningBlock).format;
+                          const rx = isExercise ? (block as ExerciseBlock).prescription : '';
+                          const setsReps = rx?.match(/(\d+)\s*x\s*(\d+(?:-\d+)?)/i)?.[0] || '';
+                          return (
+                            <div
+                              key={block.id}
+                              className="t-mono-sm"
+                              style={{
+                                fontSize: 10,
+                                lineHeight: 1.35,
+                                color: isExercise ? 'var(--text-secondary)' : 'var(--amber)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              <span style={{ color: 'var(--green)', marginRight: 4, fontWeight: 700 }}>
+                                {label})
+                              </span>
+                              {name}
+                              {setsReps && (
+                                <span style={{ color: 'var(--text-tertiary)', marginLeft: 4 }}>
+                                  · {setsReps}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {workout.blocks.length > 5 && (
+                          <div className="t-mono-sm" style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+                            + {workout.blocks.length - 5} more
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : tag ? (
                   <div className="t-body-sm" style={{ color: getTagColor(tag.color) }}>
                     {tag.note}
                   </div>
                 ) : (
-                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>No workout</div>
+                  <div className="t-mono-sm" style={{ color: 'var(--text-dim)' }}>{t('planner.no_workout_short')}</div>
                 )}
               </div>
             );
@@ -1471,46 +1806,140 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     } catch { /* vibrate API unavailable — silent */ }
   };
 
-  // Rest timer countdown
+  // Rest timer countdown — wall-clock anchored.
+  //
+  // Why anchored to a wall-clock timestamp instead of a tick counter:
+  // setInterval(..., 1000) is NOT wall-clock-accurate. When the JS
+  // thread is blocked (Gunny chat fetch, big re-render, Markdown
+  // parse) or the mobile tab is backgrounded, ticks get throttled
+  // or batched. The previous implementation decremented `restTimer`
+  // once per tick, so any missed tick = countdown drifted out of
+  // sync with the user's actual perception of time. Worse: when a
+  // backgrounded tab returned, the browser sometimes fired multiple
+  // ticks in a burst, blowing past the prev<=1 threshold and
+  // sometimes triggering the completion alarm at the wrong wall-
+  // clock moment. That's the "fires off randomly" symptom.
+  //
+  // New shape: store the END TIMESTAMP. Each tick recomputes
+  // secondsLeft from `now`. Drift-proof and burst-proof.
+  //
+  // Side effects (alarm + TTS + beeps) moved to a separate effect
+  // that watches secondsLeft transitions. Putting side effects
+  // inside the setState updater (the old shape) was the second bug:
+  // React can invoke an updater multiple times (StrictMode in dev,
+  // concurrent rendering in prod) — each invocation re-fired the
+  // alarm, double-played the TTS, and queued duplicate haptics.
+  // Updaters must be pure; the effect handles the impure work and
+  // uses a ref to fire each side-effect exactly once per cycle.
+  const restEndTimeRef = useRef<number | null>(null);
+  const restAlarmedAtRef = useRef<number | null>(null); // timestamp the cycle ended; idempotency guard
+  const lastBeepSecondRef = useRef<number | null>(null); // dedupe the 3-2-1 beeps so each second beeps once
+  const beepCtxRef = useRef<AudioContext | null>(null); // single shared AudioContext for the per-second beeps
+
+  // Lifecycle: when the user starts/restarts the timer (or adds 30s),
+  // recompute the end timestamp from the CURRENT restTimer value.
+  // setRestTimer + setRestRunning(true) is the only entry point;
+  // pause sets restRunning=false; reset clears restTimer and stops.
   useEffect(() => {
-    if (!restRunning || restTimer <= 0) {
-      if (restTimer <= 0 && restRunning) {
-        setRestRunning(false);
-        playCompletionAlarm();
-        // Visual alarm pulse for 5 seconds
-        setTimerAlarm(true);
-        setTimeout(() => setTimerAlarm(false), 5000);
-        speak('Time. Next set.');
-      }
+    if (!restRunning) {
+      // Cleared / paused — drop the anchor so the next start gets a
+      // fresh end timestamp.
+      restEndTimeRef.current = null;
+      lastBeepSecondRef.current = null;
+      restAlarmedAtRef.current = null;
       return;
     }
-    // Louder beep at 3, 2, 1
-    if (restTimer <= 3 && restTimer > 0) {
-      try {
-        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square';
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 520;
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.01);
-        gain.gain.setValueAtTime(0.6, ctx.currentTime + 0.22);
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.25);
-      } catch { /* AudioContext unavailable — skip countdown beep */ }
-      // Short vibration tick on final countdown (if supported)
-      try {
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-          navigator.vibrate(80);
-        }
-      } catch { /* vibrate API unavailable */ }
-    }
-    const interval = setInterval(() => setRestTimer(prev => prev - 1), 1000);
-    return () => clearInterval(interval);
+    // (Re)anchor whenever the timer flips on or restTimer was changed
+    // externally (e.g. +30s tap during an active rest). Compute end
+    // from now + remaining.
+    restEndTimeRef.current = Date.now() + restTimer * 1000;
+    lastBeepSecondRef.current = null;
+    restAlarmedAtRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restRunning, restTimer]);
+
+  // Tick — pure: reads the wall clock, derives secondsLeft, writes
+  // it to state. No side effects beyond the state write. Runs at
+  // 250ms so the UI display is smoother than 1Hz; the alarm timing
+  // stays accurate because everything is wall-clock derived.
+  useEffect(() => {
+    if (!restRunning) return;
+    const tick = () => {
+      const endAt = restEndTimeRef.current;
+      if (endAt == null) return;
+      const remaining = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      setRestTimer((prev) => (prev === remaining ? prev : remaining));
+      if (remaining <= 0) {
+        setRestRunning(false);
+      }
+    };
+    // Tick immediately so a freshly-started 0-second timer doesn't
+    // wait 250ms to fire its alarm.
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [restRunning]);
+
+  // Side effects — single source of truth. Watches restTimer and
+  // fires beeps at 3/2/1 (deduped via lastBeepSecondRef so a burst
+  // tick pattern can't trigger the same second's beep twice) and
+  // the completion alarm + TTS exactly once per timer cycle (deduped
+  // via restAlarmedAtRef).
+  useEffect(() => {
+    // Beep on each of the final 3 seconds — once per second value.
+    if (restRunning && restTimer > 0 && restTimer <= 3) {
+      if (lastBeepSecondRef.current !== restTimer) {
+        lastBeepSecondRef.current = restTimer;
+        try {
+          const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          // Reuse a single shared context — creating one per beep
+          // exhausts the browser's per-page AudioContext quota
+          // (capped around 6 on Chromium). Lazily create on first
+          // beep so we don't pay the suspend/resume cost on every
+          // page load.
+          if (!beepCtxRef.current) beepCtxRef.current = new AudioCtx();
+          const ctx = beepCtxRef.current;
+          // Some browsers suspend the context after period of
+          // inactivity; resume() is a no-op if running.
+          if (ctx.state === 'suspended') void ctx.resume();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 520;
+          const t = ctx.currentTime;
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.6, t + 0.01);
+          gain.gain.setValueAtTime(0.6, t + 0.22);
+          gain.gain.linearRampToValueAtTime(0, t + 0.25);
+          osc.start(t);
+          osc.stop(t + 0.25);
+        } catch { /* AudioContext unavailable */ }
+        try {
+          if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            navigator.vibrate(80);
+          }
+        } catch { /* vibrate unavailable */ }
+      }
+    }
+
+    // Completion alarm + TTS — fire exactly once when the cycle
+    // ends. restAlarmedAtRef is set with the end-timestamp; a new
+    // timer cycle resets the ref so the next alarm can fire.
+    if (restTimer === 0 && restEndTimeRef.current != null) {
+      const cycleId = restEndTimeRef.current;
+      if (restAlarmedAtRef.current !== cycleId) {
+        restAlarmedAtRef.current = cycleId;
+        playCompletionAlarm();
+        setTimerAlarm(true);
+        const dismissId = window.setTimeout(() => setTimerAlarm(false), 5000);
+        speak('Time. Next set.');
+        return () => window.clearTimeout(dismissId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restTimer, restRunning]);
 
   // Wake lock — keep screen awake during rest timer and workout mode
   useEffect(() => {
@@ -1686,6 +2115,73 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         ),
       };
       const updated = { ...operator };
+
+      // ─── AUTO-PR DETECTION ────────────────────────────────────────────────
+      // Scan every exercise block in the just-completed workout. For each
+      // block, find the heaviest completed set; if it beats the operator's
+      // prior best for that exercise (case-insensitive match) — or there
+      // is no prior best for the exercise — append a fresh PRRecord.
+      // Mirrors lib/workoutAnalysis.ts:76 isPR semantics so the "PR flag in
+      // Gunny's context" and "PR row in the PR Board" can't drift.
+      const existingPRs = updated.prs || [];
+      const newPRs: import('@/lib/types').PRRecord[] = [];
+      const todayStr = getLocalDateStr();
+      workout.blocks.forEach(block => {
+        if (block.type !== 'exercise') return;
+        const exerciseName = (block as ExerciseBlock).exerciseName?.trim();
+        if (!exerciseName) return;
+        const blockResult = savedResults.blockResults[block.id];
+        if (!blockResult) return;
+        const completedSets = (blockResult.sets || []).filter(s => s.completed && (s.weight || 0) > 0 && (s.reps || 0) > 0);
+        if (completedSets.length === 0) return;
+        // Heaviest set this session — ties broken by higher reps so logging
+        // 225×8 doesn't get masked by 225×5 on the same day.
+        let topWeight = 0;
+        let topReps = 0;
+        for (const s of completedSets) {
+          const w = s.weight || 0;
+          const r = s.reps || 0;
+          if (w > topWeight || (w === topWeight && r > topReps)) {
+            topWeight = w;
+            topReps = r;
+          }
+        }
+        if (topWeight === 0) return;
+
+        const exNameKey = exerciseName.toLowerCase();
+        const priorPR = existingPRs.find(
+          p => (p.exercise || '').trim().toLowerCase() === exNameKey
+        );
+        const isStrengthPR = priorPR
+          ? topWeight > priorPR.weight ||
+            (topWeight === priorPR.weight && topReps > (priorPR.reps || 0))
+          : true; // first time logging this exercise → baseline PR
+
+        if (!isStrengthPR) return;
+
+        newPRs.push({
+          id: `pr-auto-${Date.now()}-${block.id}`,
+          exercise: exerciseName,
+          weight: topWeight,
+          reps: topReps,
+          date: todayStr,
+          notes: priorPR
+            ? `Auto-detected from ${workout.title || 'workout'} (prev best ${priorPR.weight} × ${priorPR.reps || 0})`
+            : `Auto-detected baseline from ${workout.title || 'workout'}`,
+          type: 'strength',
+          // Stamp the operator's current training path so the PR Board
+          // can group lifetime bests by path (a 405 deadlift on
+          // powerlifting and a 315 deadlift on tactical are both "best
+          // for that path"). Falls back to undefined when intake
+          // hasn't been completed.
+          path: operator.intake?.trainingPath,
+        });
+      });
+
+      if (newPRs.length > 0) {
+        updated.prs = [...existingPRs, ...newPRs];
+      }
+
       updated.workouts[dateStr] = { ...workout, results: savedResults, completed: true };
       onUpdateOperator(updated);
 
@@ -1749,7 +2245,16 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         totalVolume,
         completionRate,
         gunnyMessage,
+        newPRs: newPRs.map(pr => ({
+          exercise: pr.exercise,
+          weight: pr.weight,
+          reps: pr.reps,
+          // pr.notes starts with "Auto-detected baseline" for first-time entries.
+          isBaseline: (pr.notes || '').startsWith('Auto-detected baseline'),
+        })),
+        dateStr,
       });
+      setPendingSrpe(7);  // reset to default for each new completion
       setShowCompletionScreen(true);
 
       // Ascending victory chord
@@ -1969,6 +2474,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               onPauseTimer={restRunning ? () => setRestRunning(false) : undefined}
               onAddRest={restRunning ? () => setRestTimer(t => t + 30) : undefined}
               onResetTimer={restRunning || restTimer > 0 ? () => { setRestTimer(0); setRestRunning(false); } : undefined}
+              // Live HR + zone strip + sparkline are COMMANDER+ per
+              // pricing model. RECON / OPERATOR users see a small lock
+              // placeholder in the center HUD slot; rest timer + set
+              // indicator stay open for all tiers.
+              canViewHR={hasCommanderAccess(operator)}
             />
           );
         })()}
@@ -1985,6 +2495,147 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             color: '#00ff41', letterSpacing: 1, fontWeight: 700,
           }}>
             {voiceFeedback}
+          </div>
+        )}
+
+        {/* ═══ ASK GUNNY OVERLAY (Apr 2026 hotfix) ═══
+            Fixed-position bottom sheet so the workout view stays
+            mounted beneath. Operator types a question, taps Send,
+            the message goes via onSendGunnyMessage (no tab switch),
+            and the response renders in the existing amber voice-
+            response overlay below this one. */}
+        {showAskGunnyOverlay && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('planner.ask_gunny_aria')}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowAskGunnyOverlay(false);
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.55)',
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: 12,
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 520,
+                background: '#0a0a0a',
+                border: '1px solid rgba(255,140,0,0.55)',
+                borderRadius: 8,
+                padding: 14,
+                boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#FF8C00', letterSpacing: 2 }}>
+                  ⚡ ASK GUNNY · MID-WORKOUT
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAskGunnyOverlay(false)}
+                  aria-label={t('planner.close_ask_gunny_aria')}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-tertiary)',
+                    fontFamily: 'Share Tech Mono, monospace',
+                    fontSize: 14,
+                    cursor: 'pointer',
+                    padding: 4,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: '#a0a0a0', marginBottom: 8 }}>
+                Quick prompts:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {[
+                  'Form check — what should I focus on?',
+                  'This is too heavy — how should I scale?',
+                  'Substitute this exercise',
+                  'Should I push another set?',
+                ].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setAskGunnyDraft(p)}
+                    style={{
+                      padding: '4px 8px',
+                      background: 'rgba(255,140,0,0.06)',
+                      border: '1px solid rgba(255,140,0,0.3)',
+                      borderRadius: 4,
+                      color: '#FF8C00',
+                      fontFamily: 'Share Tech Mono, monospace',
+                      fontSize: 10,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={askGunnyDraft}
+                onChange={(e) => setAskGunnyDraft(e.target.value)}
+                placeholder={t('planner.ask_gunny_placeholder')}
+                rows={3}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  background: '#000',
+                  color: '#e0e0e0',
+                  border: '1px solid rgba(255,140,0,0.3)',
+                  borderRadius: 4,
+                  fontFamily: 'Share Tech Mono, monospace',
+                  fontSize: 13,
+                  resize: 'vertical',
+                  marginBottom: 10,
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAskGunnyOverlay(false)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!askGunnyDraft.trim() || !onSendGunnyMessage}
+                  onClick={() => {
+                    const text = askGunnyDraft.trim();
+                    if (!text || !onSendGunnyMessage) return;
+                    onSendGunnyMessage(text);
+                    setAskGunnyDraft('');
+                    setShowAskGunnyOverlay(false);
+                  }}
+                  className="btn btn-amber btn-sm"
+                  style={{ flex: 2 }}
+                >
+                  Send to Gunny
+                </button>
+              </div>
+
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: 'var(--text-dim)', marginTop: 8, textAlign: 'center' }}>
+                Workout, timer, and set log stay running underneath. Response shows up here.
+              </div>
+            </div>
           </div>
         )}
 
@@ -2139,7 +2790,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               >
                 <span className="bl" /><span className="br" />
                 <div className="row-between" style={{ marginBottom: 8 }}>
-                  <span className="t-eyebrow amber">GO TIME</span>
+                  <span className="t-eyebrow amber">{t('planner.go_time')}</span>
                   <span className="t-mono-data" style={{ color: 'var(--amber)' }}>
                     {condBlock.format}
                   </span>
@@ -2161,7 +2812,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input
                     type="text"
-                    placeholder="Time / Rounds / Score"
+                    placeholder={t('planner.score_placeholder')}
                     value={blockData.sets[0]?.reps ? `${blockData.sets[0].reps}` : ''}
                     onChange={e => {
                       const val = e.target.value;
@@ -2236,17 +2887,22 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               sets[nowSetIdx] = { ...sets[nowSetIdx], completed: true };
               return { ...prev, [block.id]: { ...blockData, sets } };
             });
-            // Auto-start rest from the prescription string.
-            const restMatch = block.prescription?.match(/(?:rest|Rest|REST)\s*:?\s*(\d+)\s*:?\s*(\d+)?/i);
-            if (restMatch) {
-              const mins = restMatch[2] !== undefined ? parseInt(restMatch[1]) : 0;
-              const secs = restMatch[2] !== undefined ? parseInt(restMatch[2]) : parseInt(restMatch[1]);
-              const totalSecs = mins * 60 + secs;
-              if (totalSecs > 0) {
-                setRestTimer(totalSecs);
-                setRestTimerMax(totalSecs);
-                setRestRunning(true);
-              }
+            // Auto-start rest (WS2). Resolver checks the prescription
+            // string with a broadened regex bank, falls back to the
+            // operator's defaultRestSec preference, then to the app
+            // default. Single positive number unless the operator has
+            // opted out by setting defaultRestSec=0. Replaces the old
+            // inline regex which only matched "rest 2:00" style hints
+            // — anything else silently no-op'd, leaving the operator
+            // to time their own rest.
+            const rest = resolveRestSeconds(
+              block.prescription,
+              operator.preferences?.defaultRestSec,
+            );
+            if (rest.seconds > 0) {
+              setRestTimer(rest.seconds);
+              setRestTimerMax(rest.seconds);
+              setRestRunning(true);
             }
             // Stepped flow: if this was the last set of the block,
             // auto-advance the stepper cursor to the next step. Defer
@@ -2308,26 +2964,60 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     marginBottom: 12,
                   }}
                 >
-                  ✓ ALL SETS COMPLETE
+                  ✓ {t('planner.all_sets_complete')}
                 </div>
               )}
 
               <div className="row-between" style={{ marginBottom: 4, gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <div className="t-display-l" style={{ color: 'var(--green)', fontSize: 18, flex: 1, minWidth: 0 }}>
-                  {block.exerciseName}
+                  {/* Defensive fallback: if exerciseName is empty (Gunny
+                      emitted a block with no name, or the workout data
+                      got malformed), show "Exercise N" so the user can
+                      still see what set they're on. Without this, the
+                      title slot collapses to 0 height and the user has
+                      no idea which exercise they're doing.
+                      Phase B i18n: resolveExerciseName looks up the ES
+                      form from EXERCISE_LIBRARY when the operator's
+                      language is 'es' and the name matches a library
+                      entry. AI-generated or freeform names that don't
+                      match the library fall through to the EN string
+                      (workout JSON stores the EN name canonically). */}
+                  {block.exerciseName?.trim()
+                    ? resolveExerciseName(block.exerciseName, language)
+                    : `Exercise ${idx + 1}`}
                 </div>
-                {/* Notes / Form Demo / Form Check icon — single tap
-                    opens the NotesFormPopover holding the legacy
-                    inline notes field, the demo-video trigger, and
-                    the new "upload form check photo to Gunny" path.
-                    Putting these behind one icon keeps the active
-                    set card focused on WEIGHT / REPS / RPE / LOG. */}
+                {/* Form Demo button — surfaced in the card header next
+                    to the exercise name so beginners see it at first
+                    glance instead of hunting inside the Notes popover.
+                    Beta feedback Apr 2026 (VALKYRIE): "should be more
+                    visible on the name of the movement rather than
+                    under Notes section. Should be first look." Kept
+                    conditional on an actual demo URL existing so cards
+                    without a video don't render an inert button. The
+                    popover still has its own demo trigger as a backup
+                    for users who already learned the Notes path. */}
+                {isActive && (block.videoUrl || getVideoUrl(block.exerciseName)) && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
+                    className="btn btn-ghost btn-sm"
+                    aria-label={`Watch form demo for ${block.exerciseName}`}
+                    style={{ padding: '6px 10px', flexShrink: 0 }}
+                  >
+                    <Icon.Play size={11} /> DEMO
+                  </button>
+                )}
+                {/* Notes / Form Check icon — single tap opens the
+                    NotesFormPopover holding the legacy inline notes
+                    field and the "upload form check photo to Gunny"
+                    path. Form Demo is now in the header above (was
+                    also in this popover; kept there as a backup). */}
                 {isActive && (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setNotesPopoverFor(block.id); }}
                     className="btn btn-ghost btn-sm"
-                    aria-label="Open notes, form demo, and form-check upload"
+                    aria-label={t('planner.notes_aria')}
                     style={{ padding: '6px 10px', flexShrink: 0 }}
                   >
                     <Icon.Edit size={11} /> Notes
@@ -2335,7 +3025,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 )}
               </div>
               <div className="t-mono-sm" style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
-                {block.prescription}
+                {/* Same defensive fallback — empty prescription was
+                    rendering as a 0-height row, leaving the user with
+                    no spec for the active set. */}
+                {block.prescription?.trim() || '— spec missing —'}
               </div>
 
               {/* Inline Form Demo button kept ONLY for inactive blocks
@@ -2347,10 +3040,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); openExerciseVideo(block.exerciseName, block.videoUrl); }}
-                  className="btn btn-amber btn-sm"
+                  className="btn btn-ghost btn-sm"
                   style={{ marginBottom: 8, padding: '6px 10px' }}
                 >
-                  <Icon.Play size={11} /> Form Demo
+                  <Icon.Play size={11} /> DEMO
                 </button>
               )}
 
@@ -2369,15 +3062,15 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     }}
                   >
                     {[
-                      { label: 'WEIGHT', placeholder: 'lbs', value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
-                      { label: 'REPS',   placeholder: 'reps', value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
+                      { label: t('planner.weight'), placeholder: t('planner.weight_input_placeholder'), value: nowSet.weight, onChange: (v: number) => handleWeightChange(block.id, nowSetIdx, v) },
+                      { label: t('planner.reps'),   placeholder: t('planner.reps_input_placeholder'), value: nowSet.reps,   onChange: (v: number) => setResults(prev => {
                         const bd = { ...(prev[block.id] || { sets: [] }) };
                         const ss = [...bd.sets];
                         while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
                         ss[nowSetIdx] = { ...ss[nowSetIdx], reps: v };
                         return { ...prev, [block.id]: { ...bd, sets: ss } };
                       }) },
-                      { label: 'RPE',    placeholder: '0-10', value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
+                      { label: t('planner.rpe'),    placeholder: t('planner.rpe_input_placeholder'), value: rpeOf(nowSet), onChange: (v: number) => setResults(prev => {
                         const bd = { ...(prev[block.id] || { sets: [] }) };
                         const ss = [...bd.sets];
                         while (ss.length <= nowSetIdx) ss.push({ weight: 0, reps: 0, completed: false });
@@ -2416,13 +3109,19 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               )}
 
               {/* "SETS · THIS EXERCISE" history — every previously-
-                  logged set in this block, dimmed mono. Helps the
-                  user remember what they just hit before logging
-                  the next set. */}
+                  logged set in this block. Per beta hotfix (Apr 2026):
+                  these rows are now INLINE-EDITABLE so an operator who
+                  fat-fingers a weight or reps can correct the entry
+                  without abandoning workout mode. Inputs mutate
+                  workoutResults[block.id].sets[si] directly; the
+                  on-completion writeback in the workout-mode lifecycle
+                  picks up the corrected values when the session ends.
+                  Keeping the same layout + amber RPE accent so it
+                  still reads as a "logged set" row, just clickable. */}
               {isActive && blockResults.sets.some(s => s.completed) && (
                 <>
                   <div className="t-eyebrow" style={{ marginTop: 8, marginBottom: 6 }}>
-                    Sets · This Exercise
+                    Sets · This Exercise <span style={{ color: 'var(--green)', fontSize: 9, marginLeft: 6, fontWeight: 700 }}>✎ TAP A CELL TO EDIT</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {blockResults.sets.slice(0, parsedSets).map((set, si) => set.completed && (
@@ -2431,24 +3130,85 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                         className="t-mono-data"
                         style={{
                           display: 'flex',
-                          gap: 12,
+                          gap: 8,
                           padding: '4px 6px',
                           color: 'var(--text-secondary)',
                           borderLeft: '2px solid var(--border-green-strong)',
                           paddingLeft: 8,
+                          alignItems: 'center',
                         }}
                       >
-                        <span style={{ color: 'var(--text-tertiary)', minWidth: 32 }}>S{si + 1}</span>
-                        <span>{set.weight} lbs</span>
-                        <span style={{ color: 'var(--text-dim)' }}>×</span>
-                        <span>{set.reps} reps</span>
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {rpeOf(set as any) > 0 && (
-                          <span style={{ color: 'var(--amber)' }}>
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                            RPE {rpeOf(set as any)}
-                          </span>
-                        )}
+                        <span style={{ color: 'var(--text-tertiary)', minWidth: 28 }}>S{si + 1}</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={set.weight}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) ss[si] = { ...ss[si], weight: v };
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} weight`}
+                          style={{
+                            width: 70, textAlign: 'right',
+                            background: 'rgba(0,255,65,0.04)', border: '1px solid rgba(0,255,65,0.5)',
+                            borderRadius: 3, color: 'var(--text-primary)', padding: '4px 6px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
+                        <span style={{ color: 'var(--text-dim)' }}>lbs ×</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={set.reps}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) ss[si] = { ...ss[si], reps: v };
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} reps`}
+                          style={{
+                            width: 54, textAlign: 'right',
+                            background: 'rgba(0,255,65,0.04)', border: '1px solid rgba(0,255,65,0.5)',
+                            borderRadius: 3, color: 'var(--text-primary)', padding: '4px 6px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
+                        <span style={{ color: 'var(--text-dim)' }}>reps</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          value={rpeOf(set as any) || ''}
+                          placeholder={t('planner.rpe_placeholder')}
+                          onChange={(e) => {
+                            const v = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                            setResults(prev => {
+                              const bd = { ...(prev[block.id] || { sets: [] }) };
+                              const ss = [...bd.sets];
+                              if (ss[si]) {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                (ss[si] as any).rpe = v;
+                              }
+                              return { ...prev, [block.id]: { ...bd, sets: ss } };
+                            });
+                          }}
+                          aria-label={`Set ${si + 1} RPE`}
+                          style={{
+                            width: 50, textAlign: 'right',
+                            background: 'rgba(255,140,0,0.06)', border: '1px solid rgba(255,140,0,0.55)',
+                            borderRadius: 3, color: 'var(--amber)', padding: '4px 6px',
+                            fontFamily: 'inherit', fontSize: 'inherit',
+                          }}
+                        />
                       </div>
                     ))}
                   </div>
@@ -2466,15 +3226,81 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
         {/* Mid-workout edit controls — secondary affordances styled
             as ghost (add) and danger-outline (remove) buttons. Only
             rendered on exercise steps so warmup/cooldown screens
-            stay focused on the movement list. */}
-        {currentStep.kind === 'exercise' && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 4 }}>
+            stay focused on the movement list.
+            Move Up / Move Down let users reorder the current exercise
+            within the blocks array. Disabled at the array edges. */}
+        {currentStep.kind === 'exercise' && (() => {
+          // Shared swap helper for the Up / Down buttons. Pulled out
+          // of the inline onClick handlers so the swap + sortOrder
+          // normalization + cursor-shift logic only lives in one
+          // place. sortOrder is reset after every reorder to match
+          // the convention in src/lib/workoutModification.ts (which
+          // does `blocks = blocks.map((b, i) => ({ ...b, sortOrder: i }))`
+          // after every move). Nothing currently reads sortOrder
+          // for display ordering — array position is canonical — but
+          // keeping the field consistent means a future feature that
+          // sorts by it (e.g. an undo log, an analytics by-position
+          // chart, a Gunny analysis) can trust the value.
+          const swapBlocks = (direction: -1 | 1) => {
+            if (currentStep.kind !== 'exercise') return;
+            const targetIdx = currentStep.blockIdx;
+            const swapWith = targetIdx + direction;
+            if (swapWith < 0 || swapWith >= workout.blocks.length) return;
+            const dateStr = selectedDate || formatDate(currentDate);
+            const next = [...workout.blocks];
+            [next[targetIdx], next[swapWith]] = [next[swapWith], next[targetIdx]];
+            // Renumber sortOrder so it mirrors array position. Same
+            // pattern workoutModification.ts uses after a reorder.
+            const normalized = next.map((b, i) => ({ ...b, sortOrder: i }));
+            const updated = { ...operator };
+            updated.workouts = { ...updated.workouts };
+            updated.workouts[dateStr] = { ...workout, blocks: normalized };
+            onUpdateOperator(updated);
+            // Cursor follows the block so the user keeps viewing the
+            // same exercise, now in its new position.
+            setStepIdx(prev => Math.max(0, prev + direction));
+          };
+
+          const isFirstExercise = currentStep.blockIdx <= 0;
+          const isLastExercise = currentStep.blockIdx >= workout.blocks.length - 1;
+
+          return (
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => swapBlocks(-1)}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
+            disabled={isFirstExercise}
+            aria-label="Move exercise up"
+            title={isFirstExercise ? 'Already first' : 'Shift this exercise earlier in the workout'}
+          >
+            ↑ Up
+          </button>
+          <button
+            type="button"
+            onClick={() => swapBlocks(1)}
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 80px', borderStyle: 'dashed' }}
+            disabled={isLastExercise}
+            aria-label="Move exercise down"
+            title={isLastExercise ? 'Already last' : 'Shift this exercise later in the workout'}
+          >
+            ↓ Down
+          </button>
           <button
             type="button"
             onClick={() => {
+              // Default to "New Exercise" so the active-block card has
+              // a visible title even before the user fills it in. The
+              // previous empty-string default produced phantom blocks
+              // (no title rendered → user couldn't see they had added
+              // anything → kept clicking → ended up with a 34-step
+              // workout of mostly nameless 3x10 blocks). The user can
+              // rename via the Notes popover.
               const newBlock: ExerciseBlock = {
                 type: 'exercise', id: `block-live-${Date.now()}`, sortOrder: workout.blocks.length,
-                exerciseName: '', prescription: '3x10', isLinkedToNext: false,
+                exerciseName: 'New Exercise', prescription: '3x10', isLinkedToNext: false,
               };
               const dateStr = selectedDate || formatDate(currentDate);
               const updated = { ...operator };
@@ -2484,27 +3310,54 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               setWorkoutResults(prev => ({ ...prev, [newBlock.id]: { sets: [{ weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }, { weight: 0, reps: 0, completed: false }], notes: '' } }));
             }}
             className="btn btn-ghost btn-sm"
-            style={{ flex: 1, borderStyle: 'dashed' }}
+            style={{ flex: '1 1 100px', borderStyle: 'dashed' }}
           >
             + Add Exercise
           </button>
+          {/* REMOVE THIS — two-tap confirm to prevent accidental
+              deletes mid-workout. The first tap arms the button;
+              a second tap within 3 sec actually removes. After
+              removal, an UNDO toast appears below for 10 sec. */}
           <button
             type="button"
             onClick={() => {
-              // Remove the EXERCISE THE USER IS CURRENTLY VIEWING.
-              // The legacy "Remove Last" semantics (pop the tail of
-              // the blocks array) silently failed in the stepped
-              // flow because the user only ever sees one block at a
-              // time — clicking the button while on exercise 1 of 5
-              // removed exercise 5, which was off-screen, so nothing
-              // visible changed. Now operates on currentStep.blockIdx
-              // so removal always corresponds to what's on screen.
               if (workout.blocks.length <= 1) return;
               if (currentStep.kind !== 'exercise') return;
+
+              // FIRST TAP — arm the button, set 3-sec auto-revert.
+              if (removeConfirmAt === null) {
+                setRemoveConfirmAt(Date.now());
+                if (removeConfirmTimeoutRef.current) {
+                  clearTimeout(removeConfirmTimeoutRef.current);
+                }
+                removeConfirmTimeoutRef.current = setTimeout(() => {
+                  setRemoveConfirmAt(null);
+                  removeConfirmTimeoutRef.current = null;
+                }, 3000);
+                return;
+              }
+
+              // SECOND TAP — actually remove. Snapshot the block +
+              // its results so the user can undo within 10 sec.
               const targetIdx = currentStep.blockIdx;
               const dateStr = selectedDate || formatDate(currentDate);
-              const removedId = workout.blocks[targetIdx]?.id;
-              if (!removedId) return;
+              const removedBlock = workout.blocks[targetIdx];
+              if (!removedBlock) return;
+
+              if (removeConfirmTimeoutRef.current) {
+                clearTimeout(removeConfirmTimeoutRef.current);
+                removeConfirmTimeoutRef.current = null;
+              }
+              setRemoveConfirmAt(null);
+
+              setRemovedSnapshot({
+                dateStr,
+                block: removedBlock,
+                insertAt: targetIdx,
+                resultsForBlock: workoutResults[removedBlock.id] || null,
+                removedAt: Date.now(),
+              });
+
               const updated = { ...operator };
               updated.workouts = { ...updated.workouts };
               updated.workouts[dateStr] = {
@@ -2514,29 +3367,49 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               onUpdateOperator(updated);
               setWorkoutResults(prev => {
                 const next = { ...prev };
-                delete next[removedId];
+                delete next[removedBlock.id];
                 return next;
               });
+
+              // Auto-clear the undo toast after 10 sec.
+              if (undoToastTimeoutRef.current) {
+                clearTimeout(undoToastTimeoutRef.current);
+              }
+              undoToastTimeoutRef.current = setTimeout(() => {
+                setRemovedSnapshot(null);
+                undoToastTimeoutRef.current = null;
+              }, 10_000);
+
               // safeStepIdx in render clamps automatically when the
               // removed block was the tail, but if the removed block
-              // was mid-list and was also the last step (e.g. the
-              // workout has no cooldown), defensively decrement so
-              // the user sees the previous exercise instead of
-              // jumping straight to the cooldown / Complete state.
+              // was mid-list and was also the last step, defensively
+              // decrement so the user sees the previous exercise
+              // instead of jumping straight to the cooldown.
               const wasTailExercise = targetIdx === workout.blocks.length - 1;
               if (wasTailExercise) {
                 setStepIdx(prev => Math.max(0, prev - 1));
               }
             }}
-            className="btn btn-danger-outline btn-sm"
-            style={{ borderStyle: 'dashed' }}
+            className={removeConfirmAt !== null ? 'btn btn-danger btn-sm' : 'btn btn-danger-outline btn-sm'}
+            style={{
+              flex: '1 1 100px',
+              borderStyle: removeConfirmAt !== null ? 'solid' : 'dashed',
+              animation: removeConfirmAt !== null ? 'workoutCardGlow 1.5s ease-in-out infinite' : undefined,
+            }}
             disabled={workout.blocks.length <= 1}
-            title={workout.blocks.length <= 1 ? 'At least one exercise must remain' : 'Remove this exercise'}
+            title={
+              workout.blocks.length <= 1
+                ? 'At least one exercise must remain'
+                : removeConfirmAt !== null
+                  ? 'Tap again to confirm — auto-cancels in 3s'
+                  : 'Remove this exercise'
+            }
           >
-            − Remove This
+            {removeConfirmAt !== null ? '✕ TAP AGAIN TO CONFIRM' : '− Remove This'}
           </button>
         </div>
-        )}
+          );
+        })()}
 
         {/* ═══ COOLDOWN — single amber bracket card per the stepped
             flow spec. Only renders when the cursor is on the
@@ -2577,12 +3450,19 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           title={videoModalState?.title}
         />
 
-        {/* Ask Gunny — mid-workout coaching access. Uses .btn-amber
-            full-width to match the floating GUNNY pill's tone. */}
-        {onOpenGunny && (
+        {/* Ask Gunny — mid-workout coaching access. Apr 2026 hotfix:
+            opens an IN-PLACE overlay instead of switching to the Gunny
+            tab. Operators were losing timer/progress when they got
+            kicked to the chat tab; the overlay keeps Workout Mode
+            mounted underneath. Falls back to onOpenGunny only when
+            onSendGunnyMessage isn't wired (legacy callers). */}
+        {(onSendGunnyMessage || onOpenGunny) && (
           <button
             type="button"
-            onClick={onOpenGunny}
+            onClick={() => {
+              if (onSendGunnyMessage) setShowAskGunnyOverlay(true);
+              else if (onOpenGunny) onOpenGunny();
+            }}
             className="btn btn-amber btn-block"
             style={{ marginTop: 12 }}
           >
@@ -2616,7 +3496,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
             onClick={goPrev}
             disabled={isFirstStep}
             className="btn btn-ghost btn-sm"
-            aria-label="Previous step"
+            aria-label={t('common.previous')}
             style={{ justifySelf: 'start' }}
           >
             <Icon.ArrowLeft size={12} /> Back
@@ -2739,10 +3619,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               {[
-                { label: 'DURATION', value: `${completionData.duration} MIN`, color: '#00ff41' },
-                { label: 'EXERCISES', value: String(completionData.exerciseCount), color: '#00ff41' },
-                { label: 'VOLUME', value: `${completionData.totalVolume.toLocaleString()} LBS`, color: '#FFB800' },
-                { label: 'COMPLETION', value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
+                { label: t('planner.stat_duration'), value: `${completionData.duration} ${t('planner.unit_min')}`, color: '#00ff41' },
+                { label: t('planner.stat_exercises'), value: String(completionData.exerciseCount), color: '#00ff41' },
+                { label: t('planner.stat_volume'), value: `${completionData.totalVolume.toLocaleString()} ${t('planner.unit_lbs')}`, color: '#FFB800' },
+                { label: t('planner.stat_completion'), value: `${completionData.completionRate}%`, color: completionData.completionRate >= 90 ? '#00ff41' : '#FFB800' },
               ].map((stat) => (
                 <div
                   key={stat.label}
@@ -2758,6 +3638,59 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 </div>
               ))}
             </div>
+
+            {/* NEW PRs — auto-detected from this session and already
+                appended to operator.prs by handleSaveResults. Shown
+                only when the session produced at least one PR; not a
+                blocker, just a celebration. Distinguishes "baseline"
+                (first time logging this exercise) from "new best"
+                (beat a prior record). */}
+            {completionData.newPRs && completionData.newPRs.length > 0 && (
+              <div
+                style={{
+                  maxWidth: 400,
+                  width: '100%',
+                  padding: '14px 18px',
+                  background: 'rgba(0,255,65,0.05)',
+                  border: '1px solid rgba(0,255,65,0.25)',
+                  borderLeft: '3px solid #00ff41',
+                  borderRadius: 4,
+                  marginBottom: 16,
+                  fontFamily: 'Share Tech Mono, monospace',
+                  fontSize: 13,
+                  color: '#ccc',
+                  lineHeight: 1.6,
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#00ff41', letterSpacing: 1, marginBottom: 8 }}>
+                  ★ {completionData.newPRs.some(p => !p.isBaseline) ? 'NEW PRS HIT' : 'BASELINE PRS LOGGED'} ({completionData.newPRs.length})
+                </div>
+                {completionData.newPRs.map((pr, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span>{pr.exercise}</span>
+                    <span style={{ color: pr.isBaseline ? '#a0a0a0' : '#00ff41', fontWeight: 700 }}>
+                      {pr.weight} × {pr.reps}{pr.isBaseline ? ' · baseline' : ''}
+                    </span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  Saved to your PR Board automatically.
+                </div>
+              </div>
+            )}
+
+            {/* WS4 — post-workout analysis. Renders per-exercise progress
+                vs the prior session + adherence breakdown. Reads from the
+                just-saved workout on operator.workouts[dateStr]; falls back
+                gracefully (component returns null) when no exercises had
+                completed sets. */}
+            {completionData.dateStr && operator.workouts[completionData.dateStr] && (
+              <PostWorkoutAnalysis
+                workout={operator.workouts[completionData.dateStr]}
+                operator={operator}
+              />
+            )}
 
             <div
               style={{
@@ -2776,12 +3709,79 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 textAlign: 'left',
               }}
             >
-              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>GUNNY SAYS</div>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 8 }}>{t('planner.gunny_says')}</div>
               {completionData.gunnyMessage}
+            </div>
+
+            {/* Session RPE capture — Foster's sRPE 1-10. One tap to
+                accept the default of 7, or pick a different value.
+                Drives the autoregulation engine. */}
+            <div style={{
+              padding: 16,
+              background: 'rgba(0,0,0,0.4)',
+              border: '1px solid rgba(255,140,0,0.2)',
+              borderRadius: 4,
+              marginBottom: 24,
+            }}>
+              <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#FF8C00', letterSpacing: 1, marginBottom: 12, textAlign: 'center' }}>
+                {t('planner.session_rpe_question')}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4, marginBottom: 8 }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPendingSrpe(n)}
+                    style={{
+                      padding: '10px 0',
+                      background: pendingSrpe === n
+                        ? n <= 4 ? 'rgba(0,255,65,0.25)' : n <= 7 ? 'rgba(255,184,0,0.25)' : 'rgba(255,77,77,0.25)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: pendingSrpe === n
+                        ? n <= 4 ? '1px solid #00ff41' : n <= 7 ? '1px solid #ffb800' : '1px solid #ff4d4d'
+                        : '1px solid rgba(255,255,255,0.08)',
+                      color: pendingSrpe === n
+                        ? n <= 4 ? '#00ff41' : n <= 7 ? '#ffb800' : '#ff4d4d'
+                        : '#888',
+                      fontFamily: 'Orbitron, sans-serif',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      borderRadius: 3,
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#666', textAlign: 'center', lineHeight: 1.5 }}>
+                {pendingSrpe <= 3 && 'Easy — could have done much more.'}
+                {pendingSrpe >= 4 && pendingSrpe <= 6 && 'Moderate — some gas left in the tank.'}
+                {pendingSrpe === 7 && 'Challenging — solid working session.'}
+                {pendingSrpe === 8 && 'Hard — 2 reps left across most sets.'}
+                {pendingSrpe === 9 && 'Very hard — barely held form on last sets.'}
+                {pendingSrpe === 10 && 'Maximal — could not have done one more rep.'}
+              </div>
             </div>
 
             <button
               onClick={() => {
+                // Persist the sRPE to the workout record before closing.
+                // Two-step write (initial save above, sRPE follow-up here)
+                // means even if the user dismisses without rating we keep
+                // the completed workout — but if they did rate, the
+                // autoregulation engine has its primary input.
+                const ds = completionData?.dateStr;
+                if (ds && operator.workouts[ds]) {
+                  const updated = { ...operator };
+                  updated.workouts = { ...updated.workouts };
+                  updated.workouts[ds] = {
+                    ...updated.workouts[ds],
+                    sessionRpe: pendingSrpe,
+                    sessionDurationMin: completionData?.duration || undefined,
+                  };
+                  onUpdateOperator(updated);
+                }
                 setShowCompletionScreen(false);
                 setCompletionData(null);
                 setWorkoutMode(false);
@@ -2801,6 +3801,118 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               DEBRIEF COMPLETE
+            </button>
+          </div>
+        )}
+
+        {/* UNDO toast for accidental REMOVE THIS taps. Fixed-position
+            overlay so it's visible regardless of scroll. Auto-dismisses
+            after 10 sec; tapping UNDO restores the block at its
+            original index with logged results intact. */}
+        {removedSnapshot && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              position: 'fixed',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+              zIndex: 10_000,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              maxWidth: 'calc(100vw - 32px)',
+              padding: '12px 14px 12px 18px',
+              background: 'rgba(10, 10, 10, 0.96)',
+              border: '1px solid rgba(0,255,65,0.35)',
+              boxShadow: '0 0 32px rgba(0,255,65,0.18), 0 8px 24px rgba(0,0,0,0.5)',
+              borderRadius: 4,
+              fontFamily: 'var(--mono)',
+              fontSize: 13,
+              color: 'var(--text-primary)',
+              animation: 'msgSlideIn 0.25s ease-out',
+            }}
+          >
+            <span style={{ color: 'var(--text-secondary)' }}>
+              Removed{' '}
+              <span style={{ color: '#fff', fontWeight: 600 }}>
+                {removedSnapshot.block.type === 'exercise'
+                  ? (removedSnapshot.block as ExerciseBlock).exerciseName
+                  : (removedSnapshot.block as ConditioningBlock).format || 'conditioning block'}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (!removedSnapshot) return;
+                if (undoToastTimeoutRef.current) {
+                  clearTimeout(undoToastTimeoutRef.current);
+                  undoToastTimeoutRef.current = null;
+                }
+                // Restore block at its original position. operator
+                // may have changed since removal (other tabs, etc.) —
+                // re-clamp the insert index to current bounds.
+                const ds = removedSnapshot.dateStr;
+                const updated = { ...operator };
+                updated.workouts = { ...updated.workouts };
+                const liveDayWorkout = updated.workouts[ds] as Workout | undefined;
+                if (liveDayWorkout) {
+                  const next = [...liveDayWorkout.blocks];
+                  const insertIdx = Math.min(removedSnapshot.insertAt, next.length);
+                  next.splice(insertIdx, 0, removedSnapshot.block);
+                  updated.workouts[ds] = {
+                    ...liveDayWorkout,
+                    blocks: next.map((b, i) => ({ ...b, sortOrder: i })),
+                  };
+                  onUpdateOperator(updated);
+                }
+                // Restore logged results too if there were any.
+                if (removedSnapshot.resultsForBlock) {
+                  setWorkoutResults((prev) => ({
+                    ...prev,
+                    [removedSnapshot.block.id]: removedSnapshot.resultsForBlock!,
+                  }));
+                }
+                setRemovedSnapshot(null);
+              }}
+              style={{
+                padding: '6px 14px',
+                background: 'rgba(0,255,65,0.18)',
+                border: '1px solid var(--green)',
+                color: 'var(--green)',
+                fontFamily: 'var(--display)',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                cursor: 'pointer',
+                borderRadius: 2,
+                textTransform: 'uppercase',
+              }}
+            >
+              ↶ Undo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (undoToastTimeoutRef.current) {
+                  clearTimeout(undoToastTimeoutRef.current);
+                  undoToastTimeoutRef.current = null;
+                }
+                setRemovedSnapshot(null);
+              }}
+              aria-label="Dismiss"
+              style={{
+                padding: '6px 8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-tertiary)',
+                fontSize: 16,
+                cursor: 'pointer',
+                lineHeight: 1,
+              }}
+            >
+              ×
             </button>
           </div>
         )}
@@ -2956,17 +4068,17 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                               className="t-body-sm"
                               style={{ color: 'var(--text-primary)', fontWeight: 600, flex: '1 1 auto' }}
                             >
-                              {block.exerciseName}
+                              {resolveExerciseName(block.exerciseName, language)}
                             </span>
                             {vidUrl && (
                               <a
                                 href={vidUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="btn btn-amber btn-sm"
+                                className="btn btn-ghost btn-sm"
                                 style={{ padding: '4px 8px', fontSize: 9, flexShrink: 0 }}
                               >
-                                ▶ Demo
+                                <Icon.Play size={10} /> DEMO
                               </a>
                             )}
                           </div>
@@ -3119,7 +4231,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           <textarea
             value={builderData.notes}
             onChange={e => setBuilderData({ ...builderData, notes: e.target.value })}
-            placeholder="Add coaching notes or cues..."
+            placeholder={t('planner.coaching_notes_placeholder')}
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -3237,7 +4349,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                             setExerciseSearchQuery(e.target.value);
                             setShowExerciseAutocomplete(e.target.value.length > 0);
                           }}
-                          placeholder="Search exercise..."
+                          placeholder={t('planner.search_exercise_placeholder')}
                           style={{
                             width: '100%',
                             padding: '6px 8px',
@@ -3732,10 +4844,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           type="button"
           onClick={handleNavigatePrevious}
           className="seg"
-          aria-label="Previous"
+          aria-label={t('common.previous')}
           style={{ padding: '9px 12px' }}
         >
-          ◀
+          <Icon.ChevronLeft size={14} />
         </button>
 
         <div className="segmented">
@@ -3769,10 +4881,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           type="button"
           onClick={handleNavigateNext}
           className="seg"
-          aria-label="Next"
+          aria-label={t('common.next')}
           style={{ padding: '9px 12px' }}
         >
-          ▶
+          <Icon.ChevronRight size={14} />
         </button>
       </div>
 

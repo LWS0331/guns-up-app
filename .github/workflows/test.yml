@@ -1,0 +1,55 @@
+# Vitest unit + integration tests.
+#
+# First test-runner CI step for this repo. Trigger fires on every PR
+# and every push to main. The required job is short (~30s) so we can
+# block merges on it without slowing review velocity.
+#
+# Pattern mirrors validate-config.yml: minimal, explicit, and named
+# clearly enough that a failure annotation tells the operator where
+# to look.
+
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Skip Prisma generate during install — the test runner doesn't
+      # need a DB client and the postinstall script would otherwise
+      # try to connect / generate against the dummy URL. Tests cover
+      # pure-logic and (eventually) component shapes; integration
+      # tests against the real DB live elsewhere.
+      - name: Install (skip prisma generate)
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+        run: npm ci --no-audit --no-fund
+
+      - name: Run vitest
+        run: npm test
+
+      - name: Upload JUnit results (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-results
+          path: ./test-results.junit.xml
+          if-no-files-found: ignore
+          retention-days: 7

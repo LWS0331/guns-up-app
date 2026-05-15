@@ -1,0 +1,104 @@
+# Validate GitHub Actions config — required secrets and variables.
+#
+# Why this exists:
+# When .github/workflows/cron.yml shipped (May 2026, commit 2e484e8),
+# its setup instructions were clear ("set repo variable APP_BASE_URL")
+# but nothing enforced that the variable actually got created. The
+# first scheduled cron run failed because APP_BASE_URL was empty —
+# the workflow comment was a checklist nobody checked.
+#
+# This workflow runs on every push to main + on demand, and FAILS
+# (with a clear message) if any required secret or variable is
+# missing. The expectation is: when you add a new required
+# secret/variable to any workflow, you also add it to the matrix
+# below. CI then enforces the contract.
+#
+# Manual trigger (Actions → Validate Actions Config → Run workflow)
+# is the fastest way to check current state without pushing a commit.
+
+name: Validate Actions Config
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Only re-run when workflows themselves change. Routine commits
+      # to src/** don't need to re-validate (the values can't change
+      # between commits — they live in repo Settings, not source).
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Required for cron.yml — CRON_SECRET (secret) + APP_BASE_URL (variable)
+        env:
+          # Required secrets. Set in: Repo → Settings → Secrets and
+          # variables → Actions → Secrets (tab) → New repository
+          # secret. These are NOT readable from the workflow logs —
+          # only their PRESENCE is checkable.
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+          # Required variables. Set in: Repo → Settings → Secrets and
+          # variables → Actions → Variables (tab) → New repository
+          # variable. These ARE readable from logs — used for non-
+          # sensitive config like the production origin URL.
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+        run: |
+          set -e
+
+          missing=0
+
+          # bash idiom: ${VAR:?message} exits with code 1 + the
+          # message if VAR is unset OR empty. We collect all failures
+          # before exiting so devs see every missing item in one run
+          # rather than fixing one, pushing, hitting the next, etc.
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Missing repo secret: CRON_SECRET"
+            echo "  Set at: Repo → Settings → Secrets and variables → Actions → Secrets → New repository secret"
+            echo "  Required by: .github/workflows/cron.yml (auth bearer for /api/cron/*)"
+            echo "  Also must match the CRON_SECRET env var on the Railway guns-up-app service."
+            missing=$((missing + 1))
+          fi
+
+          if [ -z "$APP_BASE_URL" ]; then
+            echo "::error::Missing repo variable: APP_BASE_URL"
+            echo "  Set at: Repo → Settings → Secrets and variables → Actions → Variables → New repository variable"
+            echo "  Required by: .github/workflows/cron.yml (production origin for cron HTTP calls)"
+            echo "  Expected value: https://gunnyai.fit"
+            missing=$((missing + 1))
+          fi
+
+          # Sanity check: APP_BASE_URL should be an https origin, no
+          # trailing slash, no path. Catches typos like "gunnyai.fit"
+          # (missing scheme) or "https://gunnyai.fit/" (trailing /)
+          # before they break a cron call at 03:00 UTC.
+          if [ -n "$APP_BASE_URL" ]; then
+            case "$APP_BASE_URL" in
+              https://*) ;;
+              *)
+                echo "::error::APP_BASE_URL must start with https:// — got: $APP_BASE_URL"
+                missing=$((missing + 1))
+                ;;
+            esac
+            case "$APP_BASE_URL" in
+              */)
+                echo "::error::APP_BASE_URL must NOT end with a trailing slash — got: $APP_BASE_URL"
+                missing=$((missing + 1))
+                ;;
+            esac
+          fi
+
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing required secret(s)/variable(s) missing or invalid. Fix the above and re-run."
+            exit 1
+          fi
+
+          echo "✓ All required GitHub Actions secrets and variables are set and look valid"
+          echo "  CRON_SECRET: set (length redacted)"
+          echo "  APP_BASE_URL: $APP_BASE_URL"

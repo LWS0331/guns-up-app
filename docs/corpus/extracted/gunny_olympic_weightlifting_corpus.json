@@ -1,0 +1,1433 @@
+{
+  "metadata": {
+    "name": "Gunny Olympic Weightlifting Corpus",
+    "version": "1.0.0",
+    "created": "2026-04-27",
+    "scope": "Olympic weightlifting only — Snatch and Clean & Jerk. Does not cover powerlifting, strongman, or general strength.",
+    "depth": "Layered. Every concept node carries an athlete_view (cues, feel, what to do) and a coach_view (biomechanics, technical priorities, why it matters).",
+    "structure_pattern": "topics > [lift|domain] > phases > [phase] > concepts > [concept]",
+    "node_schema": {
+      "id": "string — dot-delimited path (e.g. 'snatch.first_pull.bar_path')",
+      "title": "string — human-readable name",
+      "summary": "string — one-line description for retrieval ranking",
+      "athlete_view": "object with cues[], feel, key_actions[]",
+      "coach_view": "object with biomechanics, priorities[], why_it_matters",
+      "common_errors": "array of {error, fix}",
+      "drills": "array of strings",
+      "tags": "array of strings for filtering"
+    },
+    "rules_reference": "IWF Technical and Competition Rules & Regulations (TCRR). USAW follows IWF for sanctioned events. Local meets may vary on equipment specs but lifting rules are uniform.",
+    "authorities": [
+      {"name": "Greg Everett", "domain": "technique, coaching, programming", "source": "Catalyst Athletics / 'Olympic Weightlifting: A Complete Guide for Athletes & Coaches'"},
+      {"name": "Bob Takano", "domain": "programming, periodization", "source": "'Weightlifting Programming: A Winning Coach's Guide'"},
+      {"name": "Glenn Pendlay", "domain": "technique, the Pendlay row, classical American coaching", "source": "MuscleDriver USA / California Strength legacy"},
+      {"name": "Travis Mash", "domain": "programming, peaking, equipped/raw crossover thinking", "source": "Mash Elite Performance"},
+      {"name": "A.S. Medvedev", "domain": "Russian periodization theory", "source": "'A System of Multi-Year Training in Weightlifting'"},
+      {"name": "R.A. Roman", "domain": "Russian biomechanics and methodology", "source": "'The Snatch, the Clean and Jerk'"},
+      {"name": "Ivan Abadjiev", "domain": "Bulgarian high-frequency max method", "source": "Bulgarian National Team methodology"},
+      {"name": "Ma Jianping / Chinese system", "domain": "high-frequency, accessory-heavy programming", "source": "Chinese National Team methodology"},
+      {"name": "Sean Waxman", "domain": "American coaching, athlete development", "source": "Waxman's Gym"},
+      {"name": "Dmitry Klokov", "domain": "Russian technique school, complexes", "source": "Klokov.com content"}
+    ],
+    "voice_notes_for_gunny": "When delivering this content, Gunny stays in DI register. Athlete_view content is what gets spoken to operators by default — short, declarative, action-oriented. Coach_view is for technical questions, programming discussions, or when an operator asks 'why'. Common_errors and drills are pulled when an operator describes a problem or asks for correctives. Cite authorities by name when challenged or when an operator asks for sources, not by default."
+  },
+
+  "topics": {
+
+    "snatch": {
+      "id": "snatch",
+      "title": "The Snatch",
+      "summary": "One-motion lift from floor to overhead in a full squat. Most technical lift in weightlifting.",
+      "phases": {
+
+        "setup": {
+          "id": "snatch.setup",
+          "title": "Snatch Setup",
+          "summary": "Static start position before the bar leaves the floor. Sets every leverage downstream.",
+          "concepts": {
+
+            "foot_position": {
+              "id": "snatch.setup.foot_position",
+              "title": "Foot Position at Setup",
+              "summary": "Feet roughly hip-width, toes slightly out. Bar over mid-foot.",
+              "athlete_view": {
+                "cues": ["Feet under hips", "Toes out a hair", "Bar over the laces"],
+                "feel": "Stable. Like you're about to jump straight up.",
+                "key_actions": ["Pull stance is narrower than your squat stance", "Bar should be over the bony bumps at the base of your big toe, not the middle of the foot"]
+              },
+              "coach_view": {
+                "biomechanics": "Hip-width stance optimizes hip extension torque while keeping the bar path close to the body's center of mass. Toe-out 7-15 degrees lets the knees track outside the elbows during the receive in the bottom of the squat.",
+                "priorities": ["Bar over mid-foot to base-of-toes", "Stance narrow enough to allow aggressive triple extension", "Stance wide enough to receive in a deep squat"],
+                "why_it_matters": "If the bar starts forward of mid-foot, the lifter must pull it back during the first pull, costing vertical force and creating a forward bar path. If feet are too narrow, knees collide with elbows in the catch."
+              },
+              "common_errors": [
+                {"error": "Stance too wide (squat width)", "fix": "Narrow it. Pull stance is hip-width. Squat stance is for the catch only — feet jump out during the turnover."},
+                {"error": "Bar too far forward at setup", "fix": "Roll the bar back until it's over the base of the toes / mid-foot. Re-set."}
+              ],
+              "drills": ["Setup-and-pause drill: assume position, hold 3 seconds, check bar position", "Tape a line on the platform under mid-foot for visual reference"],
+              "tags": ["snatch", "setup", "fundamentals", "athlete-facing", "coach-facing"]
+            },
+
+            "grip_width": {
+              "id": "snatch.setup.grip_width",
+              "title": "Snatch Grip Width",
+              "summary": "Wide enough that the bar sits at the hip crease when standing tall, hook grip mandatory.",
+              "athlete_view": {
+                "cues": ["Bar in the hip crease standing tall", "Hook grip — thumb under fingers", "Wrap the thumb hard, then bury it"],
+                "feel": "Pinch on the thumb. Uncomfortable for the first month — get over it.",
+                "key_actions": ["Stand with the bar at arms length and slide hands out until bar contacts the hip crease", "Lock thumb against the bar with index and middle finger over the thumbnail"]
+              },
+              "coach_view": {
+                "biomechanics": "Wider grip shortens the distance the bar must travel to reach overhead and improves overhead stability via reduced shoulder flexion demand. The hook grip uses bone-on-bone friction (thumb against bar) so the fingers don't have to grip-strength their way through max efforts.",
+                "priorities": ["Grip width set by anatomy (longer arms = wider grip)", "Hook grip non-negotiable above ~70% intensity", "Tape the thumbs once skin tolerance becomes the limiter"],
+                "why_it_matters": "Lifters who fail the hook grip on heavy snatches almost always lose the bar forward in the third pull because the wrists must grip-clench instead of relaxing into the turnover."
+              },
+              "common_errors": [
+                {"error": "Grip too narrow — bar lands above the hip crease", "fix": "Move out one-to-two finger widths. Test by standing tall — bar should sit in the crease, not on the abs."},
+                {"error": "Refusing to hook grip", "fix": "Non-negotiable. Tape the thumbs, hook every warmup, build tolerance. There is no elite snatch without hook grip."}
+              ],
+              "drills": ["Hook grip deadlifts at 60-70% to build skin tolerance", "Snatch grip from blocks with extended holds at top"],
+              "tags": ["snatch", "setup", "grip", "hook_grip", "fundamentals"]
+            },
+
+            "back_and_hip_position": {
+              "id": "snatch.setup.back_and_hip_position",
+              "title": "Back Angle and Hip Height at Setup",
+              "summary": "Chest up, back arched, hips above knees but below shoulders, shoulders slightly forward of the bar.",
+              "athlete_view": {
+                "cues": ["Chest proud", "Hips higher than knees", "Shoulders just over the bar"],
+                "feel": "Loaded into the hamstrings and glutes. Not squatting the bar up — hinging.",
+                "key_actions": ["Take a big breath, brace the trunk, lock the lats by trying to bend the bar around your shins", "Lats engage by pulling the shoulders down and back"]
+              },
+              "coach_view": {
+                "biomechanics": "Optimal start position varies by anthropometry. Long-femur lifters set up with higher hips and more horizontal back; short-femur lifters can set up with lower hips and more vertical torso. The shoulders sit slightly forward of the bar (1-3 inches) so the bar travels backward into the body during the second pull, not away from it.",
+                "priorities": ["Lumbar neutral or slightly extended, never flexed", "Lats engaged before liftoff", "Shoulder-bar relationship matched to femur length"],
+                "why_it_matters": "Hips too low = the lift becomes a squat, knees push forward, bar swings out. Hips too high = stiff-leg deadlift, no leg drive, slow first pull. Lat engagement is the single most-coached and most-missed setup detail."
+              },
+              "common_errors": [
+                {"error": "Lumbar flexion (rounded lower back)", "fix": "Stop loading more weight until the position is solid. Pause snatch deadlifts at knee. Strengthen erectors with good mornings and back extensions."},
+                {"error": "Hips too low — squatting the start", "fix": "Set hips above the knee crease. Cue 'hinge, don't squat'."},
+                {"error": "Shoulders behind the bar", "fix": "Bar over mid-foot, shoulders slightly forward. Otherwise the first pull launches the bar away from the body."}
+              ],
+              "drills": ["Halting snatch deadlifts with 2-second pause at knee", "Snatch from a setup hold (3-second static start)"],
+              "tags": ["snatch", "setup", "back_position", "anthropometry", "coach-facing"]
+            }
+          }
+        },
+
+        "first_pull": {
+          "id": "snatch.first_pull",
+          "title": "First Pull (Floor to Knee)",
+          "summary": "Slow, patient, leg-driven. Shoulders stay over the bar. Sets up the second pull.",
+          "concepts": {
+
+            "tempo_and_intent": {
+              "id": "snatch.first_pull.tempo_and_intent",
+              "title": "Tempo and Intent of the First Pull",
+              "summary": "Slow relative to the second pull — but accelerating. 'Patient pull' is the standard cue.",
+              "athlete_view": {
+                "cues": ["Push the floor away", "Slow off the floor", "Build speed, don't yank"],
+                "feel": "Like a deadlift with intent. Heavy. Smooth.",
+                "key_actions": ["Initiate by pressing legs into the platform, not by pulling the bar with the back", "Bar accelerates continuously — there is no static moment until lockout"]
+              },
+              "coach_view": {
+                "biomechanics": "First-pull bar velocity in elite lifters is roughly 0.8-1.2 m/s at the knee. The pull is leg-driven (knee extension) with a constant or slightly opening hip-shoulder angle. The back angle stays approximately constant from floor to knee.",
+                "priorities": ["Constant back angle floor-to-knee", "Knee extension drives the pull, not back extension", "Bar accelerates — no plateau"],
+                "why_it_matters": "If the lifter rips the bar off the floor, the back angle changes early (hips shoot up), removing leg drive from the second pull. The first pull is patient specifically so that the second pull can be violent."
+              },
+              "common_errors": [
+                {"error": "Yanking the bar off the floor", "fix": "Pause-pull at 1 inch off the floor for 2 seconds, then continue. Re-trains the patient initiation."},
+                {"error": "Hips shoot up — shoulders rise, hips rise, bar barely moves", "fix": "Cue 'shoulders and hips rise together'. Snatch pulls with chains/bands to demand leg drive."}
+              ],
+              "drills": ["1-inch pause snatch pulls", "Snatch from a deficit (1-2 inch riser) to enforce leg drive", "Tempo snatch deadlift (3-second eccentric to floor, 2-second concentric to knee)"],
+              "tags": ["snatch", "first_pull", "tempo", "leg_drive", "athlete-facing", "coach-facing"]
+            },
+
+            "bar_path_first_pull": {
+              "id": "snatch.first_pull.bar_path",
+              "title": "Bar Path in the First Pull",
+              "summary": "Bar travels backward and slightly upward — toward the lifter, never away.",
+              "athlete_view": {
+                "cues": ["Bar comes to you", "Sweep the bar back", "Lats on, bar close"],
+                "feel": "Like the bar is dragging up the shins, then up the thighs.",
+                "key_actions": ["Engage lats hard at setup so the bar doesn't drift forward", "Bar should brush or just barely clear the shins"]
+              },
+              "coach_view": {
+                "biomechanics": "The bar moves toward the lifter from the floor to the knee — a backward horizontal displacement of roughly 5-10cm in elite lifters. This puts the bar over the mid-foot or slightly behind it as the knee approaches extension, which is the optimal position for the second pull's vertical drive.",
+                "priorities": ["Lat engagement before liftoff", "Bar contacts or brushes the shins", "No forward bar drift in the first pull"],
+                "why_it_matters": "Forward bar drift in the first pull is the single most common amateur error. It puts the bar in front of the body for the second pull, causing the lifter to either jump forward or loop the bar away. Both kill the lift."
+              },
+              "common_errors": [
+                {"error": "Bar swings out and away from shins", "fix": "Drill lat engagement: 'bend the bar around your shins'. Use a snatch deadlift with PVC against the shins."},
+                {"error": "Bar drifts forward as it passes the knee", "fix": "Pause snatch at knee. Hold for 2 seconds. Re-engage lats. Continue."}
+              ],
+              "drills": ["Snatch pulls vs the wall (shins 1 inch from wall — bar must stay close)", "Pause snatches at knee", "Snatch deadlift with PVC pressed against the shins"],
+              "tags": ["snatch", "first_pull", "bar_path", "lats"]
+            }
+          }
+        },
+
+        "transition": {
+          "id": "snatch.transition",
+          "title": "Transition (Knee to Power Position)",
+          "summary": "Knee re-bends, torso starts to come vertical, bar contacts upper thigh / hip crease. The 'scoop' or 'double knee bend.'",
+          "concepts": {
+
+            "double_knee_bend": {
+              "id": "snatch.transition.double_knee_bend",
+              "title": "Double Knee Bend (the Scoop)",
+              "summary": "After the bar passes the knee, the knees re-bend slightly forward as the torso comes vertical. Loads the legs for the second pull.",
+              "athlete_view": {
+                "cues": ["Scoop", "Knees forward, chest up", "Get the bar in the pocket"],
+                "feel": "A loaded spring. Quad pre-tension. Bar grazing the upper thigh.",
+                "key_actions": ["As the bar passes the knee, drive the knees slightly back under the bar", "Torso continues to come vertical — but smoothly, not aggressively"]
+              },
+              "coach_view": {
+                "biomechanics": "The double knee bend re-loads the quadriceps and patellar tendon for the explosive triple extension of the second pull. Knee re-flexion of 10-20 degrees is typical. The bar reaches mid-to-upper thigh and continues to upper-thigh/hip-crease contact point depending on grip width and limb proportions.",
+                "priorities": ["Smooth knee re-bend, not a deliberate drop", "Bar stays close — contact at upper thigh", "Torso vertical at the contact point"],
+                "why_it_matters": "Without the double knee bend, the lifter has no leg drive available at the contact point — the lift becomes an arms-and-back rip. With it, the second pull is a vertical jump with a barbell."
+              },
+              "common_errors": [
+                {"error": "Skipping the scoop — straight legs at the contact point", "fix": "Tall snatches and high-hang snatches force the lifter to re-bend the knees to find leg drive."},
+                {"error": "Bar contact at the wrong height (mid-thigh, not hip crease)", "fix": "Adjust grip width or pull mechanics. Wider grip drops the contact point lower; narrower raises it."}
+              ],
+              "drills": ["Tall snatch (start at standing, dip and snatch)", "High-hang snatch from pockets", "Pause-at-knee snatch to feel the scoop separately"],
+              "tags": ["snatch", "transition", "scoop", "double_knee_bend", "second_pull_setup"]
+            }
+          }
+        },
+
+        "second_pull": {
+          "id": "snatch.second_pull",
+          "title": "Second Pull (Explosive Extension)",
+          "summary": "Triple extension — ankle, knee, hip — driven vertically. The 'violence' of the lift. Bar contacts hip crease, then accelerates upward.",
+          "concepts": {
+
+            "triple_extension": {
+              "id": "snatch.second_pull.triple_extension",
+              "title": "Triple Extension",
+              "summary": "Simultaneous, aggressive extension of ankle, knee, and hip joints, driving the bar vertically off the hip.",
+              "athlete_view": {
+                "cues": ["Jump", "Finish tall", "Drive through the heels and explode"],
+                "feel": "Like a max vertical jump while holding the bar.",
+                "key_actions": ["Aggressive hip drive at contact", "Stand fully tall before pulling under", "Heels stay down as long as possible — extend the ankles last"]
+              },
+              "coach_view": {
+                "biomechanics": "The second pull generates the highest power output of any lift in sport — peak power outputs of 2,000-5,000W are common in competitive lifters. Triple extension creates vertical bar acceleration that gives the lifter time to pull under. Hip extension contributes the most force; ankle extension (plantar flexion) contributes the least but completes the chain.",
+                "priorities": ["Vertical force vector — no forward lean at extension", "Hip drive into the bar, not jumping forward", "Full extension before initiating the third pull"],
+                "why_it_matters": "Cutting the second pull short ('soft pull') means the bar has insufficient upward momentum, and the lifter must rush the turnover with the arms — the bar crashes down on a weak overhead position."
+              },
+              "common_errors": [
+                {"error": "Jumping forward instead of vertical", "fix": "Snatch on a low platform with markers — feet should land in the same spot or slightly behind. Cue 'finish stacked.'"},
+                {"error": "Cutting the pull short — pulling under before full extension", "fix": "Snatch high pulls forced to full extension. Tall snatches. Cue 'finish, then pull under.'"},
+                {"error": "Early arm bend — biceps activate during extension", "fix": "Snatch pulls at 100-110% snatch with strict 'arms long' cue. Penalize early arm bend with a re-set."}
+              ],
+              "drills": ["Snatch pull at 100-110% snatch", "Tall snatch (forces extension before pull-under)", "Snatch high pull with 3-second hold at top"],
+              "tags": ["snatch", "second_pull", "triple_extension", "power_production", "core"]
+            },
+
+            "bar_contact_point": {
+              "id": "snatch.second_pull.bar_contact_point",
+              "title": "Bar Contact at the Hip",
+              "summary": "Bar makes brushing contact with the hip crease. Not a slap, not a smash — a brush that redirects momentum vertically.",
+              "athlete_view": {
+                "cues": ["Brush, don't slap", "Bar in the pocket", "Hips meet the bar"],
+                "feel": "A whisper of contact, then the bar shoots up.",
+                "key_actions": ["Drive hips forward into the bar, not the bar into the hips", "Maintain bar-body contact through extension"]
+              },
+              "coach_view": {
+                "biomechanics": "Contact at the hip crease (PSIS / inguinal area) maximizes vertical force transfer. A slapping contact suggests the bar was forward of the body and crashed into it — energy is wasted in the horizontal direction. A bar-too-low contact (mid-thigh) means the lifter ran out of pull height and the second pull was rushed.",
+                "priorities": ["Brushing contact, not impact", "Contact point at hip crease for snatch grip", "Hips drive into the bar"],
+                "why_it_matters": "The contact point is a diagnostic. Bruised hips mean the bar is crashing in (forward bar path). No contact at all means the bar swung out. The brush is the goal."
+              },
+              "common_errors": [
+                {"error": "Bar smashes the hips (bruising)", "fix": "First-pull bar path correction — get the bar over mid-foot earlier. Snatch pulls with focus on bar staying close."},
+                {"error": "Bar contacts mid-thigh or below", "fix": "Grip is too narrow, or the lifter is cutting the pull short. Widen grip; drill tall snatches."}
+              ],
+              "drills": ["High-hang snatch (forces correct contact point)", "Snatch from the pocket / power position"],
+              "tags": ["snatch", "second_pull", "contact_point", "diagnostic"]
+            }
+          }
+        },
+
+        "turnover": {
+          "id": "snatch.turnover",
+          "title": "Turnover / Third Pull (Pulling Under the Bar)",
+          "summary": "The lifter pulls themselves under a bar that is already accelerating upward. Elbows pull high and outside, then rotate around the bar to lockout overhead.",
+          "concepts": {
+
+            "pull_under_intent": {
+              "id": "snatch.turnover.pull_under_intent",
+              "title": "Pulling Under, Not Pulling Up",
+              "summary": "The third pull moves the lifter down, not the bar up. The bar's upward momentum is gifted by the second pull.",
+              "athlete_view": {
+                "cues": ["Punch under", "Drop fast, lock fast", "You move, the bar floats"],
+                "feel": "Like falling into a squat with the bar suspended above you.",
+                "key_actions": ["Pull elbows high and to the sides (not back)", "Rotate elbows around the bar at the top — fast and aggressive", "Punch up into lockout while dropping into the squat"]
+              },
+              "coach_view": {
+                "biomechanics": "At peak bar height (peak velocity ~1.8-2.2 m/s vertical for elite snatches), the bar decelerates under gravity. The lifter must beat the bar to the receive position. Elite turnover times (peak extension to bar lockout overhead) are 0.15-0.25 seconds.",
+                "priorities": ["Aggressive elbow path — high and outside", "Active wrist rotation", "Speed under matches speed up"],
+                "why_it_matters": "A slow turnover means the lifter catches the bar after it has fallen below the receive position — the bar crashes down, the catch position collapses. Speed under is a trainable skill, not a strength quality."
+              },
+              "common_errors": [
+                {"error": "Pulling the bar up with the arms instead of pulling under", "fix": "Tall snatch. Drop snatch. Both train the pull-under without rewarding the pull-up."},
+                {"error": "Slow turnover — bar crashes down on top of lifter", "fix": "Speed snatches at 60-70%. Many sets, low reps, max speed. Drop snatches."}
+              ],
+              "drills": ["Drop snatch", "Tall snatch", "Snatch balance", "Speed snatch (60-70%, focus on turnover speed)"],
+              "tags": ["snatch", "turnover", "third_pull", "speed", "skill"]
+            }
+          }
+        },
+
+        "receive": {
+          "id": "snatch.receive",
+          "title": "Receive Position (Overhead Squat Catch)",
+          "summary": "Bar locked overhead, in a full squat below parallel. Active shoulders, locked elbows, midline solid.",
+          "concepts": {
+
+            "overhead_position": {
+              "id": "snatch.receive.overhead_position",
+              "title": "Overhead Position in the Catch",
+              "summary": "Bar is slightly behind the ears, elbows locked, shoulders shrugged into the ears, scapulae upward-rotated.",
+              "athlete_view": {
+                "cues": ["Press up to the sky", "Shrug to the ears", "Bar over the back of your neck"],
+                "feel": "Like you're trying to push the bar through the ceiling.",
+                "key_actions": ["Active shrug — push the shoulders up into the bar", "Lock elbows hard", "Bar slightly behind the crown of the head"]
+              },
+              "coach_view": {
+                "biomechanics": "Stable overhead requires (1) full shoulder flexion with external rotation, (2) thoracic extension, (3) active scapular upward rotation, and (4) wrist extension. The bar's vertical line of force must pass through the midfoot for the squat to be stable. Behind-the-ear position is not a 'press behind the neck' — it's where the bar naturally settles when the scapulae are properly positioned.",
+                "priorities": ["Active shoulder packing", "Elbow lockout — never soft", "Bar over mid-foot in the squat"],
+                "why_it_matters": "A passive overhead position collapses under load. Soft elbows are an immediate red light. Bar too far forward or back puts the lifter in a battle to stand up."
+              },
+              "common_errors": [
+                {"error": "Soft elbows in the catch", "fix": "Snatch balance. Overhead squats with 3-second hold at bottom. Cue 'punch the bar through the ceiling.'"},
+                {"error": "Bar caught too far forward (above face/eyes)", "fix": "Improves with thoracic mobility and active shrug. Behind-the-neck press complex; sots press for active end-range."},
+                {"error": "Bar caught too far behind, lifter falls forward", "fix": "Address shoulder mobility. Often a setup or pull-path issue, not a catch issue — the bar was already too far back."}
+              ],
+              "drills": ["Snatch balance", "Overhead squat with pause", "Sots press", "Behind-the-neck snatch grip press"],
+              "tags": ["snatch", "receive", "overhead_position", "stability", "mobility"]
+            },
+
+            "depth_and_squat": {
+              "id": "snatch.receive.depth_and_squat",
+              "title": "Squat Depth in the Receive",
+              "summary": "Hip crease below knee crease. IWF rules require the lifter to stand from the depth they catch in.",
+              "athlete_view": {
+                "cues": ["Sit in", "Bottom out", "Bounce out of the hole if you can"],
+                "feel": "Like a fast overhead squat to full depth.",
+                "key_actions": ["Catch in the deepest position your mobility allows", "Use the eccentric-to-concentric reflex to stand up — don't pause"]
+              },
+              "coach_view": {
+                "biomechanics": "Catching deep is an efficiency play. Lower catch height = more bar height available before the lift fails = more allowable error in the second pull. Power snatches (catching at or above parallel) are training tools, not the goal of the full snatch. Standing from depth requires a strong overhead squat — programmed separately.",
+                "priorities": ["Catch as deep as the bar allows", "No 'bouncing' if it compromises position", "Overhead squat strength supports catch depth"],
+                "why_it_matters": "A lifter who can only catch at parallel needs to pull the bar 4-6 inches higher than a lifter who catches in the hole. Same percentage of max, more time, more risk."
+              },
+              "common_errors": [
+                {"error": "Catching high (parallel or above)", "fix": "Drop snatches. Snatch balance from full depth. Improves over months, not weeks."},
+                {"error": "Failing to stand from the bottom", "fix": "Overhead squat strength. Pause overhead squats. Front squats and back squats for total leg strength."}
+              ],
+              "drills": ["Overhead squat 5x5 at 70% snatch", "Pause overhead squat", "Snatch balance with 2-second hold at bottom"],
+              "tags": ["snatch", "receive", "depth", "overhead_squat", "leg_strength"]
+            }
+          }
+        },
+
+        "recovery": {
+          "id": "snatch.recovery",
+          "title": "Recovery (Stand from the Squat)",
+          "summary": "Stand from the bottom of the squat with bar overhead. Maintain bar position throughout.",
+          "concepts": {
+            "stand_from_squat": {
+              "id": "snatch.recovery.stand_from_squat",
+              "title": "Standing from the Snatch",
+              "summary": "Drive out of the bottom while keeping bar locked, active, and over mid-foot.",
+              "athlete_view": {
+                "cues": ["Stand with the bar", "Push the bar up while standing up", "Don't let the bar move"],
+                "feel": "Heavy overhead squat. Concentrate on the bar position.",
+                "key_actions": ["Initiate stand by driving knees out and pressing through midfoot", "Keep actively pressing the bar up the entire stand", "Once standing, hold the lift until the down signal — three white lights"]
+              },
+              "coach_view": {
+                "biomechanics": "Failure to stand is rarely overhead failure — it's leg strength failure. If the lifter catches deep with a stable overhead, the stand requires only the lifter's overhead squat capacity. Overhead squat 1RM should typically be 100-105% of snatch 1RM for elite lifters.",
+                "priorities": ["Knees track over toes — knees out", "Continuous pressure into the bar overhead", "Hold the lift to the down signal"],
+                "why_it_matters": "Standing too quickly often jolts the bar forward or back; standing too slowly burns energy. Smooth stand, then hold."
+              },
+              "common_errors": [
+                {"error": "Bar drifts forward as lifter stands", "fix": "Lat tension overhead. Pause overhead squats with focus on bar position. Address thoracic mobility if it's a positional limit."},
+                {"error": "Lifter drops the bar before the down signal", "fix": "Coach call: 'wait for the lights.' Drill standing-and-holding for 3-5 seconds in training."}
+              ],
+              "drills": ["Pause overhead squat (3-second pause at bottom)", "Snatch + 3-second overhead hold at standing"],
+              "tags": ["snatch", "recovery", "overhead_squat", "competition_rules"]
+            }
+          }
+        }
+      },
+
+      "errors_overview": {
+        "id": "snatch.errors_overview",
+        "title": "Top Snatch Failure Modes",
+        "summary": "The most common ways snatches die, ranked.",
+        "ranked_failures": [
+          {"rank": 1, "failure": "Bar forward in the catch", "root_cause": "Forward bar drift in the first pull or jumping forward in the second pull", "fix_path": "Diagnose first-pull bar path → snatch pulls with lat focus → tempo first pulls"},
+          {"rank": 2, "failure": "Slow / late turnover", "root_cause": "Pulling the bar up instead of pulling under", "fix_path": "Tall snatches, drop snatches, speed snatches at 60-70%"},
+          {"rank": 3, "failure": "Soft elbows / press-out", "root_cause": "Weak overhead, slow lockout, or under-extending the second pull", "fix_path": "Snatch balance, behind-the-neck snatch press, overhead squat"},
+          {"rank": 4, "failure": "Crashed catch (bar smashes lifter)", "root_cause": "Insufficient bar height from second pull", "fix_path": "Snatch high pulls at 100-110% snatch, attack hip drive, build leg strength"},
+          {"rank": 5, "failure": "Failed to stand", "root_cause": "Insufficient overhead squat strength or unstable catch position", "fix_path": "Pause overhead squats, snatch balance, front and back squat strength work"}
+        ],
+        "tags": ["snatch", "diagnostics", "coach-facing"]
+      },
+
+      "variants": {
+        "id": "snatch.variants",
+        "title": "Snatch Variations",
+        "summary": "Common variants and their training purpose.",
+        "variants": [
+          {"name": "Power Snatch", "description": "Catch above parallel. Trains pull height, second pull power.", "use": "Speed-strength block, novice progression, metcon work."},
+          {"name": "Hang Snatch (Knee / Above-Knee / High-Hang)", "description": "Start from a hanging position above the floor.", "use": "Isolates second pull / scoop. Good for technique and assistance volume."},
+          {"name": "Block Snatch", "description": "Bar starts on blocks at various heights.", "use": "Isolates phases. Removes first-pull volume to spare lower back."},
+          {"name": "Snatch Balance", "description": "Bar on back, dip-drive, drop into overhead squat with bar locked.", "use": "Speed under, overhead receive, lockout."},
+          {"name": "Drop Snatch", "description": "Bar on back, no dip-drive — drop straight under.", "use": "Pure pull-under speed. No leg drive component."},
+          {"name": "Tall Snatch", "description": "Start standing on tip-toes, bar at hips, no dip — drop under.", "use": "Forces extension before pull-under. Trains turnover speed."},
+          {"name": "Muscle Snatch", "description": "No re-bend of knees in receive — pull bar overhead in standing.", "use": "Pulling strength, turnover. Loads stay light."}
+        ],
+        "tags": ["snatch", "variants", "programming"]
+      }
+    },
+
+    "clean_and_jerk": {
+      "id": "clean_and_jerk",
+      "title": "The Clean & Jerk",
+      "summary": "Two-part lift. Clean: floor to front-rack receive in a squat. Jerk: rack to overhead via dip-drive-split (or squat).",
+
+      "clean": {
+        "id": "clean_and_jerk.clean",
+        "title": "The Clean",
+        "summary": "Floor-to-front-rack pull. Same first/second pull pattern as snatch with narrower grip and higher catch position.",
+        "phases": {
+
+          "setup": {
+            "id": "clean_and_jerk.clean.setup",
+            "title": "Clean Setup",
+            "summary": "Same principles as snatch setup, with a narrower grip — typically just outside the hips.",
+            "concepts": {
+              "grip_width": {
+                "id": "clean_and_jerk.clean.setup.grip_width",
+                "title": "Clean Grip Width",
+                "summary": "Hands just outside the hips. Hook grip mandatory. Grip width sized so the elbows clear the knees in the receive.",
+                "athlete_view": {
+                  "cues": ["Hands just outside the hips", "Hook grip", "Elbows clear the knees in the catch"],
+                  "feel": "Tighter grip than snatch, but the bar still hits the same hip crease.",
+                  "key_actions": ["Test grip by performing front squat — elbows should not collide with knees", "Hook grip for the pull, can be released in the front rack"]
+                },
+                "coach_view": {
+                  "biomechanics": "Narrow grip means the bar contacts higher on the body during the second pull (around the upper thigh / hip). Front rack receives the bar on the shoulders/clavicle, not the hands — the hands are merely a guide.",
+                  "priorities": ["Grip width that allows elbow clearance in the catch", "Hook grip for the pull", "Front rack mobility independent of grip width"],
+                  "why_it_matters": "A clean grip too narrow forces the elbows out wide in the catch and racks the bar on the wrists, causing wrist strain. Too wide and the bar bounces off the chest in the receive."
+                },
+                "common_errors": [
+                  {"error": "Grip too narrow — elbows can't clear knees in catch", "fix": "Move out 1-2 finger widths."},
+                  {"error": "Wrist pain in the front rack", "fix": "Improve front-rack flexibility — wrist, lat, triceps. Foam roll lats. Loosen grip in the receive."}
+                ],
+                "drills": ["Front squat with proper rack hold", "Clean grip from blocks"],
+                "tags": ["clean", "setup", "grip"]
+              }
+            }
+          },
+
+          "pull_phases": {
+            "id": "clean_and_jerk.clean.pull_phases",
+            "title": "Clean Pull (First, Transition, Second)",
+            "summary": "Mechanics mirror the snatch pull. Slower first pull, scoop, explosive second pull.",
+            "concepts": {
+              "shared_mechanics": {
+                "id": "clean_and_jerk.clean.pull_phases.shared_mechanics",
+                "title": "What Carries Over from the Snatch",
+                "summary": "Pull tempo, bar path, double knee bend, triple extension — all identical in principle to the snatch.",
+                "athlete_view": {
+                  "cues": ["Same patient first pull", "Same scoop", "Same vertical drive — bar to the hip"],
+                  "feel": "Heavier first pull (you can lift more clean than snatch), but the rhythm is the same.",
+                  "key_actions": ["Apply all snatch first/second pull cues to the clean", "Bar contact point is slightly higher (mid-to-upper thigh) due to narrower grip"]
+                },
+                "coach_view": {
+                  "biomechanics": "Clean second pull velocity is lower than snatch (by ~10-15%) because the load is heavier and the catch position is lower (front rack, not overhead). The transition from second pull to receive is faster in absolute terms because there's less bar height to clear.",
+                  "priorities": ["Don't 'muscle' the clean because you're stronger — same patient first pull", "Hip drive is everything — narrower grip means less arm contribution"],
+                  "why_it_matters": "Lifters who treat the clean as 'a deadlift you flip' instead of 'a snatch with closer hands' miss cleans because they yank the bar."
+                },
+                "common_errors": [
+                  {"error": "Pulling cleans with the back instead of the legs", "fix": "Same fix as snatch — pause first pulls, tempo deadlifts, leg-drive cues."},
+                  {"error": "Bar path forward in second pull (bar swings out)", "fix": "Snatch-grip pulls (yes, even for cleans) drill the lat tension; transfer to clean pulls."}
+                ],
+                "drills": ["See snatch.first_pull and snatch.second_pull drills — apply to clean grip"],
+                "tags": ["clean", "pull", "shared_mechanics"]
+              }
+            }
+          },
+
+          "rack_receive": {
+            "id": "clean_and_jerk.clean.rack_receive",
+            "title": "Front Rack Receive",
+            "summary": "Bar lands on the shoulders/clavicle in a deep front squat. Elbows high, fingers under the bar (not gripping).",
+            "concepts": {
+              "rack_position": {
+                "id": "clean_and_jerk.clean.rack_receive.rack_position",
+                "title": "The Front Rack",
+                "summary": "Bar resting on shoulders/anterior delts, elbows pointed forward and slightly up, hands relaxed.",
+                "athlete_view": {
+                  "cues": ["Elbows up and through", "Bar on the shoulders, not the hands", "Punch the elbows forward in the catch"],
+                  "feel": "Bar is being held by the shoulders. Hands could let go if needed.",
+                  "key_actions": ["Drive elbows forward and up as the bar arrives", "Open the hand if needed — fingers under, palms up", "Stay tight in the front squat"]
+                },
+                "coach_view": {
+                  "biomechanics": "The rack position depends on shoulder mobility (flexion + external rotation), wrist extension, and lat length. The fingers do not support the bar — the deltoid shelf does. Inability to rack is almost always a lat or thoracic mobility issue.",
+                  "priorities": ["Elbows high — parallel to floor or higher", "Bar on shelf, not on hands", "Tight upper back during the front squat stand"],
+                  "why_it_matters": "A poor rack collapses under heavy weight. The bar rolls forward, lifter dumps the lift. A high rack lets the lifter front squat heavy without compromising structure."
+                },
+                "common_errors": [
+                  {"error": "Elbows drop in the catch", "fix": "Front squat 5x3 with 2-second pause — train the rack under load. Tall cleans for catch position drill."},
+                  {"error": "Bar rests on the wrists, causing pain", "fix": "Loosen the grip in the catch. Improve lat and triceps mobility."}
+                ],
+                "drills": ["Front squat with pause at bottom", "Tall clean", "Clean grip front rack hold (just rack, hold for time)"],
+                "tags": ["clean", "rack", "receive", "mobility"]
+              },
+
+              "stand_from_clean": {
+                "id": "clean_and_jerk.clean.rack_receive.stand_from_clean",
+                "title": "Standing from the Clean",
+                "summary": "Front squat out of the catch. Maintain rack, elbows up, midline locked.",
+                "athlete_view": {
+                  "cues": ["Elbows up", "Stand tall", "Big breath at bottom, hold it on the way up"],
+                  "feel": "Heavy front squat. Reset breath at top before the jerk.",
+                  "key_actions": ["Brace, drive knees out, stand", "Do not start the jerk until you've reset breath and footing"]
+                },
+                "coach_view": {
+                  "biomechanics": "Front squat 1RM should be ~110-115% of clean 1RM for elite lifters — more for some, but never less. The recovery from the clean is a heavy front squat without a fresh setup.",
+                  "priorities": ["Elbows up through the entire stand", "Knees track out", "Reset breathing for the jerk"],
+                  "why_it_matters": "Cleaners who barely stand have nothing left for the jerk. The clean must feel manageable for the jerk to succeed."
+                },
+                "common_errors": [
+                  {"error": "Elbows collapse on the stand-up", "fix": "Front squat strength. Pause front squats. Increase rack mobility."},
+                  {"error": "Rushing into the jerk while still gassed", "fix": "Coach call: 'reset.' Breathe, set feet, then jerk."}
+                ],
+                "drills": ["Pause front squat", "Clean + 3-second hold + jerk"],
+                "tags": ["clean", "front_squat", "transition_to_jerk"]
+              }
+            }
+          }
+        }
+      },
+
+      "jerk": {
+        "id": "clean_and_jerk.jerk",
+        "title": "The Jerk",
+        "summary": "Drive the bar from front rack to overhead via vertical dip-drive and split (or squat) catch.",
+        "phases": {
+
+          "rack_and_setup": {
+            "id": "clean_and_jerk.jerk.rack_and_setup",
+            "title": "Jerk Setup (Rack and Foot Position)",
+            "summary": "Bar resettles on the shelf with elbows slightly lower than clean rack. Feet under hips, weight balanced midfoot.",
+            "concepts": {
+              "elbow_position_for_jerk": {
+                "id": "clean_and_jerk.jerk.rack_and_setup.elbow_position",
+                "title": "Elbow Position for the Jerk",
+                "summary": "Slightly lower than the clean catch — elbows about 30-45 degrees below horizontal. Bar shelved on shoulders, hand contact light.",
+                "athlete_view": {
+                  "cues": ["Elbows down a touch", "Bar on the shelf", "Tall posture"],
+                  "feel": "Bar is locked into the body. Stable.",
+                  "key_actions": ["Drop elbows from the clean rack", "Take a big breath into the belly and brace", "Eyes on the horizon — head neutral"]
+                },
+                "coach_view": {
+                  "biomechanics": "Elbow angle for the jerk is a tradeoff. Too high (clean rack) and the bar can't transfer cleanly to overhead — the elbows must rotate during the drive. Too low and the bar slides forward off the shelf during the dip. The 30-45 degree range balances both.",
+                  "priorities": ["Bar on the shelf, not the hands", "Stable rack — bar shouldn't move during the dip", "Vertical posture — chest tall"],
+                  "why_it_matters": "If the bar slides forward in the dip, the drive launches forward. The whole jerk fails before the drive even starts."
+                },
+                "common_errors": [
+                  {"error": "Elbows too high — bar can't drive cleanly off shelf", "fix": "Drop elbows after the clean is racked. Practice in jerk drives from rack."},
+                  {"error": "Elbows too low — bar rolls forward in dip", "fix": "Raise elbows to ~30-45 degrees below horizontal. Brace tightly."}
+                ],
+                "drills": ["Jerk drives from rack (no overhead — just dip and drive)", "Pause jerk dip"],
+                "tags": ["jerk", "rack", "setup", "elbow_position"]
+              }
+            }
+          },
+
+          "dip": {
+            "id": "clean_and_jerk.jerk.dip",
+            "title": "The Dip",
+            "summary": "Vertical, controlled, ~10% of body height. Knees bend, weight stays mid-foot, torso stays vertical.",
+            "concepts": {
+              "vertical_dip": {
+                "id": "clean_and_jerk.jerk.dip.vertical_dip",
+                "title": "Vertical Dip",
+                "summary": "Knees track out, hips drop straight down, torso stays vertical, weight midfoot.",
+                "athlete_view": {
+                  "cues": ["Straight down, straight up", "Vertical torso", "Knees out, weight mid-foot"],
+                  "feel": "Like sitting straight down between your feet.",
+                  "key_actions": ["Slow on the way down (1-2 seconds), fast change of direction, fast on the way up", "Heels stay down through the dip"]
+                },
+                "coach_view": {
+                  "biomechanics": "Dip depth is typically 10-12% of standing height (around 4-6 inches for most lifters). The dip stretches the quadriceps and patellar tendon for the drive's stretch-shortening cycle. Vertical torso is non-negotiable — any forward lean translates to a forward bar path on the drive.",
+                  "priorities": ["Vertical torso through the dip", "Slow eccentric, fast change of direction", "Weight stays mid-foot — no forward shift"],
+                  "why_it_matters": "Forward lean in the dip is the most common jerk killer. The bar drives forward, lifter chases it, lockout fails. Vertical dip → vertical drive → vertical bar → solid lockout."
+                },
+                "common_errors": [
+                  {"error": "Forward torso lean in the dip", "fix": "Pause jerk dips against a wall — back stays in contact. Cue 'hips between your feet.'"},
+                  {"error": "Dipping too fast — losing tightness", "fix": "Tempo dips (3-second descent, 0 pause, fast drive). Builds bracing under load."},
+                  {"error": "Heels rising in the dip", "fix": "Cue weight in heels and mid-foot. Strengthen quadriceps with paused front squats."}
+                ],
+                "drills": ["Pause jerk dip (3-second hold at bottom of dip)", "Jerk drive from rack", "Tempo dip-drive"],
+                "tags": ["jerk", "dip", "verticality", "core"]
+              }
+            }
+          },
+
+          "drive": {
+            "id": "clean_and_jerk.jerk.drive",
+            "title": "The Drive",
+            "summary": "Aggressive vertical leg extension launches the bar off the shoulders. Arms come into play only after legs finish.",
+            "concepts": {
+              "leg_drive_first": {
+                "id": "clean_and_jerk.jerk.drive.leg_drive_first",
+                "title": "Legs Drive, Arms Finish",
+                "summary": "The drive is a vertical jump with the bar on the shoulders. Arms lock out only after the bar separates from the shoulders.",
+                "athlete_view": {
+                  "cues": ["Drive with the legs", "Punch the floor", "Bar leaves the shoulders before the arms move"],
+                  "feel": "Like jumping straight up with a heavy bar in front rack.",
+                  "key_actions": ["Aggressive vertical drive through the heels and mid-foot", "Bar leaves the shoulders from leg drive alone", "Arms lock out aggressively only at the top"]
+                },
+                "coach_view": {
+                  "biomechanics": "The jerk drive generates 1.5-2x bodyweight in vertical force at peak in elite lifters. Arms contribute almost nothing to the drive itself — they are a passive transmission until the bar separates from the shoulders, at which point they aggressively lock out. Premature arm action ('press jerk') leaks force horizontally and short-circuits the drive.",
+                  "priorities": ["Vertical leg drive", "Arms passive until shoulder separation", "Aggressive lockout once bar is airborne"],
+                  "why_it_matters": "Pressing the jerk is the second most common failure (after forward dip). Once arms engage during the drive, leg power can no longer be transmitted to the bar."
+                },
+                "common_errors": [
+                  {"error": "Pressing the jerk (arms early)", "fix": "Push press for arm-leg sequencing. Jerk drives without overhead lockout — feel the leg drive in isolation."},
+                  {"error": "Jumping forward in the drive", "fix": "Vertical dip first. Jerks from blocks or pins to enforce verticality."}
+                ],
+                "drills": ["Push press", "Jerk drive (no lockout)", "Pause-and-drive jerk"],
+                "tags": ["jerk", "drive", "leg_power", "sequencing"]
+              }
+            }
+          },
+
+          "split_receive": {
+            "id": "clean_and_jerk.jerk.split_receive",
+            "title": "Split Jerk Receive",
+            "summary": "Front foot lands flat, back foot on ball. Front knee bent ~120 degrees, torso vertical, bar locked overhead.",
+            "concepts": {
+              "split_position": {
+                "id": "clean_and_jerk.jerk.split_receive.split_position",
+                "title": "The Split Position",
+                "summary": "Stable, vertical, balanced. Roughly 60% weight on front foot, 40% on back foot.",
+                "athlete_view": {
+                  "cues": ["Front foot flat, back foot on the ball", "Vertical torso", "Hips between the feet"],
+                  "feel": "Like a sprinter's lunge with a bar locked overhead.",
+                  "key_actions": ["Front foot lands flat, slightly forward and slightly outside the hip", "Back foot lands on the ball with a bent knee, slightly inside the hip line", "Torso vertical, eyes forward, bar over the back of the head"]
+                },
+                "coach_view": {
+                  "biomechanics": "Split width is determined by lifter anthropometry but the principle is constant — the front shin should be roughly vertical (knee over ankle), and the back leg should be set so that the back hip extension angle approaches but does not reach maximum (~150-160 degrees of hip extension). The torso is vertical, with the bar's vertical line of force passing through the lifter's center of mass — between the feet.",
+                  "priorities": ["Front shin vertical", "Back foot on ball, knee bent", "Vertical torso with locked overhead bar"],
+                  "why_it_matters": "An over-stretched split has no recovery. An under-stretched split fails to absorb the bar. The split is the lifter's stance — it has to be drilled until automatic."
+                },
+                "common_errors": [
+                  {"error": "Front foot lands too far forward (over-stride)", "fix": "Tape lines on the platform. Drill split walks. Cue 'short and tight, not long and loose.'"},
+                  {"error": "Back foot flat (knee straight)", "fix": "Train the split position statically. Lunge holds with locked-out load."},
+                  {"error": "Torso forward in the split", "fix": "Vertical dip-drive emphasis. Behind-the-neck jerks reinforce vertical torso."}
+                ],
+                "drills": ["Split walks (forward and reverse)", "Tall jerk (no dip — drop into split)", "Behind-the-neck jerk", "Static split holds with overhead load"],
+                "tags": ["jerk", "split", "receive", "stability"]
+              },
+
+              "split_recovery": {
+                "id": "clean_and_jerk.jerk.split_receive.split_recovery",
+                "title": "Recovering from the Split",
+                "summary": "Front foot steps back first (half-step), back foot steps forward to meet it. Bar held overhead throughout.",
+                "athlete_view": {
+                  "cues": ["Front foot back, then back foot up", "Bar stays still", "Wait for the down signal"],
+                  "feel": "Controlled. The lift is over once the bar is overhead — recovery is just paperwork.",
+                  "key_actions": ["Push slightly with the front leg to bring the front foot back ~half the split distance", "Step the back foot forward to meet it", "Hold until the down signal — three white lights"]
+                },
+                "coach_view": {
+                  "biomechanics": "Front-foot-first recovery is the standard because the front leg is the loaded leg — pushing back from a loaded position is more controlled than stepping forward from an unloaded back leg. Some lifters do a small front-foot adjustment then a back-foot step; some do a single decisive front-step. Either is acceptable in IWF rules as long as the bar stays overhead and the feet end on a line parallel to the platform's reference line.",
+                  "priorities": ["Bar stable overhead during recovery", "Feet end on a line", "Hold to down signal"],
+                  "why_it_matters": "Lifters who 'recover' by stepping the back foot forward first often break overhead position because the load shifts unexpectedly. Front-foot-first is mechanically safer."
+                },
+                "common_errors": [
+                  {"error": "Stepping back foot forward first", "fix": "Drill the front-back sequence. Slow-motion recovery from split."},
+                  {"error": "Bar drifts during recovery", "fix": "Static overhead holds. Strengthen overhead position."},
+                  {"error": "Dropping the bar before the down signal", "fix": "Coach call: 'wait.' Train holding for 3-5 seconds in training."}
+                ],
+                "drills": ["Slow-motion split recovery", "Jerk + 5-second overhead hold"],
+                "tags": ["jerk", "split", "recovery", "competition_rules"]
+              }
+            }
+          },
+
+          "alternatives": {
+            "id": "clean_and_jerk.jerk.alternatives",
+            "title": "Squat Jerk and Power Jerk",
+            "summary": "The squat jerk catches the bar in a full overhead squat. The power jerk catches with feet stationary and a slight knee bend.",
+            "concepts": {
+              "squat_jerk": {
+                "id": "clean_and_jerk.jerk.alternatives.squat_jerk",
+                "title": "Squat Jerk",
+                "summary": "Drive bar overhead and catch in a full overhead squat. No split.",
+                "athlete_view": {
+                  "cues": ["Drive vertical", "Drop straight under", "Bar over your head, you go down"],
+                  "feel": "Like a snatch balance off the rack.",
+                  "key_actions": ["Vertical drive, then drop into a full overhead squat", "Stand up with the bar overhead"]
+                },
+                "coach_view": {
+                  "biomechanics": "The squat jerk requires elite overhead squat capacity, mobility, and overhead stability. It allows greater bar-receive height than the split (you can catch lower than you can split), so theoretically the strongest squat jerker can jerk slightly more than the strongest splitter. In practice, very few lifters squat-jerk because the recovery (standing from full overhead squat) is harder than recovering from a split. Notable exceptions: Lasha Talakhadze, some Chinese lifters.",
+                  "priorities": ["Overhead squat strength must be world-class", "Speed under the bar", "Stable receive"],
+                  "why_it_matters": "Squat jerk is a specialist's tool — it works for lifters with exceptional overhead squat strength and mobility, and is often a poor choice for athletes with weaker overhead squats."
+                },
+                "common_errors": [
+                  {"error": "Catching above parallel — defeats the point", "fix": "Drop to full depth — cue 'sit in.'"},
+                  {"error": "Failing to stand from depth", "fix": "Overhead squat strength work."}
+                ],
+                "drills": ["Snatch balance (similar receive position)", "Overhead squat strength"],
+                "tags": ["jerk", "squat_jerk", "variants", "advanced"]
+              },
+              "power_jerk": {
+                "id": "clean_and_jerk.jerk.alternatives.power_jerk",
+                "title": "Power Jerk",
+                "summary": "Catch the bar with feet roughly in the dip-drive position, with a slight knee bend (above parallel).",
+                "athlete_view": {
+                  "cues": ["Drive vertical", "Catch standing-ish", "No split"],
+                  "feel": "Like a heavy push press that you bend slightly to receive.",
+                  "key_actions": ["Vertical drive", "Quick re-bend of knees to receive bar overhead with feet stationary"]
+                },
+                "coach_view": {
+                  "biomechanics": "Power jerks are catch-above-parallel with no split. They require very high pull height (drive height) and are typically used for training the drive in isolation. Few lifters compete with power jerks at maximum loads — split or squat receives allow lower catch heights and therefore more weight.",
+                  "priorities": ["Strong vertical drive", "Quick foot reset / minor re-bend"],
+                  "why_it_matters": "Power jerks are excellent for testing/improving drive height. They are not the maxing tool — split jerk is."
+                },
+                "common_errors": [
+                  {"error": "Splitting accidentally (foot moves backward)", "fix": "Cue 'feet stay.' Drill from a standstill."},
+                  {"error": "Pressing out", "fix": "Drive harder — the bar must reach lockout from leg drive alone."}
+                ],
+                "drills": ["Push press into power jerk progression", "Speed power jerks"],
+                "tags": ["jerk", "power_jerk", "variants"]
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "programming": {
+      "id": "programming",
+      "title": "Programming and Periodization",
+      "summary": "How to organize snatch, clean & jerk, squat, pull, and accessory work over weeks, months, and macrocycles.",
+      "concepts": {
+
+        "frequency": {
+          "id": "programming.frequency",
+          "title": "Training Frequency",
+          "summary": "Most competitive lifters train 5-9 sessions per week with snatch and C&J variants in nearly every session.",
+          "athlete_view": {
+            "cues": ["More frequency, less volume per session", "Snatch and clean every training day"],
+            "feel": "Daily skill practice, not weekend-warrior training.",
+            "key_actions": ["Lift the classic lifts at least 4 days/week to build skill", "Squat 3-4x/week", "Pull variations 2-3x/week"]
+          },
+          "coach_view": {
+            "biomechanics": "Olympic lifting is technique-dominant. Skill acquisition demands frequency. Most international programs touch the snatch and clean & jerk 4-6 times per week, often with multiple lifts per session. Volume per lift is moderate — 4-8 working sets at a given intensity is typical, not the 10+ sets common in bodybuilding.",
+            "priorities": ["Skill frequency over volume per session", "Match frequency to recovery capacity", "Beginners 3-4x/week, intermediates 4-5x/week, advanced 5-9x/week"],
+            "why_it_matters": "Two snatch sessions per week produces two snatch repetitions worth of skill practice. Five sessions produces five — same load, more skill exposure. The Bulgarian (Abadjiev) extreme of 6+ daily sessions is the limit case; the Chinese model is similar but with more accessory work and slightly less classic-lift frequency."
+          },
+          "common_errors": [
+            {"error": "Treating Olympic lifts like powerlifting (1-2x/week heavy)", "fix": "Add more sessions at lower per-session volume. Skill needs reps."},
+            {"error": "Maxing every session as a beginner", "fix": "Maxing belongs to lifters with 3+ years of consistent technique work. Beginners build with 70-85% intensities."}
+          ],
+          "drills": ["See periodization models for structured frequency examples"],
+          "tags": ["programming", "frequency", "fundamentals"]
+        },
+
+        "intensity_zones": {
+          "id": "programming.intensity_zones",
+          "title": "Intensity Zones",
+          "summary": "Standard zones: 60-70% (technique/volume), 70-80% (work zone), 80-90% (strength), 90-100% (peaking).",
+          "athlete_view": {
+            "cues": ["Live in the 70-85% range", "90%+ is for testing and peaking, not daily"],
+            "feel": "Most days are 'heavy work,' not 'crushing maxes.'",
+            "key_actions": ["Track percentages of current 1RM, adjust as PRs change", "Use RPE if percentages don't match the day"]
+          },
+          "coach_view": {
+            "biomechanics": "Optimal training intensity for skill development sits in the 70-90% range. Below 70%, technique often slips because the bar is too easy. Above 90%, technique strain accumulates and can grind down skill. Russian methodology (Medvedev, Roman) places ~60% of all classic-lift volume in the 70-89% zone.",
+            "priorities": ["Most volume at 70-89%", "Strategic volume at 60-69% for technique", "Limited volume above 90%"],
+            "why_it_matters": "Lifters who only train above 90% burn out and stagnate. Lifters who only train below 70% never build the strength to handle real meet weights."
+          },
+          "common_errors": [
+            {"error": "Living above 90%", "fix": "Wave the intensity. Heavy weeks at 85-95%, lighter weeks at 70-85%."},
+            {"error": "Never going above 80% in training", "fix": "Schedule heavy singles every 2-3 weeks. Test readiness with 90%+ openers in peak phases."}
+          ],
+          "drills": ["See periodization models for week structures"],
+          "tags": ["programming", "intensity", "percentages"]
+        },
+
+        "periodization_models": {
+          "id": "programming.periodization_models",
+          "title": "Major Periodization Models",
+          "summary": "The four most-used systems in Olympic weightlifting: Russian (block), Bulgarian (max-daily), Chinese (high-volume + accessories), Catalyst/American (linear-wave).",
+          "models": [
+            {
+              "name": "Russian / Soviet (Block Periodization — Medvedev / Roman)",
+              "structure": "Macrocycle divided into preparation (volume), strength (intensity), and competition (peaking) phases. Each phase 3-6 weeks.",
+              "intensity_pattern": "Preparation: 70-80% emphasis with high reps. Strength: 80-90% emphasis with lower reps. Peak: 90-100% with singles.",
+              "best_for": "Athletes with 2+ years experience, structured training environment, periodic competitions."
+            },
+            {
+              "name": "Bulgarian (Abadjiev)",
+              "structure": "Daily maxes on 3-5 exercises (snatch, C&J, front squat, back squat, sometimes power variants). Multiple sessions per day.",
+              "intensity_pattern": "Max daily on each lift. No periodization waves.",
+              "best_for": "Full-time professional lifters with elite recovery (medical support, full nutrition control). Catastrophic for amateurs."
+            },
+            {
+              "name": "Chinese System",
+              "structure": "Two daily sessions, six days/week. Classic lifts in the morning, squats and accessories in the afternoon. Heavy accessory volume.",
+              "intensity_pattern": "Daily heavy classic lifts (~90%) plus high accessory volume.",
+              "best_for": "Professional environments. Adaptable to less elite athletes if accessory volume is reduced."
+            },
+            {
+              "name": "Catalyst / American (Greg Everett)",
+              "structure": "12-16 week macrocycles divided into 3-4 week mesocycles, each with a focus (volume → intensity → peak).",
+              "intensity_pattern": "Linear or wave progression. Volume reduces, intensity increases over the macrocycle.",
+              "best_for": "Most American competitive lifters. Compatible with regular work schedules."
+            },
+            {
+              "name": "Mash Method (Travis Mash)",
+              "structure": "Concurrent-style with daily exposure to snatch, C&J, squat, and pull. RPE-based with planned heavy and light days.",
+              "intensity_pattern": "Daily classic lift exposure with autoregulated intensity (RPE 7-9).",
+              "best_for": "Intermediate to advanced lifters who respond well to autoregulation."
+            }
+          ],
+          "tags": ["programming", "periodization", "coach-facing"]
+        },
+
+        "squat_programming": {
+          "id": "programming.squat_programming",
+          "title": "Squat Programming for Weightlifters",
+          "summary": "Front squat and back squat 3-4x/week combined. Front squat 105-115% of clean; back squat 130-140% of clean is typical for elite.",
+          "athlete_view": {
+            "cues": ["Front squat is more important than back squat for the C&J", "Pause squats build catch position", "Don't skip squats — they fund every lift"],
+            "feel": "Squats are the engine. Lifts are the steering.",
+            "key_actions": ["Squat 3-4 times/week (combined front + back)", "Track squat ratios to your lifts — they reveal weak links"]
+          },
+          "coach_view": {
+            "biomechanics": "Squat strength is the foundation of clean recovery and snatch stand. Front squat correlates more strongly with clean than back squat does. Pause squats build the deep catch position. Tempo squats build positional control. Olympic lifters typically squat 3-4 times/week with moderate volume per session (3-5 working sets).",
+            "priorities": ["Front squat 1RM ≥ 105% of clean 1RM (target 110-115%)", "Back squat 1RM ≥ 125% of clean 1RM (target 135-140%)", "Pause squats programmed regularly"],
+            "why_it_matters": "A lifter whose front squat barely matches their clean has no margin in the catch. A lifter with deep front squat capacity catches with confidence."
+          },
+          "common_errors": [
+            {"error": "Squatting more than necessary at high RPE", "fix": "Squat for the lifts, not as a sport. RPE 8 is the typical ceiling."},
+            {"error": "Skipping front squats because back squat is easier", "fix": "Front squat is the primary squat for weightlifting."}
+          ],
+          "drills": ["Pause front squat (3 sec at bottom)", "Tempo back squat (3-1-1-0)", "1.5 rep front squat"],
+          "tags": ["programming", "squat", "strength", "front_squat"]
+        },
+
+        "pulling_programming": {
+          "id": "programming.pulling_programming",
+          "title": "Pulling Variations and Programming",
+          "summary": "Snatch pull and clean pull at 100-110% of classic lift, programmed 1-2x/week each. Deadlift variants for absolute strength.",
+          "athlete_view": {
+            "cues": ["Pulls build the engine", "Match pull intensity to phase — heavier in strength block, lighter in peak"],
+            "feel": "Pulls feel heavy but controlled. They're not maxes.",
+            "key_actions": ["Snatch pulls 1-2x/week", "Clean pulls 1-2x/week", "Pull doubles or triples at 90-110% of lift"]
+          },
+          "coach_view": {
+            "biomechanics": "Pulls overload the bar path and triple extension without the technique demands of the full lift. Snatch pull at 110% of snatch challenges first/second-pull mechanics. Snatch high pull and clean high pull add a 'shrug-and-elevate' component for turnover speed.",
+            "priorities": ["Pull intensity matches phase — accumulation 90-100%, intensification 100-110%", "Pull volume 5-15 reps per session typical", "Maintain technique under load — no compromised pulls"],
+            "why_it_matters": "Pulls are the volume backbone of strength building for the classic lifts. They reinforce bar path under heavier-than-classic loads."
+          },
+          "common_errors": [
+            {"error": "Treating pulls as deadlifts (yanking from the floor)", "fix": "Maintain classic-lift pull mechanics. If technique breaks down, reduce load."},
+            {"error": "Pulling too heavy too often", "fix": "Cycle pulls — heavy weeks at 105-110%, lighter weeks at 90-95%."}
+          ],
+          "drills": ["Pause snatch pull at knee", "Clean pull with 3-second eccentric"],
+          "tags": ["programming", "pull", "strength"]
+        },
+
+        "weekly_template_intermediate": {
+          "id": "programming.weekly_template_intermediate",
+          "title": "Sample Weekly Template — Intermediate (4-Day)",
+          "summary": "A balanced 4-day template appropriate for an intermediate lifter (training age 1-3 years).",
+          "template": {
+            "day_1": "Snatch — work up to a heavy double at 80-85%. Snatch pull 3x3 @ 100-105%. Front squat 4x3 @ 80%. Accessory: ab work, back ext.",
+            "day_2": "Clean & Jerk — work up to a heavy single complex (1+1) at 80-85%. Clean pull 3x3 @ 100-105%. Back squat 4x4 @ 75-80%. Accessory: pull-ups, RDLs.",
+            "day_3": "Snatch variant (e.g. high-hang snatch or snatch from blocks) 5x2 @ 75%. Power snatch 4x2 @ 70%. Overhead squat 4x4 @ snatch+5%. Accessory: shoulder mobility.",
+            "day_4": "Clean & Jerk variant (e.g. block clean or hang clean) 5x2 @ 75%. Power C&J 4x1 @ 80%. Front squat 4x4 @ 75%. Push press 4x4 @ jerk weight. Accessory: arms, core."
+          },
+          "tags": ["programming", "template", "intermediate"]
+        }
+      }
+    },
+
+    "meet_prep": {
+      "id": "meet_prep",
+      "title": "Meet Preparation and Competition Day",
+      "summary": "Peaking, attempt selection, warmup-room timing, weigh-ins, and platform execution.",
+      "concepts": {
+
+        "peaking_block_8_week": {
+          "id": "meet_prep.peaking_block_8_week",
+          "title": "8-Week Peak Structure",
+          "summary": "Standard 8-week build to a meet. Volume drops, intensity rises, accessories taper.",
+          "structure": [
+            {"weeks": "8-7", "phase": "Volume / Accumulation", "intensity_focus": "70-85%", "volume": "High", "key_lifts": "All classic lifts and variants, heavy accessory volume."},
+            {"weeks": "6-5", "phase": "Strength / Intensification", "intensity_focus": "80-90%", "volume": "Moderate", "key_lifts": "Classic lifts to 90%, pulls to 105-110%, squats to RPE 8."},
+            {"weeks": "4-3", "phase": "Specific Prep", "intensity_focus": "85-95%", "volume": "Moderate-low", "key_lifts": "Heavy singles weekly. Mostly classic lifts, pulls reduced. Reduce variants."},
+            {"weeks": "2", "phase": "Realization", "intensity_focus": "90-100%", "volume": "Low", "key_lifts": "Open heavy. Last opener-style attempts midweek of week 2."},
+            {"weeks": "1", "phase": "Taper", "intensity_focus": "70-85%", "volume": "Very low", "key_lifts": "Light technique work early week. Last touch at 85-90% on Day -3 or -4. Rest day before meet."}
+          ],
+          "athlete_view": {
+            "cues": ["Trust the taper", "Last week is rest with light skill work", "Don't chase PRs at the gym in the last 10 days"],
+            "feel": "Sharp by meet day. Heavy weights feel light because the system is rested.",
+            "key_actions": ["Plan the peak before week 8 starts", "Adjust if illness or injury — never panic-add volume late"]
+          },
+          "coach_view": {
+            "biomechanics": "Peaking is supercompensation. Volume reduction allows recovery; preserved intensity preserves the trained adaptations. Last 10 days are the most-violated phase by amateurs who 'just want to make sure they can hit the weight' — exactly the wrong instinct.",
+            "priorities": ["Reduce volume by 30-50% in the final week", "Maintain intensity touches but with low volume", "No new technical experiments in the final 4 weeks"],
+            "why_it_matters": "Peaking is where intermediates separate from beginners. Beginners can't peak because their training base is too volatile. Intermediates can peak by 5-15% over their daily best."
+          },
+          "tags": ["meet_prep", "peaking", "8_week"]
+        },
+
+        "final_week_protocol": {
+          "id": "meet_prep.final_week_protocol",
+          "title": "Final Week Day-by-Day",
+          "summary": "Standard taper week. Last touch 3-4 days before meet day. Day before is light or off.",
+          "days": [
+            {"day": "Monday (Meet on Saturday) — Day -5", "session": "Snatch to 85-90% single. Clean to 85-90% single. Jerk from rack 1-2 singles at 85%. Optional light squats."},
+            {"day": "Tuesday — Day -4", "session": "Off OR light skill work (50-60% snatch and clean). Mobility."},
+            {"day": "Wednesday — Day -3", "session": "Last 'touch.' Snatch to 90% single, clean and jerk to 90% single. No more. No squats."},
+            {"day": "Thursday — Day -2", "session": "Off OR very light bar work (40-50%). Walk, stretch, eat."},
+            {"day": "Friday — Day -1", "session": "Off. Travel, equipment check, weigh-in if 24-hr-out, mental prep."},
+            {"day": "Saturday — Meet Day", "session": "Compete."}
+          ],
+          "athlete_view": {
+            "cues": ["Less is more", "Save the lifts for the platform", "Sleep, eat, hydrate, walk"],
+            "feel": "Restless. That means the taper is working.",
+            "key_actions": ["Stick to the plan even if you feel great", "Sleep 8+ hours per night the entire final week"]
+          },
+          "coach_view": {
+            "biomechanics": "Performance peaking depends on supercompensation from accumulated training stress. The final week amplifies that recovery. Adding volume in the final week steals supercompensation from meet day.",
+            "priorities": ["Maintain neuromuscular sharpness with light/medium loads", "Avoid creating new fatigue", "Manage logistics so the lifter shows up rested"],
+            "why_it_matters": "Athletes who train heavy in the final week consistently underperform their daily best by 5-10% on meet day. Athletes who taper consistently exceed their daily best by 5-10%."
+          },
+          "tags": ["meet_prep", "taper", "final_week"]
+        },
+
+        "weigh_in_protocols": {
+          "id": "meet_prep.weigh_in_protocols",
+          "title": "Weigh-In Protocols",
+          "summary": "IWF rules: weigh-in starts 2 hours before competition begins, lasts 1 hour. Attempts must be declared at weigh-in.",
+          "key_rules": [
+            "Weigh-in window: 2 hours before competition session start, lasts 1 hour.",
+            "Lifters weigh in once. If overweight, they may re-weigh within the hour window.",
+            "Bodyweight is determined at weigh-in — no later check.",
+            "First snatch and first clean & jerk attempts must be declared at weigh-in (in writing on the official card).",
+            "Singlets, equipment must be checked and approved at weigh-in.",
+            "Lot number assigned at weigh-in determines lifting order in case of equal attempts.",
+            "Many local meets allow 24-hour or 2-hour weigh-ins — check the meet info packet."
+          ],
+          "athlete_view": {
+            "cues": ["Know your weigh-in window", "Bring your singlet, shoes, belt, and ID", "Have openers ready in writing"],
+            "feel": "Calm. The hard work is done — this is paperwork.",
+            "key_actions": ["Arrive 30 minutes before weigh-in opens", "Have backup snacks/fluids for after weigh-in", "Submit openers — coach can change them later up until the call"]
+          },
+          "coach_view": {
+            "biomechanics": "Cuts ending at weigh-in are followed by 2 hours of refeed before lifting. Aggressive water-cuts (>3% bodyweight in 24 hours) impair lifting performance. Most successful weight-class lifters cut <2% bodyweight via simple water/sodium manipulation.",
+            "priorities": ["Confirm weigh-in window with meet director", "Plan refeed: easily-digested carbs, electrolytes, small meal", "Have openers planned and committed before the day"],
+            "why_it_matters": "Missing weigh-in is disqualification. Aggressive cuts can sabotage the meet that the entire training cycle was for."
+          },
+          "tags": ["meet_prep", "weigh_in", "rules"]
+        },
+
+        "attempt_selection": {
+          "id": "meet_prep.attempt_selection",
+          "title": "Attempt Selection Strategy",
+          "summary": "Opener: weight you'd hit on a bad day (typically 90-93% of training best). 2nd attempt: a stretch but realistic PR-zone. 3rd: PR or strategic attempt.",
+          "athlete_view": {
+            "cues": ["Open conservative, finish bold", "An opener you miss is a disaster", "Three white lights on the opener changes the meet"],
+            "feel": "Opener feels easy. 2nd feels like work. 3rd feels like a fight.",
+            "key_actions": ["Opener: ~90-93% of training best", "2nd: ~95-97%", "3rd: 100-103% (or strategic — for a total or placing)"]
+          },
+          "coach_view": {
+            "biomechanics": "Opening with a weight you've hit reliably in training in the last 4 weeks is the standard. Missing the opener is one of the most common ways athletes bomb out — they open at training-best weights they've only hit once or twice. Conservative openers preserve total. Strategic 3rd attempts target placement.",
+            "priorities": ["Opener weight that the lifter has hit at least twice in the last 6 weeks", "Plan 2nd and 3rd in advance with multiple branches (made / missed scenarios)", "Communicate with the warm-up room timer — coach watches attempts before yours"],
+            "why_it_matters": "An athlete who goes 3-for-3 on conservative weights almost always out-totals an athlete who goes 1-for-3 on aggressive weights, regardless of training maxes."
+          },
+          "common_errors": [
+            {"error": "Opening at the lifter's training best", "fix": "Drop opener 5-10kg. Aggressive openers cause bombs."},
+            {"error": "Jumping too much between attempts", "fix": "Standard jumps are 3-5kg for snatch, 3-7kg for C&J. Larger jumps require strong rationale."},
+            {"error": "No plan for missed attempts", "fix": "Decide before the meet: if I miss the opener, what do I take next? Repeat or drop?"}
+          ],
+          "drills": ["Mock-meet sessions in training: declare openers, hit them cold, no warmup-room benefits"],
+          "tags": ["meet_prep", "attempts", "strategy"]
+        },
+
+        "warmup_room_timing": {
+          "id": "meet_prep.warmup_room_timing",
+          "title": "Warm-Up Room Timing",
+          "summary": "A coach times the lifter's warmups so the last warmup lift is taken just before the lifter is called to the platform.",
+          "athlete_view": {
+            "cues": ["Trust the coach's timing", "Take what the coach says — no extras", "Stay loose between warmups"],
+            "feel": "Controlled tension. Not flat, not pre-fatigued.",
+            "key_actions": ["Warmup room arrival 45-60 minutes before estimated first attempt", "Coach calls each warmup weight; lifter executes", "Last warmup is 5-10kg below opener"]
+          },
+          "coach_view": {
+            "biomechanics": "Olympic meets typically run ~1 minute per attempt in the early rounds and 1.5-2 minutes per attempt later (more clock time per lifter as fewer remain). The coach counts attempts ahead of the lifter and times warmups so the last warmup happens 1-3 attempts before the lifter is called. A standard snatch warmup is 7-9 lifts; clean & jerk is 6-8 lifts.",
+            "priorities": ["Count attempts ahead — know how many lifters take how many attempts before yours", "Coach manages warmup tempo, not the lifter", "Final warmup 3-5kg below opener for a confident touch"],
+            "why_it_matters": "A lifter who's warmed up too early goes flat by the time they hit the platform. Too late, and they're under-prepared. Timing is the coach's most operational job on meet day."
+          },
+          "common_errors": [
+            {"error": "Lifter directing their own warmup", "fix": "Coach controls. Lifter executes."},
+            {"error": "Going to warmup room too early", "fix": "Stay in the back, eat, hydrate. Move to warmup room when 8-10 attempts away."}
+          ],
+          "drills": ["Mock-meet warmup with a coach calling weights and timing"],
+          "tags": ["meet_prep", "warmup_room", "coaching"]
+        },
+
+        "platform_execution": {
+          "id": "meet_prep.platform_execution",
+          "title": "Platform Execution",
+          "summary": "1 minute on the clock from name call (2 minutes for back-to-back lifts by the same lifter). Three white lights = good lift.",
+          "key_rules": [
+            "1-minute clock starts when the lifter's name is called.",
+            "2-minute clock if the lifter takes consecutive attempts (2nd or 3rd attempt and they were just called previously).",
+            "Lifter must wait for the down signal before lowering the bar.",
+            "Three judges: at least 2 white lights = good lift; 2+ red lights = no lift.",
+            "No press-out (visible elbow re-bend during lockout).",
+            "Bar must end on the platform under control (not dropped from above shoulder height before lifter is established overhead).",
+            "Feet must end on a line parallel to the bar in the jerk recovery."
+          ],
+          "athlete_view": {
+            "cues": ["Eyes on the bar, then on the platform", "Take the lift you trained for", "Wait for the down signal"],
+            "feel": "Tunnel vision. The crowd disappears.",
+            "key_actions": ["Step to the bar, set, lift", "Hold the bar until the down signal", "Walk off the platform without celebrating until you see the lights"]
+          },
+          "coach_view": {
+            "biomechanics": "The 1-minute clock is rarely a factor for prepared lifters but can pressure tired or anxious lifters. Coaches in the warmup room confirm the call and the time, then the lifter is the only person on the platform.",
+            "priorities": ["Lifter executes the lift they trained", "No press-outs", "Hold to down signal"],
+            "why_it_matters": "Most platform errors are emotional, not technical. Lifters miss because they hurry, because they second-guess, or because they get distracted by the crowd or the previous attempt."
+          },
+          "common_errors": [
+            {"error": "Lowering the bar before the down signal", "fix": "Drill 'wait for lights' in training. Hold every overhead for 2-3 seconds after standing."},
+            {"error": "Press-out on a snatch or jerk", "fix": "Pre-meet: more aggressive triple extension and faster lockout. Pre-platform: visualize fast lockout."},
+            {"error": "Stepping out of the lifting area before the bar is grounded", "fix": "Set the bar down inside the platform area first, then exit."}
+          ],
+          "tags": ["meet_prep", "platform", "rules", "execution"]
+        },
+
+        "weight_class_management": {
+          "id": "meet_prep.weight_class_management",
+          "title": "Weight Class Management",
+          "summary": "Cutting under 2% via water/sodium manipulation is the standard; larger cuts (>3%) hurt performance.",
+          "athlete_view": {
+            "cues": ["Decide weight class 8+ weeks out", "Don't cut more than 2-3% in the last week", "Hydrate, refeed, then lift"],
+            "feel": "Cuts should feel manageable. If you're suffering, you're cutting too much.",
+            "key_actions": ["Plan target bodyweight 8 weeks out", "Cut gradually via diet, not dehydration", "Last 24-72 hours: water/sodium taper if needed"]
+          },
+          "coach_view": {
+            "biomechanics": "Each kg of cut weight is roughly equivalent to 0.5-1.5kg lost off snatch and 0.7-2kg lost off C&J — depending on the lifter and the cut speed. Cutting weight is rarely worth it unless the gain in placement (different category) outweighs the performance loss. Modern IWF body categories were redesigned in 2018 — confirm current categories per the meet's rule set.",
+            "priorities": ["Plan cut over weeks, not days", "Maintain protein intake during the cut", "Refeed properly between weigh-in and lifting"],
+            "why_it_matters": "Lifters who cut hard often bomb. Lifters who lift in their walking-around weight class often outperform their fellow strugglers."
+          },
+          "common_errors": [
+            {"error": "Last-minute aggressive water cut", "fix": "Plan ahead. If you can't make weight cleanly, lift in the next class up."},
+            {"error": "No refeed strategy after weigh-in", "fix": "Have a refeed plan: easy carbs, electrolytes, light protein, ready 5-10 minutes after weigh-in."}
+          ],
+          "tags": ["meet_prep", "weight_cut", "logistics"]
+        },
+
+        "bombing_out_prevention": {
+          "id": "meet_prep.bombing_out_prevention",
+          "title": "Bombing Out Prevention",
+          "summary": "Bombing = missing all three attempts in either lift. The single most-feared and most-preventable meet outcome.",
+          "athlete_view": {
+            "cues": ["Conservative opener", "If you miss the opener, drop the next attempt", "Get one good lift on the board no matter what"],
+            "feel": "If the opener feels heavy, the rest of the day is going to be a fight. Adjust.",
+            "key_actions": ["Opener at 90-93% of training best", "If opener missed, repeat or drop 1-3kg — never go up", "Get on the board first, total later"]
+          },
+          "coach_view": {
+            "biomechanics": "Bombing is almost always caused by aggressive openers, not by surprise weakness. The exception is illness, injury, or weight-cut depletion. Most bomb-outs trace back to openers within 2-3% of training maxes — a margin too tight for meet-day variability.",
+            "priorities": ["Conservative opener", "Pre-planned response to a missed opener", "Mental rehearsal of recovery"],
+            "why_it_matters": "Bombing wastes a training cycle. A 1-for-3 day with a small total still produces meet experience and ranking points. A 0-for-3 day produces zero."
+          },
+          "common_errors": [
+            {"error": "Aggressive opener to make a target total", "fix": "The total is built from three made lifts, not three attempted lifts. Open conservative."},
+            {"error": "Going up after a missed attempt", "fix": "Repeat or drop. Going up after a miss is a recipe for a second miss."}
+          ],
+          "tags": ["meet_prep", "strategy", "risk_management"]
+        }
+      }
+    },
+
+    "supportive_equipment": {
+      "id": "supportive_equipment",
+      "title": "Supportive Equipment (IWF-Legal Gear)",
+      "summary": "Olympic weightlifting permits supportive gear but does not allow 'equipped' lifting in the powerlifting sense. No suits, shirts, or wraps that store elastic energy.",
+      "concepts": {
+
+        "lifting_shoes": {
+          "id": "supportive_equipment.lifting_shoes",
+          "title": "Olympic Lifting Shoes",
+          "summary": "Raised heel (typically 0.5-1 inch / 13-25mm), rigid sole, secure midfoot strap. Standard equipment for all serious training.",
+          "athlete_view": {
+            "cues": ["Heel height matched to ankle mobility", "Rigid sole, no compression", "Lock the strap"],
+            "feel": "Stable. Like the ground was raised under your heel.",
+            "key_actions": ["Pick a heel height that allows full squat depth without forward torso lean", "Replace shoes every 3-5 years for serious lifters — soles compress over time"]
+          },
+          "coach_view": {
+            "biomechanics": "Raised heel reduces required ankle dorsiflexion in the squat, allowing more upright torso. Rigid sole prevents energy loss into shoe compression. Common heel heights: 0.5\" (Adidas Powerlift, lower-mobility lifters), 0.75\" (Romaleos middle), 1.0\" (Romaleos high heel, longer-femur lifters).",
+            "priorities": ["Heel height matched to athlete anthropometry and mobility", "Stiff sole — no running shoe compression", "Secure midfoot lockdown"],
+            "why_it_matters": "Lifting in flat-soled shoes (or running shoes) is a measurable performance loss for nearly all lifters and is unnecessary risk for ankles."
+          },
+          "common_errors": [
+            {"error": "Lifting in cross-trainers or runners", "fix": "Get lifting shoes. Adidas Powerlift, Romaleos, Reebok Legacy, Nike Romaleos are all standard."},
+            {"error": "Heel too high for body proportions", "fix": "Try lower heel options — not all lifters benefit from 1\" heels."}
+          ],
+          "tags": ["equipment", "shoes", "fundamentals"]
+        },
+
+        "belt_use": {
+          "id": "supportive_equipment.belt_use",
+          "title": "Belt Use",
+          "summary": "IWF rules: belt max 12cm wide, leather or synthetic. Worn outside the singlet. Used most commonly above 80% intensity.",
+          "athlete_view": {
+            "cues": ["Belt for max efforts only", "Brace into the belt, not relying on the belt", "Remove for warmups, accessories, light work"],
+            "feel": "Tight but not uncomfortable. You should breathe into it.",
+            "key_actions": ["Belt at 80%+ on classics", "Belt for heavy squats (typically 85%+)", "Don't belt for technique work, light lifts, or accessories"]
+          },
+          "coach_view": {
+            "biomechanics": "The belt provides a tactile reference for trunk bracing and increases intra-abdominal pressure by ~10-15%. It does not replace bracing — it amplifies it. Lifters who become belt-dependent often have weaker unaided trunk strength and fail under unbelted conditions.",
+            "priorities": ["Belt is a tool, not a crutch", "Maintain unbelted strength via lower-intensity work", "Belt position: tight at the waist, just below the ribs"],
+            "why_it_matters": "Belts add a measurable but small performance increase (~3-5% on max squats and pulls). Over-reliance creates a bracing skill deficit."
+          },
+          "common_errors": [
+            {"error": "Wearing the belt for everything including warmups", "fix": "Save belt for top sets. Build trunk strength unbelted."},
+            {"error": "Wearing belt too loose or too tight", "fix": "Belt should be tight enough to prevent rotation but loose enough to permit a deep belly breath."}
+          ],
+          "tags": ["equipment", "belt", "bracing"]
+        },
+
+        "knee_sleeves_vs_wraps": {
+          "id": "supportive_equipment.knee_sleeves_vs_wraps",
+          "title": "Knee Sleeves vs Knee Wraps",
+          "summary": "IWF allows knee sleeves (max 30cm length, single-layer construction). Knee wraps are NOT permitted in IWF Olympic weightlifting competition.",
+          "athlete_view": {
+            "cues": ["Sleeves for warmth and proprioception, not for support", "No wraps in Oly meets", "Replace sleeves when they lose elasticity"],
+            "feel": "Snug warmth. Sleeves should feel supportive but not tight enough to restrict the squat.",
+            "key_actions": ["Use sleeves at 80%+ classic lifts and squats", "Choose 5-7mm thickness for general use", "Confirm meet-specific equipment rules — some federations differ from IWF"]
+          },
+          "coach_view": {
+            "biomechanics": "Knee sleeves provide warmth (vascular benefit), light compression (proprioceptive feedback), and minor support — but no significant elastic-energy storage. Compression-style sleeves (e.g. SBD 7mm) approach the rule limit but remain legal. Wraps store and release elastic energy and provide significant lifting assistance — they are banned in IWF for that reason.",
+            "priorities": ["Confirm meet rules — IWF, USAW, and local federations may differ", "Use sleeves consistently in training so the meet day matches", "Inspect sleeves for tears or stretching"],
+            "why_it_matters": "Showing up to a meet with wraps and being told they're not allowed creates last-minute equipment problems. Confirm before traveling."
+          },
+          "common_errors": [
+            {"error": "Wearing wraps in IWF/USAW meets", "fix": "Wraps are not permitted. Use sleeves only."},
+            {"error": "Sleeves too thin (no support) or too thick (illegal)", "fix": "5-7mm is standard. Confirm thickness against current IWF technical regulations."}
+          ],
+          "tags": ["equipment", "knee_sleeves", "rules"]
+        },
+
+        "wrist_wraps": {
+          "id": "supportive_equipment.wrist_wraps",
+          "title": "Wrist Wraps",
+          "summary": "Permitted. Standard for most lifters above 80% intensity. Provides wrist support during overhead and front-rack positions.",
+          "athlete_view": {
+            "cues": ["Wraps around the wrist joint, not too high up the forearm", "Tight enough to support, loose enough to allow full extension"],
+            "feel": "Like a brace at the wrist.",
+            "key_actions": ["Wrap diagonally, anchor on the back of the hand", "Loosen between sets to maintain blood flow"]
+          },
+          "coach_view": {
+            "biomechanics": "Wrist wraps reduce passive wrist extension demand during overhead lifts and front rack positions. Especially useful for lifters with limited wrist mobility or for high-volume sessions where wrist fatigue accumulates.",
+            "priorities": ["Tightness matched to need — heavier work = tighter wrap", "Don't compensate for poor mobility with permanent reliance"],
+            "why_it_matters": "Wraps prevent wrist injury during overhead sessions, particularly in lifters who haven't built passive wrist tolerance."
+          },
+          "common_errors": [
+            {"error": "Wrapping too high (forearm)", "fix": "Wrap at the wrist joint."},
+            {"error": "Lifting all sessions in wraps", "fix": "Train light work without wraps to build joint tolerance."}
+          ],
+          "tags": ["equipment", "wrist_wraps"]
+        },
+
+        "singlet_and_attire": {
+          "id": "supportive_equipment.singlet_and_attire",
+          "title": "Singlet and Attire Rules",
+          "summary": "IWF requires a singlet covering torso. T-shirts allowed under singlet. Knee-length socks allowed but not concealing the knee.",
+          "key_rules": [
+            "Singlet (one-piece) required for IWF competition.",
+            "T-shirts permitted under or as part of attire (must not have collar covering the neck).",
+            "Socks allowed up to mid-calf (must not cover the knee, which would conflict with knee sleeve rules).",
+            "Tape on hands, fingers, wrists, knees permitted but cannot extend onto the bar contact area.",
+            "Headwear/hair: no specific rules but must not interfere with judge visibility.",
+            "Local meets may relax these — confirm meet packet."
+          ],
+          "athlete_view": {
+            "cues": ["Singlet for the meet", "Comfortable underlayer", "Practice in meet-day attire ahead of time"],
+            "feel": "Free range of motion. Nothing binds at the shoulders or hips.",
+            "key_actions": ["Buy singlet 2+ months before meet, train in it 2-3 sessions to confirm fit", "Backup singlet recommended"]
+          },
+          "tags": ["equipment", "singlet", "rules"]
+        },
+
+        "tape_use": {
+          "id": "supportive_equipment.tape_use",
+          "title": "Tape Use (Hands and Fingers)",
+          "summary": "Tape on thumbs and fingers is standard for managing skin tolerance with the hook grip. IWF rules allow tape but not on the bar-contact surface of the hand.",
+          "athlete_view": {
+            "cues": ["Tape thumbs for hook grip skin tolerance", "Don't tape over the palm where the bar sits", "Practice with the same tape in training"],
+            "feel": "Tape protects the thumb skin under the hook grip squeeze.",
+            "key_actions": ["Pre-cut strips before warmup", "Test tape brand/style in training before meet day"]
+          },
+          "coach_view": {
+            "biomechanics": "The hook grip pinches the thumb under the bar, causing skin damage if the thumb is unconditioned. Tape distributes pressure and prevents the thumb from splitting. Standard tape: 1-inch athletic tape or specific pre-wrap product.",
+            "priorities": ["Tape on thumb (always for hook grip), optionally on fingers for grip wear", "Tape brand and method consistent with training"],
+            "why_it_matters": "A torn thumb on meet day means lifting with un-hooked grip, which means a snatch or clean failure on heavy attempts."
+          },
+          "tags": ["equipment", "tape", "hook_grip"]
+        }
+      }
+    },
+
+    "accessory_work": {
+      "id": "accessory_work",
+      "title": "Accessory Work",
+      "summary": "Supplemental movements that build the strength qualities and tissue tolerance the classic lifts require.",
+      "concepts": {
+
+        "back_strength": {
+          "id": "accessory_work.back_strength",
+          "title": "Back Strength (Erectors and Lats)",
+          "summary": "Back-extension and lat-engagement work supports first-pull mechanics and overhead position.",
+          "exercises": [
+            {"name": "Snatch grip RDL", "purpose": "First-pull positioning, hamstring length under load"},
+            {"name": "Good morning", "purpose": "Erector strength"},
+            {"name": "Back extension (45-degree or GHR)", "purpose": "Erector endurance and tissue tolerance"},
+            {"name": "Pendlay row", "purpose": "Lat engagement, mid-back strength"},
+            {"name": "Pullup / chinup", "purpose": "Lat strength, overhead support"},
+            {"name": "Snatch grip behind-the-neck press", "purpose": "Overhead stability, lockout strength"}
+          ],
+          "athlete_view": {
+            "cues": ["Back strength is what holds positions under heavy loads", "Volume here is high — sets of 6-10 typical"],
+            "feel": "Pumpy, tiring. Not heart-rate spiking but locally fatiguing.",
+            "key_actions": ["Program 2-4 back accessory sets per session", "Cycle exercises every 6-8 weeks"]
+          },
+          "coach_view": {
+            "biomechanics": "Back strength (erectors, lats, mid-back) is the often-cited weak link in amateur lifters. The lats specifically are the limiting factor in bar-path control during the first pull. Back extension volume builds erector tolerance for pulling.",
+            "priorities": ["2-4 back-focused exercises per week", "Sets of 6-12 reps for volume", "Pause variations for positional strength"]
+          },
+          "tags": ["accessory", "back", "strength"]
+        },
+
+        "leg_strength": {
+          "id": "accessory_work.leg_strength",
+          "title": "Leg Strength Beyond the Squat",
+          "summary": "Bulgarian split squats, lunges, step-ups, and unilateral work for leg strength balance and joint resilience.",
+          "exercises": [
+            {"name": "Bulgarian split squat", "purpose": "Unilateral leg strength, hip stability"},
+            {"name": "Walking lunge", "purpose": "Leg strength, conditioning, position practice"},
+            {"name": "Step-up", "purpose": "Single-leg drive"},
+            {"name": "Belt squat / safety bar squat", "purpose": "Quad volume without spine loading"}
+          ],
+          "athlete_view": {
+            "cues": ["Squats build the engine, accessories build resilience", "Unilateral work prevents asymmetries"]
+          },
+          "coach_view": {
+            "biomechanics": "Asymmetries in the lower body are common in lifters and can manifest as bar path deviations under heavy load. Unilateral work addresses these. Volume should be moderate — accessories don't need to feel like main work.",
+            "priorities": ["1-2 unilateral exercises per week", "Volume in the 8-15 rep range"]
+          },
+          "tags": ["accessory", "legs", "unilateral"]
+        },
+
+        "pressing_and_overhead": {
+          "id": "accessory_work.pressing_and_overhead",
+          "title": "Pressing and Overhead Strength",
+          "summary": "Press, push press, push jerk, behind-the-neck press for overhead strength and lockout.",
+          "exercises": [
+            {"name": "Strict overhead press", "purpose": "Pure shoulder strength, overhead position support"},
+            {"name": "Push press", "purpose": "Drive practice, shoulder strength"},
+            {"name": "Behind-the-neck snatch grip press", "purpose": "Overhead position, overhead squat support"},
+            {"name": "Sots press", "purpose": "Active end-range overhead mobility under load"}
+          ],
+          "athlete_view": {
+            "cues": ["Press supports the jerk and the overhead", "Don't neglect strict press for the sake of fancier movements"]
+          },
+          "coach_view": {
+            "biomechanics": "Strict press strength correlates with overhead stability and jerk lockout. Push press translates directly to jerk drive mechanics. Behind-the-neck pressing builds the snatch overhead position more directly than front pressing.",
+            "priorities": ["Press 2x/week minimum", "Mix strict and dynamic variants"]
+          },
+          "tags": ["accessory", "press", "overhead"]
+        },
+
+        "core_and_trunk": {
+          "id": "accessory_work.core_and_trunk",
+          "title": "Core and Trunk Work",
+          "summary": "Anti-extension, anti-rotation, and bracing-specific work supports every lift.",
+          "exercises": [
+            {"name": "Plank variations", "purpose": "Anti-extension, brace endurance"},
+            {"name": "Hollow body hold", "purpose": "Anti-extension, gymnastic carryover"},
+            {"name": "Pallof press", "purpose": "Anti-rotation"},
+            {"name": "Heavy carries (farmer's, suitcase)", "purpose": "Trunk under load"},
+            {"name": "Weighted decline situp", "purpose": "Hip flexor / abs hybrid"}
+          ],
+          "athlete_view": {
+            "cues": ["A weak trunk leaks force everywhere", "5-10 minutes of trunk work per session pays off long-term"]
+          },
+          "coach_view": {
+            "biomechanics": "Trunk weakness shows up as bar path deviations under heavy load (lifter buckles forward, sideways, or backward). Programming 5-15 minutes of trunk work per session is standard.",
+            "priorities": ["Anti-extension primary", "Anti-rotation secondary", "Heavy carries weekly"]
+          },
+          "tags": ["accessory", "core", "trunk"]
+        }
+      }
+    },
+
+    "mobility_and_recovery": {
+      "id": "mobility_and_recovery",
+      "title": "Mobility and Recovery",
+      "summary": "Position-specific mobility (overhead, ankle, hip) and recovery practices that allow high-frequency training.",
+      "concepts": {
+
+        "overhead_mobility": {
+          "id": "mobility_and_recovery.overhead_mobility",
+          "title": "Overhead Mobility",
+          "summary": "Shoulder flexion, external rotation, and thoracic extension support a stable overhead receive position.",
+          "drills": [
+            {"name": "PVC dislocates", "frequency": "Daily", "purpose": "Shoulder flexion + external rotation"},
+            {"name": "Wall slides", "frequency": "Daily", "purpose": "Scap upward rotation, thoracic extension"},
+            {"name": "Lat foam roll", "frequency": "Pre-overhead session", "purpose": "Lat length"},
+            {"name": "Snatch grip OHS hold", "frequency": "2-3x/week", "purpose": "Position-specific tolerance"},
+            {"name": "Sots press", "frequency": "1-2x/week", "purpose": "Loaded end-range overhead"}
+          ],
+          "tags": ["mobility", "overhead"]
+        },
+
+        "ankle_mobility": {
+          "id": "mobility_and_recovery.ankle_mobility",
+          "title": "Ankle Mobility",
+          "summary": "Dorsiflexion supports squat depth without compensatory forward lean.",
+          "drills": [
+            {"name": "Knee-to-wall dorsiflexion test", "purpose": "Diagnostic — 4-5 inches knee-to-wall is common goal"},
+            {"name": "Banded ankle mobs", "purpose": "Joint capsule mobility"},
+            {"name": "Loaded squat hold", "purpose": "Position-specific ankle tolerance"},
+            {"name": "Calf stretching (bent and straight knee)", "purpose": "Soleus and gastroc length"}
+          ],
+          "tags": ["mobility", "ankle", "squat"]
+        },
+
+        "hip_mobility": {
+          "id": "mobility_and_recovery.hip_mobility",
+          "title": "Hip Mobility",
+          "summary": "Hip flexion, internal rotation, and adduction support deep squat positions.",
+          "drills": [
+            {"name": "Cossack squat", "purpose": "Adduction, deep flexion"},
+            {"name": "90/90 hip rotation", "purpose": "Internal/external rotation"},
+            {"name": "Hip flexor stretch (couch)", "purpose": "Anterior hip length"},
+            {"name": "Goblet squat hold", "purpose": "Loaded deep squat tolerance"}
+          ],
+          "tags": ["mobility", "hip", "squat"]
+        },
+
+        "recovery_practices": {
+          "id": "mobility_and_recovery.recovery_practices",
+          "title": "Recovery Practices",
+          "summary": "Sleep, nutrition, and programming load management are the dominant recovery levers. Modalities are secondary.",
+          "athlete_view": {
+            "cues": ["Sleep 8+ hours", "Eat enough protein (1.6-2.0g/kg)", "Deload every 4-8 weeks"],
+            "feel": "Recovery is a non-negotiable, not a bonus.",
+            "key_actions": ["Track sleep and bodyweight as recovery indicators", "Schedule deloads in the program — don't wait for breakdown"]
+          },
+          "coach_view": {
+            "biomechanics": "Recovery is dominated by sleep, nutrition, and programming load — in that order. Modalities (massage, sauna, contrast bath, ice baths) provide marginal returns. The single most overlooked recovery factor is total weekly training stress relative to fitness.",
+            "priorities": ["Sleep first", "Nutrition second", "Programming load third", "Modalities fourth"],
+            "why_it_matters": "Lifters who chase fancy recovery while sleeping 6 hours and undereating get inferior results to lifters who sleep 8 hours and eat properly with no extra modalities."
+          },
+          "tags": ["recovery", "sleep", "nutrition"]
+        }
+      }
+    },
+
+    "psychology_and_mental_game": {
+      "id": "psychology_and_mental_game",
+      "title": "Psychology and Mental Game",
+      "summary": "Pre-lift routines, attempt commitment, and competition-day arousal management.",
+      "concepts": {
+
+        "pre_lift_routine": {
+          "id": "psychology_and_mental_game.pre_lift_routine",
+          "title": "Pre-Lift Routine",
+          "summary": "A short, repeatable routine before every attempt — same in training as in meets.",
+          "athlete_view": {
+            "cues": ["Same routine, every lift, every time", "Set, breathe, commit, lift", "No second-guessing once you approach the bar"],
+            "feel": "Automatic. The body knows what to do.",
+            "key_actions": ["Develop a 5-10 second pre-lift routine in training", "Use the same sequence in warmups and on the platform", "Examples: chalk hands, set feet, breath in, brief visualization, lift"]
+          },
+          "coach_view": {
+            "biomechanics": "A pre-lift routine reduces decision-making load on meet day. Athletes with consistent routines perform more consistently under pressure. The routine should be short (5-10 seconds), physical (not just mental), and developed in training so that meet-day pressure doesn't disrupt it.",
+            "priorities": ["Develop routine in training, not meet day", "Keep it short and physical", "Trust it under pressure"]
+          },
+          "tags": ["psychology", "routine", "competition"]
+        },
+
+        "arousal_management": {
+          "id": "psychology_and_mental_game.arousal_management",
+          "title": "Arousal Management on Meet Day",
+          "summary": "Optimal performance lives in a moderate arousal zone — too low and the lifter is flat, too high and the lifter loses fine motor control.",
+          "athlete_view": {
+            "cues": ["Calm energy", "Aware, not anxious", "Trust the training"],
+            "feel": "Like a focused workout, not an emergency.",
+            "key_actions": ["Avoid stimulants in excess (over-caffeinating throws fine motor)", "Use breathing to settle if too high", "Use music or coach prompts to amp up if too flat"]
+          },
+          "coach_view": {
+            "biomechanics": "Performance follows an inverted-U curve with arousal. Olympic lifting requires precision (high skill) under heavy load — too much arousal degrades motor coordination. Caffeine, music, crowd noise, and self-talk all influence arousal. Most amateur lifters err on the high-arousal side; experienced lifters learn to dial it down.",
+            "priorities": ["Calibrate caffeine intake from training", "Have arousal-up and arousal-down tools ready", "Trust automatic execution"]
+          },
+          "tags": ["psychology", "arousal", "competition"]
+        },
+
+        "missed_lift_response": {
+          "id": "psychology_and_mental_game.missed_lift_response",
+          "title": "Responding to a Missed Lift",
+          "summary": "Reset routine, decide weight with coach, lift the next attempt without dwelling.",
+          "athlete_view": {
+            "cues": ["Walk off, breathe, reset", "Lift the next one — that's the only one that matters", "No dwelling — meet ain't over"],
+            "feel": "Disappointed, then refocused. Quick turnaround.",
+            "key_actions": ["Walk off platform without showing emotion", "Coach handles weight selection", "Re-enter the warmup mindset"]
+          },
+          "coach_view": {
+            "biomechanics": "Athletes who dwell on missed attempts often miss the follow-up attempt as well. Coach role: reset the athlete physically (breathing, posture, brief technical cue) and decide the next attempt strategy. Athlete role: trust and execute.",
+            "priorities": ["No dwelling", "Coach decides, athlete executes", "Get back to routine"]
+          },
+          "tags": ["psychology", "competition", "resilience"]
+        }
+      }
+    }
+  },
+
+  "retrieval_index": {
+    "common_questions_to_concept_map": {
+      "How do I fix a forward bar in the snatch?": ["snatch.errors_overview", "snatch.first_pull.bar_path", "snatch.second_pull.bar_contact_point"],
+      "Why am I missing snatches forward?": ["snatch.errors_overview", "snatch.second_pull.triple_extension", "snatch.first_pull.bar_path"],
+      "What's a press-out?": ["meet_prep.platform_execution", "snatch.receive.overhead_position"],
+      "How should I open at a meet?": ["meet_prep.attempt_selection", "meet_prep.bombing_out_prevention"],
+      "How heavy should my opener be?": ["meet_prep.attempt_selection"],
+      "How many days should I train?": ["programming.frequency"],
+      "What is the double knee bend?": ["snatch.transition.double_knee_bend"],
+      "What's the best peaking program?": ["meet_prep.peaking_block_8_week", "programming.periodization_models"],
+      "Should I cut weight?": ["meet_prep.weight_class_management"],
+      "Why is my jerk going forward?": ["clean_and_jerk.jerk.dip.vertical_dip", "clean_and_jerk.jerk.drive.leg_drive_first"],
+      "What weight belt should I use?": ["supportive_equipment.belt_use"],
+      "Are knee wraps allowed?": ["supportive_equipment.knee_sleeves_vs_wraps"],
+      "How do I improve overhead position?": ["mobility_and_recovery.overhead_mobility", "snatch.receive.overhead_position"],
+      "What's a good front squat ratio?": ["programming.squat_programming"],
+      "How do I split jerk correctly?": ["clean_and_jerk.jerk.split_receive.split_position"],
+      "How do I recover from a missed attempt?": ["psychology_and_mental_game.missed_lift_response", "meet_prep.bombing_out_prevention"]
+    },
+    "tag_index": "Filter concepts by tags array. Common tag clusters: ['snatch', 'first_pull', 'bar_path'] | ['jerk', 'dip', 'verticality'] | ['programming', 'peaking'] | ['meet_prep', 'rules']"
+  }
+}

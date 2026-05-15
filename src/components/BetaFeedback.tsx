@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { getAuthToken } from '@/lib/authClient';
+import { useLanguage } from '@/lib/i18n';
 
 interface FeedbackEntry {
   id: string;
@@ -57,6 +58,7 @@ const TYPE_TONE: Record<string, { color: string; tone: string }> = {
 };
 
 export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps) {
+  const { t } = useLanguage();
   const [feedbackType, setFeedbackType] = useState<'BUG' | 'RECOMMENDATION' | 'UI/UX' | 'PERFORMANCE'>('BUG');
   const [category, setCategory] = useState<'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'>('LOW');
   const [description, setDescription] = useState('');
@@ -105,14 +107,14 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
     const reader = new FileReader();
     reader.onload = (e) => {
       setScreenshot(e.target?.result as string);
-      setToast('Screenshot added');
+      setToast(t('feedback.toast_screenshot'));
     };
     reader.readAsDataURL(file);
   };
 
   const handleSubmit = async () => {
     if (description.length < 10) {
-      setToast('Description too short (min 10 chars)');
+      setToast(t('feedback.toast_too_short'));
       return;
     }
     try {
@@ -127,7 +129,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
       });
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
-      setToast(data.alert === 'CRITICAL' ? 'CRITICAL ISSUE FLAGGED' : 'Feedback submitted');
+      setToast(data.alert === 'CRITICAL' ? t('feedback.toast_critical') : t('feedback.toast_submitted'));
       setDescription('');
       setScreenshot(undefined);
       setFeedbackType('BUG');
@@ -142,7 +144,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
         setEntries(newData.feedback || []);
       }
     } catch (err) {
-      setToast('Failed to submit feedback');
+      setToast(t('feedback.toast_failed'));
     } finally {
       setSubmitting(false);
     }
@@ -170,6 +172,23 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
 
   const canSubmit = description.length >= 10 && !submitting;
 
+  // Type/severity/status display labels — translate the visible text but
+  // keep the stored value English (DB-stored). When the value can't be
+  // translated, fall back to the stored uppercase string.
+  const typeLabel = (val: string): string => {
+    const key = val === 'UI/UX' ? 'feedback.type.uiux' : `feedback.type.${val.toLowerCase()}`;
+    const translated = t(key);
+    return translated === key ? val : translated;
+  };
+  const severityLabel = (val: string): string => {
+    const translated = t(`feedback.severity.${val.toLowerCase()}`);
+    return translated.startsWith('feedback.') ? val : translated;
+  };
+  const statusLabel = (val: string): string => {
+    const translated = t(`feedback.status.${val.toLowerCase()}`);
+    return translated.startsWith('feedback.') ? val : translated;
+  };
+
   return (
     <div className="ds-card bracket" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {toast && (
@@ -193,37 +212,37 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
         </div>
       )}
 
-      <div className="t-eyebrow">// Submit Feedback</div>
+      <div className="t-eyebrow">{t('feedback.submit_eyebrow')}</div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 140 }}>
-          <div className="t-label" style={{ marginBottom: 4 }}>Type</div>
+          <div className="t-label" style={{ marginBottom: 4 }}>{t('feedback.type_label')}</div>
           <select
             className="ds-input"
             value={feedbackType}
             onChange={(e) => setFeedbackType(e.target.value as typeof feedbackType)}
           >
-            <option value="BUG">BUG</option>
-            <option value="RECOMMENDATION">RECOMMENDATION</option>
-            <option value="UI/UX">UI/UX</option>
-            <option value="PERFORMANCE">PERFORMANCE</option>
+            <option value="BUG">{typeLabel('BUG')}</option>
+            <option value="RECOMMENDATION">{typeLabel('RECOMMENDATION')}</option>
+            <option value="UI/UX">{typeLabel('UI/UX')}</option>
+            <option value="PERFORMANCE">{typeLabel('PERFORMANCE')}</option>
           </select>
         </div>
         <div style={{ flex: 0 }}>
-          <div className="t-label" style={{ marginBottom: 4 }}>Severity</div>
-          {badge(category, CATEGORY_TONE[category].color)}
+          <div className="t-label" style={{ marginBottom: 4 }}>{t('feedback.severity_label')}</div>
+          {badge(severityLabel(category), CATEGORY_TONE[category].color)}
         </div>
       </div>
 
       <div>
         <div className="t-label" style={{ marginBottom: 4 }}>
-          Description ({description.length}/1000)
+          {t('feedback.description_label')} ({description.length}/1000)
         </div>
         <textarea
           className="ds-input"
           value={description}
           onChange={(e) => handleDescriptionChange(e.target.value)}
-          placeholder="Describe the issue or suggestion... (min 10 characters)"
+          placeholder={t('feedback.description_placeholder')}
           maxLength={1000}
           style={{ minHeight: 100, resize: 'vertical' }}
         />
@@ -242,7 +261,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
           className="btn btn-sm btn-ghost"
           onClick={() => fileInputRef.current?.click()}
         >
-          {screenshot ? 'Screenshot Added' : 'Upload Screenshot'}
+          {screenshot ? t('feedback.screenshot_added') : t('feedback.upload_screenshot')}
         </button>
         {screenshot && (
           <button
@@ -253,7 +272,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
               if (fileInputRef.current) fileInputRef.current.value = '';
             }}
           >
-            Remove
+            {t('feedback.remove')}
           </button>
         )}
       </div>
@@ -265,7 +284,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
         disabled={!canSubmit}
         style={{ width: '100%' }}
       >
-        {submitting ? 'Submitting...' : 'Submit Feedback'}
+        {submitting ? t('feedback.submitting') : t('feedback.submit_btn')}
       </button>
 
       <div
@@ -276,14 +295,14 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
         }}
       >
         <div className="t-eyebrow" style={{ marginBottom: 12 }}>
-          // Feedback History ({entries.length})
+          {t('feedback.history_eyebrow')} ({entries.length})
         </div>
 
         {loading ? (
           <div
             style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: 22 }}
           >
-            Loading...
+            {t('feedback.history_loading')}
           </div>
         ) : entries.length === 0 ? (
           <div
@@ -294,7 +313,7 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
               fontSize: 12,
             }}
           >
-            No feedback entries yet
+            {t('feedback.history_empty')}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -316,13 +335,13 @@ export default function BetaFeedback({ operatorId, callsign }: BetaFeedbackProps
                 >
                   <div style={{ display: 'flex', gap: 6 }}>
                     {badge(
-                      entry.type,
+                      typeLabel(entry.type),
                       TYPE_TONE[entry.type]?.color || 'var(--text-tertiary)'
                     )}
-                    {badge(entry.category, CATEGORY_TONE[entry.category].color)}
+                    {badge(severityLabel(entry.category), CATEGORY_TONE[entry.category].color)}
                   </div>
                   {badge(
-                    entry.status,
+                    statusLabel(entry.status),
                     STATUS_TONE[entry.status]?.color || 'var(--text-tertiary)'
                   )}
                 </div>

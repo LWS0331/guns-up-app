@@ -1,18 +1,23 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import LogoFull from '@/components/LogoFull';
 import LanguageToggle from '@/components/LanguageToggle';
 import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
 import { TermsOfService, PrivacyPolicy } from '@/components/LegalPages';
+import { REGISTRATION_OPEN } from '@/lib/featureFlags';
 
 interface LoginScreenProps {
   onLogin: (operator: Operator) => void;
   operators: Operator[];
 }
 
-type LoginMode = 'pin' | 'email' | 'register';
+// PIN login is being phased out — Google OAuth is the primary path,
+// email/password is the legacy fallback for accounts that pre-date the
+// SSO migration. The /api/auth/login endpoint still accepts PINs as a
+// server-side backstop, but the UI no longer surfaces a PIN entry.
+type LoginMode = 'email' | 'register';
 
 // Floating particle for background
 interface Particle {
@@ -26,9 +31,8 @@ interface Particle {
 }
 
 export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
-  const { t } = useLanguage();
-  const [loginMode, setLoginMode] = useState<LoginMode>('pin');
-  const [pin, setPin] = useState<string>('');
+  const { t, language } = useLanguage();
+  const [loginMode, setLoginMode] = useState<LoginMode>('email');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [name, setName] = useState<string>('');
@@ -37,6 +41,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
   const [success, setSuccess] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [matchedOperator, setMatchedOperator] = useState<Operator | null>(null);
+  const [showRegistrationClosedModal, setShowRegistrationClosedModal] = useState<boolean>(false);
   const [mounted, setMounted] = useState(false);
   const [showTOS, setShowTOS] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -51,75 +56,20 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
       delay: Math.random() * 10,
     }))
   );
-  const hiddenInputRef = useRef<HTMLInputElement>(null);
+  // PIN-related refs and handlers were removed when the PIN UI was retired.
+  // The /api/auth/login endpoint still accepts PINs server-side as a backstop
+  // for any account that hasn't been migrated to email yet — there's just no
+  // longer a UI for entering one.
 
   useEffect(() => {
     setMounted(true);
-    if (hiddenInputRef.current) {
-      hiddenInputRef.current.focus();
-    }
   }, []);
 
-  useEffect(() => {
-    if (pin.length === 4) {
-      // Authenticate via API first (DB is source of truth for PINs)
-      const loginViaApi = async () => {
-        try {
-          const res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pin }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.token) localStorage.setItem('authToken', data.token);
-            setSuccess(true);
-            setError('');
-            setMatchedOperator(data.operator);
-            setTimeout(() => { onLogin(data.operator); }, 1400);
-            return;
-          }
-        } catch { /* API unreachable — fall through to offline */ }
-
-        // Offline fallback: match against local operators (no JWT issued)
-        const operator = operators.find((op) => op.pin === pin);
-        if (operator) {
-          setSuccess(true);
-          setError('');
-          setMatchedOperator(operator);
-          setTimeout(() => { onLogin(operator); }, 1400);
-        } else {
-          setError('Invalid PIN');
-          setSuccess(false);
-          setTimeout(() => {
-            setPin('');
-            setError('');
-            if (hiddenInputRef.current) hiddenInputRef.current.focus();
-          }, 800);
-        }
-      };
-      loginViaApi();
-    }
-  }, [pin, operators, onLogin]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (/^[0-9]$/.test(e.key)) {
-      setPin(prev => {
-        if (prev.length < 4) return prev + e.key;
-        return prev;
-      });
-      e.preventDefault();
-    } else if (e.key === 'Backspace') {
-      setPin(prev => prev.slice(0, -1));
-      setError('');
-      e.preventDefault();
-    }
-  }, []);
-
+  // Container click used to focus a hidden PIN input — now a no-op so the
+  // background tap doesn't accidentally trigger anything. Kept on the
+  // wrapper so the "cursor: pointer" styling still feels intentional.
   const handleContainerClick = () => {
-    if (hiddenInputRef.current && loginMode === 'pin') {
-      hiddenInputRef.current.focus();
-    }
+    /* intentionally empty — see comment above */
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -162,7 +112,12 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, callsign }),
+        // `language` reflects whatever the user picked from the
+        // top-right LanguageToggle on the login screen. Once
+        // submitted, this becomes the operator's locked preference —
+        // the in-app toggle is hidden post-signup. Switches require
+        // a support request.
+        body: JSON.stringify({ email, password, name, callsign, language }),
       });
 
       if (res.ok) {
@@ -295,34 +250,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
         pointerEvents: 'none',
       }} />
 
-      {/* Hidden input */}
-      <input
-        ref={hiddenInputRef}
-        type="tel"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        maxLength={4}
-        value={pin}
-        style={{
-          position: 'absolute',
-          opacity: 0,
-          width: '1px',
-          height: '1px',
-          border: 'none',
-          outline: 'none',
-          padding: 0,
-          margin: 0,
-          overflow: 'hidden',
-        }}
-        onKeyDown={handleKeyDown}
-        onChange={(e) => {
-          const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-          setPin(val);
-        }}
-        autoFocus
-        autoComplete="off"
-        aria-label="PIN input"
-      />
+      {/* Hidden PIN input removed — see LoginMode comment at top of file. */}
 
       {/* Language Toggle (top-right) */}
       <div style={{
@@ -380,7 +308,102 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
           transition: 'opacity 0.6s ease 0.5s',
         }} />
 
-        {/* Mode Selector Tabs */}
+        {/* Continue with Google — primary auth path. PIN/email tabs below
+            stay as fallbacks for legacy operators until the SSO migration
+            backfills emails (see Phase 3 in the auth plan). The button
+            window.location's to the OAuth start endpoint, which sets a
+            CSRF cookie and redirects to Google's consent screen. */}
+        {!success && (
+          <button
+            onClick={() => {
+              // Pass through tier/cycle params if we landed here via a
+              // landing-page tier card so checkout resumes after auth.
+              const url = new URL(window.location.href);
+              const tier = url.searchParams.get('tier');
+              const cycle = url.searchParams.get('cycle');
+              const next = url.searchParams.get('next');
+              const start = new URL('/api/auth/google/start', window.location.origin);
+              if (tier) start.searchParams.set('tier', tier);
+              if (cycle) start.searchParams.set('cycle', cycle);
+              if (next) start.searchParams.set('next', next);
+              window.location.href = start.toString();
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              padding: '14px 24px',
+              backgroundColor: '#fff',
+              color: '#1f1f1f',
+              border: 'none',
+              borderRadius: 4,
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '2px',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              boxShadow: '0 0 0 1px rgba(0,255,65,0.35), 0 0 18px rgba(0,255,65,0.2)',
+              opacity: mounted ? 1 : 0,
+              transform: mounted ? 'translateY(0)' : 'translateY(10px)',
+              transition: 'opacity 0.6s ease 0.4s, transform 0.6s ease 0.4s',
+            }}
+            aria-label={t('login.continue_google')}
+          >
+            {/* Google "G" logo as inline SVG so we don't pull a brand asset
+                into the build. Colors per Google Identity guidelines. */}
+            <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+              <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+              <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+            </svg>
+            <span>{t('login.continue_google')}</span>
+          </button>
+        )}
+
+        {/* `?oauth_error=…` query param: surfaced when the OAuth callback
+            rejects the round-trip (state mismatch, email_not_verified,
+            not_authorized, etc.). Translate the raw reason into a user-
+            facing message so we don't leak machine codes. */}
+        {(() => {
+          if (success) return null;
+          if (typeof window === 'undefined') return null;
+          const reason = new URLSearchParams(window.location.search).get('oauth_error');
+          if (!reason) return null;
+          const friendly =
+            reason === 'not_authorized'
+              ? 'This account is not yet active for the closed beta. Contact Ruben to request access.'
+              : reason === 'email_not_verified'
+                ? 'Your Google account email isn’t verified. Verify it with Google and try again.'
+                : reason === 'state_mismatch'
+                  ? 'Sign-in session expired. Try again from the login button below.'
+                  : reason === 'not_configured'
+                    ? 'Google sign-in is not configured on this server. Contact Ruben — likely missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / NEXT_PUBLIC_APP_URL env vars.'
+                    : reason === 'token_exchange_failed'
+                      ? 'Google authentication failed at the token exchange step. Likely a redirect URI mismatch in Google Cloud Console — should be exactly $APP_URL/api/auth/google/callback. Contact Ruben.'
+                      : `Google sign-in failed (${reason}). Try again or use email/password below.`;
+          return (
+            <div
+              style={{
+                fontFamily: 'Share Tech Mono, monospace',
+                fontSize: 11,
+                color: '#ff4444',
+                padding: '8px 12px',
+                border: '1px solid rgba(255,68,68,0.35)',
+                borderRadius: 4,
+                maxWidth: 360,
+                textAlign: 'center',
+              }}
+              role="alert"
+            >
+              {friendly}
+            </div>
+          );
+        })()}
+
+        {/* Mode Selector Tabs — Login + Register (PIN UI was retired) */}
         {!success && (
           <div style={{
             display: 'flex',
@@ -389,27 +412,6 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             transform: mounted ? 'translateY(0)' : 'translateY(10px)',
             transition: 'opacity 0.6s ease 0.5s, transform 0.6s ease 0.5s',
           }}>
-            <button
-              onClick={() => {
-                setLoginMode('pin');
-                setError('');
-                setPin('');
-              }}
-              style={{
-                fontFamily: 'Orbitron, monospace',
-                fontSize: '11px',
-                letterSpacing: '2px',
-                textTransform: 'uppercase',
-                padding: '8px 16px',
-                border: `1px solid ${loginMode === 'pin' ? '#00ff41' : 'rgba(0,255,65,0.2)'}`,
-                backgroundColor: loginMode === 'pin' ? 'rgba(0,255,65,0.1)' : 'transparent',
-                color: loginMode === 'pin' ? '#00ff41' : '#666',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              PIN LOGIN (BETA)
-            </button>
             <button
               onClick={() => {
                 setLoginMode('email');
@@ -436,132 +438,12 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
         )}
 
         {/* PIN Section */}
-        {!success && loginMode === 'pin' ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '12px',
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? 'translateY(0)' : 'translateY(10px)',
-            transition: 'opacity 0.6s ease 0.6s, transform 0.6s ease 0.6s',
-          }}>
-            {/* Label */}
-            <div style={{
-              fontFamily: 'Orbitron, monospace',
-              fontSize: '15px',
-              color: '#888',
-              textTransform: 'uppercase',
-              letterSpacing: '3px',
-              animation: 'accessTextPulse 3s ease-in-out infinite',
-            }}>
-              {t('login.enter_pin')}
-            </div>
-
-            {/* PIN boxes */}
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'center',
-            }}>
-              {[0, 1, 2, 3].map((index) => {
-                const filled = index < pin.length;
-                const isActive = index === pin.length;
-
-                let borderColor = 'rgba(0,255,65,0.2)';
-                let bgColor = 'rgba(0,255,65,0.03)';
-                let shadow = 'none';
-                let anim = 'pinBoxIdle 4s ease-in-out infinite';
-
-                if (error) {
-                  borderColor = '#ff4444';
-                  bgColor = 'rgba(255,68,68,0.05)';
-                  shadow = '0 0 12px rgba(255,68,68,0.3)';
-                  anim = 'none';
-                } else if (filled) {
-                  borderColor = 'rgba(0,255,65,0.35)';
-                  bgColor = 'rgba(0,255,65,0.04)';
-                  shadow = '0 0 8px rgba(0,255,65,0.15)';
-                  anim = 'none';
-                } else if (isActive) {
-                  borderColor = 'rgba(0,255,65,0.25)';
-                  bgColor = 'rgba(0,255,65,0.02)';
-                }
-
-                return (
-                  <div key={index} style={{
-                    width: '48px',
-                    height: '56px',
-                    backgroundColor: bgColor,
-                    border: `1px solid ${borderColor}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                    transition: 'all 0.15s ease',
-                    animation: anim,
-                    animationDelay: `${index * 0.5}s`,
-                    boxShadow: shadow,
-                  }}>
-                    {/* Corner accents */}
-                    <div style={{
-                      position: 'absolute', top: -1, left: -1,
-                      width: '6px', height: '6px',
-                      borderTop: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
-                      borderLeft: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
-                      transition: 'border-color 0.15s ease',
-                    }} />
-                    <div style={{
-                      position: 'absolute', bottom: -1, right: -1,
-                      width: '6px', height: '6px',
-                      borderBottom: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
-                      borderRight: `1px solid ${filled ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.25)'}`,
-                      transition: 'border-color 0.15s ease',
-                    }} />
-
-                    {/* Digit or cursor */}
-                    {filled ? (
-                      <div style={{
-                        fontFamily: 'Share Tech Mono, monospace',
-                        fontSize: '26px',
-                        color: '#00ff41',
-                        textShadow: '0 0 8px rgba(0,255,65,0.5)',
-                        animation: 'fadeInScale 0.15s ease',
-                      }}>
-                        {pin[index]}
-                      </div>
-                    ) : isActive ? (
-                      <div style={{
-                        width: '2px',
-                        height: '20px',
-                        backgroundColor: '#00ff41',
-                        opacity: 0.6,
-                        animation: 'cursorBlink 1s ease-in-out infinite',
-                      }} />
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Error message */}
-            <div style={{
-              fontFamily: 'Orbitron, monospace',
-              fontSize: '15px',
-              color: '#ff4444',
-              textTransform: 'uppercase',
-              letterSpacing: '2px',
-              textAlign: 'center',
-              opacity: error ? 1 : 0,
-              transform: error ? 'translateY(0)' : 'translateY(-5px)',
-              transition: 'opacity 0.2s ease, transform 0.2s ease',
-              minHeight: '14px',
-              textShadow: error ? '0 0 8px rgba(255,68,68,0.4)' : 'none',
-            }}>
-              {error ? `// ${t('login.access_denied')}` : ''}
-            </div>
-          </div>
-        ) : !success && loginMode === 'email' ? (
+        {/* PIN UI removed — see LoginMode comment at top of file. The
+            entire PIN entry block (digit boxes + auto-submit on 4th digit)
+            was deleted as part of the SSO migration. /api/auth/login still
+            accepts a PIN payload server-side as a backstop in case any
+            client-side caller is still POSTing one. */}
+        {!success && loginMode === 'email' ? (
           <form onSubmit={handleEmailLogin} style={{
             display: 'flex',
             flexDirection: 'column',
@@ -576,7 +458,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Email input */}
             <input
               type="email"
-              placeholder="Email"
+              placeholder={t('login.email_placeholder')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{
@@ -594,7 +476,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Password input */}
             <input
               type="password"
-              placeholder="Password"
+              placeholder={t('login.password_placeholder')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{
@@ -642,7 +524,14 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               {isLoading ? 'LOGGING IN...' : 'LOGIN'}
             </button>
 
-            {/* Register link */}
+            {/* Register link. Behavior gated by REGISTRATION_OPEN flag
+                (src/lib/featureFlags.ts). When the flag is false (closed
+                beta), clicking surfaces the closed-beta explainer modal —
+                same as before. When the flag is true (Pricing v3 era,
+                May 2026), clicking flips loginMode → 'register' so the
+                visitor reaches the existing create-account form below.
+                Server-side /api/auth/register has its own REGISTRATION_OPEN
+                gate; both must be set for sign-up to round-trip. */}
             <div style={{
               fontFamily: 'Orbitron, monospace',
               fontSize: '11px',
@@ -652,10 +541,14 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               <button
                 type="button"
                 onClick={() => {
-                  setLoginMode('register');
-                  setError('');
-                  setEmail('');
-                  setPassword('');
+                  if (REGISTRATION_OPEN) {
+                    setLoginMode('register');
+                    setError('');
+                    setEmail('');
+                    setPassword('');
+                  } else {
+                    setShowRegistrationClosedModal(true);
+                  }
                 }}
                 style={{
                   fontFamily: 'Orbitron, monospace',
@@ -669,6 +562,31 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
               >
                 REGISTER
               </button>
+            </div>
+
+            {/* Recovery escape hatch. Surfaced because Google OAuth on
+                iOS PWA can lose the state cookie between the redirect
+                round-trip, leaving the user stuck on "Sign-in session
+                expired" with no obvious way out. /recover is a
+                magic-link flow that mints a one-time token bound to
+                the email, bypassing both cookies and OAuth state. */}
+            <div style={{
+              fontFamily: 'Orbitron, monospace',
+              fontSize: '11px',
+              color: '#666',
+            }}>
+              Can&apos;t sign in?{' '}
+              <a
+                href="/recover"
+                style={{
+                  fontFamily: 'Orbitron, monospace',
+                  fontSize: '11px',
+                  color: '#00ff41',
+                  textDecoration: 'underline',
+                }}
+              >
+                EMAIL ME A LINK
+              </a>
             </div>
           </form>
         ) : !success && loginMode === 'register' ? (
@@ -686,7 +604,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Name input */}
             <input
               type="text"
-              placeholder="Full Name"
+              placeholder={t('login.fullname_placeholder')}
               value={name}
               onChange={(e) => setName(e.target.value)}
               style={{
@@ -704,7 +622,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Callsign input */}
             <input
               type="text"
-              placeholder="Callsign (UPPERCASE, no spaces)"
+              placeholder={t('login.callsign_placeholder')}
               value={callsign}
               onChange={(e) => setCallsign(e.target.value.toUpperCase())}
               style={{
@@ -722,7 +640,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Email input */}
             <input
               type="email"
-              placeholder="Email"
+              placeholder={t('login.email_placeholder')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{
@@ -740,7 +658,7 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
             {/* Password input */}
             <input
               type="password"
-              placeholder="Password (min 8 chars)"
+              placeholder={t('login.password_min_placeholder')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{
@@ -767,6 +685,23 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
                 {error}
               </div>
             )}
+
+            {/* Language-lock notice. The user's current EN/ES choice
+                (set via the top-right toggle) becomes their locked
+                language at signup. Switching post-signup requires
+                a support request — keeps users from accidentally
+                ping-ponging the app's language. */}
+            <div style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: '10px',
+              color: '#666',
+              textAlign: 'center',
+              lineHeight: 1.5,
+              padding: '4px 0',
+              maxWidth: 280,
+            }}>
+              {t('login.language_lock_hint')}
+            </div>
 
             {/* Register button */}
             <button
@@ -947,6 +882,106 @@ export default function LoginScreen({ onLogin, operators }: LoginScreenProps) {
       {/* Legal Pages Overlays */}
       {showTOS && <TermsOfService onClose={() => setShowTOS(false)} />}
       {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
+
+      {/* Registration-closed modal — closed-beta period.
+          Public registration starts June 2026 per Pricing Strategy v2 §6.
+          Until then, REGISTER buttons surface this explainer instead of
+          opening the create-account form. */}
+      {showRegistrationClosedModal && (
+        <div
+          onClick={() => setShowRegistrationClosedModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: 480,
+              width: '100%',
+              padding: 32,
+              background: '#0a0a0a',
+              border: '2px solid #00ff41',
+              borderRadius: 6,
+              textAlign: 'center',
+              boxShadow: '0 0 60px rgba(0,255,65,0.15)',
+            }}
+          >
+            <div style={{
+              display: 'inline-block',
+              padding: '4px 12px',
+              border: '1px solid #00ff41',
+              color: '#00ff41',
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: 10,
+              letterSpacing: 3,
+              marginBottom: 18,
+              borderRadius: 3,
+            }}>
+              // CLOSED BETA
+            </div>
+            <h2 style={{
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: 22,
+              color: '#fff',
+              letterSpacing: 2,
+              margin: '0 0 14px',
+              fontWeight: 800,
+            }}>
+              REGISTRATION OPENS JUNE 2026
+            </h2>
+            <p style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: 13,
+              color: '#bbb',
+              lineHeight: 1.6,
+              marginBottom: 22,
+            }}>
+              GUNS UP is currently in closed beta with a hand-picked roster of
+              operators. Public registration goes live June 2026. Until then,
+              new accounts are added one-by-one as the founder team approves them.
+            </p>
+            <p style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: 12,
+              color: '#888',
+              lineHeight: 1.6,
+              marginBottom: 22,
+            }}>
+              Already approved? Sign in with the email Ruben gave you.
+              <br />
+              Want in early? Contact Ruben directly.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowRegistrationClosedModal(false)}
+              style={{
+                padding: '10px 24px',
+                background: '#00ff41',
+                color: '#0a0a0a',
+                border: 'none',
+                fontFamily: 'Orbitron, sans-serif',
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: 2,
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                borderRadius: 3,
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes fadeInScale {

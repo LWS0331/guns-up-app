@@ -1,11 +1,63 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Operator, TIER_CONFIGS, AiTier, OPS_CENTER_ACCESS } from '@/lib/types';
 import { getAuthToken } from '@/lib/authClient';
 import Icon from '@/components/Icons';
+import OpsRoadmap from '@/components/OpsRoadmap';
+import CallsignGenerator from '@/components/CallsignGenerator';
 
-type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'MARKETING';
+type OpsTab = 'REVENUE' | 'USERS' | 'PLATFORM' | 'BETA' | 'ONBOARDING' | 'MARKETING' | 'ROADMAP';
+
+// ═══════════════════════════════════════════════════
+// ONBOARDING FORM
+// ═══════════════════════════════════════════════════
+//
+// Mirrors POST /api/admin/create-operator — every field below maps to
+// a body field on that endpoint. The form preset is "14-day COMMANDER
+// trial" which is the OpsCenter default for manually-onboarded clients
+// (Instagram-DM intake → Stripe link sent within 24 hours pattern).
+//
+// Tier picker semantics: TRIAL_COMMANDER_14D enrolls the operator in a
+// 14-day COMMANDER trial. After expiry, /api/auth/me flips trialExpired
+// and AppShell shows the "pick a tier" banner. The four other choices
+// skip the trial and place the operator directly on that tier.
+type OnboardingPreset =
+  | 'TRIAL_COMMANDER_14D'  // default: 14-day COMMANDER trial
+  | 'PAID_OPERATOR'
+  | 'PAID_COMMANDER'
+  | 'PAID_WARFIGHTER'
+  | 'FREE_RECON';
+
+interface OnboardingForm {
+  name: string;
+  email: string;
+  callsign: string;       // optional override; auto-derived if empty
+  trainerId: string;
+  preset: OnboardingPreset;
+  trainerNotes: string;
+}
+
+interface OnboardingResult {
+  id: string;
+  name: string;
+  callsign: string;
+  email: string;
+  tier: string;
+  trainerId: string | null;
+  promoActive: boolean;
+  promoType: string | null;
+  promoExpiry: string | null;
+  trainerNotesLength: number;
+  generatedPassword?: string;
+}
+
+// Hard-gated to the two founder operators ONLY. Even if OPS_CENTER_ACCESS
+// expands to include other admins later (env-configurable), the ROADMAP
+// tab stays scoped to Ruben + Britney. The strategy-doc content is
+// internal financial / hiring / fundraising info — not for general
+// admin consumption.
+const FOUNDER_IDS = ['op-ruben', 'op-britney'] as const;
 
 interface OpsCenterProps {
   currentUser: Operator;
@@ -30,7 +82,21 @@ interface DbMetrics {
       name: string;
       role: string;
       tier: string;
+      // Closed-beta fields — needed for accurate roster rendering
+      // without falling back to the stale `operators` prop.
+      email: string | null;
+      googleId: string | null;
+      tierLocked: boolean;
+      isVanguard: boolean;
+      promoActive: boolean;
+      trainerId: string | null;
       betaUser: boolean;
+      billingStatus: string | null;
+      // Admin kill switch — surfaced so the USERS tab can render
+      // a DISABLED badge + the right action button (DISABLE / ENABLE).
+      disabled?: boolean | null;
+      disabledAt?: string | null;
+      disabledReason?: string | null;
       workoutCount: number;
       mealCount: number;
       prCount: number;
@@ -83,12 +149,72 @@ const MARKETING_PLATFORMS: MarketingPlatform[] = [
   { name: 'LinkedIn', slug: 'linkedin', color: '#0077B5', connected: false, apiEndpoint: null, description: 'Post professional content' },
 ];
 
+/** Feedback entry shape mirrored from /api/beta-feedback. The DB stores a
+ *  String[] of JSON strings, so each `betaFeedback` slot here is the parsed
+ *  form of one of those strings. resolutionNote/resolvedAt/resolvedBy are
+ *  set when an admin updates status to FIXED/WONTFIX (Apr 2026, PR #100). */
+type FeedbackStatus = 'NEW' | 'REVIEWING' | 'FIXED' | 'WONTFIX';
+interface ParsedFeedback {
+  id: string;
+  operatorId: string;
+  callsign: string;
+  type: 'BUG' | 'RECOMMENDATION' | 'UI/UX' | 'PERFORMANCE';
+  category: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  description: string;
+  screenshot?: string;
+  timestamp: string;
+  status: FeedbackStatus;
+  resolutionNote?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+const STATUS_COLOR: Record<FeedbackStatus, string> = {
+  NEW: '#ff4444',
+  REVIEWING: '#ffb800',
+  FIXED: '#00ff41',
+  WONTFIX: '#888',
+};
+
 const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const [activeTab, setActiveTab] = useState<OpsTab>('REVENUE');
   const [metrics, setMetrics] = useState<DbMetrics | null>(null);
+  /** Optimistic overrides for feedback status. Keyed by feedback id; merged
+   *  on top of the operator-prop snapshot until the parent re-fetches. */
+  const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, FeedbackStatus>>({});
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<string>('');
   const [selectedOperatorForPromo, setSelectedOperatorForPromo] = useState<string | null>(null);
+
+  // ═══════════════════════════════════════════════════
+  // ONBOARDING STATE
+  // ═══════════════════════════════════════════════════
+  const [onboardingForm, setOnboardingForm] = useState<OnboardingForm>({
+    name: '',
+    email: '',
+    callsign: '',
+    trainerId: 'op-ruben',
+    preset: 'TRIAL_COMMANDER_14D',
+    trainerNotes: '',
+  });
+  const [onboardingPending, setOnboardingPending] = useState(false);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [onboardingResult, setOnboardingResult] = useState<OnboardingResult | null>(null);
+
+  // ═══════════════════════════════════════════════════
+  // ADMIN ACTIONS — disable / enable / delete
+  // ═══════════════════════════════════════════════════
+  // Tracks the operator currently in delete-confirmation state. The
+  // modal opens when this matches an operator id, and the delete
+  // POST only fires after the admin types the matching callsign.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [adminActionPending, setAdminActionPending] = useState<string | null>(null);
+  const [adminActionError, setAdminActionError] = useState<string | null>(null);
+  // Per-operator recovery link cache. When the admin clicks SEND LINK
+  // we mint a magic-link URL via /api/admin/operator-magic-link and
+  // stash it here so the row can reveal a copy-able URL inline. Cleared
+  // when the admin dismisses the reveal or navigates away.
+  const [recoveryLinkByOp, setRecoveryLinkByOp] = useState<Record<string, string>>({});
 
   // Verify access
   if (!OPS_CENTER_ACCESS.includes(currentUser.id)) {
@@ -99,51 +225,146 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     );
   }
 
+  // Request-token guard. fetchMetrics fires on mount, on visibilitychange
+  // (tab refocus), and on 60s polling. With three trigger sources the
+  // odds of overlapping requests are real — without the guard, a slow
+  // mount-fetch resolving AFTER a fast refocus-fetch would overwrite
+  // fresh metrics with stale ones.
+  const lastFetchRef = useRef(0);
+
   // Fetch real metrics from DB
   const fetchMetrics = async () => {
+    const myReq = ++lastFetchRef.current;
     setMetricsLoading(true);
     try {
       const res = await fetch(`/api/ops?operatorId=${currentUser.id}`, {
         headers: { 'Authorization': `Bearer ${getAuthToken()}` },
       });
+      if (lastFetchRef.current !== myReq) return; // superseded
       if (res.ok) {
         const data = await res.json();
+        if (lastFetchRef.current !== myReq) return;
         setMetrics(data);
         setLastRefresh(new Date().toLocaleTimeString());
       }
     } catch (err) {
+      if (lastFetchRef.current !== myReq) return;
       console.error('[OpsCenter:fetchMetrics] Failed:', err);
     } finally {
-      setMetricsLoading(false);
+      if (lastFetchRef.current === myReq) setMetricsLoading(false);
     }
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchMetrics(); }, []);
 
-  // Use DB metrics when available, fall back to client-side operators array
+  // Auto-refresh sources so the roster is always current:
+  //   - Tab refocus (visibilitychange): catches the case where admin
+  //     creates an operator in a sibling tab/terminal then comes back
+  //   - 60s polling while tab is visible: bounded staleness without
+  //     hammering the API
+  //   - After local mutations (handleTierChange, handleGrantVanguard,
+  //     etc.): wired in each handler below
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchMetrics();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchMetrics();
+      }
+    }, 60_000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Use DB metrics when available, fall back to client-side operators array.
+  //
+  // `displayOperators` is the single source of truth for roster rendering,
+  // KPI counts, tier distribution, and revenue. Prefers /api/ops (which
+  // refetches every 60s + on tab refocus + after each mutation) so a
+  // newly-created operator (e.g. via SQL or /api/admin/create-operator)
+  // appears within one polling cycle without requiring a page reload.
   const opStats = metrics?.operators.operatorStats || [];
-  const trainers = metrics ? opStats.filter(op => op.role === 'trainer') : operators.filter(op => op.role === 'trainer');
-  const clients = metrics ? opStats.filter(op => op.role === 'client') : operators.filter(op => op.role === 'client');
+  type DisplayOp = {
+    id: string; callsign: string; name: string; role: string; tier: string;
+    email?: string | null; tierLocked?: boolean; isVanguard?: boolean;
+    betaUser?: boolean; trainerId?: string | null; promoActive?: boolean;
+    googleId?: string | null;
+    /**
+     * Stripe billing status from operator.billing.status. Only 'active'
+     * counts as paying revenue. NULL / 'beta' / 'cancelled' / 'past_due'
+     * all evaluate to non-paying. Source of truth for the Revenue tab.
+     */
+    billingStatus?: string | null;
+    /** Admin kill switch — drives the DISABLE / ENABLE button toggle in
+     *  the USERS tab. */
+    disabled?: boolean | null;
+    disabledAt?: string | null;
+    disabledReason?: string | null;
+  };
+  const displayOperators: DisplayOp[] = opStats.length > 0
+    ? opStats
+    : operators as unknown as DisplayOp[];
+  const trainers = displayOperators.filter(op => op.role === 'trainer');
+  const clients = displayOperators.filter(op => op.role === 'client');
   const chatsByOperator = metrics?.chatsByOperator || {};
 
   // ═══════════════════════════════════════
-  // REVENUE CALCULATIONS (always from operators + TIER_CONFIGS)
+  // REVENUE CALCULATIONS (DB-fresh via displayOperators + TIER_CONFIGS)
+  //
+  // Paying status is gated on a positive Stripe signal:
+  // billing.status === 'active'. The previous version inferred PAID
+  // by the absence of exemption flags (no betaUser / no vanguard / no
+  // promo → PAID) which let any operator missing all three flags
+  // through, even when there was no Stripe subscription. Closed beta
+  // had several operators that didn't have betaUser=true set yet but
+  // weren't paying either — those rows showed up as PAID.
+  //
+  // The forecast endpoint at /api/financials/forecast already uses
+  // billing.status === 'active' as the gate — this brings the Revenue
+  // tab in line with that single source of truth.
+  //
+  // Why split paid vs total:
+  //   - MRR / ARR / Trainer Payout / Platform Revenue / Stripe Fees
+  //     come from money the platform actually receives → paid count.
+  //   - API Cost / Infra Cost hit on usage regardless of payment
+  //     status (we still pay Anthropic when a beta user chats with
+  //     Gunny) → total count.
   // ═══════════════════════════════════════
+  const isPayingClient = (op: DisplayOp): boolean => {
+    if (op.role !== 'client') return false;
+    return op.billingStatus === 'active';
+  };
+
   const revenueByTier = (Object.keys(TIER_CONFIGS) as AiTier[]).reduce((acc, tier) => {
-    const count = operators.filter(c => c.role === 'client' && c.tier === tier).length;
+    const allOnTier = displayOperators.filter(c => c.role === 'client' && c.tier === tier);
+    const paidOnTier = allOnTier.filter(isPayingClient);
+    const totalCount = allOnTier.length;
+    const paidCount = paidOnTier.length;
     const config = TIER_CONFIGS[tier];
     acc[tier] = {
-      count,
-      mrr: count * config.monthlyPrice,
-      trainerPayout: count * config.trainerShare,
-      platformRevenue: count * config.platformShare,
-      apiCost: count * config.apiCostEstimate,
-      stripeFees: count * config.stripeFee,
-      infraCost: count * config.infraCost,
+      count: totalCount,
+      paidCount,
+      // Revenue lines: paid only.
+      mrr: paidCount * config.monthlyPrice,
+      trainerPayout: paidCount * config.trainerShare,
+      platformRevenue: paidCount * config.platformShare,
+      stripeFees: paidCount * config.stripeFee,
+      // Cost lines: every user hits the API, infra scales with totals.
+      apiCost: totalCount * config.apiCostEstimate,
+      infraCost: totalCount * config.infraCost,
     };
     return acc;
-  }, {} as Record<AiTier, { count: number; mrr: number; trainerPayout: number; platformRevenue: number; apiCost: number; stripeFees: number; infraCost: number }>);
+  }, {} as Record<AiTier, { count: number; paidCount: number; mrr: number; trainerPayout: number; platformRevenue: number; apiCost: number; stripeFees: number; infraCost: number }>);
 
   const totalMRR = Object.values(revenueByTier).reduce((sum, t) => sum + t.mrr, 0);
   const totalTrainerPayout = Object.values(revenueByTier).reduce((sum, t) => sum + t.trainerPayout, 0);
@@ -153,6 +374,8 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   const totalInfraCost = Object.values(revenueByTier).reduce((sum, t) => sum + t.infraCost, 0);
   const totalARR = totalMRR * 12;
   const netProfit = totalPlatformRevenue - totalApiCost - totalStripeFees - totalInfraCost;
+  const paidClientCount = clients.filter(isPayingClient).length;
+  const betaClientCount = clients.filter(c => c.betaUser && !c.tierLocked).length;
 
   // ═══════════════════════════════════════
   // LIVE DATA BADGE
@@ -187,20 +410,20 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     </div>
   );
 
-  // Handle tier change
+  // Handle tier change. Slim PATCH-style body — only the tier field.
+  // The /api/operators/:id PUT handler uses pickFields to whitelist
+  // updatable columns by role, so sending only `{tier}` is the safe
+  // and correct way to change one column without risking accidental
+  // overwrite of stale spread fields.
   const handleTierChange = async (operatorId: string, newTier: AiTier) => {
     try {
-      const op = operators.find(o => o.id === operatorId);
-      if (!op) return;
-
-      const updated = { ...op, tier: newTier };
       const res = await fetch(`/api/operators/${operatorId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
-        body: JSON.stringify(updated),
+        body: JSON.stringify({ tier: newTier }),
       });
       if (res.ok) {
         fetchMetrics();
@@ -210,26 +433,50 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
-  // Handle activate beta
+  // Per-row tier-lock toggle. handleLockAllTiers (below) bulk-locked
+  // everyone for the closed-beta freeze, but there was no per-row way
+  // to UNLOCK a single operator without going to curl. Without this,
+  // upgrading or downgrading any post-bulk-lock operator from the OPS
+  // tab is impossible — the tier dropdown is hidden when tierLocked is
+  // true. Same slim PATCH shape as handleTierChange.
+  const handleToggleTierLock = async (operatorId: string, nextLocked: boolean) => {
+    try {
+      const res = await fetch(`/api/operators/${operatorId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ tierLocked: nextLocked }),
+      });
+      if (res.ok) {
+        fetchMetrics();
+      }
+    } catch (err) {
+      console.error('[OpsCenter:handleToggleTierLock] Failed:', err);
+    }
+  };
+
+  // Handle activate beta — slim PATCH per operator. Reads from
+  // displayOperators (DB-fresh) so newly-created operators get the
+  // beta flag too.
   const handleActivateBeta = async () => {
     try {
       const today = new Date();
       const betaEnd = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000);
-
-      for (const op of operators.filter(o => o.role !== 'trainer')) {
-        const updated = {
-          ...op,
-          betaUser: true,
-          betaStartDate: today.toISOString().split('T')[0],
-          betaEndDate: betaEnd.toISOString().split('T')[0],
-        };
+      const patch = {
+        betaUser: true,
+        betaStartDate: today.toISOString().split('T')[0],
+        betaEndDate: betaEnd.toISOString().split('T')[0],
+      };
+      for (const op of displayOperators.filter(o => o.role !== 'trainer')) {
         await fetch(`/api/operators/${op.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${getAuthToken()}`,
           },
-          body: JSON.stringify(updated),
+          body: JSON.stringify(patch),
         });
       }
       fetchMetrics();
@@ -238,18 +485,17 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
-  // Handle lock all tiers
+  // Handle lock all tiers — slim PATCH.
   const handleLockAllTiers = async () => {
     try {
-      for (const op of operators) {
-        const updated = { ...op, tierLocked: true };
+      for (const op of displayOperators) {
         await fetch(`/api/operators/${op.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${getAuthToken()}`,
           },
-          body: JSON.stringify(updated),
+          body: JSON.stringify({ tierLocked: true }),
         });
       }
       fetchMetrics();
@@ -258,20 +504,16 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     }
   };
 
-  // Handle grant vanguard
+  // Handle grant vanguard — slim PATCH.
   const handleGrantVanguard = async (operatorId: string) => {
     try {
-      const op = operators.find(o => o.id === operatorId);
-      if (!op) return;
-
-      const updated = { ...op, isVanguard: true };
       await fetch(`/api/operators/${operatorId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
-        body: JSON.stringify(updated),
+        body: JSON.stringify({ isVanguard: true }),
       });
       fetchMetrics();
     } catch (err) {
@@ -336,6 +578,227 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   };
 
   // ═══════════════════════════════════════
+  // ONBOARDING — submit handler
+  // ═══════════════════════════════════════
+  //
+  // Translates the form preset into the body shape /api/admin/create-operator
+  // expects:
+  //   TRIAL_COMMANDER_14D → { trialDays: 14, trialTier: 'opus' }
+  //   PAID_OPERATOR       → { tier: 'sonnet' }
+  //   PAID_COMMANDER      → { tier: 'opus' }
+  //   PAID_WARFIGHTER     → { tier: 'white_glove' }
+  //   FREE_RECON          → { tier: 'haiku' }
+  //
+  // The endpoint accepts our session cookie (OPS_CENTER_ACCESS gate)
+  // so we don't need to prompt for ADMIN_SECRET. On success we leave
+  // the result on screen with a copy-paste IG-DM template; on failure
+  // the full reason from the API surfaces in the error pill so admins
+  // can self-correct (callsign collision, invalid email, etc.).
+  const handleOnboardingSubmit = async () => {
+    setOnboardingError(null);
+    setOnboardingResult(null);
+
+    if (!onboardingForm.name.trim()) {
+      setOnboardingError('Name is required');
+      return;
+    }
+    if (!onboardingForm.email.trim()) {
+      setOnboardingError('Email is required');
+      return;
+    }
+
+    // Build the request body from the preset.
+    type OnboardingBody = {
+      name: string;
+      email: string;
+      callsign?: string;
+      trainerId?: string;
+      tier?: 'haiku' | 'sonnet' | 'opus' | 'white_glove';
+      trialDays?: number;
+      trialTier?: 'sonnet' | 'opus' | 'white_glove';
+      trainerNotes?: string;
+    };
+    const body: OnboardingBody = {
+      name: onboardingForm.name.trim(),
+      email: onboardingForm.email.trim(),
+    };
+    if (onboardingForm.callsign.trim()) {
+      body.callsign = onboardingForm.callsign.trim().toUpperCase();
+    }
+    if (onboardingForm.trainerId) {
+      body.trainerId = onboardingForm.trainerId;
+    }
+    if (onboardingForm.trainerNotes.trim()) {
+      body.trainerNotes = onboardingForm.trainerNotes;
+    }
+    switch (onboardingForm.preset) {
+      case 'TRIAL_COMMANDER_14D':
+        body.trialDays = 14;
+        body.trialTier = 'opus';
+        break;
+      case 'PAID_OPERATOR':
+        body.tier = 'sonnet';
+        break;
+      case 'PAID_COMMANDER':
+        body.tier = 'opus';
+        break;
+      case 'PAID_WARFIGHTER':
+        body.tier = 'white_glove';
+        break;
+      case 'FREE_RECON':
+        body.tier = 'haiku';
+        break;
+    }
+
+    setOnboardingPending(true);
+    try {
+      const res = await fetch('/api/admin/create-operator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        // Surface the API's reason verbatim — it's already specific
+        // (e.g. "email collision: already owned by op-xyz").
+        setOnboardingError(
+          data?.reason || data?.error || `HTTP ${res.status}`,
+        );
+        return;
+      }
+      setOnboardingResult({
+        ...data.operator,
+        generatedPassword: data.generatedPassword,
+      });
+      // Clear name/email so a follow-up onboard doesn't double-write
+      // the same operator. Keep trainerId + preset selections.
+      setOnboardingForm((f) => ({
+        ...f,
+        name: '',
+        email: '',
+        callsign: '',
+        trainerNotes: '',
+      }));
+      // Refresh the roster so the new operator appears in USERS tab.
+      fetchMetrics();
+    } catch (err) {
+      console.error('[OpsCenter:onboarding] failed', err);
+      setOnboardingError('Network error — see console');
+    } finally {
+      setOnboardingPending(false);
+    }
+  };
+
+  // ═══════════════════════════════════════
+  // ADMIN ACTION HANDLERS — disable / enable / delete
+  // ═══════════════════════════════════════
+  //
+  // Both endpoints accept session auth (OPS_CENTER_ACCESS) so we just
+  // pass the standard Bearer token. The /api/ops fetch refresh after a
+  // successful action keeps the roster in sync (the row's `disabled`
+  // flips immediately, or the row vanishes for delete).
+  const handleSetOperatorStatus = async (operatorId: string, action: 'disable' | 'enable') => {
+    setAdminActionError(null);
+    setAdminActionPending(operatorId);
+    try {
+      const res = await fetch('/api/admin/operator-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ operatorId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setAdminActionError(data?.reason || data?.error || `HTTP ${res.status}`);
+        return;
+      }
+      fetchMetrics();
+    } catch (err) {
+      console.error('[OpsCenter:operator-status] failed', err);
+      setAdminActionError('Network error — see console');
+    } finally {
+      setAdminActionPending(null);
+    }
+  };
+
+  // Generate a one-shot recovery link for an operator. Email isn't
+  // wired in production yet (EMAIL_PROVIDER=console), so the admin
+  // can't expect the user to receive an automated email. Instead, the
+  // OPS button mints a magic-link URL, returns it inline, and the
+  // admin pastes it into Slack/SMS/DM. URL is good for 7 days; one
+  // tap signs the operator in and bounces them home.
+  const handleGenerateRecoveryLink = async (operatorId: string) => {
+    setAdminActionError(null);
+    setAdminActionPending(operatorId);
+    try {
+      const res = await fetch('/api/admin/operator-magic-link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ operatorId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok || !data?.url) {
+        setAdminActionError(data?.error || `HTTP ${res.status}`);
+        return;
+      }
+      setRecoveryLinkByOp((prev) => ({ ...prev, [operatorId]: data.url }));
+    } catch (err) {
+      console.error('[OpsCenter:operator-magic-link] failed', err);
+      setAdminActionError('Network error — see console');
+    } finally {
+      setAdminActionPending(null);
+    }
+  };
+
+  const handleDismissRecoveryLink = (operatorId: string) => {
+    setRecoveryLinkByOp((prev) => {
+      const copy = { ...prev };
+      delete copy[operatorId];
+      return copy;
+    });
+  };
+
+  // Delete handler — only fires AFTER the admin typed the matching
+  // callsign. The endpoint enforces the same check server-side, so
+  // even if the modal is bypassed somehow the row stays safe.
+  const handleDeleteOperator = async (operatorId: string, confirmCallsign: string) => {
+    setAdminActionError(null);
+    setAdminActionPending(operatorId);
+    try {
+      const res = await fetch('/api/admin/delete-operator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ operatorId, confirmCallsign }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setAdminActionError(data?.reason || data?.error || `HTTP ${res.status}`);
+        return;
+      }
+      // Success — close the modal, reset confirmation text, refresh roster.
+      setPendingDeleteId(null);
+      setDeleteConfirmText('');
+      fetchMetrics();
+    } catch (err) {
+      console.error('[OpsCenter:delete-operator] failed', err);
+      setAdminActionError('Network error — see console');
+    } finally {
+      setAdminActionPending(null);
+    }
+  };
+
+  // ═══════════════════════════════════════
   // RENDER FUNCTIONS
   // ═══════════════════════════════════════
   const renderRevenue = () => {
@@ -346,13 +809,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       const estTokens = messages * 500;
       const estCost = (estTokens / 1000000) * 3;
 
-      let status = 'PAID';
-      if (op.betaUser && !op.tierLocked) {
+      // Status priority — only PAID when Stripe says so. Everything
+      // else falls through the descriptive flags. NOT ACTIVE is the
+      // catch-all for operators sitting in the DB without a billing
+      // status and without any of the exemption flags set yet.
+      const opAsDisplay = op as unknown as DisplayOp;
+      let status: 'PAID' | 'BETA FREE' | 'VANGUARD' | 'PROMO' | 'NOT ACTIVE';
+      if (opAsDisplay.billingStatus === 'active') {
+        status = 'PAID';
+      } else if (op.betaUser && !op.tierLocked) {
         status = 'BETA FREE';
       } else if (op.isVanguard) {
         status = 'VANGUARD';
       } else if (op.promoActive) {
         status = 'PROMO';
+      } else {
+        status = 'NOT ACTIVE';
       }
 
       return {
@@ -370,12 +842,19 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     return (
       <div style={{ padding: '20px' }}>
         <LiveBadge />
-        {/* Top-level KPIs */}
+        {/* Top-level KPIs.
+            MRR / ARR / Trainer Payout count PAID clients only — beta,
+            vanguard, and promo accounts are exempted. PAID CLIENTS is
+            shown alongside TOTAL CLIENTS so the gap is obvious at a
+            glance: if the cohort is 17 total / 0 paid, MRR is correctly
+            $0 instead of an inflated tier-mix theoretical. */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="MRR" value={`$${totalMRR.toFixed(2)}`} color="#00ff41" />
-          <KPICard label="ARR" value={`$${totalARR.toFixed(2)}`} color="#00ff41" />
+          <KPICard label="MRR (PAID)" value={`$${totalMRR.toFixed(2)}`} color={totalMRR > 0 ? '#00ff41' : '#555'} />
+          <KPICard label="ARR (PAID)" value={`$${totalARR.toFixed(2)}`} color={totalARR > 0 ? '#00ff41' : '#555'} />
           <KPICard label="NET PROFIT/MO" value={`$${netProfit.toFixed(2)}`} color={netProfit > 0 ? '#00ff41' : '#ff4444'} />
           <KPICard label="TOTAL CLIENTS" value={String(clients.length)} color="#00ff41" />
+          <KPICard label="PAID CLIENTS" value={`${paidClientCount} / ${clients.length}`} color={paidClientCount > 0 ? '#00ff41' : '#888'} />
+          <KPICard label="BETA (FREE)" value={String(betaClientCount)} color="#ff00ff" />
           <KPICard label="TRAINER PAYOUT" value={`$${totalTrainerPayout.toFixed(2)}/mo`} color="#ffb800" />
           <KPICard label="API COST" value={`$${totalApiCost.toFixed(2)}/mo`} color="#ff4444" />
         </div>
@@ -386,7 +865,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
-                {['TIER', 'USERS', 'PRICE', 'MRR', 'TRAINER $', 'PLATFORM $', 'API COST', 'STRIPE', 'MARGIN'].map(h => (
+                {['TIER', 'USERS', 'PAID', 'PRICE', 'MRR', 'TRAINER $', 'PLATFORM $', 'API COST', 'STRIPE', 'MARGIN'].map(h => (
                   <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
                 ))}
               </tr>
@@ -396,17 +875,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                 const config = TIER_CONFIGS[tier];
                 const data = revenueByTier[tier];
                 const margin = data.mrr > 0 ? ((data.platformRevenue - data.apiCost - data.stripeFees - data.infraCost) / data.mrr * 100) : 0;
+                // Dim the all-zero rows so the eye lands on whichever tier
+                // has actual paid users (none today, but ready for when
+                // beta lifts).
+                const dim = data.paidCount === 0;
                 return (
-                  <tr key={tier} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <tr key={tier} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: dim ? 0.6 : 1 }}>
                     <td style={{ padding: '10px 8px', color: tierColor(tier), fontWeight: 700 }}>{config.codename}</td>
                     <td style={{ padding: '10px 8px', color: '#ddd' }}>{data.count}</td>
+                    <td style={{ padding: '10px 8px', color: data.paidCount > 0 ? '#00ff41' : '#555' }}>{data.paidCount}</td>
                     <td style={{ padding: '10px 8px', color: '#888' }}>${config.monthlyPrice}</td>
-                    <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.mrr.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#ffb800' }}>${data.trainerPayout.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#00ff41' }}>${data.platformRevenue.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: '#ff4444' }}>${data.apiCost.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.mrr > 0 ? '#00ff41' : '#555' }}>${data.mrr.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.trainerPayout > 0 ? '#ffb800' : '#555' }}>${data.trainerPayout.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.platformRevenue > 0 ? '#00ff41' : '#555' }}>${data.platformRevenue.toFixed(2)}</td>
+                    <td style={{ padding: '10px 8px', color: data.apiCost > 0 ? '#ff4444' : '#555' }}>${data.apiCost.toFixed(2)}</td>
                     <td style={{ padding: '10px 8px', color: '#888' }}>${data.stripeFees.toFixed(2)}</td>
-                    <td style={{ padding: '10px 8px', color: margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{margin.toFixed(1)}%</td>
+                    <td style={{ padding: '10px 8px', color: data.mrr === 0 ? '#555' : margin > 50 ? '#00ff41' : margin > 30 ? '#ffb800' : '#ff4444' }}>{data.mrr === 0 ? '—' : `${margin.toFixed(1)}%`}</td>
                   </tr>
                 );
               })}
@@ -434,18 +918,36 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                   <td style={{ padding: '10px 8px', color: '#888' }}>{row.messages}</td>
                   <td style={{ padding: '10px 8px', color: '#00ff41' }}>{row.estTokens.toLocaleString()}</td>
                   <td style={{ padding: '10px 8px', color: row.estCost > 10 ? '#ff4444' : '#00ff41' }}>${row.estCost.toFixed(2)}</td>
-                  <td style={{ padding: '10px 8px', color: row.status === 'VANGUARD' ? '#ff00ff' : row.status === 'BETA FREE' ? '#00ff41' : row.status === 'PROMO' ? '#ffb800' : '#888' }}>{row.status}</td>
+                  <td style={{
+                    padding: '10px 8px',
+                    color:
+                      row.status === 'PAID'       ? '#00ff41' :
+                      row.status === 'VANGUARD'   ? '#ff00ff' :
+                      row.status === 'BETA FREE'  ? '#00ff41' :
+                      row.status === 'PROMO'      ? '#ffb800' :
+                      row.status === 'NOT ACTIVE' ? '#ff4444' :
+                      '#888',
+                  }}>{row.status}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Trainer Revenue Breakdown */}
+        {/* Trainer Revenue Breakdown — DB-fresh via displayOperators
+            (the previous version used the stale `operators` prop, so a
+            newly-assigned client wouldn't show in the trainer's row
+            until the parent re-fetched). Only PAID clients contribute
+            to trainerMRR; the chip shows "X clients (Y paid)" so the
+            gap between cohort size and active payout is visible. */}
         <SectionHeader title="TRAINER PAYOUT BREAKDOWN" />
-        {operators.filter(op => op.role === 'trainer').map(trainer => {
-          const trainerClients = operators.filter(op => op.trainerId === trainer.id);
-          const trainerMRR = trainerClients.reduce((sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0), 0);
+        {displayOperators.filter(op => op.role === 'trainer').map(trainer => {
+          const trainerClients = displayOperators.filter(op => op.trainerId === trainer.id);
+          const paidTrainerClients = trainerClients.filter(isPayingClient);
+          const trainerMRR = paidTrainerClients.reduce(
+            (sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.trainerShare || 0),
+            0,
+          );
           return (
             <div key={trainer.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -453,30 +955,72 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
             }}>
               <div>
                 <span style={{ color: '#ddd', fontFamily: '"Chakra Petch", sans-serif', fontSize: '14px' }}>{trainer.callsign}</span>
-                <span style={{ color: '#555', fontSize: '12px', marginLeft: '8px' }}>({trainerClients.length} clients)</span>
+                <span style={{ color: '#555', fontSize: '12px', marginLeft: '8px' }}>
+                  ({trainerClients.length} clients · {paidTrainerClients.length} paid)
+                </span>
               </div>
-              <span style={{ color: '#ffb800', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px' }}>${trainerMRR.toFixed(2)}/mo</span>
+              <span style={{ color: trainerMRR > 0 ? '#ffb800' : '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px' }}>
+                ${trainerMRR.toFixed(2)}/mo
+              </span>
             </div>
           );
         })}
 
-        {/* Projections */}
-        <SectionHeader title="GROWTH PROJECTIONS" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          {[25, 50, 100, 250, 500].map(count => {
-            const avgRevPerUser = clients.length > 0 ? totalMRR / clients.length : 5;
-            const projected = count * avgRevPerUser;
-            return (
-              <div key={count} style={{
-                padding: '12px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)',
+        {/* Projections.
+            Two ARPU sources, picked by data availability:
+              1. ACTUAL ARPU = totalMRR / paidClientCount.
+                 Used once we have any paid users — that's our real
+                 conversion picture.
+              2. THEORETICAL ARPU = sum(monthlyPrice for current tier
+                 mix) / clients.length.
+                 Used during closed beta when paidClientCount is 0.
+                 Answers: "if every current operator converted to paid
+                 at their assigned tier, what would the cohort look
+                 like?" — useful for sizing pricing decisions.
+            The header label tells you which one is feeding the math
+            so the projections aren't read as a forecast they're not. */}
+        {(() => {
+          const actualARPU = paidClientCount > 0 ? totalMRR / paidClientCount : 0;
+          const theoreticalARPU = clients.length > 0
+            ? clients.reduce(
+                (sum, c) => sum + (TIER_CONFIGS[c.tier as AiTier]?.monthlyPrice || 0),
+                0,
+              ) / clients.length
+            : 0;
+          const projectionARPU = actualARPU > 0 ? actualARPU : theoreticalARPU;
+          const arpuSource = actualARPU > 0
+            ? `ACTUAL ARPU $${actualARPU.toFixed(2)} (paid clients)`
+            : `THEORETICAL ARPU $${theoreticalARPU.toFixed(2)} (current tier mix at full price)`;
+          return (
+            <>
+              <SectionHeader title="GROWTH PROJECTIONS" />
+              <div style={{
+                fontFamily: '"Share Tech Mono", monospace',
+                fontSize: '11px',
+                color: '#666',
+                marginBottom: '8px',
+                letterSpacing: '0.5px',
               }}>
-                <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{count} USERS</div>
-                <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700 }}>${projected.toFixed(0)}/mo</div>
-                <div style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>${(projected * 12).toFixed(0)}/yr</div>
+                {arpuSource}
+                {actualARPU === 0 && ' — assumes 100% conversion if beta lifted today'}
               </div>
-            );
-          })}
-        </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                {[25, 50, 100, 250, 500].map(count => {
+                  const projected = count * projectionARPU;
+                  return (
+                    <div key={count} style={{
+                      padding: '12px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.06)',
+                    }}>
+                      <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>{count} USERS</div>
+                      <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '18px', fontWeight: 700 }}>${projected.toFixed(0)}/mo</div>
+                      <div style={{ color: '#333', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px' }}>${(projected * 12).toFixed(0)}/yr</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </div>
     );
   };
@@ -523,22 +1067,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           </button>
         </div>
 
-        {/* User KPIs — real from DB */}
+        {/* User KPIs — DB-fresh via displayOperators */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-          <KPICard label="TOTAL OPERATORS" value={String(dbStats?.total ?? operators.length)} color="#00ff41" />
+          <KPICard label="TOTAL OPERATORS" value={String(dbStats?.total ?? displayOperators.length)} color="#00ff41" />
           <KPICard label="TRAINERS" value={String(dbStats?.trainers ?? trainers.length)} color="#ffb800" />
           <KPICard label="CLIENTS" value={String(dbStats?.clients ?? clients.length)} color="#00ff41" />
           <KPICard label="ACTIVE (7D)" value={String(dbStats?.active7d ?? 0)} color={dbStats?.active7d ? '#00ff41' : '#ff4444'} />
-          <KPICard label="BETA USERS" value={String(dbStats?.beta ?? 0)} color="#ff00ff" />
-          <KPICard label="PROFILE DONE" value={`${dbStats?.profileComplete ?? 0}/${dbStats?.total ?? operators.length}`} color="#00ff41" />
+          <KPICard label="BETA USERS" value={String(dbStats?.beta ?? displayOperators.filter(o => o.betaUser).length)} color="#ff00ff" />
+          <KPICard label="ACTIVATED" value={`${displayOperators.filter(o => !!o.email).length}/${dbStats?.total ?? displayOperators.length}`} color="#00ff41" />
         </div>
 
         {/* Tier Distribution */}
         <SectionHeader title="TIER DISTRIBUTION" />
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
           {(Object.keys(TIER_CONFIGS) as AiTier[]).map(tier => {
-            const count = (opStats.length > 0 ? opStats : operators).filter((op: { tier?: string }) => op.tier === tier).length;
-            const total = dbStats?.total ?? operators.length;
+            const count = displayOperators.filter(op => op.tier === tier).length;
+            const total = dbStats?.total ?? displayOperators.length;
             const pct = total > 0 ? Math.round(count / total * 100) : 0;
             return (
               <div key={tier} style={{ padding: '12px 16px', background: 'rgba(0,0,0,0.3)', border: `1px solid ${tierColor(tier)}20`, flex: '1 1 120px' }}>
@@ -556,29 +1100,43 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
           })}
         </div>
 
-        {/* Roster with Tier Management */}
+        {/* Roster with Tier Management — DB-fresh via displayOperators.
+            Auto-refreshes every 60s + on tab refocus + after each
+            mutation. EMAIL column doubles as the activation indicator
+            for the closed-beta allowlist (NULL = locked out). GOOGLE
+            shows whether the operator has linked their Google account
+            for OAuth sign-in. */}
         <SectionHeader title="OPERATOR ROSTER" />
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Share Tech Mono", monospace', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
-                {['CALLSIGN', 'NAME', 'ROLE', 'TIER', 'LOCKED', 'ACTIONS'].map(h => (
+                {['CALLSIGN', 'NAME', 'ROLE', 'EMAIL', 'GOOGLE', 'TIER', 'LOCKED', 'ACTIONS'].map(h => (
                   <th key={h} style={{ padding: '10px 8px', color: '#555', textAlign: 'left', fontSize: '11px', letterSpacing: '1px' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {operators.map(op => (
+              {displayOperators.map(op => (
                 <tr key={op.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                   <td style={{ padding: '10px 8px', color: '#ddd', fontWeight: 600 }}>{op.callsign}</td>
                   <td style={{ padding: '10px 8px', color: '#888' }}>{op.name || '—'}</td>
                   <td style={{ padding: '10px 8px', color: '#888' }}>{op.role}</td>
+                  <td style={{ padding: '10px 8px', color: op.email ? '#aaa' : '#ff4444', fontSize: 11 }}>
+                    {op.email || '— LOCKED'}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', color: op.googleId ? '#00ff41' : '#444', fontSize: 14 }}>
+                    {op.googleId ? '✓' : '·'}
+                  </td>
                   <td style={{ padding: '10px 8px' }}>
-                    {op.tierLocked ? (
-                      <span style={{ color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <Icon.Lock size={11} /> {op.tier}
-                      </span>
-                    ) : (
+                    {/* Admins editing in OPS always get the dropdown — the
+                        tierLocked flag is a self-edit guard, not an admin
+                        guard, and hiding the dropdown here meant no UI
+                        path existed to upgrade/downgrade a tier-locked
+                        operator. The lock-state toggle lives next to the
+                        dropdown so admins can flip lock + change tier in
+                        the same row without a separate trip. */}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <select
                         value={op.tier}
                         onChange={(e) => handleTierChange(op.id, e.target.value as AiTier)}
@@ -592,23 +1150,189 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                           <option key={tier} value={tier}>{TIER_CONFIGS[tier].codename}</option>
                         ))}
                       </select>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTierLock(op.id, !op.tierLocked)}
+                        title={op.tierLocked ? 'Unlock tier (admin override)' : 'Lock tier'}
+                        aria-label={op.tierLocked ? 'Unlock tier' : 'Lock tier'}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          padding: '3px 5px',
+                          fontSize: '10px',
+                          fontFamily: '"Share Tech Mono", monospace',
+                          color: op.tierLocked ? '#ffb800' : 'var(--text-tertiary)',
+                          background: op.tierLocked ? 'rgba(255,184,0,0.08)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${op.tierLocked ? 'rgba(255,184,0,0.25)' : 'rgba(255,255,255,0.08)'}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Icon.Lock size={11} />
+                      </button>
+                    </div>
                   </td>
                   <td style={{ padding: '10px 8px', color: op.tierLocked ? '#ffb800' : '#555' }}>
                     {op.tierLocked ? 'YES' : 'NO'}
                   </td>
                   <td style={{ padding: '10px 8px' }}>
-                    {op.betaUser && !op.isVanguard && (
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {op.betaUser && !op.isVanguard && (
+                        <button
+                          onClick={() => handleGrantVanguard(op.id)}
+                          disabled={adminActionPending === op.id}
+                          style={{
+                            padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                            color: '#ff00ff', background: 'rgba(255,0,255,0.08)', border: '1px solid rgba(255,0,255,0.2)',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          VANGUARD
+                        </button>
+                      )}
+                      {/* Disable / Enable. The admin's own row gets neither
+                          (server-side guard rejects self-disable, but we
+                          hide the button too so it's not confusing). The
+                          two co-founders can still disable each other. */}
+                      {op.id !== currentUser.id && (
+                        op.disabled ? (
+                          <button
+                            onClick={() => handleSetOperatorStatus(op.id, 'enable')}
+                            disabled={adminActionPending === op.id}
+                            title={op.disabledReason || ''}
+                            style={{
+                              padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                              color: '#00ff41', background: 'rgba(0,255,65,0.08)', border: '1px solid rgba(0,255,65,0.20)',
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {adminActionPending === op.id ? '…' : 'ENABLE'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleSetOperatorStatus(op.id, 'disable')}
+                            disabled={adminActionPending === op.id}
+                            style={{
+                              padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                              color: '#ffb800', background: 'rgba(255,184,0,0.08)', border: '1px solid rgba(255,184,0,0.20)',
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {adminActionPending === op.id ? '…' : 'DISABLE'}
+                          </button>
+                        )
+                      )}
+                      {/* SEND LINK — mints a one-shot magic-link URL the
+                          admin can DM/SMS to the operator so they can
+                          unlock themselves without admin running curl.
+                          The URL renders inline below this row when
+                          generated; admin clicks again to refresh. */}
                       <button
-                        onClick={() => handleGrantVanguard(op.id)}
+                        onClick={() => handleGenerateRecoveryLink(op.id)}
+                        disabled={adminActionPending === op.id}
+                        title="Mint a magic-link URL to share with this operator"
                         style={{
                           padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
-                          color: '#ff00ff', background: 'rgba(255,0,255,0.08)', border: '1px solid rgba(255,0,255,0.2)',
+                          color: '#22d3ee', background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)',
                           cursor: 'pointer', whiteSpace: 'nowrap',
                         }}
                       >
-                        VANGUARD
+                        {adminActionPending === op.id ? '…' : (recoveryLinkByOp[op.id] ? 'NEW LINK' : 'SEND LINK')}
                       </button>
+                      {/* Delete — opens the confirmation modal. Hidden for
+                          the current admin (server also rejects). Founders
+                          aren't blocked client-side because the static seed
+                          will resurrect them on next /api/seed run. */}
+                      {op.id !== currentUser.id && (
+                        <button
+                          onClick={() => {
+                            setPendingDeleteId(op.id);
+                            setDeleteConfirmText('');
+                            setAdminActionError(null);
+                          }}
+                          disabled={adminActionPending === op.id}
+                          style={{
+                            padding: '2px 8px', fontSize: '10px', fontFamily: '"Share Tech Mono", monospace',
+                            color: '#ff4444', background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.20)',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          DELETE
+                        </button>
+                      )}
+                      {op.disabled && (
+                        <span style={{
+                          padding: '2px 6px', fontSize: '9px', fontFamily: '"Share Tech Mono", monospace',
+                          color: '#888', background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          letterSpacing: '1px',
+                        }}>
+                          DISABLED
+                        </span>
+                      )}
+                    </div>
+                    {/* Recovery-link reveal. URL is selectable + copy-on-
+                        click; dismiss button clears the cache so the row
+                        collapses back to its normal height. */}
+                    {recoveryLinkByOp[op.id] && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          padding: '6px 8px',
+                          fontSize: '10px',
+                          fontFamily: '"Share Tech Mono", monospace',
+                          background: 'rgba(34,211,238,0.06)',
+                          border: '1px solid rgba(34,211,238,0.18)',
+                          color: '#22d3ee',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <input
+                          type="text"
+                          readOnly
+                          value={recoveryLinkByOp[op.id]}
+                          onFocus={(e) => e.currentTarget.select()}
+                          style={{
+                            flex: 1,
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#22d3ee',
+                            fontFamily: '"Share Tech Mono", monospace',
+                            fontSize: '10px',
+                            padding: 0,
+                            outline: 'none',
+                            minWidth: 0,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = recoveryLinkByOp[op.id];
+                            if (url && navigator.clipboard?.writeText) {
+                              navigator.clipboard.writeText(url).catch(() => { /* clipboard blocked — input is still selectable */ });
+                            }
+                          }}
+                          style={{
+                            padding: '2px 6px', fontSize: '9px', fontFamily: '"Share Tech Mono", monospace',
+                            color: '#22d3ee', background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          COPY
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDismissRecoveryLink(op.id)}
+                          aria-label="Dismiss recovery link"
+                          style={{
+                            padding: '2px 6px', fontSize: '9px', fontFamily: '"Share Tech Mono", monospace',
+                            color: '#888', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -646,14 +1370,62 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     );
   };
 
+  /**
+   * Flip the status of a single beta-feedback entry via PATCH. Optimistic —
+   * merge the new status into local feedbackOverrides immediately so the
+   * row re-renders, then call the server. On failure, the override is
+   * rolled back and we surface a console error (no toast system here yet).
+   */
+  const handleFeedbackStatusChange = async (id: string, next: FeedbackStatus, resolutionNote?: string) => {
+    setFeedbackOverrides(prev => ({ ...prev, [id]: next }));
+    try {
+      const res = await fetch('/api/beta-feedback', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({ id, status: next, resolutionNote }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('[OpsCenter:feedbackStatus] PATCH failed', err);
+        setFeedbackOverrides(prev => {
+          const copy = { ...prev };
+          delete copy[id];
+          return copy;
+        });
+      }
+    } catch (e) {
+      console.error('[OpsCenter:feedbackStatus] network error', e);
+      setFeedbackOverrides(prev => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+    }
+  };
+
   const renderBeta = () => {
     const betaOps = operators.map(op => ({
       ...op, createdAt: '', updatedAt: '',
     })).filter(op => op.betaUser);
 
-    const allFeedback = operators.flatMap(op =>
-      (op.betaFeedback || []).map(fb => ({ callsign: op.callsign, feedback: fb, tier: op.tier }))
-    );
+    // Parse betaFeedback (array of JSON strings) into typed entries. Skip
+    // malformed rows so one bad write doesn't blank the whole list.
+    const allFeedback: Array<ParsedFeedback & { tier: string }> = [];
+    for (const op of operators) {
+      if (!Array.isArray(op.betaFeedback)) continue;
+      for (const raw of op.betaFeedback) {
+        try {
+          const parsed = JSON.parse(raw) as ParsedFeedback;
+          if (parsed && typeof parsed === 'object' && parsed.id) {
+            // Apply the in-flight optimistic override if any.
+            if (feedbackOverrides[parsed.id]) parsed.status = feedbackOverrides[parsed.id];
+            allFeedback.push({ ...parsed, tier: op.tier });
+          }
+        } catch { /* malformed — skip */ }
+      }
+    }
+    // Newest first.
+    allFeedback.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     const dbBeta = metrics?.operators;
 
@@ -746,15 +1518,67 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
             No feedback submitted yet.
           </div>
         ) : (
-          allFeedback.map((fb, i) => (
-            <div key={i} style={{
-              padding: '12px 16px', marginBottom: '6px',
+          allFeedback.map((fb) => (
+            <div key={fb.id} style={{
+              padding: '12px 16px', marginBottom: '8px',
               background: 'rgba(0,255,65,0.03)', border: '1px solid rgba(0,255,65,0.08)',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ color: tierColor(fb.tier as AiTier), fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', fontWeight: 600 }}>{fb.callsign}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ color: tierColor(fb.tier as AiTier), fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', fontWeight: 600 }}>{fb.callsign}</span>
+                  <span style={{ color: '#888', fontSize: '11px', fontFamily: '"Share Tech Mono", monospace' }}>{fb.type}</span>
+                  <span style={{ color: '#888', fontSize: '11px', fontFamily: '"Share Tech Mono", monospace' }}>{fb.category}</span>
+                </div>
+                <span style={{
+                  color: STATUS_COLOR[fb.status] || '#888',
+                  border: `1px solid ${STATUS_COLOR[fb.status] || '#888'}40`,
+                  padding: '2px 8px',
+                  fontSize: '10px',
+                  fontFamily: '"Share Tech Mono", monospace',
+                  letterSpacing: '1px',
+                }}>{fb.status}</span>
               </div>
-              <div style={{ color: '#aaa', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.5' }}>{fb.feedback}</div>
+              <div style={{ color: '#ddd', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{fb.description}</div>
+              {fb.resolutionNote && (
+                <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(0,255,65,0.04)', borderLeft: '2px solid #00ff41', color: '#aaa', fontSize: '12px', fontFamily: '"Chakra Petch", sans-serif' }}>
+                  Resolution: {fb.resolutionNote}
+                </div>
+              )}
+              <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '10px', marginTop: '6px' }}>
+                {new Date(fb.timestamp).toLocaleString()}
+                {fb.resolvedAt && ` · resolved ${new Date(fb.resolvedAt).toLocaleDateString()}`}
+              </div>
+              {/* Admin status controls. OpsCenter is already gated to OPS_CENTER_ACCESS
+                  in the parent so the buttons are safe to render unconditionally here. */}
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {(['NEW', 'REVIEWING', 'FIXED', 'WONTFIX'] as FeedbackStatus[]).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      if (s === fb.status) return;
+                      const note = (s === 'FIXED' || s === 'WONTFIX')
+                        ? (window.prompt(`Optional resolution note for ${fb.callsign}'s ${fb.type}:`) || undefined)
+                        : undefined;
+                      handleFeedbackStatusChange(fb.id, s, note);
+                    }}
+                    disabled={s === fb.status}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '10px',
+                      fontFamily: '"Share Tech Mono", monospace',
+                      letterSpacing: '1px',
+                      background: s === fb.status ? `${STATUS_COLOR[s]}20` : 'transparent',
+                      color: STATUS_COLOR[s],
+                      border: `1px solid ${STATUS_COLOR[s]}60`,
+                      cursor: s === fb.status ? 'default' : 'pointer',
+                      opacity: s === fb.status ? 0.5 : 1,
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           ))
         )}
@@ -764,15 +1588,21 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
 
   const renderMarketing = () => (
     <div style={{ padding: '20px' }}>
+      {/* MANUAL-MODE BANNER (May 2026) — until paid revenue arrives,
+          marketing posting is human-driven. The provider integration
+          (Buffer / Hootsuite / Publer) costs ~$12-30/mo + dev time
+          and isn't justified during closed beta. The cards below
+          stay visible so we have a checklist of what's coming and a
+          place to paste links once we wire it. */}
       <div style={{
-        background: 'rgba(255,184,0,0.05)', border: '1px solid rgba(255,184,0,0.12)',
+        background: 'rgba(255,140,0,0.06)', border: '1px solid rgba(255,140,0,0.25)',
         padding: '16px 20px', marginBottom: '24px',
       }}>
-        <div style={{ color: '#ffb800', fontFamily: '"Orbitron", sans-serif', fontSize: '13px', fontWeight: 700, letterSpacing: '2px', marginBottom: '8px' }}>
-          MARKETING COMMAND CENTER
+        <div style={{ color: '#ff8c00', fontFamily: '"Orbitron", sans-serif', fontSize: '13px', fontWeight: 700, letterSpacing: '2px', marginBottom: '8px' }}>
+          MARKETING — MANUAL MODE
         </div>
-        <div style={{ color: '#888', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.6' }}>
-          Centralized hub for scheduling and pushing content across all social platforms. Connect platform APIs below — the marketing agent will use these endpoints to publish content on your behalf.
+        <div style={{ color: '#bbb', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.6' }}>
+          Posting is manual during the closed beta. Platform integrations (one provider covering all six channels) ship once paid revenue justifies the ~$12-30/mo provider fee + dev time. For now, post directly from each platform&apos;s native app and use the cards below as a reference of what&apos;s on the roadmap.
         </div>
       </div>
 
@@ -850,13 +1680,288 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
     </div>
   );
 
+  // ═══════════════════════════════════════
+  // RENDER: ONBOARDING
+  // ═══════════════════════════════════════
+  //
+  // Two states stack vertically:
+  //   1. The form (always visible — admin can onboard back-to-back).
+  //   2. The most-recent result card (when a successful submit just
+  //      landed) with copy-to-clipboard for credentials + a pre-baked
+  //      Instagram DM template the admin can paste verbatim.
+  const renderOnboarding = () => {
+    const presetMeta: Record<OnboardingPreset, { label: string; subtitle: string; accent: string }> = {
+      TRIAL_COMMANDER_14D: {
+        label: '14-DAY COMMANDER TRIAL',
+        subtitle: 'Default. Full COMMANDER for 14 days, then they pick a tier.',
+        accent: '#ff4444',
+      },
+      PAID_OPERATOR: {
+        label: 'PAID — OPERATOR  $19.99/mo',
+        subtitle: 'Skip trial. Land on OPERATOR. Stripe checkout sent separately.',
+        accent: '#5af',
+      },
+      PAID_COMMANDER: {
+        label: 'PAID — COMMANDER  $39.99/mo',
+        subtitle: 'Skip trial. Land on COMMANDER. Stripe checkout sent separately.',
+        accent: '#ffb800',
+      },
+      PAID_WARFIGHTER: {
+        label: 'PAID — WARFIGHTER  $149/mo',
+        subtitle: 'Concierge tier — skip trial. Confirm seat availability first.',
+        accent: '#a855f7',
+      },
+      FREE_RECON: {
+        label: 'FREE — RECON',
+        subtitle: 'Free Haiku tier with usage caps. No trial, no Stripe.',
+        accent: '#666',
+      },
+    };
+    // Trainer roster is already computed at the component scope, but we
+    // rebind here so the closure uses the same shape regardless of
+    // future refactors moving the outer `trainers` derivation.
+    const trainerOptions = displayOperators.filter((op) => op.role === 'trainer');
+    const result = onboardingResult;
+    const dmTemplate = result
+      ? `Welcome to GUNS UP, ${result.name.split(' ')[0] || 'operator'}.
+
+Your account is locked in:
+- Login: ${result.email}
+- Password: ${result.generatedPassword || '(set during onboarding)'}
+- Callsign: ${result.callsign}
+- Tier: ${result.tier === 'opus' ? 'COMMANDER (14-day trial)' : result.tier.toUpperCase()}
+
+Open the app: https://gunnyai.fit
+First step: tap "BEGIN INTAKE" — Gunny needs your training history to build the protocol.
+
+If anything jams up, DM me. — Ruben`
+      : '';
+
+    return (
+      <div style={{ padding: '20px' }}>
+        <div style={{
+          background: 'rgba(255,68,68,0.05)', border: '1px solid rgba(255,68,68,0.20)',
+          padding: '16px 20px', marginBottom: '24px',
+        }}>
+          <div style={{ color: '#ff4444', fontFamily: '"Orbitron", sans-serif', fontSize: '13px', fontWeight: 700, letterSpacing: '2px', marginBottom: '8px' }}>
+            ONBOARDING — MANUAL CLIENT INTAKE
+          </div>
+          <div style={{ color: '#bbb', fontFamily: '"Chakra Petch", sans-serif', fontSize: '13px', lineHeight: '1.6' }}>
+            Create + activate a client in one shot. Default preset is a <strong>14-day COMMANDER trial</strong>: full Sonnet+Opus access for 14 days, then the AppShell prompts them to pay for OPERATOR / COMMANDER or drop to free RECON. Optional protocol textbox attaches a coach-supplied programming doc straight to the operator&apos;s <code>trainerNotes</code> field — Gunny pulls it into context on every chat.
+          </div>
+        </div>
+
+        <SectionHeader title="NEW OPERATOR" />
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginBottom: '16px',
+        }}>
+          <FormField label="Name *">
+            <input
+              type="text"
+              value={onboardingForm.name}
+              onChange={(e) => setOnboardingForm({ ...onboardingForm, name: e.target.value })}
+              placeholder="Ammon Morrison"
+              style={inputStyle}
+              disabled={onboardingPending}
+            />
+          </FormField>
+
+          <FormField label="Email *">
+            <input
+              type="email"
+              value={onboardingForm.email}
+              onChange={(e) => setOnboardingForm({ ...onboardingForm, email: e.target.value })}
+              placeholder="ammon1.morrison@gmail.com"
+              style={inputStyle}
+              disabled={onboardingPending}
+            />
+          </FormField>
+
+          <FormField label="Trainer">
+            <select
+              value={onboardingForm.trainerId}
+              onChange={(e) => setOnboardingForm({ ...onboardingForm, trainerId: e.target.value })}
+              style={inputStyle}
+              disabled={onboardingPending}
+            >
+              {trainerOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.callsign} — {t.name}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        </div>
+
+        {/* CallsignGenerator: 2 rounds × 2 picks (4 options total),
+            then manual fallback. Optional — auto-derives from name on
+            the server when left empty. */}
+        <div style={{ marginBottom: '20px' }}>
+          <CallsignGenerator
+            value={onboardingForm.callsign}
+            onChange={(c) => setOnboardingForm({ ...onboardingForm, callsign: c })}
+            existingCallsigns={displayOperators.map((o) => o.callsign)}
+            disabled={onboardingPending}
+          />
+        </div>
+
+        <SectionHeader title="TIER" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
+          {(Object.keys(presetMeta) as OnboardingPreset[]).map((preset) => {
+            const meta = presetMeta[preset];
+            const selected = onboardingForm.preset === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setOnboardingForm({ ...onboardingForm, preset })}
+                disabled={onboardingPending}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  background: selected ? `${meta.accent}10` : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${selected ? meta.accent + '50' : 'rgba(255,255,255,0.05)'}`,
+                  cursor: onboardingPending ? 'not-allowed' : 'pointer',
+                  fontFamily: '"Chakra Petch", sans-serif',
+                  color: '#ddd',
+                  display: 'flex', flexDirection: 'column', gap: '2px',
+                }}
+              >
+                <span style={{ color: meta.accent, fontWeight: 700, letterSpacing: '1px', fontSize: '13px' }}>
+                  {selected ? '● ' : '○ '}{meta.label}
+                </span>
+                <span style={{ color: '#888', fontSize: '12px', fontFamily: '"Share Tech Mono", monospace' }}>
+                  {meta.subtitle}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <SectionHeader title="TRAINER NOTES / PROTOCOL (OPTIONAL)" />
+        <FormField label="">
+          <textarea
+            value={onboardingForm.trainerNotes}
+            onChange={(e) => setOnboardingForm({ ...onboardingForm, trainerNotes: e.target.value })}
+            placeholder="Paste the full programming protocol here — Gunny pulls it into context on every chat. Leave empty if no custom protocol yet (max 256KB)."
+            style={{ ...inputStyle, minHeight: 180, resize: 'vertical', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px', lineHeight: '1.5' }}
+            disabled={onboardingPending}
+          />
+        </FormField>
+        <div style={{ color: '#555', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px', marginTop: '4px', marginBottom: '20px' }}>
+          {onboardingForm.trainerNotes.length.toLocaleString()} / {(256 * 1024).toLocaleString()} bytes
+        </div>
+
+        {onboardingError && (
+          <div style={{
+            padding: '12px 16px', marginBottom: '12px',
+            background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.30)',
+            color: '#ff8888', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
+          }}>
+            ✕ {onboardingError}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleOnboardingSubmit}
+          disabled={onboardingPending || !onboardingForm.name.trim() || !onboardingForm.email.trim()}
+          style={{
+            padding: '12px 24px', fontFamily: '"Orbitron", sans-serif', fontWeight: 700,
+            fontSize: '13px', letterSpacing: '2px', color: '#fff',
+            background: onboardingPending
+              ? 'rgba(120,120,120,0.5)'
+              : 'linear-gradient(135deg, #ff4444 0%, #cc0000 100%)',
+            border: 'none', cursor: onboardingPending ? 'wait' : 'pointer',
+            boxShadow: onboardingPending ? 'none' : '0 0 16px rgba(255,68,68,0.3)',
+          }}
+        >
+          {onboardingPending ? 'PROVISIONING…' : 'CREATE + ACTIVATE'}
+        </button>
+
+        {result && (
+          <div style={{
+            marginTop: '32px',
+            padding: '20px',
+            background: 'rgba(0,255,65,0.04)',
+            border: '1px solid rgba(0,255,65,0.30)',
+          }}>
+            <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '14px', fontWeight: 700, letterSpacing: '2px', marginBottom: '12px' }}>
+              ✓ OPERATOR ACTIVATED — {result.callsign}
+            </div>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px',
+              fontFamily: '"Share Tech Mono", monospace', fontSize: '12px', color: '#bbb',
+              marginBottom: '16px',
+            }}>
+              <CredRow label="ID" value={result.id} />
+              <CredRow label="EMAIL" value={result.email} />
+              <CredRow label="CALLSIGN" value={result.callsign} />
+              <CredRow label="TIER" value={result.tier.toUpperCase()} />
+              {result.generatedPassword && (
+                <CredRow label="PASSWORD" value={result.generatedPassword} mono />
+              )}
+              {result.promoActive && result.promoExpiry && (
+                <CredRow
+                  label="TRIAL EXPIRES"
+                  value={`${result.promoExpiry} (${result.promoType})`}
+                />
+              )}
+              {result.trainerNotesLength > 0 && (
+                <CredRow
+                  label="PROTOCOL"
+                  value={`${result.trainerNotesLength.toLocaleString()} bytes attached`}
+                />
+              )}
+            </div>
+            <div style={{ color: '#888', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px', marginBottom: '6px', letterSpacing: '1px' }}>
+              IG-DM TEMPLATE — copy + paste:
+            </div>
+            <textarea
+              readOnly
+              value={dmTemplate}
+              onFocus={(e) => e.currentTarget.select()}
+              style={{
+                ...inputStyle,
+                minHeight: 180, fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
+                lineHeight: '1.5', resize: 'vertical',
+                background: 'rgba(0,0,0,0.40)',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(dmTemplate).catch(() => {});
+              }}
+              style={{
+                marginTop: '8px', padding: '8px 16px',
+                background: 'rgba(0,255,65,0.10)', border: '1px solid rgba(0,255,65,0.30)',
+                color: '#00ff41', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
+                cursor: 'pointer', letterSpacing: '1px',
+              }}
+            >
+              COPY DM
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'REVENUE': return renderRevenue();
       case 'USERS': return renderUsers();
       case 'PLATFORM': return renderPlatform();
       case 'BETA': return renderBeta();
+      case 'ONBOARDING': return renderOnboarding();
       case 'MARKETING': return renderMarketing();
+      case 'ROADMAP':
+        // Defensive: even if activeTab is set to ROADMAP (state replay,
+        // dev hot-reload, etc.), the data only renders for founders.
+        return FOUNDER_IDS.includes(currentUser.id as typeof FOUNDER_IDS[number])
+          ? <OpsRoadmap />
+          : null;
       default: return null;
     }
   };
@@ -866,12 +1971,17 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
   // "$" for REVENUE is left as a glyph since there's no money icon
   // in the design-system set yet; we render it inside a styled span
   // so it visually matches the SVG siblings.
+  // ROADMAP is conditionally appended — only the two founders
+  // (op-ruben + op-britney) ever see it.
+  const isFounder = FOUNDER_IDS.includes(currentUser.id as typeof FOUNDER_IDS[number]);
   const tabConfig: { id: OpsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'REVENUE', label: 'REVENUE', icon: <span className="t-mono" style={{ fontSize: 14 }}>$</span> },
     { id: 'USERS', label: 'USERS', icon: <Icon.User /> },
     { id: 'PLATFORM', label: 'PLATFORM', icon: <Icon.Settings /> },
     { id: 'BETA', label: 'BETA', icon: <Icon.Bolt /> },
+    { id: 'ONBOARDING', label: 'ONBOARDING', icon: <Icon.Plus /> },
     { id: 'MARKETING', label: 'MARKETING', icon: <Icon.Send /> },
+    ...(isFounder ? [{ id: 'ROADMAP' as OpsTab, label: 'ROADMAP', icon: <Icon.Target /> }] : []),
   ];
 
   return (
@@ -902,11 +2012,22 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         </div>
       </div>
 
-      {/* Sub-tabs */}
+      {/* Sub-tabs.
+          Six buttons wrap into 2 rows on narrow viewports instead of
+          overflow-scrolling and getting clipped at the right edge
+          (the previous version used overflowX:auto with no visible
+          scroll indicator, so on mobile the sixth tab — ROADMAP —
+          looked like a permanently-cut-off "ROADMA"). Each button
+          has flex: 1 1 30% so three fit per row at ≤375px and they
+          distribute evenly when the strip is wider. The icon is
+          dropped on narrow viewports so the labels stay legible. */}
       <div style={{
-        display: 'flex', gap: '4px', padding: '10px 20px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '6px',
+        padding: '10px 16px',
         borderBottom: '1px solid rgba(255,68,68,0.06)',
-        background: 'rgba(255,0,0,0.01)', overflowX: 'auto',
+        background: 'rgba(255,0,0,0.01)',
       }}>
         {tabConfig.map(tab => {
           const isActive = activeTab === tab.id;
@@ -915,20 +2036,27 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
-                padding: '8px 16px', fontSize: '12px',
+                flex: '1 1 30%',
+                minWidth: 90,
+                padding: '8px 10px',
+                fontSize: '11px',
                 fontFamily: '"Share Tech Mono", monospace',
                 fontWeight: isActive ? 700 : 400,
-                letterSpacing: '1.5px',
+                letterSpacing: '1px',
                 color: isActive ? '#ff4444' : '#555',
                 background: isActive ? 'rgba(255,68,68,0.08)' : 'transparent',
-                border: `1px solid ${isActive ? 'rgba(255,68,68,0.2)' : 'transparent'}`,
+                border: `1px solid ${isActive ? 'rgba(255,68,68,0.2)' : 'rgba(255,255,255,0.04)'}`,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
               }}
             >
-              <span style={{ marginRight: 6, opacity: 0.7, display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}>
-                {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 13 })}
+              <span style={{ opacity: 0.7, display: 'inline-flex', alignItems: 'center' }}>
+                {React.cloneElement(tab.icon as React.ReactElement<{ size?: number }>, { size: 12 })}
               </span>
               {tab.label}
             </button>
@@ -940,6 +2068,132 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {renderContent()}
       </div>
+
+      {/* Delete confirmation modal — overlay-style, blocks the surface
+          so an accidental click outside doesn't fire the delete. The
+          callsign-match field gates the actual POST: typing a
+          mismatched value disables the CONFIRM button, and even if
+          the request goes out the server-side check rejects it.
+          Mirrors the GitHub repo-delete + Stripe customer-delete UX. */}
+      {pendingDeleteId && (() => {
+        const target = displayOperators.find((o) => o.id === pendingDeleteId);
+        if (!target) return null;
+        const matches = deleteConfirmText.trim().toUpperCase() === target.callsign.toUpperCase();
+        const inFlight = adminActionPending === pendingDeleteId;
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-op-title"
+            style={{
+              position: 'fixed', inset: 0, zIndex: 1000,
+              background: 'rgba(0,0,0,0.80)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '20px',
+            }}
+            onClick={() => {
+              if (!inFlight) {
+                setPendingDeleteId(null);
+                setDeleteConfirmText('');
+                setAdminActionError(null);
+              }
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: 480,
+                background: '#0a0202',
+                border: '1px solid rgba(255,68,68,0.40)',
+                padding: '24px',
+                fontFamily: '"Chakra Petch", sans-serif',
+                color: '#ddd',
+              }}
+            >
+              <div id="delete-op-title" style={{
+                color: '#ff4444', fontFamily: '"Orbitron", sans-serif', fontSize: '16px',
+                fontWeight: 700, letterSpacing: '2px', marginBottom: '16px',
+              }}>
+                ⚠ DELETE {target.callsign}
+              </div>
+              <div style={{ marginBottom: '12px', fontSize: '13px', lineHeight: 1.5 }}>
+                This is <strong style={{ color: '#ff4444' }}>permanent</strong>. The operator row + every
+                child record (chat history, workouts, wearable data, daily-ops plans) will be deleted.
+                There is no undo. To soft-disable instead, cancel and use the DISABLE button.
+              </div>
+              <div style={{ marginBottom: '12px', fontSize: '12px', color: '#888' }}>
+                Type the callsign <strong style={{ color: '#ff4444' }}>{target.callsign}</strong> to confirm:
+              </div>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={target.callsign}
+                disabled={inFlight}
+                autoFocus
+                style={{
+                  width: '100%', padding: '10px 12px', marginBottom: '12px',
+                  background: 'rgba(0,0,0,0.40)',
+                  border: `1px solid ${matches ? 'rgba(0,255,65,0.40)' : 'rgba(255,255,255,0.10)'}`,
+                  color: '#ddd', fontFamily: '"Share Tech Mono", monospace', fontSize: '14px',
+                  letterSpacing: '2px', textAlign: 'center', outline: 'none',
+                }}
+              />
+              {adminActionError && (
+                <div style={{
+                  padding: '8px 10px', marginBottom: '12px',
+                  background: 'rgba(255,68,68,0.10)',
+                  border: '1px solid rgba(255,68,68,0.30)',
+                  color: '#ff8888',
+                  fontFamily: '"Share Tech Mono", monospace', fontSize: '11px',
+                }}>
+                  ✕ {adminActionError}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!inFlight) {
+                      setPendingDeleteId(null);
+                      setDeleteConfirmText('');
+                      setAdminActionError(null);
+                    }
+                  }}
+                  disabled={inFlight}
+                  style={{
+                    padding: '10px 16px', background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    color: '#888', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
+                    letterSpacing: '1px', cursor: inFlight ? 'wait' : 'pointer',
+                  }}
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOperator(target.id, deleteConfirmText.trim())}
+                  disabled={!matches || inFlight}
+                  style={{
+                    padding: '10px 16px',
+                    background: matches
+                      ? 'linear-gradient(135deg, #ff4444 0%, #cc0000 100%)'
+                      : 'rgba(120,120,120,0.20)',
+                    border: 'none',
+                    color: '#fff', fontFamily: '"Orbitron", sans-serif', fontSize: '12px',
+                    fontWeight: 700, letterSpacing: '2px',
+                    cursor: matches && !inFlight ? 'pointer' : 'not-allowed',
+                    boxShadow: matches ? '0 0 12px rgba(255,68,68,0.30)' : 'none',
+                  }}
+                >
+                  {inFlight ? 'DELETING…' : 'CONFIRM DELETE'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -964,6 +2218,58 @@ const SectionHeader: React.FC<{ title: string }> = ({ title }) => (
     borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: '12px',
   }}>
     {title}
+  </div>
+);
+
+// ═══════════════════════════════════════════════════
+// ONBOARDING — shared form primitives
+// ═══════════════════════════════════════════════════
+//
+// Standard input style. Reuses the OpsCenter chrome palette so the
+// form feels native to the surrounding admin UI rather than a bolt-on.
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  background: 'rgba(0,0,0,0.40)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  color: '#ddd',
+  fontFamily: '"Chakra Petch", sans-serif',
+  fontSize: '13px',
+  outline: 'none',
+};
+
+const FormField: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    {label && (
+      <label style={{
+        color: '#777', fontFamily: '"Share Tech Mono", monospace', fontSize: '10px',
+        letterSpacing: '2px', textTransform: 'uppercase',
+      }}>
+        {label}
+      </label>
+    )}
+    {children}
+  </div>
+);
+
+// Stamped key/value row used in the success card. `mono` flips the
+// value to a monospace font for credentials (passwords, tokens, IDs)
+// where character spacing matters more than typographic balance.
+const CredRow: React.FC<{ label: string; value: string; mono?: boolean }> = ({ label, value, mono }) => (
+  <div style={{
+    display: 'flex', flexDirection: 'column', gap: '2px',
+    padding: '8px 10px', background: 'rgba(0,0,0,0.35)',
+    border: '1px solid rgba(0,255,65,0.10)',
+  }}>
+    <span style={{ color: '#666', fontSize: '10px', letterSpacing: '2px' }}>{label}</span>
+    <span style={{
+      color: '#ddd',
+      fontFamily: mono ? '"Share Tech Mono", monospace' : '"Chakra Petch", sans-serif',
+      fontSize: '13px',
+      wordBreak: 'break-all',
+    }}>
+      {value}
+    </span>
   </div>
 );
 

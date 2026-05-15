@@ -1,10 +1,20 @@
 'use client';
 
-// Founder Rotator — the photo-rotation centerpiece of the Origin section.
+// Founder Rotator — reusable photo-rotation component for the Founders
+// section. Originally specced for one founder (Ruben); the v4.2 update
+// added a second co-founder (Britney) with her own three-era rotator,
+// so the slide list moved from a hardcoded const to a `slides` prop.
+//
+// i18n (Phase 5): the slide text (era / year / caption / alt) is now
+// pulled from the translation table via `useLanguage().t()`. Slides
+// are described by a stable `key` plus the language-independent
+// pieces (image src, geo coord). The lookup keys themselves stay
+// English (matches the rest of the table) — the resolved strings
+// flip with the active language toggle.
 //
 // Spec (from design-handoff README §9):
-// - 4:5 portrait slot, 3 background-image slides (military → crossfit →
-//   bodybuilding), all rendered in B&W (grayscale + low saturation).
+// - 4:5 portrait slot, 3 background-image slides, all rendered in B&W
+//   (grayscale + low saturation).
 // - Auto-cycles every 5 s. Click any progress segment to jump and reset
 //   the cycle. Glitch transition between slides (RGB jitter + scanline bars).
 // - Per-slide HUD: top bar with red blinking REC indicator, geo coords,
@@ -21,41 +31,50 @@
 
 import { useEffect, useRef, useState } from 'react';
 import styles from './landing.module.css';
+import { useLanguage } from '@/lib/i18n';
 
-interface Slide {
-  era: string;       // big label, e.g. "MILITARY"
-  year: string;      // "2008"
-  caption: string;   // "USMC · DEPLOYED · OEF"
-  coord: string;     // "34.5°N / 69.1°E"
-  src: string;       // public path
-  alt: string;
+export interface RotatorSlide {
+  /** Stable key — used to look up era/year/caption/alt in the i18n table.
+   *  Format: `<founder>.s<n>` (e.g. "ruben.s1", "britney.s3"). */
+  key: string;
+  /** Coords overlaid on the HUD top bar. Numeric/locale-independent so
+   *  they don't need translation. */
+  coord: string;
+  /** Public path to the photo. Locale-independent. */
+  src: string;
 }
 
-const SLIDES: Slide[] = [
-  {
-    era: 'MILITARY',
-    year: '2008',
-    caption: 'USMC · DEPLOYED · OEF',
-    coord: '34.5°N / 69.1°E',
-    src: '/founder-military.jpg',
-    alt: 'Founder on deployment, USMC, 2008',
-  },
-  {
-    era: 'CROSSFIT',
-    year: '2015',
-    caption: 'COMPETITOR · REGIONALS · RX',
-    coord: '39.7°N / 104.9°W',
-    src: '/founder-crossfit.jpg',
-    alt: 'Founder competing in CrossFit, 2015',
-  },
-  {
-    era: 'BODYBUILDING',
-    year: '2022',
-    caption: 'NPC · STAGE · CLASSIC PHYSIQUE',
-    coord: '33.4°N / 112.0°W',
-    src: '/founder-bodybuilding.jpg',
-    alt: 'Founder competing in NPC bodybuilding, 2022',
-  },
+export interface FounderRotatorProps {
+  /** The three eras to cycle through. Component re-derives layout from
+   *  the array length, but the canonical design spec is exactly 3 slides
+   *  (one per era) — the progress bar's segment count and the auto-cycle
+   *  cadence both assume 3. */
+  slides: RotatorSlide[];
+  /** ARIA label for the rotator container. Defaults to a generic
+   *  "Founder photo rotator" but should be overridden per founder
+   *  (e.g. "Ruben — career eras") so screen readers announce who's in
+   *  the photos. */
+  ariaLabel?: string;
+}
+
+// ─── Default slide set: Ruben (founder #1) ─────────────────────────
+// Kept exported so the page can pass them in explicitly without
+// re-declaring; also lets the component render a sensible default when
+// used without props (e.g. in Storybook / smoke tests).
+export const RUBEN_SLIDES: RotatorSlide[] = [
+  { key: 'ruben.s1', coord: '34.5°N / 69.1°E', src: '/founder-military.jpg' },
+  { key: 'ruben.s2', coord: '39.7°N / 104.9°W', src: '/founder-crossfit.jpg' },
+  { key: 'ruben.s3', coord: '33.4°N / 112.0°W', src: '/founder-bodybuilding.jpg' },
+];
+
+// ─── Co-founder slide set: Britney (founder #2) ────────────────────
+// Soccer (WPSL) → Spartan World Championships → NPC Women's Figure.
+// Coordinates picked from the canonical handoff: Fresno-area for
+// WPSL, Lake Tahoe for the 2018 Spartan Worlds, Phoenix for NPC.
+export const BRITNEY_SLIDES: RotatorSlide[] = [
+  { key: 'britney.s1', coord: '36.7°N / 119.7°W', src: '/cofounder-soccer.jpg' },
+  { key: 'britney.s2', coord: '39.0°N / 120.0°W', src: '/cofounder-spartan.jpg' },
+  { key: 'britney.s3', coord: '33.4°N / 112.0°W', src: '/cofounder-bodybuilding.jpg' },
 ];
 
 const ROTATE_MS = 5000;
@@ -70,7 +89,12 @@ function formatUtc(d: Date): string {
   return `${hh}:${mm}:${ss} Z`;
 }
 
-export default function FounderRotator() {
+export default function FounderRotator({
+  slides = RUBEN_SLIDES,
+  ariaLabel,
+}: FounderRotatorProps = { slides: RUBEN_SLIDES }) {
+  const { t } = useLanguage();
+  const resolvedAria = ariaLabel || t('landing.rotator.aria_default');
   const [index, setIndex] = useState(0);
   const [glitchKey, setGlitchKey] = useState(0); // bumped each transition to retrigger keyframes
   const [now, setNow] = useState<Date | null>(null);
@@ -89,13 +113,13 @@ export default function FounderRotator() {
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setIndex((i) => (i + 1) % SLIDES.length);
+      setIndex((i) => (i + 1) % slides.length);
       setGlitchKey((k) => k + 1);
     }, ROTATE_MS);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [index]); // re-arm on manual jumps too (jump bumps index)
+  }, [index, slides.length]); // re-arm on manual jumps too (jump bumps index)
 
   const jumpTo = (i: number) => {
     if (i === index) return;
@@ -103,24 +127,32 @@ export default function FounderRotator() {
     setGlitchKey((k) => k + 1);
   };
 
-  const slide = SLIDES[index];
+  const slide = slides[index];
+  const era = t(`landing.rotator.${slide.key}.era`);
+  const year = t(`landing.rotator.${slide.key}.year`);
+  const caption = t(`landing.rotator.${slide.key}.caption`);
 
   return (
-    <div className={`${styles.founderRotator} ${styles.bracket}`} aria-label="Founder photo rotator">
+    <div className={`${styles.founderRotator} ${styles.bracket}`} aria-label={resolvedAria}>
       <span className="bl" /><span className="br" />
 
       {/* Slides — all three are mounted at once; .active controls visibility
           via opacity + transform so the cross-fade + zoom is GPU-only.
           Photos are <img> rather than CSS background-image so the alt text
           is still announceable to screen readers. */}
-      {SLIDES.map((s, i) => (
+      {slides.map((s, i) => (
         <div
           key={s.src}
           className={`${styles.frSlide} ${i === index ? styles.frSlideActive : ''}`}
-          data-era={s.era}
+          data-era={t(`landing.rotator.${s.key}.era`)}
           aria-hidden={i !== index}
         >
-          <img src={s.src} alt={s.alt} className={styles.frSlideImg} draggable={false} />
+          <img
+            src={s.src}
+            alt={t(`landing.rotator.${s.key}.alt`)}
+            className={styles.frSlideImg}
+            draggable={false}
+          />
         </div>
       ))}
 
@@ -139,7 +171,7 @@ export default function FounderRotator() {
       {/* HUD top: red blinking REC dot, geo coords, live UTC clock. */}
       <div className={styles.frHudTop}>
         <span className={styles.frRec}>
-          <span className={styles.frRecDot} /> REC
+          <span className={styles.frRecDot} /> {t('landing.rotator.rec')}
         </span>
         <span className={styles.frCoord}>{slide.coord}</span>
         {/* Suppress hydration warning because the clock differs by render
@@ -153,26 +185,30 @@ export default function FounderRotator() {
       {/* HUD bottom: ERA label + year + caption + 3-segment progress bar. */}
       <div className={styles.frHudBottom}>
         <div className={styles.frEraLine}>
-          <span className={styles.frEraLabel}>ERA :: {slide.era}</span>
-          <span className={styles.frYear}>{slide.year}</span>
+          <span className={styles.frEraLabel}>{t('landing.rotator.era_prefix')} {era}</span>
+          <span className={styles.frYear}>{year}</span>
         </div>
-        <div className={styles.frCaption}>{slide.caption}</div>
-        <div className={styles.frProgress} role="tablist" aria-label="Founder eras">
-          {SLIDES.map((s, i) => (
-            <button
-              type="button"
-              key={s.era}
-              role="tab"
-              aria-selected={i === index}
-              aria-label={`${s.era} ${s.year}`}
-              onClick={() => jumpTo(i)}
-              className={`${styles.frSegment} ${i === index ? styles.frSegmentActive : ''} ${i < index ? styles.frSegmentDone : ''}`}
-            >
-              {/* The fill bar inside is keyed off the glitchKey so the
-                  CSS animation restarts in lockstep with the auto-cycle. */}
-              {i === index && <span key={glitchKey} className={styles.frSegmentFill} />}
-            </button>
-          ))}
+        <div className={styles.frCaption}>{caption}</div>
+        <div className={styles.frProgress} role="tablist" aria-label={t('landing.rotator.aria_progress')}>
+          {slides.map((s, i) => {
+            const sEra = t(`landing.rotator.${s.key}.era`);
+            const sYear = t(`landing.rotator.${s.key}.year`);
+            return (
+              <button
+                type="button"
+                key={s.key}
+                role="tab"
+                aria-selected={i === index}
+                aria-label={`${sEra} ${sYear}`}
+                onClick={() => jumpTo(i)}
+                className={`${styles.frSegment} ${i === index ? styles.frSegmentActive : ''} ${i < index ? styles.frSegmentDone : ''}`}
+              >
+                {/* The fill bar inside is keyed off the glitchKey so the
+                    CSS animation restarts in lockstep with the auto-cycle. */}
+                {i === index && <span key={glitchKey} className={styles.frSegmentFill} />}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

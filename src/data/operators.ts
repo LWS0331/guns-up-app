@@ -32,6 +32,11 @@ export const OPERATORS: Operator[] = [
     name: 'Ruben Rodriguez',
     callsign: 'RAMPAGE',
     pin: '1234',
+    // Pre-seeded email so the Google OAuth callback links the first
+    // ruben@gunsupfitness.com sign-in to this existing operator (with all
+    // his trainer data) instead of creating a fresh op-google-... record.
+    // Update via DB if the chosen email differs.
+    email: 'ruben@gunsupfitness.com',
     role: 'trainer',
     tier: 'opus',
     coupleWith: 'op-britney',
@@ -593,6 +598,10 @@ export const OPERATORS: Operator[] = [
     callsign: 'WARDOG',
     pin: '1111',
     role: 'client',
+    // Demoted COMMANDER (opus) → OPERATOR (sonnet) — May 2026 cost-control
+    // pass. The Apr 2026 beta-testing promotion to opus is over;
+    // adult clients now run on sonnet by default with only the
+    // trainer accounts (Ruben + Britney) on opus.
     tier: 'sonnet',
     coupleWith: 'op-erika',
     trainerId: 'op-ruben',
@@ -877,7 +886,9 @@ export const OPERATORS: Operator[] = [
     callsign: 'PHOENIX',
     pin: '2222',
     role: 'client',
-    tier: 'haiku',
+    // Demoted COMMANDER (opus) → OPERATOR (sonnet) — May 2026 cost-control
+    // pass. See WARDOG above for full rationale.
+    tier: 'sonnet',
     coupleWith: 'op-efrain',
     trainerId: 'op-ruben',
     teamId: 'team-wolf-pack',
@@ -1142,7 +1153,8 @@ export const OPERATORS: Operator[] = [
     undefined, 'team-wolf-pack'),
 
   // Edgar + Patty (WOLF PACK)
-  makeClient('op-edgar', 'Edgar', 'VIPER', '3007', 'sonnet', 'op-patty', 'op-ruben', true,
+  // Edgar promoted to COMMANDER (opus) for beta testing — Apr 2026.
+  makeClient('op-edgar', 'Edgar', 'VIPER', '3007', 'opus', 'op-patty', 'op-ruben', true,
     { age: 34, height: "5'10\"", weight: 195, bodyFat: 19, trainingAge: '8 years', goals: ['strength', 'athletic performance'], readiness: 8, sleep: 7.5, stress: 3 },
     { split: 'Push/Pull/Legs', equipment: ['Barbell', 'Dumbbell', 'Cable', 'Kettlebell'], sessionDuration: 75, daysPerWeek: 5, weakPoints: ['Overhead mobility'], avoidMovements: [] },
     undefined, 'team-wolf-pack'),
@@ -1152,7 +1164,8 @@ export const OPERATORS: Operator[] = [
     undefined, 'team-wolf-pack'),
 
   // Aldo + Jasmine (WOLF PACK)
-  makeClient('op-aldo', 'Aldo', 'TITAN', '3009', 'sonnet', 'op-jasmine', 'op-ruben', true,
+  // Aldo promoted to COMMANDER (opus) for beta testing — Apr 2026.
+  makeClient('op-aldo', 'Aldo', 'TITAN', '3009', 'opus', 'op-jasmine', 'op-ruben', true,
     { age: 28, height: "6'0\"", weight: 205, bodyFat: 16, trainingAge: '10 years', goals: ['hypertrophy', 'aesthetics'], readiness: 8, sleep: 8, stress: 2 },
     { split: 'Bro Split', equipment: ['Barbell', 'Dumbbell', 'Cable', 'Machine'], sessionDuration: 90, daysPerWeek: 6, weakPoints: ['Calves', 'Rear delts'], avoidMovements: [] },
     undefined, 'team-wolf-pack'),
@@ -1170,6 +1183,202 @@ export const OPERATORS: Operator[] = [
     { age: 33, height: "5'5\"", weight: 140, bodyFat: 22, trainingAge: '3 years', goals: ['toning', 'endurance', 'weight loss'], readiness: 7, sleep: 7.5, stress: 4 },
     { split: 'Upper/Lower', equipment: ['Dumbbell', 'Cable', 'Bodyweight', 'Resistance Band'], sessionDuration: 50, daysPerWeek: 4, weakPoints: ['Core', 'Upper body strength'], avoidMovements: [] },
     undefined, 'team-madheart'),
+
+  // ─── Junior Operators (PIN block 4xxx) ─────────────────────────────────
+  // First Junior Operator profile. Trainer: RAMPAGE. Parents: IRONSIDE + Erika.
+  // Routed to SOCCER_YOUTH_PROMPT — never the adult Marine DI tone.
+  {
+    id: 'op-poppy',
+    name: 'Camila Cruz',
+    callsign: 'POPPY',
+    pin: '4001',
+    role: 'client',
+    tier: 'opus',                                   // COMMANDER tier — all junior operators get Opus 4.6 for safety-critical youth coaching (refusal scope, concussion protocol, RED-S detection benefit from the strongest model)
+    tierLocked: true,                               // junior tiers are admin-controlled
+    coupleWith: null,
+    trainerId: 'op-ruben',
+    teamId: 'team-wolf-pack',
+    isJunior: true,
+    juniorAge: 12,
+    parentIds: ['op-efrain', 'op-erika'],
+
+    profile: {
+      age: 12,
+      height: '4\'11"',                             // placeholder — confirm at intake
+      weight: 90,                                   // placeholder — confirm at intake
+      bodyFat: 0,                                   // sentinel: NEVER tracked or displayed for juniors
+      trainingAge: '4 years',                       // soccer experience proxy
+      goals: [
+        'develop on-field aggression',
+        'improve agility and change of direction',
+        'refine running mechanics',
+        'maintain ball-skill foundation',
+      ],
+      readiness: 8,
+      sleep: 9,                                     // age-appropriate target 9-12 hrs
+      stress: 3,
+    },
+
+    sportProfile: {
+      sport: 'soccer',
+      position: 'unsure',                           // coach to confirm
+      level: 'mixed',
+      yearsPlaying: 4,
+      trainingDaysPerWeek: 3,                       // soccer practice days
+      gameDay: 'sat',
+      noTrainingDays: ['wed'],                      // dance day — explicit rest from soccer S&C
+      trainingWindow: '6:00 PM',
+      multiSport: true,
+      otherSports: ['dance'],
+      focusAreas: [
+        'aggressive play / competitive mindset',
+        'agility and change of direction',
+        'running mechanics',
+        'proficient and controlled movement',
+        'ball-drill heavy programming',
+      ],
+      coachNotes:
+        'Speed is a strength. Slightly undersized — leverage quickness over physicality. Ball skills are good — agility under pressure is the next layer. Running tech needs work — knee drive, foot strike, posture. Multi-sport (dance) is a positive: dance gives her body awareness and footwork that translates. Programming should be ball-heavy with movement quality cues — never punitive conditioning.',
+      maturationStage: 'pre_phv',                   // typical for 12yo girl, confirm at next assessment
+      estimatedPeakHeightVelocity: null,            // calculate via Mirwald in v2
+    },
+
+    juniorConsent: {
+      parentSignatures: [],                         // populated on first parent login + e-signature
+      participationConsent: false,
+      dataConsent: false,
+      emergencyContact: { name: '', relationship: '', phone: '' },
+      pediatricianClearance: false,
+      pediatricianClearanceDate: null,
+    },
+
+    juniorSafety: { events: [] },
+
+    nutrition: {
+      // Youth-appropriate range, NOT a deficit prescription.
+      // Per UEFA 2021 / SDA 2014: girl 10-13 active = 2000-2400 kcal.
+      targets: { calories: 2200, protein: 80, carbs: 300, fat: 75 },
+      meals: {},
+    },
+
+    prs: [],                                        // Junior PR board uses sport-performance metrics — see commit 6
+    injuries: [],
+    workouts: {},
+    dayTags: {},
+
+    preferences: {
+      split: 'Soccer S&C',
+      equipment: ['cones', 'agility ladder', 'ball', 'bands', 'med-ball-light'],
+      sessionDuration: 45,
+      daysPerWeek: 3,                               // S&C sessions, not soccer practice
+      weakPoints: ['running mechanics', 'agility under pressure'],
+      avoidMovements: [],
+    },
+  },
+  // ─── BRIELLE — Ruben + Britney's daughter, age 7, female-youth-soccer-4-10 corpus
+  //
+  // Parent-led training: she doesn't have app access at this age. The
+  // PARENT runs the session from the Parent Hub (ParentDashboard.tsx);
+  // Gunny scripts the cues, the parent reads them aloud, taps LOG
+  // SESSION when done. Both parents (op-ruben + op-britney) have full
+  // visibility per getParentJuniors().
+  //
+  // Age-band routing:
+  //   - juniorAge ∈ [4, 10] → Parent-Led Mode UI in ParentDashboard
+  //   - Corpus overlay: female-youth-soccer-4-10.md (mastery climate,
+  //     process praise, FIFA 11+ Kids warm-up, NMT 2x/wk min)
+  //   - Tier opus (Commander) — safety-critical age band gets the
+  //     strongest model just like op-poppy
+  //
+  // Provisioned in prod via POST /api/admin/operator-provision
+  // { operatorId: 'op-brielle' } after this PR merges.
+  {
+    id: 'op-brielle',
+    name: 'Brielle Rodriguez',
+    callsign: 'BUMBLEBEE',
+    pin: '4002',
+    role: 'client',
+    tier: 'opus',                                    // COMMANDER — junior safety floor (matches op-poppy)
+    tierLocked: true,                                // junior tiers are admin-controlled
+    coupleWith: null,
+    trainerId: 'op-ruben',
+    teamId: 'team-wolf-pack',                        // same team as op-poppy + parents
+    isJunior: true,
+    juniorAge: 4,
+    parentIds: ['op-ruben', 'op-britney'],
+
+    profile: {
+      age: 4,
+      height: '3\'5"',                               // placeholder — confirm at intake
+      weight: 36,                                    // placeholder — confirm at intake
+      bodyFat: 0,                                    // sentinel: NEVER tracked for juniors
+      trainingAge: '6 months',                       // backyard play, not structured
+      goals: [
+        'have fun + build confidence',
+        'fundamental movement skills (run / jump / land / change direction)',
+        'ball-touch foundation (juggling, passing, dribbling)',
+        'mastery climate — celebrate effort over outcome',
+      ],
+      readiness: 9,
+      sleep: 11,                                     // age-appropriate target 10-13 hrs
+      stress: 1,
+    },
+
+    sportProfile: {
+      sport: 'soccer',
+      position: 'unsure',                            // age 4 = no positions per US Soccer PDI (4v4, no GK at U6)
+      level: 'recreational',
+      yearsPlaying: 1,
+      trainingDaysPerWeek: 1,                        // Tier 1 (4-5) = play-based, 1 short session/wk plenty
+      gameDay: 'sat',
+      noTrainingDays: ['sun', 'mon', 'tue', 'thu'],  // play happens when she wants — explicit rest is most days
+      trainingWindow: '4:30 PM',                     // post-nap, pre-dinner
+      multiSport: false,
+      otherSports: [],
+      focusAreas: [
+        'fundamental movement skills',
+        'ball touches (with foot, hand-eye OK too)',
+        'fun — every session ends on a game',
+        'land mechanics (soft feet, balanced)',
+      ],
+      coachNotes:
+        'Age 4, female, Tier 1 (4-5) per the corpus = play-based programming. US Soccer PDI: 4v4 no GK at U6. NO structured FIFA 11+ Kids yet — that lights up at Tier 2 (6-7). Per Quatman 2008 / Ford 2010, neuromuscular sex differences only emerge at PHV, so programming is shared with the male 4-10 corpus PLUS mastery-climate framing (Smith Smoll Cumming CET) and process-praise habits. Attention span 5-10 min per drill — switch often, end on a game, never punitive conditioning. Refusal is data, not defiance.',
+      maturationStage: 'pre_phv',
+      estimatedPeakHeightVelocity: null,             // ~11-13 yo typical for girls
+    },
+
+    juniorConsent: {
+      parentSignatures: [],                          // populated at first parent login
+      participationConsent: false,
+      dataConsent: false,
+      emergencyContact: { name: '', relationship: '', phone: '' },
+      pediatricianClearance: false,
+      pediatricianClearanceDate: null,
+    },
+
+    juniorSafety: { events: [] },
+
+    nutrition: {
+      // Age-appropriate range per IOM DRI 2005, NOT a deficit prescription.
+      // 4yo girl active: ~1200-1400 kcal.
+      targets: { calories: 1400, protein: 30, carbs: 200, fat: 50 },
+      meals: {},
+    },
+
+    prs: [],                                         // Junior PR board: sport-performance only
+    injuries: [],
+    workouts: {},                                    // Parent asks Gunny to build today's session — empty seed avoids stale-date risk
+    dayTags: {},
+
+    preferences: {
+      split: 'Youth Soccer (Parent-Led)',
+      equipment: ['cones', 'small ball', 'spot markers'],
+      sessionDuration: 20,                            // age 4 attention span — keep it under 20 min
+      daysPerWeek: 1,
+      weakPoints: ['none — building base motor patterns'],
+      avoidMovements: ['any structured resistance', 'plyo', 'overhead movements', 'long endurance'],
+    },
+  },
 ];
 
 export function getAccessibleOperators(userId: string, ops?: Operator[]): Operator[] {
@@ -1191,6 +1400,14 @@ export function getAccessibleOperators(userId: string, ops?: Operator[]): Operat
     }
   }
 
+  // Parents (adult operators with juniors in parentIds) gain visibility into their juniors
+  const juniors = getParentJuniors(user.id, source);
+  for (const jr of juniors) {
+    if (!accessibleUsers.find((a) => a.id === jr.id)) {
+      accessibleUsers.push(jr);
+    }
+  }
+
   return accessibleUsers;
 }
 
@@ -1206,4 +1423,18 @@ export function getClientTrainer(clientId: string, ops?: Operator[]): Operator |
   const client = source.find((op) => op.id === clientId);
   if (!client?.trainerId) return undefined;
   return source.find((op) => op.id === client.trainerId);
+}
+
+// Get all juniors a parent has visibility into
+export function getParentJuniors(parentId: string, ops?: Operator[]): Operator[] {
+  const source = ops || OPERATORS;
+  return source.filter((op) => op.isJunior === true && op.parentIds?.includes(parentId));
+}
+
+// Get a junior's parents (adult operators)
+export function getJuniorParents(juniorId: string, ops?: Operator[]): Operator[] {
+  const source = ops || OPERATORS;
+  const junior = source.find((op) => op.id === juniorId);
+  if (!junior?.parentIds?.length) return [];
+  return source.filter((op) => junior.parentIds!.includes(op.id));
 }

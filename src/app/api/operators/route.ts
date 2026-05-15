@@ -26,45 +26,51 @@ export async function GET(req: NextRequest) {
         },
       });
     } else {
-      rows = me ? [me] : [];
+      // Clients: self + any junior operators where this client is listed
+      // as a parent + ALL trainers. Without the junior expansion, parents
+      // (WARDOG / PHOENIX) wouldn't see their kids and PARENT HUB breaks.
+      // Without the trainer expansion, the ClientOnboarding screen renders
+      // "No trainers available" for any client whose trainerId isn't set,
+      // and they get stuck on step 1 with no way forward.
+      rows = await prisma.operator.findMany({
+        where: {
+          OR: [
+            { id: auth.operatorId },
+            { isJunior: true, parentIds: { has: auth.operatorId } },
+            { role: 'trainer' },
+          ],
+        },
+      });
     }
 
-    // Convert DB rows back to the app's Operator shape.
-    // NEVER include `pin` or `passwordHash` — pins are credentials and must not leak
-    // to the client, even for admins browsing the OpsCenter. If pins are needed for
-    // debugging, use /api/admin/debug (admin-secret-gated).
-    const operators = rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      callsign: row.callsign,
-      email: row.email,
-      role: row.role,
-      tier: row.tier,
-      coupleWith: row.coupleWith,
-      trainerId: row.trainerId,
-      clientIds: row.clientIds,
-      trainerNotes: row.trainerNotes,
-      betaUser: row.betaUser,
-      betaFeedback: row.betaFeedback,
-      betaStartDate: row.betaStartDate,
-      betaEndDate: row.betaEndDate,
-      isVanguard: row.isVanguard,
-      tierLocked: row.tierLocked,
-      promoActive: row.promoActive,
-      promoType: row.promoType,
-      promoExpiry: row.promoExpiry,
-      intake: row.intake as Record<string, unknown>,
-      profile: row.profile as Record<string, unknown>,
-      nutrition: row.nutrition as Record<string, unknown>,
-      prs: row.prs as unknown[],
-      injuries: row.injuries as unknown[],
-      preferences: row.preferences as Record<string, unknown>,
-      workouts: row.workouts as Record<string, unknown>,
-      dayTags: row.dayTags as Record<string, unknown>,
-      sitrep: row.sitrep as Record<string, unknown>,
-      dailyBrief: row.dailyBrief as Record<string, unknown>,
-      billing: row.billing as Record<string, unknown>,
-    }));
+    // Spread-with-denylist projection.
+    //
+    // The old shape was a hand-picked allowlist of ~30 fields. That
+    // pattern is what caused PRs #153 (macroCycles write), #155
+    // (provision junior fields), and #163 (macroCycles read) — every
+    // time a new column landed on Operator, somebody had to remember
+    // to update this list, and three separate times nobody did. The
+    // operator's data round-tripped through this route and quietly
+    // lost the new field.
+    //
+    // Inverted: spread the whole row, then DELETE the credentials.
+    // New schema columns ride through automatically. The denylist is
+    // small + auditable + the security invariant is local rather
+    // than implicit-by-omission.
+    //
+    // Denylist rationale:
+    //   - pin:          login credential (Web PIN entry)
+    //   - passwordHash: bcrypt; never client-visible
+    //   - googleId:     OAuth subject id; we don't need it client-side
+    //                   and it's recoverable evidence of a user's
+    //                   Google identity
+    // If a future column lands that ALSO must not leak (API tokens,
+    // billing PII, etc.), add it to the destructure here.
+    const operators = rows.map(row => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { pin, passwordHash, googleId, ...safe } = row;
+      return safe;
+    });
 
     return NextResponse.json({ operators });
   } catch (error) {

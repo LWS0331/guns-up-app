@@ -14,8 +14,12 @@ model Operator {
   pin         String
   email       String?   @unique
   passwordHash String?
+  googleId    String?   @unique  // Google OAuth `sub` claim — set after first sign-in via /api/auth/google/callback
   role        String                  // "trainer" | "client"
   tier        String                  // "haiku" | "sonnet" | "opus" | "white_glove"
+  // AI coach persona — see src/lib/personas.ts. NULL or unknown values
+  // resolve to 'gunny' via resolvePersonaId() (legacy default).
+  personaId   String?                  // "gunny" | "raven" | "buck" | "coach"
   coupleWith  String?
   trainerId   String?
   clientIds   String[]  @default([])
@@ -29,6 +33,14 @@ model Operator {
   promoActive   Boolean  @default(false) // currently on promotional period
   promoType     String?               // e.g. "free_month_recon"
   promoExpiry   String?               // ISO date when promo expires
+  // Admin hard kill switch. When true, isOperatorAllowed() rejects the
+  // session on the next /api/auth/me call. Reversible — clearing the
+  // flag re-enables the account without losing data. Set via
+  // POST /api/admin/operator-status. Distinct from a row delete:
+  // disabled rows still exist in the DB and can be reactivated.
+  disabled      Boolean  @default(false)
+  disabledAt    DateTime?              // when the disable was applied
+  disabledReason String?               // optional admin note ("trial expired no-pay")
 
   // Complex nested data stored as JSONB
   intake      Json      @default("{}")  // IntakeAssessment (completed flag, goals, equipment, etc.)
@@ -39,12 +51,106 @@ model Operator {
   preferences Json      @default("{}")
   workouts    Json      @default("{}")  // Record<string, Workout>
   dayTags     Json      @default("{}")  // Record<string, DayTag>
+  dailyReadiness Json   @default("{}")  // Record<string, DailyReadinessEntry> — daily check-ins (sleep/stress/mood/readiness/energy)
   sitrep      Json      @default("{}")  // Sitrep battle plan from Gunny AI
   dailyBrief  Json      @default("{}")  // Today's adaptive daily brief
   billing     Json      @default("{}")  // Stripe billing data
 
+  // Macrocycle engine (Apr 2026). Up to 2 active goals — calendar-aware
+  // periodization for 6-12 month targets. See src/lib/macrocycle.ts and
+  // src/lib/macrocycleLibrary.ts. Migration NOT auto-run.
+  macroCycles  Json     @default("[]")    // MacroCycle[] — see src/lib/types.ts
+
+  // Junior Operator fields (gated behind JUNIOR_OPERATOR_ENABLED feature flag)
+  isJunior      Boolean  @default(false)
+  juniorAge     Int?                                  // duplicate of profile.age for fast filter
+  parentIds     String[] @default([])                 // adult operators with full visibility
+  sportProfile  Json     @default("{}")               // SportProfile shape — see src/lib/types.ts
+  juniorConsent Json     @default("{}")               // parent consent record + signed dates
+  juniorSafety  Json     @default("{}")               // refusal log, escalation flags, RED-S flags
+
+  // Free RECON usage caps (Pricing Strategy v2 — RECON is now $0/mo with
+  // hard caps to prevent runaway API spend). Tiers above RECON ignore.
+  // Counters reset against rolling windows: chats every 24h, workout
+  // generations every 7 days. See src/lib/usageCaps.ts.
+  reconChatsCount       Int       @default(0)         // chats in current 24h window
+  reconChatsResetAt     DateTime?                     // next reset boundary (now + 24h)
+  reconWorkoutsCount    Int       @default(0)         // workout generations in current 7d window
+  reconWorkoutsResetAt  DateTime?                     // next reset boundary (now + 7d)
+
+  // Post-purchase activation tracking (PaywallSpec §8). The cron in
+  // src/app/api/cron/activation-emails/route.ts scans these fields to
+  // schedule the four-email activation sequence (immediate, 6h, 3d, 7d).
+  webPurchaseAt           DateTime?  // first Stripe webhook fired for this account
+  firstAppOpenAt          DateTime?  // first authenticated app session
+  firstWorkoutCompletedAt DateTime?  // first workout marked done after activation
+  activationEmailsSent    Int        @default(0)
+  lastActivationEmailAt   DateTime?
+  passwordResetRequestedAt DateTime?
+  recoveryAttempts         Int       @default(0)
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([parentIds])
+  @@index([isJunior])
+  @@index([webPurchaseAt, firstAppOpenAt])  // activation email cron scan
+}
+
+// OperatorBaseline — rolling-window personal baselines for the
+// autoregulation engine. Updated daily by /api/cron/baselines from
+// recent Workouts + WearableConnection.syncData. Read by
+// src/lib/readiness.ts to compute the GO_HARD / NORMAL / DELOAD /
+// REST recommendation with confidence-graded output.
+//
+// Cold-start protocol (per "RPE auto-regulation engine" v1 spec):
+//   - Days 0-6: function returns INSUFFICIENT_DATA, falls back to
+//     existing recovery-readout hardcoded thresholds.
+//   - Days 7-13: low-confidence recommendations (DELOAD nudges only,
+//     no STOP-style rest calls).
+//   - Days 14+: full personal-baseline engine.
+//
+// All fields nullable so a fresh row can be created at first sync
+// before any rolling means exist.
+model OperatorBaseline {
+  operatorId       String   @id
+  hrvRollingMean   Float?   // 14-day rolling mean (ms)
+  hrvRollingSD     Float?
+  rhrRollingMean   Float?   // resting HR (bpm)
+  sleepHoursMean   Float?
+  sRpeMean         Float?
+  sRpeSD           Float?
+  acuteLoad7d      Float?   // sum of (sRPE × durationMin) over last 7d
+  chronicLoad28d   Float?   // rolling 28d mean of daily loads
+  acwr             Float?   // acute / chronic — sweet spot 0.8-1.3
+  baselineDays     Int      @default(0)  // days of data contributing
+  lastComputedAt   DateTime?
+  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now())
+
+  @@index([lastComputedAt])
+}
+
+// AuthToken — short-lived single-use tokens for the activation flow.
+// Three intents:
+//   - web_handoff:    iOS app generates a token to hand off to the web
+//                     for an upgrade checkout. 5-min TTL, single use.
+//   - magic_link:     emailed sign-in link sent post-purchase. 7-day TTL.
+//   - password_reset: standard password recovery. 1-hour TTL.
+// metadata holds intent-specific payload (e.g. targetTier for upgrades).
+model AuthToken {
+  id          String    @id @default(cuid())
+  operatorId  String
+  type        String    // 'web_handoff' | 'magic_link' | 'password_reset'
+  intent      String?   // 'upgrade' | 'sign_in' | 'recover'
+  metadata    Json      @default("{}")
+  used        Boolean   @default(false)
+  usedAt      DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([operatorId])
+  @@index([expiresAt])
 }
 
 model ChatHistory {
@@ -71,4 +177,319 @@ model WearableConnection {
   @@unique([operatorId, provider])
   @@index([operatorId])
   @@index([vitalUserId])
+}
+
+// CalendarConnection — operator-owned external-calendar link. Phase 1
+// (May 2026) supports Google Calendar read-only via OAuth so Daily Ops
+// can reshape blocks around real meetings ("you have a 9am call —
+// moving strength training to 11am"). Phase 2 will add provider="ical_url"
+// for Apple/Outlook via shared-feed URLs (no token storage needed).
+//
+// Tokens are encrypted at rest by src/lib/calendarTokens.ts using a key
+// derived from JWT_SECRET via HKDF. Storing them plaintext would make a
+// DB leak equivalent to a Google account compromise; encryption shifts
+// the threat model so JWT_SECRET must also leak before tokens are usable.
+//
+// active=false replaces hard-delete for disconnects so we keep the audit
+// trail (when, by what scopes, against which Google account).
+model CalendarConnection {
+  id                String    @id @default(cuid())
+  operatorId        String
+  provider          String    // "google" (Phase 1); "ical_url" (Phase 2)
+  providerAccountId String?   // Google account email — what the operator authorized as
+  externalCalId     String    @default("primary")  // Google calendarId, defaults to user's primary
+  accessTokenEnc    String?   // AES-GCM(iv|ciphertext|tag) base64url; null for ical_url provider
+  refreshTokenEnc   String?
+  tokenExpiresAt    DateTime?
+  scopes            String    @default("")  // space-separated, e.g. "https://www.googleapis.com/auth/calendar.readonly"
+  connectedAt       DateTime  @default(now())
+  lastSyncAt        DateTime?
+  syncData          Json      @default("{}") // { events: [{title,startISO,endISO,allDay,location?}], windowStart, windowEnd, eventCount }
+  active            Boolean   @default(true)
+
+  @@unique([operatorId, provider])
+  @@index([operatorId])
+}
+
+// WearableSnapshot — one row per operator per calendar day, written
+// by /api/wearables/webhook on each daily.data.* event (and by the
+// sync route's pull). Lets the baselines cron compute TRUE rolling
+// means/SDs from real historical samples instead of the v1
+// approximation that treated each cron run as one data point against
+// an incrementally-updated mean.
+//
+// The unique([operatorId, syncDate]) lets the webhook upsert by
+// (operator, day) so a provider that pushes multiple events for the
+// same day (sleep + recovery + body) collapses to a single row, with
+// each event filling in its own columns via the Prisma `update` half.
+//
+// Migration NOT run automatically; applies via Prisma's runtime
+// `db push` at deploy startup (see scripts/start.* and migrate route).
+model WearableSnapshot {
+  id              String   @id @default(cuid())
+  operatorId      String
+  syncDate        String                  // calendar_date YYYY-MM-DD (provider-reported)
+  hrv             Float?                  // ms
+  restingHr       Float?                  // bpm
+  sleepHours      Float?                  // hours (decimal) — stored consistently with webhook/sync output
+  sleepEfficiency Float?                  // 0-100
+  recoveryScore   Float?                  // 0-100 (provider-computed when present)
+  raw             Json     @default("{}") // last full provider payload for the day, for debugging
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([operatorId, syncDate])
+  @@index([operatorId, syncDate])
+}
+
+// Trainer applications submitted via /trainer-apply landing page form.
+// Public POST endpoint; admin-only GET. Reviewed manually — no auto-acceptance.
+// Migration NOT run automatically; apply via `prisma migrate dev` when ready.
+// Junior Operator beta-list signups (May 2026, /junior-operator
+// landing). Public form takes role + email + name + an optional
+// "lifter experience" follow-up. We onboard in waves; status flips
+// from "pending" → "invited" once an admin sends the magic link
+// from the founder dashboard. Same shape as TrainerApplication so
+// the admin tooling can be unified later.
+model JuniorBetaLead {
+  id                  String   @id @default(cuid())
+  email               String
+  name                String
+  // "parent" | "coach" | "athlete" | "lifter" — discriminator that
+  // routes the lead into the right onboarding bucket.
+  role                String
+  // Free-form context only meaningful when role === "lifter"
+  // ("2 years · novice · serious", etc.). NULL for other roles.
+  lifterExperience    String?
+
+  status              String   @default("pending")  // "pending" | "invited" | "rejected"
+  reviewedBy          String?                       // operatorId of admin who reviewed
+  reviewedAt          DateTime?
+  reviewNotes         String?
+
+  // Spam-protection metadata (mirrors /api/trainer-applications)
+  ip                  String?
+  userAgent           String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
+  @@index([role])
+}
+
+model TrainerApplication {
+  id                  String   @id @default(cuid())
+  email               String
+  name                String
+  callsign            String?                // optional — applicant may not have a callsign yet
+  yearsCertified      Int                    // years holding any S&C / personal-training cert
+  currentClientCount  Int                    // active paying clients today
+  primaryDiscipline   String                 // e.g. "strength", "hypertrophy", "tactical", "sport_perf"
+  certifications      String[] @default([])  // e.g. ["NSCA-CSCS", "NASM-CPT"]
+  whyGunsUp           String                 // free text — qualifying motivation
+  sampleProgramming   String                 // free text — sample week / proof-of-craft
+
+  status              String   @default("pending") // "pending" | "approved" | "rejected"
+  reviewedBy          String?                // operatorId of admin who reviewed (e.g. "op-ruben")
+  reviewedAt          DateTime?
+  reviewNotes         String?
+
+  // Spam-protection metadata (mirrors /api/contact rate-limit pattern)
+  ip                  String?
+  userAgent           String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
+}
+
+// PersonalRhythm — 14-day rolling aggregates derived from
+// DailyOpsPlan.feedback. Phase 2A (May 2026) of Daily Ops. Computed
+// lazily before each plan generation by src/lib/personalRhythm.ts;
+// injected into Gunny's system prompt so the next plan adapts to
+// what the operator actually does (vs what Gunny thinks they should
+// do). One row per operator. Pure derived state — safe to recompute
+// from history at any time, no manual edits.
+model PersonalRhythm {
+  operatorId              String   @id
+
+  // Time-shift signals — minutes the operator habitually moves a
+  // block from Gunny's default. Negative = earlier, positive = later.
+  // Aggregated from BlockFeedback.perceivedFit votes:
+  //   'too_early' → +60 min vote
+  //   'too_late'  → -30 min vote
+  //   'right'     → reinforce current
+  caffeineCutoffOffsetMin Int      @default(0)
+  workoutWindowDefault    String?  // 'HH:MM' — mode of workout block startTimes that scored 'right' or were followed
+  windDownOffsetMin       Int      @default(0)
+  bedtimeOffsetMin        Int      @default(0)
+
+  // Adherence by category (0..1). Categories with persistent low
+  // adherence get downgraded or removed from the next plan.
+  blockSkipRates          Json     @default("{}") // { [BlockCategory]: number }
+
+  // Meal preference learned from how many meal blocks land 'on time'
+  // vs get merged or skipped.
+  preferredMealCount      Int      @default(4)
+
+  // Wearable-derived multi-day comparison.
+  // Negative sleepGapMin = consistently sleeping less than the
+  // sleep_target.endTime - startTime delta (operator under-resting).
+  sleepGapMin             Int      @default(0)
+
+  // Diagnostics — surfaced in admin/parent views, not in the plan.
+  feedbackSampleCount     Int      @default(0)
+  lastComputedAt          DateTime?
+  updatedAt               DateTime @updatedAt
+}
+
+// ChatHistorySnapshot — append-only audit of every ChatHistory.messages
+// overwrite. Captured by /api/chat PUT BEFORE applying the upsert,
+// so the prior state is always preserved even if a buggy client (or
+// a future regression) sends a wipe.
+//
+// Existed in pre-emptive response to the May 2026 Daily Ops chat-wipe
+// incident: client-side hydration race wiped Ruben's full chat
+// history when sendGunnyVoiceMessage ran before gunnyMessages had
+// loaded from the DB. The shrink guard added at the same time
+// rejects the obvious wipes; this table guarantees recovery even
+// from non-obvious ones.
+//
+// Retention: keep all snapshots forever for now (cheap — tens of KB
+// per row). Future cleanup cron can drop snapshots older than 90
+// days IF storage becomes an issue.
+model ChatHistorySnapshot {
+  id           String   @id @default(cuid())
+  operatorId   String
+  chatType     String
+  messages     Json     // the previous value, captured immediately before overwrite
+  replacedAt   DateTime @default(now())
+  replacedByOp String?  // auth.operatorId of the caller who triggered the overwrite
+  reason       String?  // 'normal-update' | 'force-clear' | 'admin-restore' | 'migration'
+  prevLen      Int      @default(0) // length of prev messages — fast filter for queries
+  newLen       Int      @default(0) // length of incoming — diagnostic
+
+  @@index([operatorId, chatType, replacedAt])
+  @@index([operatorId, replacedAt])
+}
+
+// GunnyUsageLog — per-call accounting of Anthropic API usage. Added
+// May 2026 alongside prompt caching to make the cost picture
+// auditable. One row per LLM call from /api/gunny (both streaming
+// and non-streaming paths). Cache_read / cache_write counts surface
+// whether the caching pass is actually paying off; estimated_cost_usd
+// computed via src/lib/anthropicCost.ts at write time so a later
+// rate change doesn't backdate historical numbers.
+//
+// Indexes optimized for:
+//   - per-operator daily rollups (operatorId, createdAt)
+//   - cost dashboard (createdAt) sorted DESC
+model GunnyUsageLog {
+  id                String   @id @default(cuid())
+  operatorId        String
+  /// Optional — populated when this call was tied to a specific
+  /// chatType (gunny-tab, gunny-onboarding) so we can split spend by
+  /// surface.
+  chatType          String?
+  /// Optional — 'workout', 'voice', 'assistant', 'ops', 'onboarding', etc.
+  mode              String?
+  model             String   // e.g. 'claude-opus-4-6-20250101'
+  inputTokens       Int      @default(0)
+  outputTokens      Int      @default(0)
+  cacheReadTokens   Int      @default(0)
+  cacheWriteTokens  Int      @default(0)
+  /// USD, 6-decimal precision. Computed at write time from the rate
+  /// card in src/lib/anthropicCost.ts.
+  estimatedCostUsd  Decimal  @default(0) @db.Decimal(12, 6)
+  /// Anthropic billing only counts non-cached input as "input_tokens".
+  /// Cache reads + writes are reported separately. We mirror that
+  /// shape here so the row is directly comparable to the CSV export.
+  createdAt         DateTime @default(now())
+
+  @@index([operatorId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}
+
+// PushSubscription — Web Push (RFC 8030) subscription rows. Phase 2C.
+// One row per (operatorId, endpoint). Endpoint uniqueness across
+// operators is enforced too — if a device's endpoint already exists
+// against another operator (rare, e.g. shared family iPad) we delete
+// the old row before inserting the new one.
+//
+// This is the targeting table the daily-ops notification cron + the
+// generic sendPush helper read from. p256dh + auth are the encryption
+// keys the browser handed us at subscribe time; web-push uses them to
+// envelope the payload before sending it through the FCM/APNs/Mozilla
+// push service.
+//
+// Lifecycle:
+//   - subscribe  → upserted from /api/push/subscribe
+//   - unsubscribe → deleted from /api/push/unsubscribe
+//   - 404 / 410 from push service on send → delete (the browser revoked
+//     it; sendPush handles this cleanup)
+model PushSubscription {
+  id               String   @id @default(cuid())
+  operatorId       String
+  endpoint         String   @unique
+  p256dh           String
+  auth             String
+  /// 'ios-pwa' | 'desktop' | 'android' | 'unknown' — used for diagnostics + per-platform tweaks if needed
+  platform         String   @default("unknown")
+  /// Operator-specific notification policy. Defaults are 'default-on' per
+  /// Phase 2C decision: every block category notifies unless the operator
+  /// mutes it. Future Phase 2D adds the per-block mute UI.
+  mutedCategories  String[] @default([])
+  notificationsOn  Boolean  @default(true)
+  lastSeenAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([operatorId])
+  @@index([operatorId, notificationsOn])
+}
+
+// Daily Ops — Gunny's prescribed daily schedule (separate from the
+// Workout Planner). Owns the rhythm of the day: wake, sun, caffeine
+// window, meal cadence, supplement timing, workout window, wind-down,
+// sleep target. Generated by Gunny via the `<daily_ops_json>` channel
+// (May 2026 launch; Commander tier-gated).
+//
+// One plan per (operatorId, date). Junior operators' plans land in
+// `pending_parent_approval` until a linked parent approves — adult
+// operators land directly in `active`.
+//
+// `feedback` is a denormalized JSON map keyed by blockId so the
+// 3-tap UI can stamp without round-tripping a join table. If we
+// outgrow this for analytics we'll normalize it.
+model DailyOpsPlan {
+  id              String   @id @default(cuid())
+  operatorId      String
+  date            String   // YYYY-MM-DD local
+  generatedAt     DateTime @default(now())
+  generatedBy     String   // 'gunny' | 'gunny_adapted' | 'manual'
+
+  // Parent approval workflow for junior operators.
+  // - Adults: status === 'active' on creation
+  // - Juniors: status === 'pending_parent_approval' on creation;
+  //            parent flips to 'approved' or 'rejected'
+  status          String   @default("active")
+  approvedBy      String?  // parent operatorId
+  approvedAt      DateTime?
+  rejectionNotes  String?
+
+  basis           Json     // { periodizationPhase, sleepDebtHrs, readinessScore, workoutLoad, trainingPath }
+  blocks          Json     // DailyBlock[] — see src/lib/dailyOpsTypes.ts
+  notes           String?  // Gunny's day-level rationale (1-3 sentences)
+  feedback        Json     @default("{}") // { [blockId]: BlockFeedback }
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([operatorId, date])
+  @@index([operatorId, date])
+  @@index([status])
 }

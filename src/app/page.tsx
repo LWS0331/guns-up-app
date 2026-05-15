@@ -5,6 +5,8 @@ import { Operator } from '@/lib/types';
 import { OPERATORS, getAccessibleOperators } from '@/data/operators';
 import AppShell from '@/components/AppShell';
 import ClientOnboarding from '@/components/ClientOnboarding';
+import TrialBanner, { TrialState } from '@/components/TrialBanner';
+import VanguardBanner from '@/components/VanguardBanner';
 // Marketing landing page is the public face of `/`. Members log in via
 // `/login` (which the landing's MEMBER LOGIN button links to). LoginScreen
 // is no longer rendered here — it lives at /login.
@@ -17,6 +19,11 @@ export default function Home() {
   const [operators, setOperators] = useState<Operator[]>(OPERATORS);
   const [isLoaded, setIsLoaded] = useState(false);
   const [dbReady, setDbReady] = useState(false);
+  // Trial-tier state surfaced by /api/auth/me. Drives the TrialBanner
+  // overlay (expired) and the soft "trial ending soon" warning when
+  // daysRemaining ≤ 3. Null means /me hasn't returned yet, OR the
+  // operator has no active trial promo.
+  const [trialState, setTrialState] = useState<TrialState | null>(null);
 
   // Debounce timer for save operations
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -26,106 +33,253 @@ export default function Home() {
     // Initialize PostHog analytics
     initAnalytics();
 
-    // Register service worker for PWA support with auto-update
+    // ─── Stripe checkout return handling ─────────────────────────────
+    // Stripe's success_url + cancel_url drop the user back at /?checkout=
+    // success&session_id=… or /?checkout=cancelled. We don't actually
+    // act on those params yet (Stripe webhook updates the operator
+    // record server-side), but the leftover URL state was confusing
+    // bfcache restoration on iOS — combined with SW updates this could
+    // produce the "stuck loading" symptom on browser-back from Stripe.
+    // Strip the query string immediately so the URL goes back to clean
+    // `/` and downstream logic doesn't see weird state.
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('checkout') || params.has('session_id')) {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    }
+
+    // ─── bfcache restore handler ─────────────────────────────────────
+    // iOS Safari aggressively caches the page when you navigate away
+    // (e.g. to Stripe). When you come back via browser-back the page is
+    // restored from cache — pageshow fires with persisted=true. The
+    // cached React tree is fine, but we want to make sure isLoaded is
+    // true (in case the original load was mid-flight when we navigated
+    // away) so the user doesn't get stuck on "INITIALIZING SYSTEMS…".
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        setIsLoaded(true);
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+
+    // Register service worker for PWA support with auto-update.
+    // SINGLE reload trigger only — the previous setup had two listeners
+    // (updatefound→statechange AND postMessage) that both fired on the
+    // same activation, racing each other and causing double reloads /
+    // bfcache confusion when returning from Stripe checkout. We now
+    // rely solely on `controllerchange` which is the canonical "a new
+    // SW just took control" signal, and we guard against firing more
+    // than once per page life.
+    let swReloadFired = false;
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
           // Check for updates every 60 seconds
           setInterval(() => registration.update(), 60000);
-          // When a new SW is waiting, activate it
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'activated') {
-                  // New version available — reload to get fresh assets
-                  window.location.reload();
-                }
-              });
-            }
-          });
         })
-        .catch((error) => {
-          // Service Worker registration failed
+        .catch(() => {
+          // Service Worker registration failed — non-fatal, app still works
         });
-      // Listen for SW update messages
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data?.type === 'SW_UPDATED') {
-          window.location.reload();
-        }
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (swReloadFired) return;
+        swReloadFired = true;
+        window.location.reload();
       });
     }
 
+    // Wraps fetch with an AbortController-driven timeout. Without a timeout,
+    // a hung /api/auth/me or /api/operators traps the user on "INITIALIZING
+    // SYSTEMS…" indefinitely (setIsLoaded(true) at the bottom of loadFromDB
+    // never runs). 10s is generous for a healthy backend and short enough
+    // that a real outage flips us to the static-data fallback quickly.
+    const fetchWithTimeout = (url: string, init: RequestInit, timeoutMs = 10_000): Promise<Response> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+    };
+
     const loadFromDB = async () => {
-      // Check for stored JWT token FIRST — needed for authenticated API calls
+      // Check for stored JWT token FIRST — needed for authenticated API calls.
+      // Apr 2026 fix (iOS PWA persistence): even when localStorage is empty,
+      // the user may still have a valid httpOnly auth cookie. Always probe
+      // /api/auth/me with credentials: 'include' so the server can fall back
+      // to the cookie. If /me succeeds, the response carries an operator
+      // object — and the cookie's existence means the user is still
+      // authenticated even though localStorage was wiped between sessions.
       const token = getAuthToken();
       const authHeaders: Record<string, string> = token
         ? { 'Authorization': `Bearer ${token}` }
         : {};
 
-      // Auto-login if token exists
-      if (token) {
-        try {
-          const meRes = await fetch('/api/auth/me', {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (meRes.ok) {
-            const meData = await meRes.json();
-            setCurrentUser(meData.operator);
-            identifyUser(meData.operator.id, {
-              role: meData.operator.role,
-              tier: meData.operator.tier,
-              callsign: meData.operator.callsign
-            });
-          } else {
-            // Token invalid, clear it
-            console.warn('[page.tsx:loadFromDB] Auth /me returned non-ok:', meRes.status);
-            localStorage.removeItem('authToken');
-          }
-        } catch (err) {
-          console.error('[page.tsx:loadFromDB] Auth /me network error:', err);
-          localStorage.removeItem('authToken');
-        }
-      }
+      // Parallel fan-out: /api/auth/me and /api/operators are independent —
+      // operators uses authHeaders (already captured above), not /me's response.
+      // Previously these ran sequentially (~1.6s + ~2.8s = ~4.4s of splash on
+      // the Apr 2026 trace). Running them concurrently halves that.
+      //
+      // Each promise is wrapped to never reject — a network error becomes a
+      // resolved-null so the consumer below handles the no-result case the
+      // same way it handles a non-ok response. This keeps us out of try/catch
+      // tangle and makes setIsLoaded(true) in finally trivially safe.
+      //
+      // Always make the /me call (even without a localStorage token) so the
+      // cookie path can resurrect the session. credentials:'include' ensures
+      // the cookie travels with the request.
+      const mePromise: Promise<Response | null> = fetchWithTimeout('/api/auth/me', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
+      }).catch(err => {
+        console.error('[page.tsx:loadFromDB] /api/auth/me network error:', err);
+        return null;
+      });
 
-      // Now fetch operators with auth header (so we get DB data, not static fallback)
+      const operatorsPromise: Promise<Response | null> = fetchWithTimeout('/api/operators', { headers: authHeaders }).catch(err => {
+        console.error('[page.tsx:loadFromDB] /api/operators network error:', err);
+        return null;
+      });
+
       try {
-        const res = await fetch('/api/operators', { headers: authHeaders });
-        if (res.ok) {
-          const data = await res.json();
+        const [meRes, opsRes] = await Promise.all([mePromise, operatorsPromise]);
+
+        // Handle /api/auth/me result.
+        if (meRes && meRes.ok) {
+          const meData = await meRes.json();
+          setCurrentUser(meData.operator);
+          // Trial state lives next to currentUser. /me derives this
+          // from promoActive + promoType + promoExpiry (see
+          // src/app/api/auth/me/route.ts) so the client doesn't have
+          // to re-implement the date math.
+          if (meData.trial) {
+            setTrialState(meData.trial as TrialState);
+          }
+          identifyUser(meData.operator.id, {
+            role: meData.operator.role,
+            tier: meData.operator.tier,
+            callsign: meData.operator.callsign,
+          });
+          // Apr 2026 fix: /me now returns a fresh token (rolling refresh).
+          // Re-stash to localStorage so subsequent header-based API calls
+          // continue to work even if the prior localStorage entry was
+          // wiped and the cookie carried the auth.
+          if (meData.token && typeof meData.token === 'string') {
+            try { localStorage.setItem('authToken', meData.token); } catch { /* storage full */ }
+          }
+        } else if (meRes && !meRes.ok && meRes.status === 401) {
+          // Truly unauthorized — neither header nor cookie valid. Clear
+          // the localStorage entry; the cookie will get cleared when the
+          // user logs out, or naturally expire after 7 days.
+          console.warn('[page.tsx:loadFromDB] Auth /me returned 401, clearing localStorage token');
+          localStorage.removeItem('authToken');
+        } else if (meRes && !meRes.ok) {
+          // Other non-ok (403 not_allowed, 404 operator-not-found, 5xx).
+          // Don't blindly clear localStorage — 5xx is transient, and 403
+          // means the operator was de-allowlisted; the user will see the
+          // login screen but their token survives any reauth.
+          console.warn('[page.tsx:loadFromDB] Auth /me non-ok status:', meRes.status);
+        }
+
+        // Handle /api/operators result. Empty DB triggers a seed + re-fetch
+        // (still serial, since they depend on each other — but only inside
+        // the empty-DB branch, which is rare).
+        if (opsRes && opsRes.ok) {
+          const data = await opsRes.json();
           if (data.operators && data.operators.length > 0) {
             setOperators(data.operators as Operator[]);
             setDbReady(true);
           } else {
             // Database is empty — seed it
-            const seedRes = await fetch('/api/seed', { method: 'POST', headers: authHeaders });
-            if (seedRes.ok) {
-              // Re-fetch after seed
-              const reRes = await fetch('/api/operators', { headers: authHeaders });
-              if (reRes.ok) {
-                const reData = await reRes.json();
-                if (reData.operators?.length > 0) {
-                  setOperators(reData.operators as Operator[]);
+            try {
+              const seedRes = await fetchWithTimeout('/api/seed', { method: 'POST', headers: authHeaders });
+              if (seedRes.ok) {
+                const reRes = await fetchWithTimeout('/api/operators', { headers: authHeaders });
+                if (reRes.ok) {
+                  const reData = await reRes.json();
+                  if (reData.operators?.length > 0) {
+                    setOperators(reData.operators as Operator[]);
+                  }
                 }
               }
+            } catch (err) {
+              console.error('[page.tsx:loadFromDB] seed flow failed:', err);
             }
             setDbReady(true);
           }
         } else {
-          // API error — fall back to static data
+          // API error / no response — fall back to static data
           setDbReady(false);
         }
-      } catch (err) {
-        // Network/DB not available — fall back to static data
-        setDbReady(false);
+      } finally {
+        // ALWAYS lift the splash, even if every fetch threw, every parser
+        // failed, or a setter blew up. Operator data falls back to the
+        // static OPERATORS import; auth falls back to logged-out (LandingPage).
+        // Either is recoverable; staying on the splash forever isn't.
+        setIsLoaded(true);
       }
-
-      setIsLoaded(true);
     };
 
     loadFromDB();
   }, []);
+
+  // ── LIVE LEADERBOARD POLL ──
+  // The COC leaderboard derives its rows from `operators` state, which
+  // was previously set ONCE during loadFromDB() and never refreshed.
+  // Net effect: User A logs a workout or PR, User B's leaderboard sits
+  // frozen until a hard reload. This effect pings /api/operators on a
+  // 10s cadence after the initial load so cross-account leaderboard
+  // changes (workout completions, PRs, streaks, day-tags) surface
+  // without a manual refresh.
+  //
+  // Tab-aware: pauses while document is hidden so background tabs
+  // don't burn API budget. Re-fires immediately on visibilitychange
+  // when the tab regains focus, so a user returning to the app sees
+  // current standings within ~1 polling cycle.
+  //
+  // /me is not re-polled here — auth/trial/operator-profile drift is
+  // handled separately by the existing /me-on-boot path. This is
+  // strictly a leaderboard-data refresh.
+  useEffect(() => {
+    if (!isLoaded) return;
+    let cancelled = false;
+
+    const refetch = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const token = getAuthToken();
+      const headers: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+      try {
+        const res = await fetch('/api/operators', { headers });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data?.operators)) {
+          setOperators(data.operators as Operator[]);
+        }
+      } catch {
+        // Network blip — next tick will retry. Don't surface to UI.
+      }
+    };
+
+    const intervalMs = 10_000;
+    const interval = setInterval(refetch, intervalMs);
+
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) refetch();
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+    };
+  }, [isLoaded]);
 
   // Persist operator updates to database
   const persistOperator = useCallback(async (updated: Operator) => {
@@ -160,6 +314,17 @@ export default function Home() {
       sitrep: updated.sitrep ?? {},
       dailyBrief: updated.dailyBrief ?? {},
       trainerNotes: updated.trainerNotes ?? null,
+      // Junior Operator fields — only meaningful when the operator
+      // (or its target via parent dashboard) is a junior. The server
+      // whitelists per actor (self/trainer/admin write the kid-owned
+      // fields; parents are restricted to juniorConsent + juniorSafety).
+      // Without these on the body, JuniorIntakeForm.onComplete loses
+      // sportProfile + consent on save and ParentDashboard updates
+      // (mark resolved, emergency contact) silently fail.
+      sportProfile: updated.sportProfile,
+      juniorConsent: updated.juniorConsent,
+      juniorSafety: updated.juniorSafety,
+      juniorAge: updated.juniorAge,
       // Admin-only fields (ignored by server if not admin)
       tier: updated.tier,
       role: updated.role,
@@ -175,6 +340,15 @@ export default function Home() {
       promoActive: updated.promoActive ?? false,
       promoType: updated.promoType ?? null,
       promoExpiry: updated.promoExpiry ?? null,
+      // Admin-only junior identity (toggle isJunior on, set parents)
+      isJunior: updated.isJunior,
+      parentIds: updated.parentIds,
+      // Macrocycle goals — periodization plans the operator builds via
+      // MacrocyclePanel. The server-side whitelist gates which fields
+      // get written; macroCycles is now allow-listed on the profile
+      // PATCH path. Without this line the goal lived in React state
+      // only, vanishing on the next page load.
+      macroCycles: updated.macroCycles ?? [],
     };
 
     try {
@@ -225,6 +399,13 @@ export default function Home() {
     trackEvent(EVENTS.LOGOUT);
     resetAnalytics();
     localStorage.removeItem('authToken');
+    // Apr 2026 fix: also clear the persistent httpOnly auth cookie. Without
+    // this, logout only clears localStorage — the cookie would silently
+    // re-authenticate the next visitor on a shared device on next /me probe.
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {
+      // Best-effort — a network failure here is OK; the cookie expires in 7 days
+      // anyway and the user is already client-side logged out.
+    });
     setCurrentUser(null);
   };
 
@@ -293,12 +474,33 @@ export default function Home() {
   const accessibleUsers = getAccessibleOperators(currentUser.id, operators);
 
   return (
-    <AppShell
-      currentUser={currentUser}
-      accessibleUsers={accessibleUsers}
-      operators={operators}
-      onUpdateOperator={handleUpdateOperator}
-      onLogout={handleLogout}
-    />
+    <>
+      <AppShell
+        currentUser={currentUser}
+        accessibleUsers={accessibleUsers}
+        operators={operators}
+        onUpdateOperator={handleUpdateOperator}
+        onLogout={handleLogout}
+      />
+      {/* Trial banner overlays AppShell when promo trial is active.
+          Self-suppresses if trialState is null or trial.active is false,
+          so this mount is a no-op for any operator without a trial. */}
+      {trialState && (
+        <TrialBanner
+          trial={trialState}
+          operatorId={currentUser.id}
+          stripePortalEnabled
+        />
+      )}
+      {/* Vanguard banner — top-pinned recognition strip for founding
+          members (Operator.isVanguard = true, granted from OPS Center).
+          Self-suppresses for non-vanguard operators and remembers the
+          dismiss in localStorage. Lives at the top so it doesn't fight
+          TrialBanner for the bottom slot. */}
+      <VanguardBanner
+        operatorId={currentUser.id}
+        isVanguard={currentUser.isVanguard === true}
+      />
+    </>
   );
 }

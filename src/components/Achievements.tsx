@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { Operator } from '@/lib/types';
 import { toLocalDateStr } from '@/lib/dateUtils';
+import { useLanguage } from '@/lib/i18n';
 import Icon from './Icons';
 
 interface AchievementsProps {
@@ -33,6 +34,7 @@ const BADGE_COLORS = {
 };
 
 const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
+  const { t } = useLanguage();
   const badges = useMemo<Badge[]>(() => {
     const workouts = Object.values(operator.workouts || {});
     const completedWorkouts = workouts.filter(w => w.completed);
@@ -58,60 +60,60 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
 
     return [
       // WORKOUT BADGES
-      { id: 'first-blood', name: 'FIRST BLOOD', description: 'Complete your first workout', icon: ic(Icon.Target),
+      { id: 'first-blood', name: t('achievements.first_blood.name'), description: t('achievements.first_blood.desc'), icon: ic(Icon.Target),
         tier: 'bronze', category: 'workout', earned: completedWorkouts.length >= 1,
-        progress: Math.min(100, (completedWorkouts.length / 1) * 100), requirement: '1 workout' },
-      { id: 'ten-hut', name: 'TEN HUT', description: 'Complete 10 workouts', icon: ic(Icon.Dumbbell),
+        progress: Math.min(100, (completedWorkouts.length / 1) * 100), requirement: t('achievements.first_blood.req') },
+      { id: 'ten-hut', name: t('achievements.ten_hut.name'), description: t('achievements.ten_hut.desc'), icon: ic(Icon.Dumbbell),
         tier: 'bronze', category: 'workout', earned: completedWorkouts.length >= 10,
-        progress: Math.min(100, (completedWorkouts.length / 10) * 100), requirement: '10 workouts' },
-      { id: 'fifty-cal', name: 'FIFTY CAL', description: 'Complete 50 workouts', icon: ic(Icon.Bolt),
+        progress: Math.min(100, (completedWorkouts.length / 10) * 100), requirement: t('achievements.ten_hut.req') },
+      { id: 'fifty-cal', name: t('achievements.fifty_cal.name'), description: t('achievements.fifty_cal.desc'), icon: ic(Icon.Bolt),
         tier: 'silver', category: 'workout', earned: completedWorkouts.length >= 50,
-        progress: Math.min(100, (completedWorkouts.length / 50) * 100), requirement: '50 workouts' },
-      { id: 'centurion', name: 'CENTURION', description: 'Complete 100 workouts', icon: ic(Icon.Trophy),
+        progress: Math.min(100, (completedWorkouts.length / 50) * 100), requirement: t('achievements.fifty_cal.req') },
+      { id: 'centurion', name: t('achievements.centurion.name'), description: t('achievements.centurion.desc'), icon: ic(Icon.Trophy),
         tier: 'gold', category: 'workout', earned: completedWorkouts.length >= 100,
-        progress: Math.min(100, (completedWorkouts.length / 100) * 100), requirement: '100 workouts' },
-      { id: 'war-machine', name: 'WAR MACHINE', description: 'Complete 365 workouts', icon: ic(Icon.Bolt),
+        progress: Math.min(100, (completedWorkouts.length / 100) * 100), requirement: t('achievements.centurion.req') },
+      { id: 'war-machine', name: t('achievements.war_machine.name'), description: t('achievements.war_machine.desc'), icon: ic(Icon.Bolt),
         tier: 'diamond', category: 'workout', earned: completedWorkouts.length >= 365,
-        progress: Math.min(100, (completedWorkouts.length / 365) * 100), requirement: '365 workouts' },
+        progress: Math.min(100, (completedWorkouts.length / 365) * 100), requirement: t('achievements.war_machine.req') },
 
       // STREAK BADGES — flame icon for all streak tiers, color
       // already differentiates them via tier-tinted card border.
-      { id: 'week-warrior', name: 'WEEK WARRIOR', description: '7-day workout streak', icon: ic(Icon.Flame),
+      { id: 'week-warrior', name: t('achievements.week_warrior.name'), description: t('achievements.week_warrior.desc'), icon: ic(Icon.Flame),
         tier: 'bronze', category: 'streak', earned: streak >= 7,
-        progress: Math.min(100, (streak / 7) * 100), requirement: '7 consecutive days' },
-      { id: 'iron-will', name: 'IRON WILL', description: '30-day workout streak', icon: ic(Icon.Flame),
+        progress: Math.min(100, (streak / 7) * 100), requirement: t('achievements.week_warrior.req') },
+      { id: 'iron-will', name: t('achievements.iron_will.name'), description: t('achievements.iron_will.desc'), icon: ic(Icon.Flame),
         tier: 'silver', category: 'streak', earned: streak >= 30,
-        progress: Math.min(100, (streak / 30) * 100), requirement: '30 consecutive days' },
-      { id: 'unbreakable', name: 'UNBREAKABLE', description: '90-day workout streak', icon: ic(Icon.Flame),
+        progress: Math.min(100, (streak / 30) * 100), requirement: t('achievements.iron_will.req') },
+      { id: 'unbreakable', name: t('achievements.unbreakable.name'), description: t('achievements.unbreakable.desc'), icon: ic(Icon.Flame),
         tier: 'gold', category: 'streak', earned: streak >= 90,
-        progress: Math.min(100, (streak / 90) * 100), requirement: '90 consecutive days' },
-      { id: 'legend', name: 'LEGEND', description: '365-day workout streak', icon: ic(Icon.Trophy),
+        progress: Math.min(100, (streak / 90) * 100), requirement: t('achievements.unbreakable.req') },
+      { id: 'legend', name: t('achievements.legend.name'), description: t('achievements.legend.desc'), icon: ic(Icon.Trophy),
         tier: 'diamond', category: 'streak', earned: streak >= 365,
-        progress: Math.min(100, (streak / 365) * 100), requirement: '365 consecutive days' },
+        progress: Math.min(100, (streak / 365) * 100), requirement: t('achievements.legend.req') },
 
       // STRENGTH BADGES
-      { id: 'pr-hunter', name: 'PR HUNTER', description: 'Log your first PR', icon: ic(Icon.Trophy),
+      { id: 'pr-hunter', name: t('achievements.pr_hunter.name'), description: t('achievements.pr_hunter.desc'), icon: ic(Icon.Trophy),
         tier: 'bronze', category: 'strength', earned: prs.length >= 1,
-        progress: Math.min(100, (prs.length / 1) * 100), requirement: '1 PR logged' },
-      { id: 'pr-collector', name: 'PR COLLECTOR', description: 'Log 10 personal records', icon: ic(Icon.Trophy),
+        progress: Math.min(100, (prs.length / 1) * 100), requirement: t('achievements.pr_hunter.req') },
+      { id: 'pr-collector', name: t('achievements.pr_collector.name'), description: t('achievements.pr_collector.desc'), icon: ic(Icon.Trophy),
         tier: 'silver', category: 'strength', earned: prs.length >= 10,
-        progress: Math.min(100, (prs.length / 10) * 100), requirement: '10 PRs logged' },
-      { id: 'two-plate-club', name: '2 PLATE CLUB', description: 'Bench press 225 lbs', icon: ic(Icon.Dumbbell),
+        progress: Math.min(100, (prs.length / 10) * 100), requirement: t('achievements.pr_collector.req') },
+      { id: 'two-plate-club', name: t('achievements.two_plate.name'), description: t('achievements.two_plate.desc'), icon: ic(Icon.Dumbbell),
         tier: 'gold', category: 'strength',
         earned: prs.some(p => p.exercise.toLowerCase().includes('bench') && p.weight >= 225),
         progress: Math.min(100, (Math.max(0, ...prs.filter(p => p.exercise.toLowerCase().includes('bench')).map(p => p.weight)) / 225) * 100),
-        requirement: '225 lbs bench' },
-      { id: 'three-plate-club', name: '3 PLATE CLUB', description: 'Squat 315 lbs', icon: ic(Icon.Dumbbell),
+        requirement: t('achievements.two_plate.req') },
+      { id: 'three-plate-club', name: t('achievements.three_plate.name'), description: t('achievements.three_plate.desc'), icon: ic(Icon.Dumbbell),
         tier: 'gold', category: 'strength',
         earned: prs.some(p => p.exercise.toLowerCase().includes('squat') && p.weight >= 315),
         progress: Math.min(100, (Math.max(0, ...prs.filter(p => p.exercise.toLowerCase().includes('squat')).map(p => p.weight)) / 315) * 100),
-        requirement: '315 lbs squat' },
-      { id: 'four-plate-club', name: '4 PLATE CLUB', description: 'Deadlift 405 lbs', icon: ic(Icon.Trophy),
+        requirement: t('achievements.three_plate.req') },
+      { id: 'four-plate-club', name: t('achievements.four_plate.name'), description: t('achievements.four_plate.desc'), icon: ic(Icon.Trophy),
         tier: 'diamond', category: 'strength',
         earned: prs.some(p => p.exercise.toLowerCase().includes('deadlift') && p.weight >= 405),
         progress: Math.min(100, (Math.max(0, ...prs.filter(p => p.exercise.toLowerCase().includes('deadlift')).map(p => p.weight)) / 405) * 100),
-        requirement: '405 lbs deadlift' },
-      { id: '1000-club', name: '1000 LB CLUB', description: 'Combined SBD total over 1000 lbs', icon: ic(Icon.Trophy),
+        requirement: t('achievements.four_plate.req') },
+      { id: '1000-club', name: t('achievements.thousand_club.name'), description: t('achievements.thousand_club.desc'), icon: ic(Icon.Trophy),
         tier: 'diamond', category: 'strength',
         earned: (() => {
           const bestSquat = Math.max(0, ...prs.filter(p => p.exercise.toLowerCase().includes('squat')).map(p => p.weight));
@@ -125,44 +127,44 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
           const bestDead = Math.max(0, ...prs.filter(p => p.exercise.toLowerCase().includes('deadlift')).map(p => p.weight));
           return Math.min(100, ((bestSquat + bestBench + bestDead) / 1000) * 100);
         })(),
-        requirement: 'S+B+D = 1000+ lbs' },
+        requirement: t('achievements.thousand_club.req') },
 
       // NUTRITION BADGES
-      { id: 'fuel-up', name: 'FUEL UP', description: 'Log your first meal', icon: ic(Icon.Food),
+      { id: 'fuel-up', name: t('achievements.fuel_up.name'), description: t('achievements.fuel_up.desc'), icon: ic(Icon.Food),
         tier: 'bronze', category: 'nutrition', earned: totalMeals >= 1,
-        progress: Math.min(100, (totalMeals / 1) * 100), requirement: '1 meal logged' },
-      { id: 'meal-prepper', name: 'MEAL PREPPER', description: 'Log 50 meals', icon: ic(Icon.Food),
+        progress: Math.min(100, (totalMeals / 1) * 100), requirement: t('achievements.fuel_up.req') },
+      { id: 'meal-prepper', name: t('achievements.meal_prepper.name'), description: t('achievements.meal_prepper.desc'), icon: ic(Icon.Food),
         tier: 'silver', category: 'nutrition', earned: totalMeals >= 50,
-        progress: Math.min(100, (totalMeals / 50) * 100), requirement: '50 meals logged' },
-      { id: 'nutrition-machine', name: 'NUTRITION MACHINE', description: 'Log 200 meals', icon: ic(Icon.Food),
+        progress: Math.min(100, (totalMeals / 50) * 100), requirement: t('achievements.meal_prepper.req') },
+      { id: 'nutrition-machine', name: t('achievements.nutrition_machine.name'), description: t('achievements.nutrition_machine.desc'), icon: ic(Icon.Food),
         tier: 'gold', category: 'nutrition', earned: totalMeals >= 200,
-        progress: Math.min(100, (totalMeals / 200) * 100), requirement: '200 meals logged' },
+        progress: Math.min(100, (totalMeals / 200) * 100), requirement: t('achievements.nutrition_machine.req') },
 
       // MILESTONE BADGES
-      { id: 'enlisted', name: 'ENLISTED', description: 'Complete intake assessment', icon: ic(Icon.User),
+      { id: 'enlisted', name: t('achievements.enlisted.name'), description: t('achievements.enlisted.desc'), icon: ic(Icon.User),
         tier: 'bronze', category: 'milestone', earned: !!intakeComplete,
-        progress: intakeComplete ? 100 : 0, requirement: 'Complete intake' },
-      { id: 'connected', name: 'CONNECTED', description: 'Link a wearable device', icon: ic(Icon.Heart),
+        progress: intakeComplete ? 100 : 0, requirement: t('achievements.enlisted.req') },
+      { id: 'connected', name: t('achievements.connected.name'), description: t('achievements.connected.desc'), icon: ic(Icon.Heart),
         tier: 'bronze', category: 'milestone',
         earned: !!(operator as unknown as Record<string, unknown>).wearableConnected,
         progress: (operator as unknown as Record<string, unknown>).wearableConnected ? 100 : 0,
-        requirement: 'Connect wearable' },
+        requirement: t('achievements.connected.req') },
 
       // COMMS / VOICE — unlocks once the operator uses tactical radio voice
       // input. We mark it earned when the voice-input flag is set on the
       // operator record (set by TacticalRadio on first successful PTT
       // transcription) — same gating pattern as 'connected' above.
-      { id: 'comms-check', name: 'COMMS CHECK', description: 'Use Tactical Radio voice input', icon: ic(Icon.Mic),
+      { id: 'comms-check', name: t('achievements.comms_check.name'), description: t('achievements.comms_check.desc'), icon: ic(Icon.Mic),
         tier: 'bronze', category: 'milestone',
         earned: !!(operator as unknown as Record<string, unknown>).voiceInputUsed,
         progress: (operator as unknown as Record<string, unknown>).voiceInputUsed ? 100 : 0,
-        requirement: 'Use voice PTT once' },
+        requirement: t('achievements.comms_check.req') },
 
       // ZONE LOCK — fires when the user has logged at least one workout
       // with live HR data captured (proxy: wearable connected AND a
       // completed workout exists). Encourages the cardio/HR-zone flow
       // that the Commander tier unlocks.
-      { id: 'zone-lock', name: 'ZONE LOCK', description: 'Train with live HR zones', icon: ic(Icon.Heart),
+      { id: 'zone-lock', name: t('achievements.zone_lock.name'), description: t('achievements.zone_lock.desc'), icon: ic(Icon.Heart),
         tier: 'silver', category: 'milestone',
         earned: !!(operator as unknown as Record<string, unknown>).wearableConnected && completedWorkouts.length >= 1,
         progress:
@@ -171,9 +173,9 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
             : (operator as unknown as Record<string, unknown>).wearableConnected
               ? 50
               : 0,
-        requirement: 'Wearable + 1 workout' },
+        requirement: t('achievements.zone_lock.req') },
     ] as Badge[];
-  }, [operator]);
+  }, [operator, t]);
 
   const earnedBadges = badges.filter(b => b.earned);
   const inProgressBadges = badges.filter(b => !b.earned && b.progress > 0);
@@ -251,7 +253,7 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
                 <span style={{ width: `${badge.progress}%`, background: colors.border }} />
               </div>
               <div className="t-mono-sm" style={{ color: 'var(--text-dim)', marginTop: 2, fontSize: 8 }}>
-                {Math.round(badge.progress)}% — {badge.requirement}
+                {t('achievements.requirement_progress').replace('{percent}', String(Math.round(badge.progress))).replace('{requirement}', badge.requirement)}
               </div>
             </div>
           )}
@@ -260,7 +262,7 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
               className="t-mono-sm"
               style={{ color: colors.border, marginTop: 4, fontSize: 8 }}
             >
-              EARNED {badge.tier.toUpperCase()}
+              {t('achievements.earned_prefix')} {t(`achievements.tier.${badge.tier}`)}
             </div>
           )}
         </div>
@@ -300,16 +302,16 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
         <span className="bl" /><span className="br" />
         <div>
           <div className="t-display-m" style={{ color: 'var(--warn)' }}>
-            Level {level}
+            {t('achievements.level')} {level}
           </div>
           <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginTop: 2 }}>
-            {xp} XP — {xpToNext} XP to next level
+            {t('achievements.xp_to_next').replace('{xp}', String(xp)).replace('{toNext}', String(xpToNext))}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="t-num-display">{earnedBadges.length}</div>
           <div className="t-mono-sm" style={{ color: 'var(--text-tertiary)' }}>
-            / {badges.length} BADGES
+            / {badges.length} {t('achievements.badges_suffix')}
           </div>
         </div>
       </div>
@@ -327,7 +329,7 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
 
       {earnedBadges.length > 0 && (
         <>
-          {sectionLabel('Earned', earnedBadges.length, 'green')}
+          {sectionLabel(t('achievements.section_earned'), earnedBadges.length, 'green')}
           <div
             style={{
               display: 'grid',
@@ -343,7 +345,7 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
 
       {inProgressBadges.length > 0 && (
         <>
-          {sectionLabel('In Progress', inProgressBadges.length, 'amber')}
+          {sectionLabel(t('achievements.section_in_progress'), inProgressBadges.length, 'amber')}
           <div
             style={{
               display: 'grid',
@@ -359,7 +361,7 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
 
       {lockedBadges.length > 0 && (
         <>
-          {sectionLabel('Locked', lockedBadges.length, 'dim')}
+          {sectionLabel(t('achievements.section_locked'), lockedBadges.length, 'dim')}
           <div
             style={{
               display: 'grid',

@@ -1,0 +1,603 @@
+/* ===== EARLY ACCESS — single-page tactical landing ===== */
+/* Mirrors the visual language of /landing without depending on it. */
+
+.main {
+  position: relative;
+  min-height: 100vh;
+  background: #050505;
+  color: #d8e3d8;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  padding: 24px 16px 80px;
+}
+
+.gridBg {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 255, 65, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.brandHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #00ff41;
+  margin-bottom: 32px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.15);
+}
+
+.brandMark { font-weight: 700; }
+
+.brandStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(0, 255, 65, 0.7);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00ff41;
+  box-shadow: 0 0 8px rgba(0, 255, 65, 0.8);
+  animation: eaPulse 2s ease-in-out infinite;
+}
+
+@keyframes eaPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.eyebrow {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: #00ff41;
+  margin-bottom: 16px;
+}
+
+/* ─── HERO ─── */
+.hero { margin-bottom: 48px; }
+
+.title {
+  font-size: clamp(40px, 8vw, 72px);
+  font-weight: 800;
+  line-height: 1.0;
+  letter-spacing: -0.02em;
+  color: #f5f5f5;
+  margin: 0 0 24px 0;
+  text-transform: uppercase;
+}
+
+.titleAccent {
+  color: #00ff41;
+  text-shadow: 0 0 24px rgba(0, 255, 65, 0.4);
+}
+
+.lede {
+  font-size: 18px;
+  line-height: 1.55;
+  color: #c0ccc0;
+  margin: 0 0 16px 0;
+  max-width: 640px;
+}
+
+.lede strong { color: #f5f5f5; }
+
+.ledeSecondary {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  color: rgba(0, 255, 65, 0.85);
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+/* ─── SEAT GRID ─── */
+.seatGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 48px;
+}
+
+@media (max-width: 720px) {
+  .seatGrid { grid-template-columns: 1fr; }
+}
+
+.seatCard {
+  position: relative;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 255, 65, 0.15);
+  padding: 28px 24px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.seatCard:hover {
+  border-color: rgba(0, 255, 65, 0.4);
+  transform: translateY(-2px);
+}
+
+.seatCardFeatured {
+  border-color: rgba(0, 255, 65, 0.4);
+  background: linear-gradient(180deg, rgba(0, 255, 65, 0.04), rgba(0, 0, 0, 0.4));
+}
+
+.seatCardSold { opacity: 0.5; }
+
+.seatBadge {
+  position: absolute;
+  top: -10px;
+  right: 16px;
+  background: #00ff41;
+  color: #000;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  font-weight: 700;
+}
+
+.seatLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: rgba(0, 255, 65, 0.6);
+  letter-spacing: 0.15em;
+  margin-bottom: 6px;
+}
+
+.seatName {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #f5f5f5;
+  margin-bottom: 10px;
+}
+
+.seatPrice {
+  font-size: 38px;
+  font-weight: 800;
+  color: #f5f5f5;
+  margin-bottom: 18px;
+}
+
+.seatPriceUnit {
+  font-size: 16px;
+  font-weight: 400;
+  color: #888;
+  margin-left: 4px;
+}
+
+.seatFeats {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+}
+
+.seatFeats li {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c0ccc0;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.06);
+  position: relative;
+  padding-left: 16px;
+}
+
+.seatFeats li:last-child { border-bottom: none; }
+
+.seatFeats li::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  color: #00ff41;
+  font-size: 12px;
+}
+
+.seatFeats li strong { color: #00ff41; }
+
+.seatCounter {
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(0, 255, 65, 0.15);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.seatCounterNum {
+  font-size: 28px;
+  font-weight: 800;
+  color: #00ff41;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.seatCounterLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: #888;
+  letter-spacing: 0.05em;
+}
+
+.seatCounterClosed {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  color: #ff6b35;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+/* ─── CTA SECTION (IG DM intake) ─── */
+/* Replaces the original form. Two big tap targets that deep-link
+   into Instagram DM compose with @gunnyai_fit — onboarding for the
+   first 20 is fully manual, so the page just routes traffic. */
+.ctaSection { margin-bottom: 48px; }
+
+.ctaHead { margin-bottom: 20px; }
+
+.ctaLede {
+  font-size: 14px;
+  color: #888;
+  margin: 8px 0 0 0;
+  line-height: 1.55;
+}
+
+.ctaGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 540px) {
+  .ctaGrid { grid-template-columns: 1fr; }
+}
+
+.ctaPrimary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  background: #00ff41;
+  color: #000;
+  text-decoration: none;
+  padding: 22px 56px 22px 24px;
+  border: 2px solid #00ff41;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+
+.ctaPrimary:hover {
+  background: #4dff7a;
+  border-color: #4dff7a;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 255, 65, 0.25);
+}
+
+/* WARFIGHTER variant — outlined to differentiate from the primary
+   COMMANDER button. Visual hierarchy: solid = entry tier, outline =
+   premium concierge tier (matches the seatCardFeatured pattern). */
+.ctaPrimaryAccent {
+  background: #050505;
+  color: #00ff41;
+}
+
+.ctaPrimaryAccent:hover {
+  background: rgba(0, 255, 65, 0.08);
+  color: #4dff7a;
+  border-color: #4dff7a;
+}
+
+.ctaTier {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ctaPrice {
+  font-size: 12px;
+  opacity: 0.75;
+  letter-spacing: 0.05em;
+}
+
+.ctaArrow {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ctaHelper {
+  margin: 16px 0 0 0;
+  font-size: 13px;
+  color: #888;
+  text-align: center;
+}
+
+.ctaHelper strong { color: #00ff41; }
+.ctaHelper a { color: #00ff41; text-decoration: underline; }
+
+/* ─── CLOSED STATE ─── */
+.closedBox {
+  background: rgba(0, 255, 65, 0.05);
+  border: 1px solid rgba(0, 255, 65, 0.3);
+  padding: 32px 28px;
+  text-align: center;
+}
+
+.closedTitle {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  letter-spacing: 0.15em;
+  color: #00ff41;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.closedBox p { font-size: 15px; line-height: 1.55; margin: 0; }
+
+.closedBox a { color: #00ff41; }
+
+/* ─── FOUNDER STRIP ─── */
+.credStrip {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 255, 65, 0.1);
+  padding: 16px 20px;
+  margin-bottom: 48px;
+  text-align: center;
+}
+
+.credLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: rgba(0, 255, 65, 0.6);
+  letter-spacing: 0.15em;
+  margin-bottom: 10px;
+}
+
+.credList {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: #888;
+  letter-spacing: 0.05em;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+.credList span { white-space: nowrap; }
+
+.credDot { color: rgba(0, 255, 65, 0.4); }
+
+/* ─── FAQ ─── */
+.faqSection { margin-bottom: 32px; }
+
+.faqTitle {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  letter-spacing: 0.15em;
+  color: #00ff41;
+  margin: 0 0 20px 0;
+  font-weight: 700;
+}
+
+.faqGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: rgba(0, 255, 65, 0.08);
+  border: 1px solid rgba(0, 255, 65, 0.12);
+}
+
+@media (max-width: 720px) {
+  .faqGrid { grid-template-columns: 1fr; }
+}
+
+.faqItem {
+  background: #050505;
+  padding: 18px 20px;
+}
+
+.faqQ {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f5f5f5;
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+
+.faqQ::before {
+  content: '// ';
+  color: #00ff41;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.faqA {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #c0ccc0;
+}
+
+/* ─── CHAT (Gunny-Lite Q&A) ─── */
+/* Anonymous chatbot that answers GUNS-UP product questions. Server
+   rate-limits to 2 user messages per IP per 24h — past that, the
+   input is replaced with a big IG DM CTA to push the conversation
+   to Ruben directly. */
+.chatSection { margin-bottom: 48px; }
+
+.chatHead { margin-bottom: 16px; }
+
+.chatLede {
+  font-size: 14px;
+  color: #888;
+  margin: 8px 0 0 0;
+  line-height: 1.55;
+}
+
+.chatPanel {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+}
+
+.chatLog {
+  padding: 18px 18px 8px;
+  max-height: 380px;
+  min-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Subtle terminal-scan tint at top so it reads as a screen */
+  background:
+    linear-gradient(180deg, rgba(0, 255, 65, 0.02) 0%, transparent 60px);
+}
+
+.chatMsg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.chatRole {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.chatMsgBot .chatRole { color: rgba(0, 255, 65, 0.6); }
+.chatMsgUser .chatRole { color: rgba(255, 255, 255, 0.5); }
+
+.chatText {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-left: 12px;
+  border-left: 2px solid rgba(0, 255, 65, 0.4);
+}
+
+.chatMsgUser .chatText {
+  color: #f5f5f5;
+  border-left-color: rgba(255, 255, 255, 0.18);
+}
+
+.chatMsgBot .chatText {
+  color: #d8e3d8;
+}
+
+.chatTyping {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: rgba(0, 255, 65, 0.5);
+  font-style: italic;
+}
+
+.chatInputRow {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid rgba(0, 255, 65, 0.18);
+}
+
+.chatInput {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: #f5f5f5;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 14px 16px;
+  outline: none;
+  /* iOS Safari renders inputs as translucent pills without this. */
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+}
+
+.chatInput:focus { background: rgba(0, 0, 0, 0.85); }
+.chatInput:disabled { opacity: 0.5; }
+
+.chatInput::placeholder { color: rgba(255, 255, 255, 0.35); }
+
+.chatSendBtn {
+  background: #00ff41;
+  color: #000;
+  border: none;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0 22px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+  transition: background 0.15s;
+  min-width: 88px;
+}
+
+.chatSendBtn:hover:not(:disabled) { background: #4dff7a; }
+.chatSendBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.chatLimitCta {
+  display: block;
+  text-align: center;
+  background: #00ff41;
+  color: #000;
+  text-decoration: none;
+  padding: 18px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  border-top: 1px solid rgba(0, 255, 65, 0.4);
+  transition: background 0.15s;
+}
+
+.chatLimitCta:hover { background: #4dff7a; }
+
+/* ─── FOOTER ─── */
+.footer {
+  text-align: center;
+  padding-top: 24px;
+  border-top: 1px solid rgba(0, 255, 65, 0.1);
+}
+
+.disclaimer {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #666;
+  font-style: italic;
+  max-width: 600px;
+  margin: 0 auto 12px;
+}
+
+.copyright {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: #555;
+  letter-spacing: 0.1em;
+  margin: 0;
+}

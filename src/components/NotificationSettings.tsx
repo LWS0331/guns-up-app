@@ -8,6 +8,7 @@ import {
   requestNotificationPermission,
   NotificationPreferences,
 } from '@/lib/notifications';
+import { useLanguage } from '@/lib/i18n';
 
 interface NotificationSettingsProps {
   operatorId: string;
@@ -79,9 +80,15 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
   operatorId,
   callsign,
 }) => {
+  const { t } = useLanguage();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<string>('unsupported');
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  // WS1 (May 2026) — collapse the toggle wall by default. The settings
+  // block runs ~280px tall on mobile, and most operators don't need to
+  // touch it more than once during initial setup. Header stays clickable
+  // with an "(N active · TAP TO OPEN)" hint so it's still discoverable.
+  const [expanded, setExpanded] = useState(false);
 
   // Load preferences on mount
   useEffect(() => {
@@ -159,23 +166,48 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
         maxWidth: '100%',
       }}
     >
-      {/* Header */}
-      <div
+      {/* Header — clickable to toggle the collapsed body. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
         style={{
+          width: '100%',
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          marginBottom: expanded ? '16px' : 0,
           fontFamily: 'Orbitron, sans-serif',
           fontSize: '13px',
           letterSpacing: '2px',
           color: '#00ff41',
           textTransform: 'uppercase',
           fontWeight: 700,
-          marginBottom: '16px',
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'space-between',
           gap: '8px',
+          cursor: 'pointer',
+          textAlign: 'left',
         }}
+        aria-expanded={expanded}
       >
-        <span>📢</span> COMPLIANCE REMINDERS
-      </div>
+        <span>{expanded ? '▼' : '▶'} {t('notif.heading')}</span>
+        {!expanded && (
+          <span
+            style={{
+              fontFamily: 'Share Tech Mono, monospace',
+              fontSize: '10px',
+              color: '#888',
+              letterSpacing: '1px',
+              textTransform: 'none',
+            }}
+          >
+            {permissionStatus === 'granted' ? 'ON' : permissionStatus === 'denied' ? 'BLOCKED' : 'OFF'} · {t('notif.tap_to_open') || 'TAP TO OPEN'}
+          </span>
+        )}
+      </button>
+
+      {!expanded ? null : <>
 
       {/* Permission Status */}
       <div
@@ -205,10 +237,10 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
             letterSpacing: '0.5px',
           }}
         >
-          {permissionStatus === 'granted' && '✓ NOTIFICATIONS ENABLED'}
-          {permissionStatus === 'denied' && '✗ NOTIFICATIONS BLOCKED'}
-          {permissionStatus === 'default' && '⚠ PERMISSION PENDING'}
-          {permissionStatus === 'unsupported' && '⚠ NOT SUPPORTED'}
+          {permissionStatus === 'granted' && t('notif.status_enabled')}
+          {permissionStatus === 'denied' && t('notif.status_blocked')}
+          {permissionStatus === 'default' && t('notif.status_pending')}
+          {permissionStatus === 'unsupported' && t('notif.status_unsupported')}
         </div>
         {(permissionStatus === 'default' || permissionStatus === 'denied') && (
           <button
@@ -230,79 +262,79 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
               letterSpacing: '1px',
             }}
           >
-            {isRequestingPermission ? 'REQUESTING...' : 'REQUEST PERMISSION'}
+            {isRequestingPermission ? t('notif.requesting') : t('notif.request_permission')}
           </button>
         )}
       </div>
 
       {/* Training Reminders */}
-      <div style={sectionLabelStyle}>TRAINING</div>
+      <div style={sectionLabelStyle}>{t('notif.section_training')}</div>
       <ToggleSwitch
         checked={prefs.workoutReminders}
         onChange={(val) => handleToggle('workoutReminders', val)}
-        label="Workout Reminders"
-        description="Daily reminder at your set time if workout not logged"
+        label={t('notif.workout_reminders')}
+        description={t('notif.workout_reminders_desc')}
       />
       <ToggleSwitch
         checked={prefs.streakWarnings}
         onChange={(val) => handleToggle('streakWarnings', val)}
-        label="Streak Warnings"
-        description="Alert when an active streak is at risk"
+        label={t('notif.streak_warnings')}
+        description={t('notif.streak_warnings_desc')}
       />
       <ToggleSwitch
         checked={prefs.prAlerts}
         onChange={(val) => handleToggle('prAlerts', val)}
-        label="PR Alerts"
-        description="Celebrate new personal records"
+        label={t('notif.pr_alerts')}
+        description={t('notif.pr_alerts_desc')}
       />
 
       {/* Nutrition Reminders */}
-      <div style={sectionLabelStyle}>NUTRITION</div>
+      <div style={sectionLabelStyle}>{t('notif.section_nutrition')}</div>
       <ToggleSwitch
         checked={prefs.mealReminders}
         onChange={(val) => handleToggle('mealReminders', val)}
-        label="Meal Logging Nudges"
-        description="Remind to log meals at midday, afternoon, evening"
+        label={t('notif.meal_reminders')}
+        description={t('notif.meal_reminders_desc')}
       />
       <ToggleSwitch
         checked={prefs.hydrationReminders}
         onChange={(val) => handleToggle('hydrationReminders', val)}
-        label="Hydration Reminders"
-        description={`Every ${prefs.hydrationInterval}h during the day`}
+        label={t('notif.hydration_reminders')}
+        description={t('notif.hydration_reminders_desc').replace('{hours}', String(prefs.hydrationInterval))}
       />
 
       {/* Compliance & Motivation */}
-      <div style={sectionLabelStyle}>COMPLIANCE</div>
+      <div style={sectionLabelStyle}>{t('notif.section_compliance')}</div>
       <ToggleSwitch
         checked={prefs.dailyBriefAlerts}
         onChange={(val) => handleToggle('dailyBriefAlerts', val)}
-        label="Daily Brief Alerts"
-        description="Morning notification when your battle plan is ready"
+        label={t('notif.daily_brief_alerts')}
+        description={t('notif.daily_brief_alerts_desc')}
       />
       <ToggleSwitch
         checked={prefs.complianceAlerts}
         onChange={(val) => handleToggle('complianceAlerts', val)}
-        label="Compliance Score"
-        description="Yesterday's compliance grade with motivational push"
+        label={t('notif.compliance_alerts')}
+        description={t('notif.compliance_alerts_desc')}
       />
       <ToggleSwitch
         checked={prefs.eveningCheckIn}
         onChange={(val) => handleToggle('eveningCheckIn', val)}
-        label="Evening Check-In"
-        description="End-of-day summary of what's still outstanding"
+        label={t('notif.evening_check_in')}
+        description={t('notif.evening_check_in_desc')}
       />
       <ToggleSwitch
         checked={prefs.gunnyCheckIns}
         onChange={(val) => handleToggle('gunnyCheckIns', val)}
-        label="Gunny Check-Ins"
-        description="Periodic motivational messages from Gunny AI"
+        label={t('notif.gunny_check_ins')}
+        description={t('notif.gunny_check_ins_desc')}
       />
 
       {/* Time Settings */}
-      <div style={sectionLabelStyle}>SCHEDULE</div>
+      <div style={sectionLabelStyle}>{t('notif.section_schedule')}</div>
       <div style={{ padding: '8px 0' }}>
         <label style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', color: '#e0e0e0', display: 'block', marginBottom: 4 }}>
-          MORNING REMINDER
+          {t('notif.morning_reminder')}
         </label>
         <input
           type="time"
@@ -313,7 +345,7 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
       </div>
       <div style={{ padding: '8px 0' }}>
         <label style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', color: '#e0e0e0', display: 'block', marginBottom: 4 }}>
-          EVENING CHECK-IN
+          {t('notif.evening_check_in_time')}
         </label>
         <input
           type="time"
@@ -324,7 +356,7 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
       </div>
       <div style={{ padding: '8px 0' }}>
         <label style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: '12px', color: '#e0e0e0', display: 'block', marginBottom: 4 }}>
-          HYDRATION INTERVAL (HOURS)
+          {t('notif.hydration_interval')}
         </label>
         <div style={{ display: 'flex', gap: 8 }}>
           {[1, 2, 3, 4].map((h) => (
@@ -344,7 +376,7 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
                 cursor: 'pointer',
               }}
             >
-              {h}h
+              {h}{t('notif.hours_suffix')}
             </button>
           ))}
         </div>
@@ -360,8 +392,9 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
           fontStyle: 'italic',
         }}
       >
-        Changes auto-saved. Stay compliant, {callsign}.
+        {t('notif.footer').replace('{callsign}', callsign)}
       </div>
+      </>}
     </div>
   );
 };

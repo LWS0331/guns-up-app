@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Icon from '@/components/Icons';
 import type { ParsedMovement } from '@/lib/parseMovementText';
 
 interface WarmupMovementCardProps {
@@ -101,29 +102,10 @@ export default function WarmupMovementCard({
           type="button"
           onClick={handlePlay}
           aria-label={`Play demo video for ${movement.name}`}
-          // Cooldowns get a custom blue-filled button since none of
-          // the canonical .btn variants cover blue.
-          className={isCooldown ? undefined : 'btn btn-amber btn-sm'}
-          style={
-            isCooldown
-              ? {
-                  flexShrink: 0,
-                  background: '#60a5fa',
-                  color: '#111',
-                  border: 'none',
-                  padding: '6px 12px',
-                  fontFamily: 'var(--display)',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: 1.6,
-                  textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  minHeight: 32,
-                }
-              : { flexShrink: 0, padding: '6px 12px' }
-          }
+          className="btn btn-ghost btn-sm"
+          style={{ flexShrink: 0, padding: '6px 10px' }}
         >
-          ▶ Demo
+          <Icon.Play size={10} /> DEMO
         </button>
       )}
     </div>
