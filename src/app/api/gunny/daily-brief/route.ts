@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { requireAuth } from '@/lib/requireAuth';
+import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
 import { resolveTierModel } from '@/lib/models';
 
 const client = new Anthropic({
@@ -8,7 +8,7 @@ const client = new Anthropic({
 });
 
 export async function POST(req: NextRequest) {
-  const auth = requireAuth(req);
+  const auth = requireTrainerAuth(req);
   if (auth instanceof NextResponse) return auth;
 
   try {
