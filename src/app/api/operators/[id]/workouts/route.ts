@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/requireAuth';
+import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 
 // PATCH /api/operators/:id/workouts
@@ -10,7 +10,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = requireAuth(req);
+  const auth = requireTrainerAuth(req);
   if (auth instanceof NextResponse) return auth;
 
   try {

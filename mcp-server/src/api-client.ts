@@ -1,0 +1,146 @@
+/**
+ * Thin client for gunnyai.fit's REST API, scoped to one trainer. The MCP
+ * tool handlers compose against this — they don't talk to fetch directly,
+ * so retries / error shapes / auth are in one place.
+ *
+ * Auth: every call sends `x-operator-api-key` (validated server-side by
+ * requireTrainerAuth). The same secret the trainer puts in their Claude.ai
+ * connector is the one this client uses upstream — no second key store.
+ */
+
+export interface ApiClientConfig {
+  baseUrl: string;
+  operatorId: string;
+  apiKey: string;
+}
+
+export class GunnyApiClient {
+  constructor(private readonly cfg: ApiClientConfig) {}
+
+  private async fetch<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown
+  ): Promise<T> {
+    const url = `${this.cfg.baseUrl}${path}`;
+    const res = await fetch(url, {
+      method,
+      headers: {
+        'content-type': 'application/json',
+        'x-operator-api-key': this.cfg.apiKey,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(
+        `gunnyai.fit ${method} ${path} → ${res.status} ${res.statusText}: ${text.slice(0, 500)}`
+      );
+    }
+    if (!text) return undefined as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      // Some endpoints return plain text; pass through.
+      return text as unknown as T;
+    }
+  }
+
+  /** Full operator record — profile, intake, workouts, nutrition, prs, dayTags, etc. */
+  getOperator(): Promise<Operator> {
+    return this.fetch<Operator>('GET', `/api/operators/${this.cfg.operatorId}`);
+  }
+
+  /** Targeted PATCH against the profile subroute (skips workouts to avoid races). */
+  patchProfile(patch: Partial<Operator>): Promise<Operator> {
+    return this.fetch<Operator>(
+      'PATCH',
+      `/api/operators/${this.cfg.operatorId}/profile`,
+      patch
+    );
+  }
+
+  /** Targeted PATCH against the workouts subroute (plus optional prs/injuries). */
+  patchWorkouts(patch: {
+    workouts?: Record<string, Workout>;
+    prs?: PRRecord[];
+    injuries?: unknown[];
+  }): Promise<Operator> {
+    return this.fetch<Operator>(
+      'PATCH',
+      `/api/operators/${this.cfg.operatorId}/workouts`,
+      patch
+    );
+  }
+}
+
+// ── Loose type aliases. The MCP doesn't need a full mirror of the app's
+// types — it just shuttles JSON. These exist for IDE help and to mark
+// intent in the api-client signatures.
+
+export interface Operator {
+  id: string;
+  callsign?: string;
+  name?: string;
+  workouts?: Record<string, Workout>;
+  nutrition?: { targets?: MacroTargets; meals?: Record<string, Meal[]> };
+  prs?: PRRecord[];
+  injuries?: unknown[];
+  dayTags?: Record<string, DayTag>;
+  sitrep?: unknown;
+  dailyBrief?: unknown;
+  intake?: Record<string, unknown>;
+  profile?: Record<string, unknown>;
+  preferences?: Record<string, unknown>;
+  [k: string]: unknown;
+}
+
+export interface Workout {
+  id: string;
+  date: string;
+  title: string;
+  notes?: string;
+  warmup?: string;
+  blocks: WorkoutBlock[];
+  cooldown?: string;
+  completed?: boolean;
+  results?: unknown;
+  [k: string]: unknown;
+}
+
+export type WorkoutBlock =
+  | { type: 'exercise'; id?: string; sortOrder?: number; exerciseName: string; prescription: string; videoUrl?: string; isLinkedToNext?: boolean }
+  | { type: 'conditioning'; id?: string; sortOrder?: number; format: string; description: string; isLinkedToNext?: boolean };
+
+export interface Meal {
+  id?: string;
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  time?: string;
+}
+
+export interface MacroTargets {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export interface PRRecord {
+  id?: string;
+  exercise: string;
+  weight: number;
+  reps?: number;
+  date: string;
+  notes?: string;
+  type?: 'strength' | 'endurance' | 'consistency' | 'milestone';
+  path?: string;
+}
+
+export interface DayTag {
+  color: string;
+  note?: string;
+}
