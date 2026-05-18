@@ -19,6 +19,7 @@ import { OPS_CENTER_ACCESS } from '@/lib/types';
 import { loadGunnyCorpus } from '@/lib/gunnyCorpus';
 import type { TrainingPath, CorpusSelectionInput } from '@/data/gunny-corpus';
 import { getCoreIdentity, resolvePersonaId, detectPersonaDrift } from '@/lib/personas';
+import { getThisWeekDateKeys } from '@/lib/dateUtils';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -4360,6 +4361,59 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
     // confuse the youth prompt's strict refusal scope.
     const gapsBlock = isJuniorOperator ? '' : buildDataGapsBlock(operatorContext);
 
+    // WEEKLY PLAN MODE — detect "build my week"-style prompts and inject a
+    // per-turn addendum into the dynamic suffix telling Gunny to emit one
+    // <workout_json> per training day + <day_tag_json> rest tags for the
+    // off-days, anchored to a server-computed date list so the model never
+    // does calendar math (off-by-one date bugs have happened before — see
+    // route.ts:409–427 for the singular-emit guardrails).
+    const weeklyTriggerText = (() => {
+      const last = [...messages].reverse().find(
+        (m: { role?: string; text?: string; content?: string }) => m.role === 'user'
+      );
+      return (last?.text || last?.content || '').toString();
+    })();
+    const isWeeklyBuild = !!weeklyTriggerText && (
+      /\b(build|plan|lay\s*out|map\s*out|design|set\s*up|fill\s*(in|out)|put\s*together|give\s*me)\b[^.?!]*\bweek\b/i.test(weeklyTriggerText)
+      || /\bweek\s+of\s+training\b/i.test(weeklyTriggerText)
+      || /\b(full|whole|entire)\s+week\b/i.test(weeklyTriggerText)
+    );
+    let weeklyPlanBlock = '';
+    if (isWeeklyBuild) {
+      const week = getThisWeekDateKeys(clientDate);
+      const linesOut = week.map(d => `${d.weekday} ${d.key}`).join('\n');
+      const nDays = week.length;
+      weeklyPlanBlock = `\n\n═══ WEEKLY PLAN MODE (this turn only) ═══
+The operator asked for a full training week. Build the plan TODAY → SUNDAY
+in the operator's local timezone. Use ONLY the dates listed in
+WEEK_PLAN_DATES below — do NOT compute dates yourself.
+
+For each date in WEEK_PLAN_DATES:
+- If it's a training day (decide based on the operator's intake.daysPerWeek
+  and preferredSplit — e.g. PPL → up to 6 days, Upper/Lower → 4 days,
+  Full Body → 3 days, Bro Split → 5 days; clamp to 3-6 and intersect
+  with how many days remain in WEEK_PLAN_DATES), emit ONE <workout_json>
+  block. EACH BLOCK MUST INCLUDE a "date" field set to the matching
+  YYYY-MM-DD from WEEK_PLAN_DATES. This OVERRIDES the default "omit date"
+  rule — for weekly mode, date is REQUIRED.
+- If it's a rest day, emit a <day_tag_json> block:
+  { "date": "<YYYY-MM-DD>", "color": "cyan", "note": "rest", "op": "set" }
+
+Across the week, apply progressive overload: volume or intensity should
+escalate from earlier days to later days, with the heaviest sessions
+front-loaded if recovery allows. Honor EXERCISE VARIATION rules — no
+repeating the same primary lift on consecutive same-muscle days; rotate
+variants. Respect intake.sessionDuration on EVERY day.
+
+After all blocks, end your prose response with EXACTLY this line on its
+own (substitute the real count for N):
+WEEK BUILT — say ADD WEEK to save all N days.
+
+WEEK_PLAN_DATES (operator local timezone, ${nDays} day${nDays === 1 ? '' : 's'}):
+${linesOut}
+═══════════════════════════════════════════\n`;
+    }
+
     const maxTokens = ownerOverride ? 8192 : (isAssistantMode ? 1024 : isOnboardingMode ? 2048 : 4096);
 
     // Check if client wants SSE streaming
@@ -4401,7 +4455,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       text: string;
       cache_control?: { type: 'ephemeral' };
     };
-    const dynamicSuffix = gapsBlock + contextBlock;
+    const dynamicSuffix = gapsBlock + contextBlock + weeklyPlanBlock;
     const systemBlocks: SystemBlock[] = [];
     systemBlocks.push({
       type: 'text',
@@ -4454,26 +4508,36 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
         }
       }
 
-      let workoutData = null;
-      const jsonMatch = responseText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
-      if (jsonMatch) { try { workoutData = JSON.parse(jsonMatch[1].trim()); } catch { /* ignore */ } }
+      // Gunny may emit MULTIPLE <workout_json> blocks per response when the
+      // operator asks for a full week (WEEKLY PLAN MODE). Parse them all.
+      // workoutDatas (plural, array) is the canonical output for the weekly
+      // build; workoutData (singular) stays as the first-entry alias so all
+      // the existing single-workout client paths keep working unchanged.
+      const workoutDatas: Array<Record<string, unknown>> = [];
+      for (const m of responseText.matchAll(/<workout_json>([\s\S]*?)<\/workout_json>/g)) {
+        try { workoutDatas.push(JSON.parse(m[1].trim())); } catch { /* ignore malformed */ }
+      }
 
       // Junior Operator runtime safety net — silently downscale plyo
       // contacts, RPE, and session duration if the model produced an
-      // over-cap workout despite the youth prompt's explicit caps. Adult
-      // operators short-circuit through here unchanged.
-      if (workoutData && isJuniorOperator) {
-        const guarded = applyJuniorGuardrailsToWorkoutJson(workoutData, {
-          isJunior: true,
-          sportProfile: operatorContext?.sportProfile,
-          juniorAge: operatorContext?.juniorAge,
-        });
-        workoutData = guarded.workout;
-        if (guarded.modified) {
-          // eslint-disable-next-line no-console
-          console.warn('[junior-guardrails]', operatorContext?.callsign, guarded.modificationsApplied.join(' | '));
+      // over-cap workout despite the youth prompt's explicit caps. Applied
+      // per-entry so every day in a weekly build is independently capped.
+      if (isJuniorOperator) {
+        for (let i = 0; i < workoutDatas.length; i++) {
+          const guarded = applyJuniorGuardrailsToWorkoutJson(workoutDatas[i], {
+            isJunior: true,
+            sportProfile: operatorContext?.sportProfile,
+            juniorAge: operatorContext?.juniorAge,
+          });
+          workoutDatas[i] = guarded.workout;
+          if (guarded.modified) {
+            // eslint-disable-next-line no-console
+            console.warn('[junior-guardrails]', operatorContext?.callsign, `[day ${i + 1}]`, guarded.modificationsApplied.join(' | '));
+          }
         }
       }
+
+      let workoutData: Record<string, unknown> | null = workoutDatas[0] ?? null;
 
       // Gunny may emit MULTIPLE <workout_modification> blocks in a single
       // response — e.g. prefill_weights for 5 different exercises on the same
@@ -4828,6 +4892,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
       return NextResponse.json({
         response: responseWithDailyOpsError,
         workoutData,
+        workouts: workoutDatas,
         workoutModification,
         workoutModifications,
         workoutDelete,
@@ -4911,28 +4976,35 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
           // After the stream completes, pull out the final message for post-processing
           const final = await stream.finalMessage();
 
-          // Extract workout JSON if present
-          let workoutData: Record<string, unknown> | null = null;
-          const wm = fullText.match(/<workout_json>([\s\S]*?)<\/workout_json>/);
-          if (wm) {
-            try { workoutData = JSON.parse(wm[1].trim()); } catch { /* invalid JSON */ }
+          // Extract workout JSON(s) — plural. Gunny emits MULTIPLE blocks in
+          // WEEKLY PLAN MODE (one per training day). workoutDatas is the
+          // canonical output; workoutData stays as workoutDatas[0] so all
+          // single-workout downstream paths keep working unchanged.
+          const workoutDatas: Array<Record<string, unknown>> = [];
+          for (const m of fullText.matchAll(/<workout_json>([\s\S]*?)<\/workout_json>/g)) {
+            try { workoutDatas.push(JSON.parse(m[1].trim())); } catch { /* invalid JSON */ }
           }
 
           // Junior Operator runtime safety net (streaming path) — same logic
           // as the non-streaming path above; mirrors so both transports
-          // behave identically.
-          if (workoutData && isJuniorOperator) {
-            const guarded = applyJuniorGuardrailsToWorkoutJson(workoutData, {
-              isJunior: true,
-              sportProfile: operatorContext?.sportProfile,
-              juniorAge: operatorContext?.juniorAge,
-            });
-            workoutData = guarded.workout;
-            if (guarded.modified) {
-              // eslint-disable-next-line no-console
-              console.warn('[junior-guardrails]', operatorContext?.callsign, guarded.modificationsApplied.join(' | '));
+          // behave identically. Applied per-entry so each day in a weekly
+          // build is independently capped.
+          if (isJuniorOperator) {
+            for (let i = 0; i < workoutDatas.length; i++) {
+              const guarded = applyJuniorGuardrailsToWorkoutJson(workoutDatas[i], {
+                isJunior: true,
+                sportProfile: operatorContext?.sportProfile,
+                juniorAge: operatorContext?.juniorAge,
+              });
+              workoutDatas[i] = guarded.workout;
+              if (guarded.modified) {
+                // eslint-disable-next-line no-console
+                console.warn('[junior-guardrails]', operatorContext?.callsign, `[day ${i + 1}]`, guarded.modificationsApplied.join(' | '));
+              }
             }
           }
+
+          let workoutData: Record<string, unknown> | null = workoutDatas[0] ?? null;
 
           // Extract workout MODIFICATION(S) — plural. Gunny emits one block per
           // exercise when doing a multi-exercise prefill (e.g. filling weights
@@ -5266,6 +5338,7 @@ CRITICAL — INJURY PROTOCOL: NEVER program exercises that violate the operator'
               `event: final\ndata: ${JSON.stringify({
                 cleanText: streamCleanTextWithDailyOpsError,
                 workoutData,
+                workouts: workoutDatas,
                 workoutModification,
                 workoutModifications,
                 workoutDelete,
