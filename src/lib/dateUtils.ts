@@ -34,6 +34,30 @@ export function getLocalYesterdayStr(): string {
   return getLocalDateStrOffset(-1);
 }
 
+/**
+ * Date keys (YYYY-MM-DD, local) from `anchor` through the upcoming Sunday inclusive.
+ * Anchor defaults to today; pass a YYYY-MM-DD to anchor explicitly (e.g. the operator's
+ * clientDate so server math stays in their timezone). Sunday returns a single entry.
+ *
+ * Used by the Gunny weekly-build flow so the model never does calendar math —
+ * the server injects WEEK_PLAN_DATES and Gunny only ever copies dates from it.
+ */
+export function getThisWeekDateKeys(anchor?: string): Array<{ key: string; weekday: string }> {
+  const start = anchor && isValidDateStr(anchor)
+    ? parseLocalDateKey(anchor) ?? new Date()
+    : new Date();
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+  const out: Array<{ key: string; weekday: string }> = [];
+  // Safety bound — break after 8 iterations even if something is wrong with getDay().
+  for (let i = 0; i < 8; i++) {
+    out.push({ key: toLocalDateStr(cursor), weekday: WEEKDAYS[cursor.getDay()] });
+    if (cursor.getDay() === 0) break; // Sunday is inclusive end
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
+
 /** Parse an ISO or loose date string and return its LOCAL date key. */
 export function parseToLocalDateStr(input: string | undefined | null): string | null {
   if (!input) return null;

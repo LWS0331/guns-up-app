@@ -1446,7 +1446,12 @@ ${mealSuggestion}`;
   // Store last workout data from AI for "add it" / "save it" commands
   const lastWorkoutDataRef = useRef<Record<string, unknown> | null>(null);
 
-  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>; hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null; readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null; injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>; dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>; nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null; goals?: Array<{ action?: string; value?: string; match?: string }>; dietary?: Array<{ field?: string; action?: string; values?: string[] }>; macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>; prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>; prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>; wearable?: { provider: string; affected: number } | null; notification?: Record<string, unknown> | null; trainerNote?: { targetOperatorId: string; targetCallsign?: string; op: 'set' | 'append' } | null } | null> => {
+  // Store last WEEK of workouts (multi-day build via WEEKLY PLAN MODE) for
+  // "add week" / "save week" commands. Mirrors lastWorkoutDataRef but holds
+  // the full array so a single confirmation flushes the whole week.
+  const lastWeekDataRef = useRef<Array<Record<string, unknown>> | null>(null);
+
+  const callGunnyAPI = async (allMessages: Message[], forceMode?: string): Promise<{ response: string; workoutData?: Record<string, unknown>; workouts?: Array<Record<string, unknown>>; workoutModification?: WorkoutModification; workoutModifications?: Array<Record<string, unknown>>; workoutDelete?: { date: string }; workoutDeletes?: Array<{ date: string }>; profileData?: Record<string, unknown>; mealData?: { name: string; calories: number; protein: number; carbs: number; fat: number; date?: string }; prData?: { exercise: string; weight: number; reps?: number; date?: string; notes?: string; type?: string }; mealDeletes?: Array<{ id?: string; name?: string; calories?: number; date?: string }>; hydration?: { date: string; oz: number; total: number; op: 'add' | 'set' } | null; readiness?: { date: string; readiness?: number; sleep?: number; stress?: number; energy?: number; mood?: string; notes?: string; recordedAt: string } | null; injuryModifications?: Array<{ action?: string; match?: { id?: string; name?: string }; patch?: { name?: string; status?: string; notes?: string; restrictions?: string[] } }>; dayTags?: Array<{ date: string; color?: string; note?: string; op?: string }>; nutritionTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number } | null; goals?: Array<{ action?: string; value?: string; match?: string }>; dietary?: Array<{ field?: string; action?: string; values?: string[] }>; macrocycles?: Array<{ action: string; cycleId?: string; goalName?: string; blockCount?: number; status?: string }>; prModifications?: Array<{ match?: { id?: string; exercise?: string; date?: string }; patch?: Record<string, unknown> }>; prDeletes?: Array<{ match?: { id?: string; exercise?: string; date?: string } }>; wearable?: { provider: string; affected: number } | null; notification?: Record<string, unknown> | null; trainerNote?: { targetOperatorId: string; targetCallsign?: string; op: 'set' | 'append' } | null } | null> => {
     try {
       const recentMessages = allMessages.slice(-10).map(m => ({
         role: m.role,
@@ -1610,6 +1615,7 @@ ${mealSuggestion}`;
       return {
         response: data.response,
         workoutData: data.workoutData,
+        workouts: Array.isArray(data.workouts) ? data.workouts : (data.workoutData ? [data.workoutData] : []),
         workoutModification: data.workoutModification,
         workoutModifications: data.workoutModifications,
         workoutDelete: data.workoutDelete,
@@ -1651,6 +1657,7 @@ ${mealSuggestion}`;
   ): Promise<{
     response: string;
     workoutData?: Record<string, unknown>;
+    workouts?: Array<Record<string, unknown>>;
     workoutModification?: Record<string, unknown>;
     /**
      * All workout_modification blocks parsed from Gunny's reply, in emission
@@ -1791,6 +1798,7 @@ ${mealSuggestion}`;
         return {
           response: data.response || '',
           workoutData: data.workoutData,
+          workouts: Array.isArray(data.workouts) ? data.workouts : (data.workoutData ? [data.workoutData] : []),
           workoutModification: data.workoutModification,
           workoutModifications: Array.isArray(data.workoutModifications) ? data.workoutModifications : (data.workoutModification ? [data.workoutModification] : []),
           workoutDelete: data.workoutDelete,
@@ -1925,6 +1933,7 @@ ${mealSuggestion}`;
         return {
           response: finalPayload.cleanText,
           workoutData: finalPayload.workoutData,
+          workouts: Array.isArray(finalPayload.workouts) ? finalPayload.workouts : (finalPayload.workoutData ? [finalPayload.workoutData] : []),
           workoutModification: finalPayload.workoutModification,
           workoutModifications: Array.isArray(finalPayload.workoutModifications) ? finalPayload.workoutModifications : (finalPayload.workoutModification ? [finalPayload.workoutModification] : []),
           workoutDelete: finalPayload.workoutDelete,
@@ -1975,14 +1984,11 @@ ${mealSuggestion}`;
     return normalized.trim();
   };
 
-  // Save workout to planner. Honors optional `date` (backdate) and `completed` fields on workoutData.
-  const saveWorkoutToPlanner = (workoutData: Record<string, unknown>) => {
-    if (!onUpdateOperator) return;
-    const today = getLocalDateStr();
-    const targetDate = isValidDateStr(workoutData.date) ? (workoutData.date as string) : today;
-    const completedFlag = workoutData.completed === true;
-    const updatedOp = { ...operator };
-
+  // Pure builder — convert one parsed workout_json payload into the planner
+  // shape. Extracted so the weekly-build flow can loop without re-running
+  // React state-update logic on each call (which would race against stale
+  // `operator` closures and lose all but the last day).
+  const buildWorkoutFromData = (workoutData: Record<string, unknown>, targetDate: string) => {
     const blocks = ((workoutData.blocks as Array<Record<string, unknown>>) || []).map((block, i) => {
       if (block.type === 'conditioning') {
         return {
@@ -2004,22 +2010,37 @@ ${mealSuggestion}`;
         isLinkedToNext: false,
       };
     });
-
-    updatedOp.workouts = {
-      ...updatedOp.workouts,
-      [targetDate]: {
-        id: `wk-ai-${Date.now()}`,
-        date: targetDate,
-        title: (workoutData.title as string) || 'AI Generated Workout',
-        notes: normalizeDescription((workoutData.notes as string) || ''),
-        warmup: normalizeDescription((workoutData.warmup as string) || ''),
-        blocks,
-        cooldown: normalizeDescription((workoutData.cooldown as string) || ''),
-        completed: completedFlag,
-      },
+    return {
+      id: `wk-ai-${Date.now()}-${targetDate}`,
+      date: targetDate,
+      title: (workoutData.title as string) || 'AI Generated Workout',
+      notes: normalizeDescription((workoutData.notes as string) || ''),
+      warmup: normalizeDescription((workoutData.warmup as string) || ''),
+      blocks,
+      cooldown: normalizeDescription((workoutData.cooldown as string) || ''),
+      completed: workoutData.completed === true,
     };
+  };
 
-    onUpdateOperator(updatedOp);
+  // Save MANY workouts to planner in a single React state update. Used by
+  // the weekly-build flow ("ADD WEEK") so all 5-7 days land atomically; the
+  // previous per-day loop raced against stale `operator` closures and only
+  // the last day's call survived. Calling with a single-entry array also
+  // covers the existing single-workout path.
+  const saveWorkoutsToPlanner = (workouts: Array<Record<string, unknown>>) => {
+    if (!onUpdateOperator || !workouts.length) return;
+    const today = getLocalDateStr();
+    const mergedWorkouts = { ...(operator.workouts || {}) };
+    for (const wd of workouts) {
+      const targetDate = isValidDateStr(wd.date) ? (wd.date as string) : today;
+      mergedWorkouts[targetDate] = buildWorkoutFromData(wd, targetDate);
+    }
+    onUpdateOperator({ ...operator, workouts: mergedWorkouts });
+  };
+
+  // Save workout to planner. Honors optional `date` (backdate) and `completed` fields on workoutData.
+  const saveWorkoutToPlanner = (workoutData: Record<string, unknown>) => {
+    saveWorkoutsToPlanner([workoutData]);
   };
 
   const handleSendMessage = async () => {
@@ -2094,6 +2115,31 @@ ${mealSuggestion}`;
     }
 
     // ═══ NORMAL MODE ═══
+
+    // Check for "add week" / "save week" / "lock the week" — flush the entire
+    // staged weekly plan (from WEEKLY PLAN MODE) into the planner in one
+    // atomic state update. Lives above the single-workout ADD IT block so the
+    // week phrase wins when both refs are set (which only happens transiently;
+    // staging the week clears lastWorkoutDataRef in C4 below).
+    const isSaveWeekCommand = /\b(add\s+(the\s+)?week|save\s+(the\s+)?week|lock\s+(the\s+)?week|approve\s+(the\s+)?week|add\s+all\s+(days|workouts)|save\s+all\s+(days|workouts))\b/i.test(lower);
+    if (isSaveWeekCommand && lastWeekDataRef.current?.length) {
+      const staged = lastWeekDataRef.current;
+      saveWorkoutsToPlanner(staged);
+      const n = staged.length;
+      lastWeekDataRef.current = null;
+      lastWorkoutDataRef.current = null;
+      setTimeout(() => {
+        const gunnyResponse: Message = {
+          id: 'gunny-' + Date.now(), role: 'gunny',
+          text: `LOCKED IN. ${n} day${n === 1 ? '' : 's'} of training on the PLANNER. Open the PLANNER tab and execute. No excuses, champ.`,
+          timestamp: new Date(),
+        };
+        setIsTyping(false); setThinkingStartedAt(null);
+        setMessages((prev) => [...prev, gunnyResponse]);
+      }, 300);
+      inputRef.current?.focus();
+      return;
+    }
 
     // Check for "add it" / "save it" / "I like it" — save last workout to planner
     const isSaveCommand = /\b(add it|save it|i like it|lock it in|add to planner|save to planner|add that|save that|add this|log it)\b/i.test(lower);
@@ -2610,8 +2656,14 @@ ${mealSuggestion}`;
         }
       }
 
-      // Store workout data if AI generated a NEW complete workout
-      if (!wasModification && apiResult?.workoutData) {
+      // Store workout data if AI generated a NEW complete workout. When
+      // WEEKLY PLAN MODE emitted multiple <workout_json> blocks (> 1), stage
+      // the whole array under lastWeekDataRef so "ADD WEEK" commits them
+      // atomically; otherwise fall through to the single-workout ref.
+      if (!wasModification && apiResult?.workouts && apiResult.workouts.length > 1) {
+        lastWeekDataRef.current = apiResult.workouts;
+        lastWorkoutDataRef.current = null;
+      } else if (!wasModification && apiResult?.workoutData) {
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
 
@@ -2748,7 +2800,11 @@ ${mealSuggestion}`;
               ? {
                   ...m,
                   text: (apiResult?.response || m.text)
-                    + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
+                    + (hasWorkout
+                        ? (apiResult?.workouts && apiResult.workouts.length > 1
+                            ? `\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD WEEK" to save all ${apiResult.workouts.length} days to your PLANNER.`
+                            : '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.')
+                        : '')
                     + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
                     + (mealLogged ? '\n\n[MEAL LOGGED TO NUTRITION TRACKER]' : '')
                     + (prLogged ? '\n\n[PR LOGGED TO PR BOARD]' : '')
@@ -3192,7 +3248,10 @@ ${mealSuggestion}`;
         }
       }
 
-      if (!wasModification && apiResult?.workoutData) {
+      if (!wasModification && apiResult?.workouts && apiResult.workouts.length > 1) {
+        lastWeekDataRef.current = apiResult.workouts;
+        lastWorkoutDataRef.current = null;
+      } else if (!wasModification && apiResult?.workoutData) {
         lastWorkoutDataRef.current = apiResult.workoutData;
       }
       const hasWorkout = !wasModification && !!apiResult?.workoutData;
@@ -3208,7 +3267,11 @@ ${mealSuggestion}`;
               ? {
                   ...m,
                   text: (apiResult?.response || m.text)
-                    + (hasWorkout ? '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.' : '')
+                    + (hasWorkout
+                        ? (apiResult?.workouts && apiResult.workouts.length > 1
+                            ? `\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD WEEK" to save all ${apiResult.workouts.length} days to your PLANNER.`
+                            : '\n\n━━━━━━━━━━━━━━━━━━\nSay "ADD IT" to save this workout to your PLANNER.')
+                        : '')
                     + (wasModification ? '\n\n[WORKOUT UPDATED]' : '')
                     + (qaMealsDeletedCount > 0 ? `\n\n[${qaMealsDeletedCount === 1 ? 'MEAL REMOVED' : `${qaMealsDeletedCount} MEALS REMOVED`}]` : '')
                     + (qaHydrationLogged && apiResult?.hydration ? `\n\n[HYDRATION ${apiResult.hydration.op === 'set' ? 'SET' : 'LOGGED'} — ${apiResult.hydration.total}oz TOTAL]` : '')
@@ -3685,7 +3748,7 @@ ${mealSuggestion}`;
                 // so it renders cleanly in markdown — the action moves
                 // to the dedicated button below.
                 const bodyText = message.isWorkout
-                  ? message.text.replace(/\n*━+\n*\s*Say "ADD IT"[^\n]*\n?/i, '\n').trim()
+                  ? message.text.replace(/\n*━+\n*\s*Say "ADD (IT|WEEK)"[^\n]*\n?/i, '\n').trim()
                   : message.text;
                 return (
                 <ReactMarkdown
@@ -3820,6 +3883,49 @@ ${mealSuggestion}`;
                   </button>
                   <span style={{ fontSize: 12, color: '#666', fontFamily: '"Share Tech Mono", monospace' }}>
                     or type &quot;add it&quot;
+                  </span>
+                </div>
+              )}
+              {/* SAVE WEEK button — appears when WEEKLY PLAN MODE staged a
+                  multi-day plan under lastWeekDataRef. Same affordance as the
+                  single-workout button above but commits the whole array via
+                  saveWorkoutsToPlanner in one React update. */}
+              {message.isWorkout && lastWeekDataRef.current && lastWeekDataRef.current.length > 1 && (
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => {
+                      const staged = lastWeekDataRef.current;
+                      if (staged && staged.length) {
+                        saveWorkoutsToPlanner(staged);
+                        const n = staged.length;
+                        lastWeekDataRef.current = null;
+                        const confirmMsg: Message = {
+                          id: 'gunny-confirm-week-' + Date.now(),
+                          role: 'gunny',
+                          text: `LOCKED IN. ${n} day${n === 1 ? '' : 's'} of training saved to your PLANNER. Open the PLANNER tab and execute. No excuses, champ.`,
+                          timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, confirmMsg]);
+                      }
+                    }}
+                    style={{
+                      padding: '10px 24px',
+                      fontFamily: '"Orbitron", sans-serif',
+                      fontSize: 13,
+                      fontWeight: 800,
+                      letterSpacing: 2,
+                      color: '#030303',
+                      background: '#ffb800',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 0 12px rgba(255,184,0,0.3)',
+                    }}
+                  >
+                    ◆ ADD WEEK ({lastWeekDataRef.current.length} DAYS)
+                  </button>
+                  <span style={{ fontSize: 12, color: '#666', fontFamily: '"Share Tech Mono", monospace' }}>
+                    or type &quot;add week&quot;
                   </span>
                 </div>
               )}
