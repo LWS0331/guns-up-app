@@ -64,6 +64,12 @@ export async function PATCH(
         // from MacrocyclePanel was silently dropped server-side and
         // the goal vanished on reload.
         'macroCycles',
+        // Daily readiness check-ins (Record<date, DailyReadinessEntry>).
+        // Previously only written through the Gunny chat <readiness_json>
+        // handler; the MCP server's log_readiness tool needs to PATCH
+        // this field directly so trainers can log check-ins from Claude.ai
+        // without paying for an Anthropic call on our end.
+        'dailyReadiness',
       ] as const;
       for (const k of allowed) {
         if (body[k] !== undefined) data[k] = body[k];
