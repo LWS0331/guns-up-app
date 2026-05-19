@@ -17,6 +17,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { GunnyApiClient, MacroTargets, Meal, PRRecord, Workout, WorkoutBlock } from './api-client.js';
+import {
+  projectNutritionInRange,
+  projectProfileSummary,
+  projectWorkoutsInRange,
+} from './projections.js';
 
 function todayKey(): string {
   const d = new Date();
@@ -56,21 +61,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       // Trim heavy nested blobs for the default profile view — keep the
       // model's context window from getting buried under months of meal
       // logs every time it asks "who am I?".
-      const summary = {
-        id: op.id,
-        callsign: op.callsign,
-        name: op.name,
-        intake: op.intake,
-        profile: op.profile,
-        preferences: op.preferences,
-        sitrep: op.sitrep,
-        dailyBrief: op.dailyBrief,
-        nutritionTargets: op.nutrition?.targets,
-        workoutDates: Object.keys(op.workouts || {}).sort(),
-        prCount: (op.prs || []).length,
-        injuryCount: (op.injuries || []).length,
-      };
-      return jsonContent(summary);
+      return jsonContent(projectProfileSummary(op));
     }
   );
 
@@ -103,12 +94,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     },
     async ({ from, to }) => {
       const op = await client.getOperator();
-      const all = op.workouts || {};
-      const out: Record<string, Workout> = {};
-      for (const [date, w] of Object.entries(all)) {
-        if (date >= from && date <= to) out[date] = w;
-      }
-      return jsonContent(out);
+      return jsonContent(projectWorkoutsInRange(op, { from, to }));
     }
   );
 
@@ -382,28 +368,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     },
     async ({ from, to }) => {
       const op = await client.getOperator();
-      const allMeals = (op.nutrition?.meals as Record<string, Meal[]> | undefined) || {};
-      const targets = op.nutrition?.targets;
-      const days: Array<{
-        date: string;
-        meals: Meal[];
-        totals: { calories: number; protein: number; carbs: number; fat: number };
-      }> = [];
-      for (const [date, meals] of Object.entries(allMeals)) {
-        if (date < from || date > to) continue;
-        const totals = meals.reduce(
-          (acc, m) => ({
-            calories: acc.calories + (m.calories || 0),
-            protein: acc.protein + (m.protein || 0),
-            carbs: acc.carbs + (m.carbs || 0),
-            fat: acc.fat + (m.fat || 0),
-          }),
-          { calories: 0, protein: 0, carbs: 0, fat: 0 }
-        );
-        days.push({ date, meals, totals });
-      }
-      days.sort((a, b) => a.date.localeCompare(b.date));
-      return jsonContent({ from, to, targets, days });
+      return jsonContent(projectNutritionInRange(op, { from, to }));
     }
   );
 
