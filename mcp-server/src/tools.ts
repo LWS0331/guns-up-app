@@ -1665,6 +1665,85 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       return textContent(`Removed PR ${prId} from ${client_id}.`);
     }
   );
+
+  // ─────────── WEARABLES (Phase 3c — reads) ───────────
+  // Surfaces Vital-backed wearable data so Gunny can ground recovery /
+  // readiness recommendations in real HRV / sleep / HR data instead of
+  // self-reports alone. Provider data shape varies (Whoop, Oura, Garmin,
+  // Apple Watch, etc.) so `snapshot` is opaque — Gunny extracts what's
+  // useful per provider.
+
+  server.registerTool(
+    'get_my_wearable_status',
+    {
+      title: 'Get my connected wearables',
+      description:
+        'Returns the trainer\'s active wearable connections — provider, lastSyncAt, scopes. Use to confirm a device is connected + reporting before relying on snapshot data.',
+      inputSchema: {},
+    },
+    async () => {
+      const myId = clientOperatorId(client);
+      const connections = await client.listWearables(myId);
+      const summary = connections.map((c) => ({
+        provider: c.provider,
+        active: c.active,
+        connectedAt: c.connectedAt ?? null,
+        lastSyncAt: c.lastSyncAt ?? null,
+        scopes: c.scopes ?? [],
+      }));
+      return jsonContent({ connected: summary.length > 0, connections: summary });
+    }
+  );
+
+  server.registerTool(
+    'get_my_wearable_latest',
+    {
+      title: 'Get my latest wearable snapshot',
+      description:
+        'Returns the freshest cached wearable snapshot — HRV, sleep, activity, heart rate. `snapshot` is the raw provider blob (shape varies by Whoop / Oura / Garmin / Apple Watch); `currentHR` is the server\'s best-effort normalized live HR. Polled cheaply (no Vital roundtrip per call).',
+      inputSchema: {},
+    },
+    async () => {
+      const myId = clientOperatorId(client);
+      const data = await client.getWearableLatest(myId);
+      return jsonContent(data);
+    }
+  );
+
+  server.registerTool(
+    'get_client_wearable_status',
+    {
+      title: 'Get a client\'s connected wearables',
+      description:
+        'Returns the client\'s active wearable connections. CHECK THIS before recommending recovery / training-load decisions for a client — if no device is connected, snapshot data won\'t exist.',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const connections = await client.listWearables(client_id);
+      const summary = connections.map((c) => ({
+        provider: c.provider,
+        active: c.active,
+        connectedAt: c.connectedAt ?? null,
+        lastSyncAt: c.lastSyncAt ?? null,
+        scopes: c.scopes ?? [],
+      }));
+      return jsonContent({ client_id, connected: summary.length > 0, connections: summary });
+    }
+  );
+
+  server.registerTool(
+    'get_client_wearable_latest',
+    {
+      title: 'Get a client\'s latest wearable snapshot',
+      description:
+        'Returns the client\'s freshest cached wearable snapshot. Same shape as get_my_wearable_latest. Useful for "is ROSA recovered enough for tomorrow\'s squat day?" — pair with get_client_recent_workouts for full picture.',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const data = await client.getWearableLatest(client_id);
+      return jsonContent({ client_id, ...data });
+    }
+  );
 }
 
 /** Pull the calling trainer's operator-id off the api-client without
