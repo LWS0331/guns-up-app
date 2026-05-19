@@ -19,6 +19,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { loadEnv, lookupOperatorByBearer } from './env.js';
 import { GunnyApiClient } from './api-client.js';
 import { registerAllTools } from './tools.js';
+import { buildGunnyInstructions } from './persona.js';
 
 const env = loadEnv();
 
@@ -63,10 +64,22 @@ app.post('/mcp', async (req: Request, res: Response) => {
     operatorId,
     apiKey: bearer,
   });
-  const server = new McpServer({
-    name: 'gunnyai-trainer',
-    version: '0.1.0',
-  });
+  // Ship the Gunny persona via the MCP `instructions` capability — every
+  // Claude.ai client (and any other MCP client) reads this at the
+  // initialize handshake and uses it as system context. This guarantees
+  // the persona even outside the dedicated Claude.ai Project (where the
+  // pasted Custom Instructions would otherwise be the only source). The
+  // project-level instructions still add per-trainer detail; this is the
+  // server-enforced floor that travels with the connection.
+  const server = new McpServer(
+    {
+      name: 'gunnyai-trainer',
+      version: '0.1.0',
+    },
+    {
+      instructions: buildGunnyInstructions(operatorId),
+    }
+  );
   registerAllTools(server, apiClient);
 
   const transport = new StreamableHTTPServerTransport({
