@@ -46,31 +46,42 @@ export class GunnyApiClient {
     }
   }
 
-  /** Full operator record — profile, intake, workouts, nutrition, prs, dayTags, etc. */
-  getOperator(): Promise<Operator> {
-    return this.fetch<Operator>('GET', `/api/operators/${this.cfg.operatorId}`);
+  /** Full operator record — profile, intake, workouts, nutrition, prs, dayTags, etc.
+   * gunnyai.fit wraps the operator in { operator } (matches PUT's response shape);
+   * unwrap here so tool handlers get the bare object. */
+  async getOperator(): Promise<Operator> {
+    const res = await this.fetch<{ operator: Operator }>(
+      'GET',
+      `/api/operators/${this.cfg.operatorId}`
+    );
+    return res.operator;
   }
 
-  /** Targeted PATCH against the profile subroute (skips workouts to avoid races). */
-  patchProfile(patch: Partial<Operator>): Promise<Operator> {
-    return this.fetch<Operator>(
+  /** Targeted PATCH against the profile subroute (skips workouts to avoid races).
+   * Server returns `{ ok: true, operator }` — unwrap to the bare row. */
+  async patchProfile(patch: Partial<Operator>): Promise<Operator> {
+    const res = await this.fetch<{ ok?: boolean; operator?: Operator; updated?: Operator }>(
       'PATCH',
       `/api/operators/${this.cfg.operatorId}/profile`,
       patch
     );
+    return res.operator ?? res.updated ?? (res as unknown as Operator);
   }
 
-  /** Targeted PATCH against the workouts subroute (plus optional prs/injuries). */
-  patchWorkouts(patch: {
+  /** Targeted PATCH against the workouts subroute (plus optional prs/injuries).
+   * Server returns `{ ok: true, updated }` here — `updated` not `operator`,
+   * inconsistent with the profile route but it's what's on the wire today. */
+  async patchWorkouts(patch: {
     workouts?: Record<string, Workout>;
     prs?: PRRecord[];
     injuries?: unknown[];
   }): Promise<Operator> {
-    return this.fetch<Operator>(
+    const res = await this.fetch<{ ok?: boolean; operator?: Operator; updated?: Operator }>(
       'PATCH',
       `/api/operators/${this.cfg.operatorId}/workouts`,
       patch
     );
+    return res.operator ?? res.updated ?? (res as unknown as Operator);
   }
 }
 
