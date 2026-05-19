@@ -50,11 +50,28 @@ export class GunnyApiClient {
    * gunnyai.fit wraps the operator in { operator } (matches PUT's response shape);
    * unwrap here so tool handlers get the bare object. */
   async getOperator(): Promise<Operator> {
+    return this.getOperatorById(this.cfg.operatorId);
+  }
+
+  /** Fetch an arbitrary operator by id. Used by the client-roster tools
+   * (trainer reading their assigned clients' data). Server enforces
+   * trainer-of-target access in GET /api/operators/[id] — calling this
+   * with a non-client id results in 403, which we surface as an Error. */
+  async getOperatorById(operatorId: string): Promise<Operator> {
     const res = await this.fetch<{ operator: Operator }>(
       'GET',
-      `/api/operators/${this.cfg.operatorId}`
+      `/api/operators/${operatorId}`
     );
     return res.operator;
+  }
+
+  /** Fetch the operators visible to the calling trainer. Server-side
+   * (GET /api/operators) returns: self + clients (trainerId === me) +
+   * other trainers (for client-side trainer picker). Filter the
+   * roster down to actual clients in the tool layer. */
+  async listVisibleOperators(): Promise<Operator[]> {
+    const res = await this.fetch<{ operators: Operator[] }>('GET', '/api/operators');
+    return Array.isArray(res.operators) ? res.operators : [];
   }
 
   /** Targeted PATCH against the profile subroute (skips workouts to avoid races).

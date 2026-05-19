@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/requireAuth';
+import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 
 // GET /api/operators — fetch operators visible to caller (auth required)
 // Admins: all operators. Trainers: self + assigned clients. Clients: self only.
 export async function GET(req: NextRequest) {
-  const auth = requireAuth(req);
+  const auth = requireTrainerAuth(req);
   if (auth instanceof NextResponse) return auth;
 
   try {

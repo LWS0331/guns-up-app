@@ -877,6 +877,244 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       return jsonContent({ from, to, days });
     }
   );
+
+  // ─────────── CLIENT ROSTER (Phase 3a — reads only) ───────────
+  // Trainers (RAMPAGE, VALKYRIE) get full read access to operators
+  // where operator.trainerId === their own id. The server enforces
+  // trainer-of-target access in GET /api/operators/[id]; if the
+  // trainer requests a non-client operator, the server returns 403.
+  // Writes for clients are Phase 3b — they need extra confirmation
+  // affordances so the trainer can't accidentally clobber a client's
+  // data with self-targeted intent.
+  //
+  // Workflow: call list_my_clients first to find the client_id, then
+  // use it on every subsequent client_* tool call.
+
+  server.registerTool(
+    'list_my_clients',
+    {
+      title: 'List my assigned clients',
+      description:
+        'Returns the trainer\'s client roster — every operator whose `trainerId` is the calling trainer. Each entry: { id, callsign, name, lastWorkoutDate, workoutCount, prCount, injuryCount }. Use this BEFORE any other client_* tool so you can resolve a callsign (e.g. "EFRAIN") to an operator id (e.g. "op-efrain").',
+      inputSchema: {},
+    },
+    async () => {
+      const myOperatorId = clientOperatorId(client);
+      const all = await client.listVisibleOperators();
+      const roster = all
+        .filter((op) => {
+          // Server returns self + clients + other trainers. Filter to
+          // clients (trainerId === me) and exclude self.
+          if (op.id === myOperatorId) return false;
+          return (op as { trainerId?: string }).trainerId === myOperatorId;
+        })
+        .map((op) => {
+          const workoutDates = Object.keys(op.workouts || {}).sort();
+          const lastWorkoutDate = workoutDates[workoutDates.length - 1] || null;
+          return {
+            id: op.id,
+            callsign: op.callsign ?? null,
+            name: op.name ?? null,
+            lastWorkoutDate,
+            workoutCount: workoutDates.length,
+            prCount: (op.prs || []).length,
+            injuryCount: (op.injuries || []).length,
+          };
+        });
+      // Sort by lastWorkoutDate desc so most-active clients surface first.
+      roster.sort((a, b) =>
+        (b.lastWorkoutDate || '').localeCompare(a.lastWorkoutDate || '')
+      );
+      return jsonContent(roster);
+    }
+  );
+
+  server.registerTool(
+    'get_client_profile',
+    {
+      title: 'Get a client\'s operator profile',
+      description:
+        'Returns the same summary shape as get_my_profile, but for the named client. `client_id` from list_my_clients. Server 403s if the client is not assigned to the calling trainer.',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const op = await client.getOperatorById(client_id);
+      return jsonContent(projectProfileSummary(op));
+    }
+  );
+
+  server.registerTool(
+    'get_client_today_workout',
+    {
+      title: 'Get a client\'s today workout',
+      description:
+        'Returns `{date, workout|null}` for the client\'s today (operator\'s local timezone resolution happens on the server; client may be in a different TZ than the trainer).',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const op = await client.getOperatorById(client_id);
+      const date = todayKey();
+      const workout = op.workouts?.[date] ?? null;
+      return jsonContent({ client_id, date, workout });
+    }
+  );
+
+  server.registerTool(
+    'get_client_workouts_in_range',
+    {
+      title: 'Get a client\'s workouts in a range',
+      description:
+        'Returns every workout for the client keyed between `from` and `to` inclusive. Useful for client weekly recaps, volume audits, and "what did EFRAIN do last week?"',
+      inputSchema: {
+        client_id: z.string().min(1),
+        from: DATE_KEY,
+        to: DATE_KEY,
+      },
+    },
+    async ({ client_id, from, to }) => {
+      assertValidDateRange({ from, to });
+      const op = await client.getOperatorById(client_id);
+      return jsonContent({
+        client_id,
+        ...projectWorkoutsInRange(op, { from, to }),
+      });
+    }
+  );
+
+  server.registerTool(
+    'get_client_recent_workouts',
+    {
+      title: 'Get a client\'s N most recent workouts',
+      description:
+        'Last `limit` workouts (default 5, max 30) for the client, ordered most-recent-first. Use for variation-rule enforcement before programming a new client session.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        limit: z.number().int().positive().max(30).optional(),
+      },
+    },
+    async ({ client_id, limit }) => {
+      const op = await client.getOperatorById(client_id);
+      const all = op.workouts || {};
+      const sorted = Object.entries(all).sort((a, b) => b[0].localeCompare(a[0]));
+      const sliced = sorted.slice(0, limit ?? 5);
+      return jsonContent({ client_id, workouts: Object.fromEntries(sliced) });
+    }
+  );
+
+  server.registerTool(
+    'get_client_nutrition_today',
+    {
+      title: 'Get a client\'s today nutrition',
+      description:
+        'Today\'s meals + macro totals + target gap for the client (operator\'s local date).',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const op = await client.getOperatorById(client_id);
+      const date = todayKey();
+      const meals = op.nutrition?.meals?.[date] ?? [];
+      const totals = meals.reduce(
+        (acc, m) => ({
+          calories: acc.calories + (m.calories || 0),
+          protein: acc.protein + (m.protein || 0),
+          carbs: acc.carbs + (m.carbs || 0),
+          fat: acc.fat + (m.fat || 0),
+        }),
+        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      );
+      const targets = op.nutrition?.targets;
+      const remaining = targets
+        ? {
+            calories: targets.calories - totals.calories,
+            protein: targets.protein - totals.protein,
+            carbs: targets.carbs - totals.carbs,
+            fat: targets.fat - totals.fat,
+          }
+        : null;
+      return jsonContent({ client_id, date, meals, totals, targets, remaining });
+    }
+  );
+
+  server.registerTool(
+    'get_client_nutrition_in_range',
+    {
+      title: 'Get a client\'s nutrition history',
+      description:
+        'Meals + per-day totals for the client between `from` and `to` inclusive.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        from: DATE_KEY,
+        to: DATE_KEY,
+      },
+    },
+    async ({ client_id, from, to }) => {
+      assertValidDateRange({ from, to });
+      const op = await client.getOperatorById(client_id);
+      return jsonContent({
+        client_id,
+        ...projectNutritionInRange(op, { from, to }),
+      });
+    }
+  );
+
+  server.registerTool(
+    'get_client_prs',
+    {
+      title: 'Get a client\'s PR board',
+      description:
+        'Returns the client\'s PR board. Optional `exercise` filter (case-insensitive substring).',
+      inputSchema: {
+        client_id: z.string().min(1),
+        exercise: z.string().optional(),
+      },
+    },
+    async ({ client_id, exercise }) => {
+      const op = await client.getOperatorById(client_id);
+      let prs = op.prs || [];
+      if (exercise) {
+        const needle = exercise.toLowerCase();
+        prs = prs.filter((p) => (p.exercise || '').toLowerCase().includes(needle));
+      }
+      return jsonContent({ client_id, prs });
+    }
+  );
+
+  server.registerTool(
+    'get_client_injuries',
+    {
+      title: 'Get a client\'s injuries',
+      description:
+        'Returns the client\'s injury list (active + resolved). CHECK THIS before programming any session for a client — server-side guards prevent unsafe writes but the upfront read keeps the recommendation safe too.',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const op = await client.getOperatorById(client_id);
+      return jsonContent({ client_id, injuries: op.injuries ?? [] });
+    }
+  );
+
+  server.registerTool(
+    'get_client_goals',
+    {
+      title: 'Get a client\'s training goals',
+      description:
+        'Returns the client\'s goal list (operator.profile.goals). Use this to align programming with the client\'s stated objectives.',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const op = await client.getOperatorById(client_id);
+      const goals = ((op.profile as { goals?: string[] } | undefined)?.goals) || [];
+      return jsonContent({ client_id, goals });
+    }
+  );
+}
+
+/** Pull the calling trainer's operator-id off the api-client without
+ * adding a public accessor. The cfg property is `private` in the class
+ * but accessible via the bracketed-name trick — same outcome, no API
+ * leakage. */
+function clientOperatorId(c: GunnyApiClient): string {
+  return (c as unknown as { cfg: { operatorId: string } }).cfg.operatorId;
 }
 
 /** Drop undefined values from a flat partial object. zod's `.optional()`
