@@ -96,16 +96,34 @@ export interface Operator {
   callsign?: string;
   name?: string;
   workouts?: Record<string, Workout>;
-  nutrition?: { targets?: MacroTargets; meals?: Record<string, Meal[]> };
+  nutrition?: {
+    targets?: MacroTargets;
+    meals?: Record<string, Meal[]>;
+    /** Hydration totals in oz, keyed by YYYY-MM-DD. */
+    hydration?: Record<string, number>;
+  };
   prs?: PRRecord[];
   injuries?: unknown[];
   dayTags?: Record<string, DayTag>;
   sitrep?: unknown;
   dailyBrief?: unknown;
   intake?: Record<string, unknown>;
-  profile?: Record<string, unknown>;
+  profile?: Record<string, unknown> & { goals?: string[] };
   preferences?: Record<string, unknown>;
+  /** Daily readiness check-ins keyed by YYYY-MM-DD. */
+  dailyReadiness?: Record<string, DailyReadinessEntry>;
   [k: string]: unknown;
+}
+
+export interface DailyReadinessEntry {
+  date: string;
+  recordedAt: string;
+  readiness?: number;
+  sleep?: number;
+  stress?: number;
+  energy?: number;
+  mood?: string;
+  notes?: string;
 }
 
 export interface Workout {

@@ -1,25 +1,56 @@
 # gunnyai-trainer-mcp
 
-Remote MCP server that exposes a trainer's own gunnyai.fit account to Claude.ai. Lets **RAMPAGE** + **VALKYRIE** drive their training data from their existing Claude.ai subscription — **zero Anthropic spend on our infra** for trainer workflows.
+Remote MCP server that exposes a trainer's **entire gunnyai.fit account** to Claude.ai. Lets **RAMPAGE** + **VALKYRIE** drive every aspect of their training data from their existing Claude.ai subscription — **zero Anthropic spend on our infra** for trainer workflows.
 
-In-app Gunny chat is unchanged for every other operator. This is a power surface for the two trainers only.
+In-app Gunny chat is unchanged for every other operator. This MCP is a power surface for the two trainers only, with the explicit end goal of making the in-app UI a read-only ledger — every write happens through Claude.ai.
 
-## What it exposes
+## What it exposes (28 tools)
 
-Each trainer's MCP connection acts on their **own operator record** (Phase 1 — no client-roster ops yet). Tools:
+Each trainer's MCP connection acts on their **own operator record** (no client-roster ops in Phase 2.6 — that's Phase 3).
 
-| Tool | Type | What it does |
-|---|---|---|
-| `get_my_profile` | read | Operator summary: intake, profile, preferences, sitrep, dailyBrief, nutrition targets, workout dates list, counts |
-| `get_today_workout` | read | Today's workout (operator local timezone) |
-| `get_workouts_in_range` | read | Workouts keyed in a `from`/`to` YYYY-MM-DD range |
-| `get_my_nutrition_today` | read | Today's meals + totals + target gap |
-| `get_my_prs` | read | PR board, optional `exercise` filter |
-| `get_my_day_tags` | read | Calendar day tags (rest/deload/etc.), optional date range |
-| `log_meal` | write | Append meal to `nutrition.meals[date]` |
-| `log_pr` | write | Append PR to PR board |
-| `set_day_tag` | write | Tag a date `green` / `amber` / `red` / `cyan` |
-| `add_or_update_workout` | write | Write a full workout to `workouts[date]` |
+### Reads (11)
+| Tool | What it returns |
+|---|---|
+| `get_my_profile` | Operator summary: intake, profile, preferences, sitrep, dailyBrief, nutrition targets, workout dates, PR/injury counts |
+| `get_today_workout` | Today's workout (operator local timezone) |
+| `get_workouts_in_range(from, to)` | All workouts keyed in date range |
+| `get_my_recent_workouts(limit?)` | Last N sessions by date |
+| `get_my_nutrition_today` | Today's meals + totals + target gap |
+| `get_my_nutrition_in_range(from, to)` | Meals + per-day totals across a range |
+| `get_my_hydration_in_range(from, to)` | Water totals per day vs intake.dailyWaterOz target |
+| `get_my_readiness_in_range(from, to)` | Daily readiness check-in history |
+| `get_my_prs(exercise?)` | PR board, optional filter |
+| `get_my_day_tags(from?, to?)` | Calendar tags (rest/deload/sick), optional range |
+| `get_my_injuries` | Current injury list |
+| `get_my_goals` | Goal list (operator.profile.goals) |
+| `get_my_macrocycles` | Periodization plans (read-only) |
+
+### Updates (8 — partial PATCH-style)
+| Tool | Field |
+|---|---|
+| `update_my_preferences` | split, daysPerWeek, sessionDuration, trainingPath, equipment, weakPoints, avoidMovements, language |
+| `update_my_profile` | weight, bodyFat, height, age, sleep, stress, readiness, trainingAge |
+| `update_my_intake` | dietaryRestrictions, supplements, mealsPerDay, sleepQuality, stressLevel, dailyWaterOz, injuryNotes, primaryGoal, etc. |
+| `update_nutrition_targets` | calories, protein, carbs, fat (partial) |
+| `update_my_goals` | add/remove/replace freeform goal strings |
+| `set_my_injuries([...])` | replace entire injury list |
+| `set_day_tag(date, color?, note?)` | tag a calendar day |
+| `add_or_update_workout(date, ...)` | write a workout (overwrites on collision) |
+
+### Logging (4 — single-action)
+| Tool | Persists to |
+|---|---|
+| `log_meal` | nutrition.meals[date] |
+| `log_pr` | prs[] |
+| `log_hydration(oz, op?, date?)` | nutrition.hydration[date] (add or set) |
+| `log_readiness(readiness?, sleep?, stress?, energy?, mood?, notes?, date?)` | dailyReadiness[date] (+ mirrors today's numerics to profile) |
+
+### Deletes (3)
+| Tool | What |
+|---|---|
+| `delete_workout(date)` | remove workout on a date |
+| `delete_meal(date, mealId)` | remove a single meal by id |
+| `delete_pr(prId)` | remove a PR |
 
 ## Architecture
 
@@ -133,9 +164,13 @@ curl -s -X POST http://localhost:3001/mcp \
 
 You should see the 10 tools listed.
 
-## What's NOT in Phase 1
+## What's NOT yet covered (Phase 3 roadmap)
 
-- **Client roster ops** — "list my clients", "push plan to a client", "log a session for client X". Phase 2.
-- **Structured workout modification** (`swap_exercise`, etc.) — for now, `add_or_update_workout` overwrites the whole day. Phase 1.5 if the loop pattern proves clunky.
-- **Voice / wearables / billing tools** — out of scope; the in-app surfaces cover them.
+- **Client roster ops** — "list my clients", "push plan to a client", "log a session for client X". Phase 3.
+- **Wearable data reads** (HRV, sleep stages, recovery) — Vital webhook fills `WearableConnection` rows; need a read endpoint that joins these into the MCP surface.
+- **Macrocycle mutations** — read-only today (`get_my_macrocycles`). Mutation involves `buildMacroCycle` + `recomputeOnGoalDateChange` server helpers; expose via a structured endpoint when first trainer asks for it.
+- **Structured workout modification** (`swap_exercise`, `add_block`, etc.) — for now, `add_or_update_workout` overwrites the whole day. Promote to first-class endpoint if the loop pattern becomes clunky.
+- **Stripe / billing** — out of scope by design (risky from a chat surface).
 - **Per-tool rate limiting** — relies on gunnyai.fit's existing rate limit on the upstream REST calls.
+
+End goal: when the Phase 3 items land, the in-app UI becomes the read-only ledger and every write flows through Claude.ai.

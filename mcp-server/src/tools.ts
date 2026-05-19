@@ -16,7 +16,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { GunnyApiClient, MacroTargets, Meal, PRRecord, Workout, WorkoutBlock } from './api-client.js';
+import { DailyReadinessEntry, GunnyApiClient, MacroTargets, Meal, PRRecord, Workout, WorkoutBlock } from './api-client.js';
 
 function todayKey(): string {
   const d = new Date();
@@ -670,6 +670,238 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       }
       await client.patchWorkouts({ prs: filtered });
       return textContent(`Removed PR ${prId}.`);
+    }
+  );
+
+  // ─────────── DAILY OPS (hydration / readiness / goals) ───────────
+  // These previously lived only inside the Gunny chat XML-tag handlers
+  // (paid Anthropic path). Exposing them via MCP lets trainers log
+  // hydration / readiness / goals from Claude.ai with zero Anthropic
+  // spend on our infra. Storage paths match what the Gunny route
+  // writes to, so in-app surfaces stay in sync.
+
+  server.registerTool(
+    'log_hydration',
+    {
+      title: 'Log water intake',
+      description:
+        'Adds `oz` to the trainer\'s hydration log for `date` (default today). `op:"add"` accumulates onto today\'s total (default); `op:"set"` replaces it. Hydration is stored at operator.nutrition.hydration[date].',
+      inputSchema: {
+        oz: z.number().positive(),
+        op: z.enum(['add', 'set']).optional(),
+        date: DATE_KEY.optional(),
+      },
+    },
+    async ({ oz, op, date }) => {
+      const operator = await client.getOperator();
+      const target = date ?? todayKey();
+      const action: 'add' | 'set' = op ?? 'add';
+      const existingNutrition = operator.nutrition || {};
+      const existingHydration = existingNutrition.hydration || {};
+      const prior = Number(existingHydration[target] || 0);
+      const newTotal = action === 'set' ? Math.round(oz) : prior + Math.round(oz);
+      const merged = {
+        ...existingNutrition,
+        hydration: { ...existingHydration, [target]: newTotal },
+      };
+      await client.patchProfile({ nutrition: merged });
+      return textContent(
+        `Logged ${Math.round(oz)}oz (${action}) on ${target}. Total: ${newTotal}oz.`
+      );
+    }
+  );
+
+  server.registerTool(
+    'log_readiness',
+    {
+      title: 'Log a daily readiness check-in',
+      description:
+        'Captures the trainer\'s readiness check-in for `date` (default today). All fields optional but at least one must be provided. Numeric fields are clamped 1-10. If logging for today, the latest readiness/sleep/stress values also mirror into operator.profile so other surfaces (BattlePlan, daily brief) see fresh numbers.',
+      inputSchema: {
+        readiness: z.number().min(1).max(10).optional(),
+        sleep: z.number().min(1).max(10).optional(),
+        stress: z.number().min(1).max(10).optional(),
+        energy: z.number().min(1).max(10).optional(),
+        mood: z.string().min(1).max(80).optional(),
+        notes: z.string().min(1).max(500).optional(),
+        date: DATE_KEY.optional(),
+      },
+    },
+    async ({ readiness, sleep, stress, energy, mood, notes, date }) => {
+      const target = date ?? todayKey();
+      const today = todayKey();
+
+      const entry: DailyReadinessEntry = {
+        date: target,
+        recordedAt: new Date().toISOString(),
+      };
+      if (readiness !== undefined) entry.readiness = Math.round(readiness);
+      if (sleep !== undefined) entry.sleep = Math.round(sleep);
+      if (stress !== undefined) entry.stress = Math.round(stress);
+      if (energy !== undefined) entry.energy = Math.round(energy);
+      if (mood) entry.mood = mood.trim().slice(0, 80);
+      if (notes) entry.notes = notes.trim().slice(0, 500);
+
+      const hasContent =
+        entry.readiness !== undefined ||
+        entry.sleep !== undefined ||
+        entry.stress !== undefined ||
+        entry.energy !== undefined ||
+        entry.mood !== undefined ||
+        entry.notes !== undefined;
+      if (!hasContent) {
+        return textContent(
+          'Readiness entry skipped: at least one of readiness / sleep / stress / energy / mood / notes is required.'
+        );
+      }
+
+      const operator = await client.getOperator();
+      const existingReadiness = operator.dailyReadiness || {};
+      const mergedReadiness = { ...existingReadiness, [target]: entry };
+
+      // Mirror today's numerics into profile so the readiness engine +
+      // daily brief see them without a separate read. Past-date entries
+      // don't mirror — same behavior as applyReadinessEntry in the Gunny
+      // route, kept consistent so chat + MCP can't disagree on "today".
+      const patch: {
+        dailyReadiness: typeof mergedReadiness;
+        profile?: Record<string, unknown>;
+      } = { dailyReadiness: mergedReadiness };
+      if (target === today) {
+        const existingProfile = (operator.profile as Record<string, unknown>) || {};
+        const mirror = { ...existingProfile };
+        if (entry.readiness !== undefined) mirror.readiness = entry.readiness;
+        if (entry.sleep !== undefined) mirror.sleep = entry.sleep;
+        if (entry.stress !== undefined) mirror.stress = entry.stress;
+        patch.profile = mirror;
+      }
+      await client.patchProfile(patch);
+
+      const captured = Object.keys(entry).filter(
+        (k) => k !== 'date' && k !== 'recordedAt'
+      );
+      return textContent(
+        `Logged readiness check-in for ${target} (${captured.join(', ')}).`
+      );
+    }
+  );
+
+  server.registerTool(
+    'update_my_goals',
+    {
+      title: 'Add / remove / replace training goals',
+      description:
+        'Mutates the trainer\'s goal list (operator.profile.goals). Pass any combination of `add` (new goal strings), `remove` (substrings to filter out, case-insensitive), and `replace` (old-substring → new-value pairs). Goal strings are short freeform text — e.g. "Hit 405 squat by Q3", "Drop to 12% body fat", "Sub-6:00 mile".',
+      inputSchema: {
+        add: z.array(z.string().min(1)).optional(),
+        remove: z.array(z.string().min(1)).optional(),
+        replace: z
+          .array(
+            z.object({
+              match: z.string().min(1),
+              value: z.string().min(1),
+            })
+          )
+          .optional(),
+      },
+    },
+    async ({ add, remove, replace }) => {
+      const operator = await client.getOperator();
+      const existingProfile = (operator.profile as Record<string, unknown>) || {};
+      let goals = Array.isArray(existingProfile.goals)
+        ? [...(existingProfile.goals as string[])]
+        : [];
+      const summary: string[] = [];
+
+      for (const v of add || []) {
+        const trimmed = v.trim();
+        if (!trimmed) continue;
+        if (goals.some((g) => g.toLowerCase().trim() === trimmed.toLowerCase())) continue;
+        goals.push(trimmed);
+        summary.push(`+${trimmed}`);
+      }
+      for (const m of remove || []) {
+        const needle = m.toLowerCase().trim();
+        if (!needle) continue;
+        const before = goals.length;
+        goals = goals.filter((g) => !g.toLowerCase().includes(needle));
+        if (goals.length !== before) summary.push(`−${m}`);
+      }
+      for (const r of replace || []) {
+        const needle = r.match.toLowerCase().trim();
+        const next = r.value.trim();
+        if (!needle || !next) continue;
+        const idx = goals.findIndex((g) => g.toLowerCase().includes(needle));
+        if (idx < 0) continue;
+        goals[idx] = next;
+        summary.push(`~${r.match}→${next}`);
+      }
+
+      if (summary.length === 0) {
+        return textContent('No goal changes applied (nothing matched / nothing new).');
+      }
+
+      const mergedProfile = { ...existingProfile, goals };
+      await client.patchProfile({ profile: mergedProfile });
+      return textContent(`Updated goals: ${summary.join(', ')}. Now ${goals.length} total.`);
+    }
+  );
+
+  server.registerTool(
+    'get_my_goals',
+    {
+      title: 'Get my training goals',
+      description:
+        'Returns the current goal list (operator.profile.goals). Read-only — use update_my_goals to mutate.',
+      inputSchema: {},
+    },
+    async () => {
+      const op = await client.getOperator();
+      const goals = ((op.profile as { goals?: string[] } | undefined)?.goals) || [];
+      return jsonContent({ goals });
+    }
+  );
+
+  server.registerTool(
+    'get_my_hydration_in_range',
+    {
+      title: 'Get hydration history',
+      description:
+        'Returns hydration totals (oz per day) between `from` and `to` inclusive. Each entry: { date, oz, targetOz? }. Compares against intake.dailyWaterOz if set.',
+      inputSchema: { from: DATE_KEY, to: DATE_KEY },
+    },
+    async ({ from, to }) => {
+      const op = await client.getOperator();
+      const all = op.nutrition?.hydration || {};
+      const targetOz = (op.intake as { dailyWaterOz?: number } | undefined)?.dailyWaterOz;
+      const days: Array<{ date: string; oz: number; targetOz?: number }> = [];
+      for (const [date, oz] of Object.entries(all)) {
+        if (date < from || date > to) continue;
+        days.push({ date, oz: Number(oz) || 0, ...(targetOz ? { targetOz } : {}) });
+      }
+      days.sort((a, b) => a.date.localeCompare(b.date));
+      return jsonContent({ from, to, targetOz, days });
+    }
+  );
+
+  server.registerTool(
+    'get_my_readiness_in_range',
+    {
+      title: 'Get readiness check-in history',
+      description:
+        'Returns daily readiness entries between `from` and `to` inclusive. Each entry includes readiness/sleep/stress/energy/mood/notes as logged.',
+      inputSchema: { from: DATE_KEY, to: DATE_KEY },
+    },
+    async ({ from, to }) => {
+      const op = await client.getOperator();
+      const all = op.dailyReadiness || {};
+      const days: DailyReadinessEntry[] = [];
+      for (const [date, entry] of Object.entries(all)) {
+        if (date < from || date > to) continue;
+        days.push(entry as DailyReadinessEntry);
+      }
+      days.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      return jsonContent({ from, to, days });
     }
   );
 }
