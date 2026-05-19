@@ -232,8 +232,13 @@ export function handleAuthorizeGet(env: Env, req: Request, res: Response): void 
     return;
   }
   // Resource param: optional per RFC 8707 but Claude.ai sends it. If
-  // present it must match our canonical URL.
-  if (params.resource && params.resource !== env.publicBaseUrl) {
+  // present it must match our canonical URL. Per MCP spec (rev 2025-06-18,
+  // Resource Parameter Implementation > Canonical Server URI note):
+  // "implementations SHOULD consistently use the form without the trailing
+  // slash for better interoperability" — but Claude.ai sends the trailing-
+  // slash form. Normalize both sides before comparing so this isn't a
+  // string-equality landmine.
+  if (params.resource && normalizeResourceUri(params.resource) !== normalizeResourceUri(env.publicBaseUrl)) {
     res.status(400).type('text/plain').send(
       `resource parameter mismatch: got ${params.resource}, expected ${env.publicBaseUrl}`
     );
@@ -425,6 +430,17 @@ async function handleRefreshGrant(
 }
 
 // ───────────────────── Helpers ─────────────────────
+
+/**
+ * Strip trailing slashes for resource-URI comparison. RFC 8707 + MCP spec
+ * are explicit that the trailing slash is not semantically significant
+ * for an MCP server's canonical URI, but neither side enforces a single
+ * form — so clients (including Claude.ai) can legitimately send either.
+ * Normalize both sides before comparing.
+ */
+function normalizeResourceUri(uri: string): string {
+  return uri.replace(/\/+$/, '');
+}
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({
