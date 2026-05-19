@@ -56,6 +56,58 @@ function pickFields(body: Record<string, any>, allowed: Set<string>): Record<str
   return out;
 }
 
+// GET /api/operators/:id — fetch a single operator.
+// Access rules mirror PUT: self / admin / trainer-of-target. Anyone else 403.
+// Returns the same { operator } shape as PUT so callers can swap response handling.
+//
+// Added in #176 after the MCP server (#174) shipped expecting this endpoint —
+// the trainer MCP's read tools (get_my_profile, get_today_workout, etc.) all
+// hit GET /api/operators/[id]. /api/operators (list) was the closest existing
+// thing but returns multiple operators and isn't safe to use here. /api/auth/me
+// also returns the operator but uses a different auth middleware and is awkward
+// to call from the MCP (which already knows its operator-id from env).
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = requireTrainerAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const { id } = await params;
+
+    const isSelf = auth.operatorId === id;
+    const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
+    let isTrainerOfTarget = false;
+    if (!isSelf && !isAdmin) {
+      const target = await prisma.operator.findUnique({
+        where: { id },
+        select: { trainerId: true },
+      });
+      isTrainerOfTarget = !!target && target.trainerId === auth.operatorId;
+    }
+    if (!isSelf && !isAdmin && !isTrainerOfTarget) {
+      return NextResponse.json({ error: 'Forbidden: cannot read another operator' }, { status: 403 });
+    }
+
+    const row = await prisma.operator.findUnique({ where: { id } });
+    if (!row) {
+      return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
+    }
+
+    // Same spread-with-denylist projection as GET /api/operators (see that
+    // route's comment for the rationale). Keep the denylist in sync with
+    // /api/operators/route.ts — if a new credential column lands, both
+    // routes need it stripped.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { pin, passwordHash, googleId, ...safe } = row;
+    return NextResponse.json({ operator: safe });
+  } catch (error) {
+    console.error('Failed to fetch operator:', error);
+    return NextResponse.json({ error: 'Failed to fetch operator' }, { status: 500 });
+  }
+}
+
 // PUT /api/operators/:id — update a single operator (auth required + field-scoped to actor role)
 // Previously allowed any trainer-of-target (or self) to set every column — including
 // `role`, `tier`, `tierLocked`, `isVanguard`, `promo*` — which is privilege escalation.
