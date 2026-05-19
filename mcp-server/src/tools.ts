@@ -16,7 +16,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { GunnyApiClient, Meal, PRRecord, Workout, WorkoutBlock } from './api-client.js';
+import { GunnyApiClient, MacroTargets, Meal, PRRecord, Workout, WorkoutBlock } from './api-client.js';
 
 function todayKey(): string {
   const d = new Date();
@@ -369,4 +369,318 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       );
     }
   );
+
+  // ─────────── EXTENDED READS (Phase 2 — full app coverage) ───────────
+
+  server.registerTool(
+    'get_my_nutrition_in_range',
+    {
+      title: 'Get nutrition history in a date range',
+      description:
+        'Returns meals + per-day totals for every date between `from` and `to` inclusive. Use for "how did I eat this week?" / "show my last 7 days of macros" / weekly nutrition audits.',
+      inputSchema: { from: DATE_KEY, to: DATE_KEY },
+    },
+    async ({ from, to }) => {
+      const op = await client.getOperator();
+      const allMeals = (op.nutrition?.meals as Record<string, Meal[]> | undefined) || {};
+      const targets = op.nutrition?.targets;
+      const days: Array<{
+        date: string;
+        meals: Meal[];
+        totals: { calories: number; protein: number; carbs: number; fat: number };
+      }> = [];
+      for (const [date, meals] of Object.entries(allMeals)) {
+        if (date < from || date > to) continue;
+        const totals = meals.reduce(
+          (acc, m) => ({
+            calories: acc.calories + (m.calories || 0),
+            protein: acc.protein + (m.protein || 0),
+            carbs: acc.carbs + (m.carbs || 0),
+            fat: acc.fat + (m.fat || 0),
+          }),
+          { calories: 0, protein: 0, carbs: 0, fat: 0 }
+        );
+        days.push({ date, meals, totals });
+      }
+      days.sort((a, b) => a.date.localeCompare(b.date));
+      return jsonContent({ from, to, targets, days });
+    }
+  );
+
+  server.registerTool(
+    'get_my_injuries',
+    {
+      title: 'Get my injuries',
+      description:
+        'Returns the trainer\'s injury list (active + resolved). Each entry has name, status, restrictions, notes. Use before programming any lower-body or compound work.',
+      inputSchema: {},
+    },
+    async () => {
+      const op = await client.getOperator();
+      return jsonContent(op.injuries ?? []);
+    }
+  );
+
+  server.registerTool(
+    'get_my_recent_workouts',
+    {
+      title: 'Get my N most recent workouts',
+      description:
+        'Returns the last `limit` workouts by date (default 5, max 30). Useful for "show me my last few sessions" / variation rule enforcement before programming a new lift.',
+      inputSchema: {
+        limit: z.number().int().positive().max(30).optional(),
+      },
+    },
+    async ({ limit }) => {
+      const op = await client.getOperator();
+      const all = op.workouts || {};
+      const sorted = Object.entries(all).sort((a, b) => b[0].localeCompare(a[0]));
+      const sliced = sorted.slice(0, limit ?? 5);
+      return jsonContent(Object.fromEntries(sliced));
+    }
+  );
+
+  server.registerTool(
+    'get_my_macrocycles',
+    {
+      title: 'Get my macrocycles (periodization plans)',
+      description:
+        'Returns the trainer\'s macrocycle periodization plans. Read-only in Phase 2 — mutation (create/update/delete) deferred until structured-intent endpoint exists.',
+      inputSchema: {},
+    },
+    async () => {
+      const op = await client.getOperator();
+      return jsonContent((op as { macroCycles?: unknown[] }).macroCycles ?? []);
+    }
+  );
+
+  // ─────────── PATCH-style UPDATES (partial, merge-with-existing) ───────────
+
+  server.registerTool(
+    'update_my_preferences',
+    {
+      title: 'Update my training preferences',
+      description:
+        'Patch any subset of the trainer\'s preferences. Only the fields you pass change; others are left intact. CONFIRM the change with the operator before invoking.',
+      inputSchema: {
+        split: z.string().optional(),
+        daysPerWeek: z.number().int().min(2).max(7).optional(),
+        sessionDuration: z.number().int().positive().optional(),
+        trainingPath: z.string().optional(),
+        equipment: z.array(z.string()).optional(),
+        weakPoints: z.array(z.string()).optional(),
+        avoidMovements: z.array(z.string()).optional(),
+        language: z.string().optional(),
+      },
+    },
+    async (patch) => {
+      const op = await client.getOperator();
+      const existing = (op.preferences as Record<string, unknown>) || {};
+      const merged = { ...existing, ...stripUndefined(patch) };
+      await client.patchProfile({ preferences: merged });
+      const changed = Object.keys(stripUndefined(patch));
+      return textContent(`Updated preferences: ${changed.join(', ')}.`);
+    }
+  );
+
+  server.registerTool(
+    'update_my_profile',
+    {
+      title: 'Update my physical profile',
+      description:
+        'Patch weight, body fat, sleep, stress, readiness, age, height, training age. Only fields you pass change. CONFIRM before invoking. For weight/bodyFat, expect numeric values (weight in lbs, bodyFat in %).',
+      inputSchema: {
+        weight: z.number().positive().optional(),
+        bodyFat: z.number().min(0).max(60).optional(),
+        height: z.string().optional(),
+        age: z.number().int().positive().optional(),
+        sleep: z.number().min(0).max(24).optional(),
+        stress: z.number().min(1).max(10).optional(),
+        readiness: z.number().min(1).max(10).optional(),
+        trainingAge: z.string().optional(),
+      },
+    },
+    async (patch) => {
+      const op = await client.getOperator();
+      const existing = (op.profile as Record<string, unknown>) || {};
+      const merged = { ...existing, ...stripUndefined(patch) };
+      await client.patchProfile({ profile: merged });
+      const changed = Object.keys(stripUndefined(patch));
+      return textContent(`Updated profile: ${changed.join(', ')}.`);
+    }
+  );
+
+  server.registerTool(
+    'update_my_intake',
+    {
+      title: 'Update my intake fields',
+      description:
+        'Patch intake fields — dietary restrictions, supplements, sleep quality, stress, water target, injury notes, etc. Only fields you pass change. CONFIRM before invoking.',
+      inputSchema: {
+        dietaryRestrictions: z.array(z.string()).optional(),
+        supplements: z.array(z.string()).optional(),
+        mealsPerDay: z.number().int().min(1).max(8).optional(),
+        sleepQuality: z.number().int().min(1).max(10).optional(),
+        stressLevel: z.number().int().min(1).max(10).optional(),
+        dailyWaterOz: z.number().min(0).optional(),
+        injuryNotes: z.string().optional(),
+        injuryHistory: z.array(z.string()).optional(),
+        primaryGoal: z.string().optional(),
+        secondaryGoals: z.array(z.string()).optional(),
+        currentDiet: z.string().optional(),
+        proteinPriority: z.string().optional(),
+        preferredWorkoutTime: z.string().optional(),
+        motivationFactors: z.array(z.string()).optional(),
+      },
+    },
+    async (patch) => {
+      const op = await client.getOperator();
+      const existing = (op.intake as Record<string, unknown>) || {};
+      const merged = { ...existing, ...stripUndefined(patch) };
+      await client.patchProfile({ intake: merged });
+      const changed = Object.keys(stripUndefined(patch));
+      return textContent(`Updated intake: ${changed.join(', ')}.`);
+    }
+  );
+
+  server.registerTool(
+    'update_nutrition_targets',
+    {
+      title: 'Update macro targets',
+      description:
+        'Patch calorie + macro targets. Pass only the targets you want to change; others stay. CONFIRM before invoking.',
+      inputSchema: {
+        calories: z.number().int().positive().optional(),
+        protein: z.number().int().nonnegative().optional(),
+        carbs: z.number().int().nonnegative().optional(),
+        fat: z.number().int().nonnegative().optional(),
+      },
+    },
+    async (patch) => {
+      const op = await client.getOperator();
+      const existing = op.nutrition || {};
+      const existingTargets = (existing.targets as unknown as Record<string, unknown>) || {};
+      const mergedTargets = { ...existingTargets, ...stripUndefined(patch) };
+      // Targets are stored as a JSON column server-side — the api-client
+      // MacroTargets type is stricter than the wire allows. Cast through
+      // unknown so the partial passes through cleanly.
+      const merged = { ...existing, targets: mergedTargets as unknown as MacroTargets };
+      await client.patchProfile({ nutrition: merged });
+      return textContent(
+        `Updated macro targets: ${Object.entries(stripUndefined(patch)).map(([k, v]) => `${k}=${v}`).join(', ')}.`
+      );
+    }
+  );
+
+  server.registerTool(
+    'set_my_injuries',
+    {
+      title: 'Replace my injury list',
+      description:
+        'REPLACES the entire injuries array. Use to add/remove/update injuries in one shot. Each entry: { name, status?, restrictions?[], notes? }. CONFIRM the full list before invoking — this is destructive (the old list is overwritten).',
+      inputSchema: {
+        injuries: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              status: z.enum(['active', 'managed', 'resolved']).optional(),
+              restrictions: z.array(z.string()).optional(),
+              notes: z.string().optional(),
+            })
+          )
+          .max(50),
+      },
+    },
+    async ({ injuries }) => {
+      const enriched = injuries.map((inj, i) => ({
+        id: `inj-mcp-${Date.now()}-${i}`,
+        ...inj,
+      }));
+      await client.patchWorkouts({ injuries: enriched });
+      return textContent(
+        `Replaced injuries list (${enriched.length} ${enriched.length === 1 ? 'entry' : 'entries'}).`
+      );
+    }
+  );
+
+  // ─────────── DELETES (with explicit-action naming) ───────────
+
+  server.registerTool(
+    'delete_workout',
+    {
+      title: 'Delete a workout from a specific date',
+      description:
+        'Removes the workout on `date` from the planner. Cannot be undone via this tool — confirm the date with the operator before invoking.',
+      inputSchema: { date: DATE_KEY },
+    },
+    async ({ date }) => {
+      const op = await client.getOperator();
+      const all = { ...(op.workouts || {}) };
+      if (!all[date]) {
+        return textContent(`No workout on ${date} to delete.`);
+      }
+      const title = (all[date]?.title as string) || 'workout';
+      delete all[date];
+      await client.patchWorkouts({ workouts: all });
+      return textContent(`Deleted "${title}" from ${date}.`);
+    }
+  );
+
+  server.registerTool(
+    'delete_meal',
+    {
+      title: 'Delete a logged meal',
+      description:
+        'Removes a single meal from `nutrition.meals[date]` by its id (returned in get_my_nutrition_today / get_my_nutrition_in_range). If you don\'t have the id, get_my_nutrition_today first.',
+      inputSchema: { date: DATE_KEY, mealId: z.string().min(1) },
+    },
+    async ({ date, mealId }) => {
+      const op = await client.getOperator();
+      const existing = op.nutrition || { meals: {} };
+      const existingMeals = (existing.meals as Record<string, Meal[]> | undefined) || {};
+      const bucket = existingMeals[date] || [];
+      const before = bucket.length;
+      const filtered = bucket.filter((m) => m.id !== mealId);
+      if (filtered.length === before) {
+        return textContent(`No meal with id ${mealId} on ${date}.`);
+      }
+      const nextMeals = { ...existingMeals, [date]: filtered };
+      // Drop the date entirely if no meals remain — keeps the structure clean.
+      if (filtered.length === 0) delete nextMeals[date];
+      const nextNutrition = { ...existing, meals: nextMeals };
+      await client.patchProfile({ nutrition: nextNutrition });
+      return textContent(`Removed meal ${mealId} from ${date}.`);
+    }
+  );
+
+  server.registerTool(
+    'delete_pr',
+    {
+      title: 'Delete a PR from the PR board',
+      description:
+        'Removes a personal record by id (returned in get_my_prs). Use when a PR was logged in error.',
+      inputSchema: { prId: z.string().min(1) },
+    },
+    async ({ prId }) => {
+      const op = await client.getOperator();
+      const prs = (op.prs as PRRecord[]) || [];
+      const filtered = prs.filter((p) => p.id !== prId);
+      if (filtered.length === prs.length) {
+        return textContent(`No PR with id ${prId}.`);
+      }
+      await client.patchWorkouts({ prs: filtered });
+      return textContent(`Removed PR ${prId}.`);
+    }
+  );
+}
+
+/** Drop undefined values from a flat partial object. zod's `.optional()`
+ * leaves undefined keys present after parsing, which would clobber existing
+ * fields in the merged object. */
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out as Partial<T>;
 }
