@@ -90,7 +90,7 @@ function send401WithChallenge(res: Response, msg: string): void {
   res.status(401).json({ error: msg });
 }
 
-app.post('/mcp', async (req: Request, res: Response) => {
+async function handleMcpPost(req: Request, res: Response): Promise<void> {
   const bearer = extractBearer(req);
   if (!bearer) {
     send401WithChallenge(res, 'Missing Authorization: Bearer <token>');
@@ -166,17 +166,33 @@ app.post('/mcp', async (req: Request, res: Response) => {
       res.status(500).json({ error: 'internal MCP error' });
     }
   }
+}
+
+// Mount the MCP transport at BOTH /mcp and / (root). Claude.ai resolves
+// the MCP endpoint from the `resource` field in protected-resource
+// metadata, which is the canonical server URI without a /mcp suffix —
+// so after OAuth completes, Claude.ai POSTs to / for the transport.
+// Claude Code's existing connection uses the /mcp path. Both must work.
+// MCP spec (rev 2025-06-18, Canonical Server URI) allows either form.
+app.post('/mcp', (req, res) => {
+  void handleMcpPost(req, res);
+});
+app.post('/', (req, res) => {
+  void handleMcpPost(req, res);
 });
 
 // MCP Streamable HTTP also defines GET (server-sent stream) and DELETE
 // (session end) — in stateless mode we just reject them with 405 so
-// clients know not to try.
-app.get('/mcp', (_req, res) => {
-  res.status(405).json({ error: 'GET /mcp not supported in stateless mode' });
-});
-app.delete('/mcp', (_req, res) => {
-  res.status(405).json({ error: 'DELETE /mcp not supported in stateless mode' });
-});
+// clients know not to try. Mounted at both paths for the same reason
+// as POST above.
+const mcpUnsupported = (_req: Request, res: Response): void => {
+  res.status(405).json({ error: 'Method not supported in stateless mode' });
+};
+app.get('/mcp', mcpUnsupported);
+app.delete('/mcp', mcpUnsupported);
+// Root GET/DELETE intentionally NOT mapped to mcpUnsupported — keeping
+// them open lets the /health-style probes and Railway healthcheck do
+// their thing. If MCP clients ever probe GET / for SSE, we'll revisit.
 
 app.listen(env.port, () => {
   // eslint-disable-next-line no-console
