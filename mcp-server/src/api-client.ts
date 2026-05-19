@@ -124,6 +124,25 @@ export class GunnyApiClient {
     );
     return res.operator ?? res.updated ?? (res as unknown as Operator);
   }
+
+  /** List active wearable connections for an operator.
+   * GET /api/wearables?operatorId=<id> — server enforces self/admin/trainer-of-target. */
+  async listWearables(operatorId: string): Promise<WearableConnection[]> {
+    const res = await this.fetch<{ connections: WearableConnection[] }>(
+      'GET',
+      `/api/wearables?operatorId=${encodeURIComponent(operatorId)}`
+    );
+    return Array.isArray(res.connections) ? res.connections : [];
+  }
+
+  /** Latest cached wearable snapshot for an operator.
+   * GET /api/wearables/latest?operatorId=<id>. Same auth model. */
+  async getWearableLatest(operatorId: string): Promise<WearableLatestResponse> {
+    return this.fetch<WearableLatestResponse>(
+      'GET',
+      `/api/wearables/latest?operatorId=${encodeURIComponent(operatorId)}`
+    );
+  }
 }
 
 // ── Loose type aliases. The MCP doesn't need a full mirror of the app's
@@ -214,4 +233,31 @@ export interface PRRecord {
 export interface DayTag {
   color: string;
   note?: string;
+}
+
+/** WearableConnection row (Vital-backed). The full row carries internal
+ * fields (vital_user_id, refresh_token, etc.) that the server-side
+ * projection strips before returning. */
+export interface WearableConnection {
+  id: string;
+  operatorId: string;
+  provider: string;
+  active: boolean;
+  connectedAt?: string;
+  lastSyncAt?: string | null;
+  scopes?: string[];
+  // syncData blob varies wildly by provider — left as unknown.
+  syncData?: unknown;
+}
+
+/** /api/wearables/latest response shape. `snapshot` is the cached
+ * syncData blob (HRV / sleep / activity / etc. — provider-shaped).
+ * `currentHR` is the server's best-effort normalization. */
+export interface WearableLatestResponse {
+  ok: boolean;
+  connected: boolean;
+  provider?: string;
+  lastSyncAt?: string | null;
+  snapshot?: unknown;
+  currentHR?: number | null;
 }
