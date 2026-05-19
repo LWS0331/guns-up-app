@@ -77,9 +77,17 @@ export class GunnyApiClient {
   /** Targeted PATCH against the profile subroute (skips workouts to avoid races).
    * Server returns `{ ok: true, operator }` — unwrap to the bare row. */
   async patchProfile(patch: Partial<Operator>): Promise<Operator> {
+    return this.patchProfileById(this.cfg.operatorId, patch);
+  }
+
+  /** PATCH /profile on an arbitrary operator. Used by client-roster
+   * writes — trainer-of-target authorization enforced server-side via
+   * TRAINER_FIELDS (training-facing data + trainerNotes). Writes to a
+   * non-client operator 403. */
+  async patchProfileById(operatorId: string, patch: Partial<Operator>): Promise<Operator> {
     const res = await this.fetch<{ ok?: boolean; operator?: Operator; updated?: Operator }>(
       'PATCH',
-      `/api/operators/${this.cfg.operatorId}/profile`,
+      `/api/operators/${operatorId}/profile`,
       patch
     );
     return res.operator ?? res.updated ?? (res as unknown as Operator);
@@ -95,9 +103,23 @@ export class GunnyApiClient {
     injuries?: unknown[];
     dayTags?: Record<string, DayTag>;
   }): Promise<Operator> {
+    return this.patchWorkoutsById(this.cfg.operatorId, patch);
+  }
+
+  /** PATCH /workouts on an arbitrary operator. Used by client-roster
+   * writes. Same trainer-of-target authorization as patchProfileById. */
+  async patchWorkoutsById(
+    operatorId: string,
+    patch: {
+      workouts?: Record<string, Workout>;
+      prs?: PRRecord[];
+      injuries?: unknown[];
+      dayTags?: Record<string, DayTag>;
+    }
+  ): Promise<Operator> {
     const res = await this.fetch<{ ok?: boolean; operator?: Operator; updated?: Operator }>(
       'PATCH',
-      `/api/operators/${this.cfg.operatorId}/workouts`,
+      `/api/operators/${operatorId}/workouts`,
       patch
     );
     return res.operator ?? res.updated ?? (res as unknown as Operator);
