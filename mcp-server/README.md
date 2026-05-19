@@ -74,6 +74,15 @@ In Claude.ai → Settings → Connectors → **Add custom connector**:
 
 Each trainer pastes **their own** key. Same URL, different keys.
 
+### 5. Set up the Claude.ai Project (per trainer)
+
+Each trainer should create a **dedicated Claude.ai Project** named e.g. `GunnyAI — RAMPAGE` and paste a custom-instructions block so the model knows who it's coaching, when to call which tool, and what safety rails to honor. Pre-written instructions:
+
+- **RAMPAGE / Ruben** → [`PROJECT_INSTRUCTIONS_RAMPAGE.md`](./PROJECT_INSTRUCTIONS_RAMPAGE.md)
+- **VALKYRIE / Britney** → [`PROJECT_INSTRUCTIONS_VALKYRIE.md`](./PROJECT_INSTRUCTIONS_VALKYRIE.md)
+
+Copy the `## INSTRUCTIONS` section from the trainer's file into the project's *Custom Instructions* field. Re-paste when the source-of-truth file changes.
+
 ## Local dev
 
 ```bash
