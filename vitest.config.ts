@@ -33,6 +33,8 @@ export default defineConfig({
     include: [
       'src/**/*.{test,spec}.{ts,tsx}',
       'src/**/__tests__/**/*.{ts,tsx}',
+      'mcp-server/src/**/*.{test,spec}.{ts,tsx}',
+      'mcp-server/src/**/__tests__/**/*.{ts,tsx}',
     ],
     // node_modules is excluded by default but explicit is better.
     exclude: ['node_modules', '.next', 'dist', '.git'],
