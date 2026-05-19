@@ -54,7 +54,13 @@ On `gunnyai-trainer-mcp` also set:
 ```
 GUNS_UP_API_URL=https://gunnyai.fit
 PORT=3001                            # Railway sets this automatically
+PUBLIC_BASE_URL=https://gunnyai-trainer-mcp-production-45fb.up.railway.app
+OAUTH_JWT_SECRET=<openssl rand -hex 64>   # signs OAuth access/refresh/code JWTs
 ```
+
+`PUBLIC_BASE_URL` is the URL Claude.ai connects to (used as OAuth issuer + audience). Set it to your custom domain once `mcp.gunnyai.fit` is live; until then, the Railway-generated domain is the default.
+
+`OAUTH_JWT_SECRET` must be ≥32 chars in production. Generate via `openssl rand -hex 64`. Rotating it invalidates every active OAuth token (trainers will need to re-authorize), so rotate sparingly.
 
 ### 3. Deploy to Railway
 
@@ -65,14 +71,36 @@ Add a new service in the existing `Guns-up` Railway project, pointed at this rep
 
 Generate a domain → e.g. `https://mcp.gunnyai.fit`.
 
-### 4. Connect from Claude.ai
+### 4. Connect from Claude.ai (OAuth flow)
 
-In Claude.ai → Settings → Connectors → **Add custom connector**:
+Claude.ai's Custom Connectors require OAuth 2.1 — our server speaks it. In Claude.ai → Settings → Connectors → **Add custom connector**:
+
 - **Name**: GunnyAI (trainer)
-- **URL**: `https://mcp.gunnyai.fit/mcp`
-- **Authentication**: Bearer token → paste the trainer's own key
+- **URL**: `https://gunnyai-trainer-mcp-production-45fb.up.railway.app/mcp` *(or your custom domain)*
+- **No client ID / secret needed** — the server supports Dynamic Client Registration
 
-Each trainer pastes **their own** key. Same URL, different keys.
+Click *Connect*. Claude.ai will:
+1. Hit `/mcp` with no token, see the `WWW-Authenticate: Bearer resource_metadata=...` header
+2. Fetch `/.well-known/oauth-protected-resource` → finds our authorization server
+3. Fetch `/.well-known/oauth-authorization-server` → finds `/authorize` + `/token`
+4. POST `/register` to dynamically register itself
+5. Pop a browser window to `/authorize` — paste your **trainer API key** into the form, click *Authorize*
+6. Receive auth code → exchange for access + refresh tokens
+7. MCP requests start working with the JWT access token
+
+The trainer API key only gets typed once into the `/authorize` page; after that, Claude.ai stores the OAuth tokens and refreshes them automatically.
+
+#### Connect from Claude Code (legacy static-Bearer flow)
+
+The pre-OAuth static-Bearer path still works for Claude Code:
+
+```bash
+claude mcp add --transport http gunnyai-trainer \
+  https://gunnyai-trainer-mcp-production-45fb.up.railway.app/mcp \
+  --header "Authorization: Bearer <trainer-api-key>"
+```
+
+Both auth modes coexist — no migration needed for existing Claude Code connections.
 
 ### 5. Set up the Claude.ai Project (per trainer)
 
