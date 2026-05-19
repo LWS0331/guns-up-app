@@ -68,13 +68,15 @@ export class GunnyApiClient {
     return res.operator ?? res.updated ?? (res as unknown as Operator);
   }
 
-  /** Targeted PATCH against the workouts subroute (plus optional prs/injuries).
-   * Server returns `{ ok: true, updated }` here — `updated` not `operator`,
-   * inconsistent with the profile route but it's what's on the wire today. */
+  /** Targeted PATCH against the workouts subroute. Accepts workouts, prs,
+   * injuries, AND dayTags — the server route allowlists all four despite
+   * the name. Server returns `{ ok: true, updated }` (not `operator`,
+   * inconsistent with the profile route but that's what's on the wire). */
   async patchWorkouts(patch: {
     workouts?: Record<string, Workout>;
     prs?: PRRecord[];
     injuries?: unknown[];
+    dayTags?: Record<string, DayTag>;
   }): Promise<Operator> {
     const res = await this.fetch<{ ok?: boolean; operator?: Operator; updated?: Operator }>(
       'PATCH',

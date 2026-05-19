@@ -286,11 +286,14 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       const tags = { ...(op.dayTags || {}) };
       if (!color) {
         delete tags[date];
-        await client.patchProfile({ dayTags: tags });
+        // dayTags lives on the /workouts PATCH allowlist, NOT /profile.
+        // The profile route rejects with 400 "No profile fields supplied"
+        // if we route dayTags through it.
+        await client.patchWorkouts({ dayTags: tags });
         return textContent(`Cleared tag for ${date}.`);
       }
       tags[date] = { color, note: note ?? '' };
-      await client.patchProfile({ dayTags: tags });
+      await client.patchWorkouts({ dayTags: tags });
       return textContent(`Tagged ${date} ${color}${note ? ` ("${note}")` : ''}.`);
     }
   );
