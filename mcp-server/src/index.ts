@@ -194,10 +194,23 @@ app.delete('/mcp', mcpUnsupported);
 // them open lets the /health-style probes and Railway healthcheck do
 // their thing. If MCP clients ever probe GET / for SSE, we'll revisit.
 
-app.listen(env.port, () => {
+// Bind to 0.0.0.0 explicitly (not the Node default `::` IPv6-unspecified).
+// Some container runtimes — Railway included after their May 2026
+// networking changes — probe the upstream via IPv4 only. If the server
+// is only listening on the IPv6 unspecified address, the IPv4 probe
+// hits a closed port and the edge marks the container unhealthy. Result:
+// container thinks it's listening, edge returns 502, no logs because
+// the container never receives the request. Explicit '0.0.0.0' makes
+// this unambiguous: bind to all IPv4 interfaces.
+//
+// Caught by the May 2026 incident where the MCP service entered zombie
+// state — booted, logged "listening on :8080", but never served a single
+// request. Restart didn't fix it because the bind problem persisted
+// across restarts.
+app.listen(env.port, '0.0.0.0', () => {
   // eslint-disable-next-line no-console
   console.log(
-    `[mcp] gunnyai-trainer-mcp listening on :${env.port} ` +
+    `[mcp] gunnyai-trainer-mcp listening on 0.0.0.0:${env.port} ` +
       `(upstream=${env.gunsUpApiUrl}, trainers=${env.operatorKeys.length})`
   );
 });
