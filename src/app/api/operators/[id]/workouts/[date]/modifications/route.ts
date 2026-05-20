@@ -109,7 +109,9 @@ export async function POST(
     if (!op) {
       return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
     }
-    const allWorkouts = (op.workouts || {}) as Record<string, Workout>;
+    // Prisma's JsonValue doesn't structurally match Record<string, Workout> —
+    // cast through unknown (same pattern as macrocycles/route.ts).
+    const allWorkouts = (op.workouts || {}) as unknown as Record<string, Workout>;
     const existing = allWorkouts[date];
     if (!existing) {
       return NextResponse.json(
