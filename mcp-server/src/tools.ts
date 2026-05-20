@@ -1107,6 +1107,791 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       return jsonContent({ client_id, goals });
     }
   );
+
+  // ─────────── CLIENT ROSTER (Phase 3b — writes) ───────────
+  // Every tool below mutates an arbitrary client's record. Server-side
+  // PATCH /api/operators/[id]/{profile,workouts} routes already enforce
+  // trainer-of-target via TRAINER_FIELDS — writes to non-clients 403.
+  // Phase 3a (reads) is the safe surface; THESE require disciplined
+  // operator confirmation per the persona. Each tool description
+  // explicitly tells Gunny to echo the callsign + intent before invoking.
+
+  server.registerTool(
+    'log_client_meal',
+    {
+      title: 'Log a meal for a client',
+      description:
+        'Append a meal to a client\'s nutrition.meals[date]. CONFIRM the client\'s callsign + macros with the trainer ("logging X for EFRAIN, go?") before invoking.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        name: z.string().min(1),
+        calories: z.number().nonnegative(),
+        protein: z.number().nonnegative(),
+        carbs: z.number().nonnegative(),
+        fat: z.number().nonnegative(),
+        date: DATE_KEY.optional(),
+      },
+    },
+    async ({ client_id, name, calories, protein, carbs, fat, date }) => {
+      const op = await client.getOperatorById(client_id);
+      const target = date ?? todayKey();
+      const meal: Meal = {
+        id: `meal-mcp-${Date.now()}`,
+        name,
+        calories: Math.round(calories),
+        protein: Math.round(protein),
+        carbs: Math.round(carbs),
+        fat: Math.round(fat),
+        time: new Date().toISOString(),
+      };
+      const existing = op.nutrition || { meals: {} };
+      const existingMeals = (existing.meals as Record<string, Meal[]> | undefined) || {};
+      const bucket = existingMeals[target] || [];
+      const nextNutrition = {
+        ...existing,
+        meals: { ...existingMeals, [target]: [...bucket, meal] },
+      };
+      await client.patchProfileById(client_id, { nutrition: nextNutrition });
+      return textContent(
+        `Logged for ${client_id}: ${meal.name} — ${meal.calories}cal / ${meal.protein}P / ${meal.carbs}C / ${meal.fat}F on ${target}.`
+      );
+    }
+  );
+
+  server.registerTool(
+    'log_client_pr',
+    {
+      title: 'Log a PR for a client',
+      description:
+        'Append a personal record to a client\'s PR board. CONFIRM with the trainer first. Don\'t volunteer — only log when the trainer says the client explicitly hit a PR.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        exercise: z.string().min(1),
+        weight: z.number().positive(),
+        reps: z.number().int().positive().optional(),
+        date: DATE_KEY.optional(),
+        notes: z.string().optional(),
+        type: z.enum(['strength', 'endurance', 'consistency', 'milestone']).optional(),
+      },
+    },
+    async ({ client_id, exercise, weight, reps, date, notes, type }) => {
+      const op = await client.getOperatorById(client_id);
+      const newPr: PRRecord = {
+        id: `pr-mcp-${Date.now()}`,
+        exercise: exercise.trim(),
+        weight: Math.round(weight),
+        reps: reps ?? 1,
+        date: date ?? todayKey(),
+        notes: notes ?? `Logged via MCP by trainer`,
+        type: type ?? 'strength',
+      };
+      const prs = [...(op.prs || []), newPr];
+      await client.patchWorkoutsById(client_id, { prs });
+      return textContent(
+        `Logged PR for ${client_id}: ${newPr.exercise} ${newPr.weight}lbs × ${newPr.reps} on ${newPr.date}.`
+      );
+    }
+  );
+
+  server.registerTool(
+    'log_client_hydration',
+    {
+      title: 'Log a client\'s water intake',
+      description:
+        'Adds `oz` to a client\'s nutrition.hydration[date] (default today). `op:"add"` accumulates (default); `op:"set"` replaces. CONFIRM client callsign.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        oz: z.number().positive(),
+        op: z.enum(['add', 'set']).optional(),
+        date: DATE_KEY.optional(),
+      },
+    },
+    async ({ client_id, oz, op, date }) => {
+      const operator = await client.getOperatorById(client_id);
+      const target = date ?? todayKey();
+      const action: 'add' | 'set' = op ?? 'add';
+      const existingNutrition = operator.nutrition || {};
+      const existingHydration = existingNutrition.hydration || {};
+      const prior = Number(existingHydration[target] || 0);
+      const newTotal = action === 'set' ? Math.round(oz) : prior + Math.round(oz);
+      const merged = {
+        ...existingNutrition,
+        hydration: { ...existingHydration, [target]: newTotal },
+      };
+      await client.patchProfileById(client_id, { nutrition: merged });
+      return textContent(
+        `Logged ${Math.round(oz)}oz (${action}) for ${client_id} on ${target}. Total: ${newTotal}oz.`
+      );
+    }
+  );
+
+  server.registerTool(
+    'log_client_readiness',
+    {
+      title: 'Log a readiness check-in for a client',
+      description:
+        'Captures readiness for the client on `date` (default today). At least one signal required. Numerics clamped 1-10. Mirrors today\'s numerics into the client\'s profile (same as the self path).',
+      inputSchema: {
+        client_id: z.string().min(1),
+        readiness: z.number().min(1).max(10).optional(),
+        sleep: z.number().min(1).max(10).optional(),
+        stress: z.number().min(1).max(10).optional(),
+        energy: z.number().min(1).max(10).optional(),
+        mood: z.string().min(1).max(80).optional(),
+        notes: z.string().min(1).max(500).optional(),
+        date: DATE_KEY.optional(),
+      },
+    },
+    async ({ client_id, readiness, sleep, stress, energy, mood, notes, date }) => {
+      const target = date ?? todayKey();
+      const today = todayKey();
+      const entry: DailyReadinessEntry = {
+        date: target,
+        recordedAt: new Date().toISOString(),
+      };
+      if (readiness !== undefined) entry.readiness = Math.round(readiness);
+      if (sleep !== undefined) entry.sleep = Math.round(sleep);
+      if (stress !== undefined) entry.stress = Math.round(stress);
+      if (energy !== undefined) entry.energy = Math.round(energy);
+      if (mood) entry.mood = mood.trim().slice(0, 80);
+      if (notes) entry.notes = notes.trim().slice(0, 500);
+
+      const hasContent =
+        entry.readiness !== undefined || entry.sleep !== undefined ||
+        entry.stress !== undefined || entry.energy !== undefined ||
+        entry.mood !== undefined || entry.notes !== undefined;
+      if (!hasContent) {
+        return textContent('Readiness entry skipped: at least one signal required.');
+      }
+
+      const operator = await client.getOperatorById(client_id);
+      const existingReadiness = operator.dailyReadiness || {};
+      const mergedReadiness = { ...existingReadiness, [target]: entry };
+      const patch: { dailyReadiness: typeof mergedReadiness; profile?: Record<string, unknown> } = {
+        dailyReadiness: mergedReadiness,
+      };
+      if (target === today) {
+        const existingProfile = (operator.profile as Record<string, unknown>) || {};
+        const mirror = { ...existingProfile };
+        if (entry.readiness !== undefined) mirror.readiness = entry.readiness;
+        if (entry.sleep !== undefined) mirror.sleep = entry.sleep;
+        if (entry.stress !== undefined) mirror.stress = entry.stress;
+        patch.profile = mirror;
+      }
+      await client.patchProfileById(client_id, patch);
+      const captured = Object.keys(entry).filter((k) => k !== 'date' && k !== 'recordedAt');
+      return textContent(`Logged readiness for ${client_id} on ${target} (${captured.join(', ')}).`);
+    }
+  );
+
+  server.registerTool(
+    'set_client_day_tag',
+    {
+      title: 'Tag a client\'s calendar day',
+      description:
+        'Tag a date on the client\'s calendar with a color + note. green=great session, amber=deload, red=injured/sick, cyan=rest. Pass no color to clear. CONFIRM client + date with the trainer before invoking.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        date: DATE_KEY,
+        color: z.enum(['green', 'amber', 'red', 'cyan']).optional(),
+        note: z.string().optional(),
+      },
+    },
+    async ({ client_id, date, color, note }) => {
+      const op = await client.getOperatorById(client_id);
+      const tags = { ...(op.dayTags || {}) };
+      if (!color) {
+        delete tags[date];
+        await client.patchWorkoutsById(client_id, { dayTags: tags });
+        return textContent(`Cleared tag for ${client_id} on ${date}.`);
+      }
+      tags[date] = { color, note: note ?? '' };
+      await client.patchWorkoutsById(client_id, { dayTags: tags });
+      return textContent(`Tagged ${client_id} ${date} ${color}${note ? ` ("${note}")` : ''}.`);
+    }
+  );
+
+  server.registerTool(
+    'update_client_profile',
+    {
+      title: 'Update a client\'s physical profile',
+      description:
+        'Patch weight / bodyFat / sleep / stress / readiness / age / height / trainingAge on a client. Partial — only fields you pass change. CONFIRM client + the specific changes with the trainer before invoking.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        weight: z.number().positive().optional(),
+        bodyFat: z.number().min(0).max(60).optional(),
+        height: z.string().optional(),
+        age: z.number().int().positive().optional(),
+        sleep: z.number().min(0).max(24).optional(),
+        stress: z.number().min(1).max(10).optional(),
+        readiness: z.number().min(1).max(10).optional(),
+        trainingAge: z.string().optional(),
+      },
+    },
+    async ({ client_id, ...patch }) => {
+      const op = await client.getOperatorById(client_id);
+      const existing = (op.profile as Record<string, unknown>) || {};
+      const merged = { ...existing, ...stripUndefined(patch) };
+      await client.patchProfileById(client_id, { profile: merged });
+      const changed = Object.keys(stripUndefined(patch));
+      return textContent(`Updated ${client_id} profile: ${changed.join(', ')}.`);
+    }
+  );
+
+  server.registerTool(
+    'update_client_intake',
+    {
+      title: 'Update a client\'s intake fields',
+      description:
+        'Patch a client\'s intake — dietary restrictions, supplements, mealsPerDay, sleepQuality, stressLevel, dailyWaterOz, injuryNotes, primaryGoal, etc. CONFIRM with trainer.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        dietaryRestrictions: z.array(z.string()).optional(),
+        supplements: z.array(z.string()).optional(),
+        mealsPerDay: z.number().int().min(1).max(8).optional(),
+        sleepQuality: z.number().int().min(1).max(10).optional(),
+        stressLevel: z.number().int().min(1).max(10).optional(),
+        dailyWaterOz: z.number().min(0).optional(),
+        injuryNotes: z.string().optional(),
+        injuryHistory: z.array(z.string()).optional(),
+        primaryGoal: z.string().optional(),
+        secondaryGoals: z.array(z.string()).optional(),
+        currentDiet: z.string().optional(),
+        proteinPriority: z.string().optional(),
+        preferredWorkoutTime: z.string().optional(),
+        motivationFactors: z.array(z.string()).optional(),
+      },
+    },
+    async ({ client_id, ...patch }) => {
+      const op = await client.getOperatorById(client_id);
+      const existing = (op.intake as Record<string, unknown>) || {};
+      const merged = { ...existing, ...stripUndefined(patch) };
+      await client.patchProfileById(client_id, { intake: merged });
+      const changed = Object.keys(stripUndefined(patch));
+      return textContent(`Updated ${client_id} intake: ${changed.join(', ')}.`);
+    }
+  );
+
+  server.registerTool(
+    'update_client_preferences',
+    {
+      title: 'Update a client\'s training preferences',
+      description:
+        'Patch a client\'s split, daysPerWeek, sessionDuration, trainingPath, equipment, weakPoints, avoidMovements, language. Partial. CONFIRM with trainer.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        split: z.string().optional(),
+        daysPerWeek: z.number().int().min(2).max(7).optional(),
+        sessionDuration: z.number().int().positive().optional(),
+        trainingPath: z.string().optional(),
+        equipment: z.array(z.string()).optional(),
+        weakPoints: z.array(z.string()).optional(),
+        avoidMovements: z.array(z.string()).optional(),
+        language: z.string().optional(),
+      },
+    },
+    async ({ client_id, ...patch }) => {
+      const op = await client.getOperatorById(client_id);
+      const existing = (op.preferences as Record<string, unknown>) || {};
+      const merged = { ...existing, ...stripUndefined(patch) };
+      await client.patchProfileById(client_id, { preferences: merged });
+      const changed = Object.keys(stripUndefined(patch));
+      return textContent(`Updated ${client_id} preferences: ${changed.join(', ')}.`);
+    }
+  );
+
+  server.registerTool(
+    'update_client_nutrition_targets',
+    {
+      title: 'Update a client\'s macro targets',
+      description:
+        'Patch a client\'s calorie + macro targets. Partial. CONFIRM with trainer.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        calories: z.number().int().positive().optional(),
+        protein: z.number().int().nonnegative().optional(),
+        carbs: z.number().int().nonnegative().optional(),
+        fat: z.number().int().nonnegative().optional(),
+      },
+    },
+    async ({ client_id, ...patch }) => {
+      const op = await client.getOperatorById(client_id);
+      const existing = op.nutrition || {};
+      const existingTargets = (existing.targets as unknown as Record<string, unknown>) || {};
+      const mergedTargets = { ...existingTargets, ...stripUndefined(patch) };
+      const merged = { ...existing, targets: mergedTargets as unknown as MacroTargets };
+      await client.patchProfileById(client_id, { nutrition: merged });
+      return textContent(
+        `Updated ${client_id} macro targets: ${Object.entries(stripUndefined(patch)).map(([k, v]) => `${k}=${v}`).join(', ')}.`
+      );
+    }
+  );
+
+  server.registerTool(
+    'update_client_goals',
+    {
+      title: 'Add / remove / replace a client\'s training goals',
+      description:
+        'Mutates client.profile.goals. Pass add (new strings), remove (substrings, case-insensitive), replace (match → value). CONFIRM with trainer.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        add: z.array(z.string().min(1)).optional(),
+        remove: z.array(z.string().min(1)).optional(),
+        replace: z
+          .array(z.object({ match: z.string().min(1), value: z.string().min(1) }))
+          .optional(),
+      },
+    },
+    async ({ client_id, add, remove, replace }) => {
+      const op = await client.getOperatorById(client_id);
+      const existingProfile = (op.profile as Record<string, unknown>) || {};
+      let goals = Array.isArray(existingProfile.goals)
+        ? [...(existingProfile.goals as string[])]
+        : [];
+      const summary: string[] = [];
+
+      for (const v of add || []) {
+        const trimmed = v.trim();
+        if (!trimmed) continue;
+        if (goals.some((g) => g.toLowerCase().trim() === trimmed.toLowerCase())) continue;
+        goals.push(trimmed);
+        summary.push(`+${trimmed}`);
+      }
+      for (const m of remove || []) {
+        const needle = m.toLowerCase().trim();
+        if (!needle) continue;
+        const before = goals.length;
+        goals = goals.filter((g) => !g.toLowerCase().includes(needle));
+        if (goals.length !== before) summary.push(`−${m}`);
+      }
+      for (const r of replace || []) {
+        const needle = r.match.toLowerCase().trim();
+        const next = r.value.trim();
+        if (!needle || !next) continue;
+        const idx = goals.findIndex((g) => g.toLowerCase().includes(needle));
+        if (idx < 0) continue;
+        goals[idx] = next;
+        summary.push(`~${r.match}→${next}`);
+      }
+
+      if (summary.length === 0) {
+        return textContent(`No goal changes applied to ${client_id}.`);
+      }
+      const mergedProfile = { ...existingProfile, goals };
+      await client.patchProfileById(client_id, { profile: mergedProfile });
+      return textContent(`Updated ${client_id} goals: ${summary.join(', ')}. Now ${goals.length} total.`);
+    }
+  );
+
+  server.registerTool(
+    'set_client_injuries',
+    {
+      title: 'Replace a client\'s injury list',
+      description:
+        'REPLACES the entire injuries array for a client. CONFIRM the full list with the trainer — this is destructive (old list overwritten).',
+      inputSchema: {
+        client_id: z.string().min(1),
+        injuries: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              status: z.enum(['active', 'managed', 'resolved']).optional(),
+              restrictions: z.array(z.string()).optional(),
+              notes: z.string().optional(),
+            })
+          )
+          .max(50),
+      },
+    },
+    async ({ client_id, injuries }) => {
+      const enriched = injuries.map((inj, i) => ({
+        id: `inj-mcp-${Date.now()}-${i}`,
+        ...inj,
+      }));
+      await client.patchWorkoutsById(client_id, { injuries: enriched });
+      return textContent(
+        `Replaced ${client_id} injuries (${enriched.length} ${enriched.length === 1 ? 'entry' : 'entries'}).`
+      );
+    }
+  );
+
+  server.registerTool(
+    'add_or_update_client_workout',
+    {
+      title: 'Add or update a workout on a client\'s planner',
+      description:
+        'Writes a full workout to a client\'s workouts[date]. OVERWRITES any existing workout on that date — call get_client_workouts_in_range first if you need to confirm what\'s being replaced. CONFIRM client + date + block summary with the trainer before invoking.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        date: DATE_KEY,
+        title: z.string().min(1),
+        warmup: z.string().optional(),
+        cooldown: z.string().optional(),
+        notes: z.string().optional(),
+        completed: z.boolean().optional(),
+        blocks: z
+          .array(
+            z.discriminatedUnion('type', [
+              z.object({
+                type: z.literal('exercise'),
+                exerciseName: z.string().min(1),
+                prescription: z.string().min(1),
+                videoUrl: z.string().url().optional(),
+              }),
+              z.object({
+                type: z.literal('conditioning'),
+                format: z.string().min(1),
+                description: z.string().min(1),
+              }),
+            ])
+          )
+          .min(1),
+      },
+    },
+    async ({ client_id, date, title, warmup, cooldown, notes, completed, blocks }) => {
+      const op = await client.getOperatorById(client_id);
+      const normalizedBlocks: WorkoutBlock[] = blocks.map((b, i) =>
+        b.type === 'conditioning'
+          ? {
+              type: 'conditioning',
+              id: `block-mcp-${Date.now()}-${i}`,
+              sortOrder: i + 1,
+              format: b.format,
+              description: b.description,
+              isLinkedToNext: false,
+            }
+          : {
+              type: 'exercise',
+              id: `block-mcp-${Date.now()}-${i}`,
+              sortOrder: i + 1,
+              exerciseName: b.exerciseName,
+              prescription: b.prescription,
+              videoUrl: b.videoUrl ?? '',
+              isLinkedToNext: false,
+            }
+      );
+      const newWorkout: Workout = {
+        id: `wk-mcp-${Date.now()}-${date}`,
+        date,
+        title,
+        notes: notes ?? '',
+        warmup: warmup ?? '',
+        blocks: normalizedBlocks,
+        cooldown: cooldown ?? '',
+        completed: completed ?? false,
+      };
+      const workouts = { ...(op.workouts || {}), [date]: newWorkout };
+      await client.patchWorkoutsById(client_id, { workouts });
+      return textContent(
+        `Saved "${title}" to ${client_id}'s planner on ${date} (${normalizedBlocks.length} blocks).`
+      );
+    }
+  );
+
+  server.registerTool(
+    'delete_client_workout',
+    {
+      title: 'Delete a workout from a client\'s planner',
+      description:
+        'Removes the workout on `date` from the client\'s planner. CONFIRM client + date with the trainer before invoking.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        date: DATE_KEY,
+      },
+    },
+    async ({ client_id, date }) => {
+      const op = await client.getOperatorById(client_id);
+      const all = { ...(op.workouts || {}) };
+      if (!all[date]) {
+        return textContent(`No workout on ${date} to delete for ${client_id}.`);
+      }
+      const title = (all[date]?.title as string) || 'workout';
+      delete all[date];
+      await client.patchWorkoutsById(client_id, { workouts: all });
+      return textContent(`Deleted "${title}" from ${client_id} on ${date}.`);
+    }
+  );
+
+  server.registerTool(
+    'delete_client_meal',
+    {
+      title: 'Delete a meal from a client\'s nutrition log',
+      description:
+        'Removes a single meal by id from the client\'s nutrition.meals[date]. Get the id from get_client_nutrition_today/in_range first.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        date: DATE_KEY,
+        mealId: z.string().min(1),
+      },
+    },
+    async ({ client_id, date, mealId }) => {
+      const op = await client.getOperatorById(client_id);
+      const existing = op.nutrition || { meals: {} };
+      const existingMeals = (existing.meals as Record<string, Meal[]> | undefined) || {};
+      const bucket = existingMeals[date] || [];
+      const before = bucket.length;
+      const filtered = bucket.filter((m) => m.id !== mealId);
+      if (filtered.length === before) {
+        return textContent(`No meal ${mealId} on ${date} for ${client_id}.`);
+      }
+      const nextMeals = { ...existingMeals, [date]: filtered };
+      if (filtered.length === 0) delete nextMeals[date];
+      const nextNutrition = { ...existing, meals: nextMeals };
+      await client.patchProfileById(client_id, { nutrition: nextNutrition });
+      return textContent(`Removed meal ${mealId} from ${client_id} on ${date}.`);
+    }
+  );
+
+  server.registerTool(
+    'delete_client_pr',
+    {
+      title: 'Delete a PR from a client\'s PR board',
+      description:
+        'Removes a personal record by id from the client\'s PR board. Get the id from get_client_prs first.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        prId: z.string().min(1),
+      },
+    },
+    async ({ client_id, prId }) => {
+      const op = await client.getOperatorById(client_id);
+      const prs = (op.prs as PRRecord[]) || [];
+      const filtered = prs.filter((p) => p.id !== prId);
+      if (filtered.length === prs.length) {
+        return textContent(`No PR ${prId} found on ${client_id}.`);
+      }
+      await client.patchWorkoutsById(client_id, { prs: filtered });
+      return textContent(`Removed PR ${prId} from ${client_id}.`);
+    }
+  );
+
+  // ─────────── WEARABLES (Phase 3c — reads) ───────────
+  // Surfaces Vital-backed wearable data so Gunny can ground recovery /
+  // readiness recommendations in real HRV / sleep / HR data instead of
+  // self-reports alone. Provider data shape varies (Whoop, Oura, Garmin,
+  // Apple Watch, etc.) so `snapshot` is opaque — Gunny extracts what's
+  // useful per provider.
+
+  server.registerTool(
+    'get_my_wearable_status',
+    {
+      title: 'Get my connected wearables',
+      description:
+        'Returns the trainer\'s active wearable connections — provider, lastSyncAt, scopes. Use to confirm a device is connected + reporting before relying on snapshot data.',
+      inputSchema: {},
+    },
+    async () => {
+      const myId = clientOperatorId(client);
+      const connections = await client.listWearables(myId);
+      const summary = connections.map((c) => ({
+        provider: c.provider,
+        active: c.active,
+        connectedAt: c.connectedAt ?? null,
+        lastSyncAt: c.lastSyncAt ?? null,
+        scopes: c.scopes ?? [],
+      }));
+      return jsonContent({ connected: summary.length > 0, connections: summary });
+    }
+  );
+
+  server.registerTool(
+    'get_my_wearable_latest',
+    {
+      title: 'Get my latest wearable snapshot',
+      description:
+        'Returns the freshest cached wearable snapshot — HRV, sleep, activity, heart rate. `snapshot` is the raw provider blob (shape varies by Whoop / Oura / Garmin / Apple Watch); `currentHR` is the server\'s best-effort normalized live HR. Polled cheaply (no Vital roundtrip per call).',
+      inputSchema: {},
+    },
+    async () => {
+      const myId = clientOperatorId(client);
+      const data = await client.getWearableLatest(myId);
+      return jsonContent(data);
+    }
+  );
+
+  server.registerTool(
+    'get_client_wearable_status',
+    {
+      title: 'Get a client\'s connected wearables',
+      description:
+        'Returns the client\'s active wearable connections. CHECK THIS before recommending recovery / training-load decisions for a client — if no device is connected, snapshot data won\'t exist.',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const connections = await client.listWearables(client_id);
+      const summary = connections.map((c) => ({
+        provider: c.provider,
+        active: c.active,
+        connectedAt: c.connectedAt ?? null,
+        lastSyncAt: c.lastSyncAt ?? null,
+        scopes: c.scopes ?? [],
+      }));
+      return jsonContent({ client_id, connected: summary.length > 0, connections: summary });
+    }
+  );
+
+  server.registerTool(
+    'get_client_wearable_latest',
+    {
+      title: 'Get a client\'s latest wearable snapshot',
+      description:
+        'Returns the client\'s freshest cached wearable snapshot. Same shape as get_my_wearable_latest. Useful for "is ROSA recovered enough for tomorrow\'s squat day?" — pair with get_client_recent_workouts for full picture.',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const data = await client.getWearableLatest(client_id);
+      return jsonContent({ client_id, ...data });
+    }
+  );
+
+  // ─────────── MACROCYCLES (Phase 3d — mutations) ───────────
+  // Periodization plans. Each cycle has a goal (powerlifting_meet,
+  // hypertrophy_phase, season_prep, fat_loss, olympic_meet,
+  // tactical_assessment, crossfit_comp, pregnancy_postpartum,
+  // return_to_sport) + a generated block sequence (accumulation,
+  // intensification, peak, taper, etc.).
+  //
+  // Server wraps buildMacroCycle so the MCP doesn't reimplement the
+  // template-driven block generation. Changing targetDate on the
+  // PATCH path triggers recomputeOnGoalDateChange (blocks regenerate,
+  // Gunny notes carry over by position).
+
+  const GOAL_TYPE = z.enum([
+    'powerlifting_meet',
+    'hypertrophy_phase',
+    'season_prep',
+    'fat_loss',
+    'olympic_meet',
+    'tactical_assessment',
+    'crossfit_comp',
+    'pregnancy_postpartum',
+    'return_to_sport',
+  ]);
+  const PRIORITY = z.union([z.literal(1), z.literal(2)]);
+  const GOAL_STATUS = z.enum(['active', 'completed', 'paused', 'cancelled']);
+
+  server.registerTool(
+    'create_macrocycle',
+    {
+      title: 'Create a new macrocycle (periodization plan)',
+      description:
+        'Builds a periodization plan for the trainer. Required: type, name, targetDate (future). Priority 1 (default) is the main goal; priority 2 is secondary and pauses when priority 1 hits an exclusive block. Server generates the block sequence; MCP just supplies the goal metadata.',
+      inputSchema: {
+        type: GOAL_TYPE,
+        name: z.string().min(1),
+        targetDate: DATE_KEY,
+        priority: PRIORITY.optional(),
+        targetMetrics: z.record(z.string(), z.number()).optional(),
+      },
+    },
+    async ({ type, name, targetDate, priority, targetMetrics }) => {
+      const myId = clientOperatorId(client);
+      const res = await client.createMacrocycle(myId, {
+        type, name, targetDate, priority, targetMetrics,
+      });
+      return jsonContent(res);
+    }
+  );
+
+  server.registerTool(
+    'update_macrocycle',
+    {
+      title: 'Update a macrocycle\'s goal',
+      description:
+        'Patch name / targetDate / priority / targetMetrics / status. If targetDate changes, the server recomputes the block sequence (Gunny notes carry over by block position). Status transitions: active → paused (temporarily off), completed (goal hit), cancelled (dropped).',
+      inputSchema: {
+        cycleId: z.string().min(1),
+        name: z.string().min(1).optional(),
+        targetDate: DATE_KEY.optional(),
+        priority: PRIORITY.optional(),
+        targetMetrics: z.record(z.string(), z.number()).optional(),
+        status: GOAL_STATUS.optional(),
+      },
+    },
+    async ({ cycleId, ...patch }) => {
+      const myId = clientOperatorId(client);
+      const res = await client.updateMacrocycle(myId, cycleId, patch);
+      return jsonContent(res);
+    }
+  );
+
+  server.registerTool(
+    'delete_macrocycle',
+    {
+      title: 'Delete a macrocycle',
+      description:
+        'Removes a periodization plan by id. Destructive — block annotations + status are lost. CONFIRM with the operator before invoking.',
+      inputSchema: { cycleId: z.string().min(1) },
+    },
+    async ({ cycleId }) => {
+      const myId = clientOperatorId(client);
+      const res = await client.deleteMacrocycle(myId, cycleId);
+      return jsonContent(res);
+    }
+  );
+
+  server.registerTool(
+    'create_client_macrocycle',
+    {
+      title: 'Create a macrocycle for a client',
+      description:
+        'Builds a periodization plan for a client. CONFIRM client callsign + goal + targetDate with the trainer before invoking.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        type: GOAL_TYPE,
+        name: z.string().min(1),
+        targetDate: DATE_KEY,
+        priority: PRIORITY.optional(),
+        targetMetrics: z.record(z.string(), z.number()).optional(),
+      },
+    },
+    async ({ client_id, type, name, targetDate, priority, targetMetrics }) => {
+      const res = await client.createMacrocycle(client_id, {
+        type, name, targetDate, priority, targetMetrics,
+      });
+      return jsonContent({ client_id, ...res });
+    }
+  );
+
+  server.registerTool(
+    'update_client_macrocycle',
+    {
+      title: 'Update a client\'s macrocycle goal',
+      description:
+        'Patch a client\'s macrocycle name / targetDate / priority / targetMetrics / status. targetDate change triggers block regeneration. CONFIRM with trainer.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        cycleId: z.string().min(1),
+        name: z.string().min(1).optional(),
+        targetDate: DATE_KEY.optional(),
+        priority: PRIORITY.optional(),
+        targetMetrics: z.record(z.string(), z.number()).optional(),
+        status: GOAL_STATUS.optional(),
+      },
+    },
+    async ({ client_id, cycleId, ...patch }) => {
+      const res = await client.updateMacrocycle(client_id, cycleId, patch);
+      return jsonContent({ client_id, ...res });
+    }
+  );
+
+  server.registerTool(
+    'delete_client_macrocycle',
+    {
+      title: 'Delete a client\'s macrocycle',
+      description:
+        'Removes a client\'s periodization plan by id. Destructive. CONFIRM client + cycleId with trainer.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        cycleId: z.string().min(1),
+      },
+    },
+    async ({ client_id, cycleId }) => {
+      const res = await client.deleteMacrocycle(client_id, cycleId);
+      return jsonContent({ client_id, ...res });
+    }
+  );
 }
 
 /** Pull the calling trainer's operator-id off the api-client without

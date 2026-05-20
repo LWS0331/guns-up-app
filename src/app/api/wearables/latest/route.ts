@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/requireAuth';
+import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 
 // GET /api/wearables/latest?operatorId=xxx
@@ -21,7 +21,7 @@ import { OPS_CENTER_ACCESS } from '@/lib/types';
 // endpoint. If the wearable webhook (also separately wired) fires
 // new HR data, syncData updates and the next poll picks it up.
 export async function GET(req: NextRequest) {
-  const auth = requireAuth(req);
+  const auth = requireTrainerAuth(req);
   if (auth instanceof NextResponse) return auth;
 
   const operatorId = req.nextUrl.searchParams.get('operatorId');
@@ -29,11 +29,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'operatorId query param required' }, { status: 400 });
   }
 
-  // Same auth model as the sync route: own-or-admin. A trainer reading
-  // a client's HR isn't blocked here yet — that's the next iteration.
+  // Auth model: self / admin / trainer-of-target. The previous "next
+  // iteration" comment is now: trainer-of-target IS accepted, so a
+  // trainer can poll a client's HR during a live session via Claude.ai
+  // (Phase 3c MCP rollout).
   const isSelf = auth.operatorId === operatorId;
   const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
+  let isTrainerOfTarget = false;
   if (!isSelf && !isAdmin) {
+    const target = await prisma.operator.findUnique({
+      where: { id: operatorId },
+      select: { trainerId: true },
+    });
+    isTrainerOfTarget = !!target && target.trainerId === auth.operatorId;
+  }
+  if (!isSelf && !isAdmin && !isTrainerOfTarget) {
     return NextResponse.json(
       { error: 'Forbidden: cannot read wearables for another operator' },
       { status: 403 }

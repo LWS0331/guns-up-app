@@ -77,9 +77,17 @@ export class GunnyApiClient {
   /** Targeted PATCH against the profile subroute (skips workouts to avoid races).
    * Server returns `{ ok: true, operator }` — unwrap to the bare row. */
   async patchProfile(patch: Partial<Operator>): Promise<Operator> {
+    return this.patchProfileById(this.cfg.operatorId, patch);
+  }
+
+  /** PATCH /profile on an arbitrary operator. Used by client-roster
+   * writes — trainer-of-target authorization enforced server-side via
+   * TRAINER_FIELDS (training-facing data + trainerNotes). Writes to a
+   * non-client operator 403. */
+  async patchProfileById(operatorId: string, patch: Partial<Operator>): Promise<Operator> {
     const res = await this.fetch<{ ok?: boolean; operator?: Operator; updated?: Operator }>(
       'PATCH',
-      `/api/operators/${this.cfg.operatorId}/profile`,
+      `/api/operators/${operatorId}/profile`,
       patch
     );
     return res.operator ?? res.updated ?? (res as unknown as Operator);
@@ -95,12 +103,97 @@ export class GunnyApiClient {
     injuries?: unknown[];
     dayTags?: Record<string, DayTag>;
   }): Promise<Operator> {
+    return this.patchWorkoutsById(this.cfg.operatorId, patch);
+  }
+
+  /** PATCH /workouts on an arbitrary operator. Used by client-roster
+   * writes. Same trainer-of-target authorization as patchProfileById. */
+  async patchWorkoutsById(
+    operatorId: string,
+    patch: {
+      workouts?: Record<string, Workout>;
+      prs?: PRRecord[];
+      injuries?: unknown[];
+      dayTags?: Record<string, DayTag>;
+    }
+  ): Promise<Operator> {
     const res = await this.fetch<{ ok?: boolean; operator?: Operator; updated?: Operator }>(
       'PATCH',
-      `/api/operators/${this.cfg.operatorId}/workouts`,
+      `/api/operators/${operatorId}/workouts`,
       patch
     );
     return res.operator ?? res.updated ?? (res as unknown as Operator);
+  }
+
+  /** List active wearable connections for an operator.
+   * GET /api/wearables?operatorId=<id> — server enforces self/admin/trainer-of-target. */
+  async listWearables(operatorId: string): Promise<WearableConnection[]> {
+    const res = await this.fetch<{ connections: WearableConnection[] }>(
+      'GET',
+      `/api/wearables?operatorId=${encodeURIComponent(operatorId)}`
+    );
+    return Array.isArray(res.connections) ? res.connections : [];
+  }
+
+  /** Latest cached wearable snapshot for an operator.
+   * GET /api/wearables/latest?operatorId=<id>. Same auth model. */
+  async getWearableLatest(operatorId: string): Promise<WearableLatestResponse> {
+    return this.fetch<WearableLatestResponse>(
+      'GET',
+      `/api/wearables/latest?operatorId=${encodeURIComponent(operatorId)}`
+    );
+  }
+
+  /** Create a macrocycle for an operator. The server wraps buildMacroCycle —
+   * caller supplies goal metadata only; block sequence is generated. */
+  async createMacrocycle(
+    operatorId: string,
+    input: {
+      type: string;
+      name: string;
+      targetDate: string;
+      priority?: 1 | 2;
+      targetMetrics?: Record<string, number>;
+      today?: string;
+    }
+  ): Promise<{ ok: boolean; cycle: unknown }> {
+    return this.fetch<{ ok: boolean; cycle: unknown }>(
+      'POST',
+      `/api/operators/${operatorId}/macrocycles`,
+      input
+    );
+  }
+
+  /** Update a macrocycle's goal. If targetDate changes, the server calls
+   * recomputeOnGoalDateChange so blocks regenerate. */
+  async updateMacrocycle(
+    operatorId: string,
+    cycleId: string,
+    patch: {
+      name?: string;
+      targetDate?: string;
+      priority?: 1 | 2;
+      targetMetrics?: Record<string, number>;
+      status?: 'active' | 'completed' | 'paused' | 'cancelled';
+      today?: string;
+    }
+  ): Promise<{ ok: boolean; cycle: unknown }> {
+    return this.fetch<{ ok: boolean; cycle: unknown }>(
+      'PATCH',
+      `/api/operators/${operatorId}/macrocycles/${cycleId}`,
+      patch
+    );
+  }
+
+  /** Delete a macrocycle by id. */
+  async deleteMacrocycle(
+    operatorId: string,
+    cycleId: string
+  ): Promise<{ ok: boolean; removedId: string }> {
+    return this.fetch<{ ok: boolean; removedId: string }>(
+      'DELETE',
+      `/api/operators/${operatorId}/macrocycles/${cycleId}`
+    );
   }
 }
 
@@ -192,4 +285,31 @@ export interface PRRecord {
 export interface DayTag {
   color: string;
   note?: string;
+}
+
+/** WearableConnection row (Vital-backed). The full row carries internal
+ * fields (vital_user_id, refresh_token, etc.) that the server-side
+ * projection strips before returning. */
+export interface WearableConnection {
+  id: string;
+  operatorId: string;
+  provider: string;
+  active: boolean;
+  connectedAt?: string;
+  lastSyncAt?: string | null;
+  scopes?: string[];
+  // syncData blob varies wildly by provider — left as unknown.
+  syncData?: unknown;
+}
+
+/** /api/wearables/latest response shape. `snapshot` is the cached
+ * syncData blob (HRV / sleep / activity / etc. — provider-shaped).
+ * `currentHR` is the server's best-effort normalization. */
+export interface WearableLatestResponse {
+  ok: boolean;
+  connected: boolean;
+  provider?: string;
+  lastSyncAt?: string | null;
+  snapshot?: unknown;
+  currentHR?: number | null;
 }
