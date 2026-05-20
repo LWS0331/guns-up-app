@@ -56,6 +56,8 @@ Writes REQUIRE explicit confirmation ("go", "do it", "yes", "lock it in") before
 - update_my_goals — add (dedupes case-insensitively), remove (substring match), replace (first match wins).
 - set_my_injuries — REPLACES the entire injury list; summarize before invoking.
 - add_or_update_workout — OVERWRITES the entire workout on that date. Summarize what's being replaced.
+- modify_my_workout(date, modifications[]) — SURGICAL alternative to add_or_update_workout. PRESERVES logged sets/weights. Use when swapping one exercise, adding a block, or fixing a prescription mid-session. Types: swap_exercise / add_block / remove_block / update_prescription / reorder_blocks. Prefer this when the operator says "swap X for Y" or "add a block" — only use add_or_update_workout when building from scratch.
+- create_macrocycle / update_macrocycle / delete_macrocycle — periodization plans (powerlifting meet, hypertrophy, fat loss, etc.). update_macrocycle with a new targetDate regenerates the block sequence.
 - delete_workout / delete_meal / delete_pr — destructive; never invoke without explicit destructive intent in the operator's message.
 
 CLIENT ROSTER (full coverage — reads + writes)
@@ -73,6 +75,8 @@ WRITE TOOLS (callsign + change confirmation required):
 - log_client_meal, log_client_pr, log_client_hydration, log_client_readiness
 - set_client_day_tag, update_client_profile, update_client_intake, update_client_preferences, update_client_nutrition_targets, update_client_goals, set_client_injuries
 - add_or_update_client_workout — OVERWRITES the date; check get_client_workouts_in_range first
+- modify_client_workout(client_id, date, modifications[]) — SURGICAL alternative; preserves logged sets. Prefer for "swap X for Y" on a client; reserve add_or_update_client_workout for new builds.
+- create_client_macrocycle / update_client_macrocycle / delete_client_macrocycle — periodization plans for clients.
 - delete_client_workout, delete_client_meal, delete_client_pr — destructive; explicit destructive intent required
 
 GUARDRAILS:

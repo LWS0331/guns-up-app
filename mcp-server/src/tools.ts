@@ -1892,6 +1892,98 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       return jsonContent({ client_id, ...res });
     }
   );
+
+  // ─────────── STRUCTURED WORKOUT MODIFICATIONS (Phase 3e) ───────────
+  // Surgical edits to a workout that PRESERVE workout.results — logged
+  // sets / weights / RPE survive. Block IDs are preserved across swaps
+  // so per-set logged data still maps to the right block.
+  //
+  // This is the alternative to add_or_update_workout (which overwrites
+  // the whole day). Use modify_*_workout when you want to swap one
+  // exercise / add a block / change a prescription without losing
+  // partially-logged work from earlier in the session.
+
+  const NEW_BLOCK_SCHEMA = z.object({
+    type: z.enum(['exercise', 'conditioning']),
+    exerciseName: z.string().optional(),
+    prescription: z.string().optional(),
+    videoUrl: z.string().url().optional(),
+    format: z.string().optional(),
+    description: z.string().optional(),
+  });
+
+  const MODIFICATION = z.discriminatedUnion('type', [
+    z.object({
+      type: z.literal('swap_exercise'),
+      targetBlockId: z.string().optional(),
+      targetExerciseName: z.string().optional(),
+      changes: z.object({
+        exerciseName: z.string().optional(),
+        prescription: z.string().optional(),
+        videoUrl: z.string().url().optional(),
+      }),
+    }),
+    z.object({
+      type: z.literal('add_block'),
+      afterBlockId: z.string().optional(),
+      afterExerciseName: z.string().optional(),
+      newBlock: NEW_BLOCK_SCHEMA,
+    }),
+    z.object({
+      type: z.literal('remove_block'),
+      targetBlockId: z.string().optional(),
+      targetExerciseName: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal('update_prescription'),
+      targetBlockId: z.string().optional(),
+      targetExerciseName: z.string().optional(),
+      changes: z.object({
+        prescription: z.string().optional(),
+        exerciseName: z.string().optional(),
+      }),
+    }),
+    z.object({
+      type: z.literal('reorder_blocks'),
+      newOrder: z.array(z.string().min(1)).min(1),
+    }),
+  ]);
+
+  server.registerTool(
+    'modify_my_workout',
+    {
+      title: 'Modify a workout surgically (preserves logged sets)',
+      description:
+        'Apply one or more surgical modifications to the workout on `date`. UNLIKE add_or_update_workout, this PRESERVES workout.results — logged sets / weights / RPE survive. Block IDs are preserved across swaps so per-set logged data still maps. Use when changing one exercise, adding a block, fixing a prescription, etc. — without wiping the day\'s progress.\n\nModification types:\n- swap_exercise: replace an exercise block by name (or id). Preserves block id + results. Example: { type:"swap_exercise", targetExerciseName:"Lat Pulldown", changes:{ exerciseName:"Cable Row", prescription:"4x10 @ 140" } }\n- add_block: insert a new block after a named exercise (or id). Example: { type:"add_block", afterExerciseName:"Bench Press", newBlock:{ type:"exercise", exerciseName:"Cable Crossover", prescription:"3x15" } }\n- remove_block: delete a block by name or id.\n- update_prescription: change just the sets/reps/notes string on an existing block.\n- reorder_blocks: pass an array of block IDs in the new order.\n\nMultiple mods can be applied atomically (server applies them sequentially, persists once). CONFIRM the plan with the operator before invoking.',
+      inputSchema: {
+        date: DATE_KEY,
+        modifications: z.array(MODIFICATION).min(1).max(25),
+      },
+    },
+    async ({ date, modifications }) => {
+      const myId = clientOperatorId(client);
+      const res = await client.modifyWorkout(myId, date, modifications);
+      return jsonContent(res);
+    }
+  );
+
+  server.registerTool(
+    'modify_client_workout',
+    {
+      title: 'Modify a client\'s workout surgically (preserves logged sets)',
+      description:
+        'Apply one or more surgical modifications to a client\'s workout on `date`. Same semantics as modify_my_workout — preserves logged results, preserves block IDs across swaps. Use for "swap X for Y on tomorrow\'s session for EFRAIN" or "add 3 sets of incline DB after bench press for ROSA". CONFIRM client callsign + each modification with the trainer before invoking.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        date: DATE_KEY,
+        modifications: z.array(MODIFICATION).min(1).max(25),
+      },
+    },
+    async ({ client_id, date, modifications }) => {
+      const res = await client.modifyWorkout(client_id, date, modifications);
+      return jsonContent({ client_id, ...res });
+    }
+  );
 }
 
 /** Pull the calling trainer's operator-id off the api-client without

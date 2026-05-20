@@ -195,7 +195,66 @@ export class GunnyApiClient {
       `/api/operators/${operatorId}/macrocycles/${cycleId}`
     );
   }
+
+  /** Apply one or more surgical modifications to a workout. PRESERVES
+   * workout.results (logged sets/weights) unlike the full PATCH /workouts
+   * which overwrites the whole day. Block IDs preserved across swaps so
+   * per-set logged results still map to the correct block. */
+  async modifyWorkout(
+    operatorId: string,
+    date: string,
+    modifications: WorkoutModificationInput[]
+  ): Promise<{
+    ok: boolean;
+    applied: number;
+    skipped: Array<{ type: string; reason: string }>;
+    workout: Workout;
+  }> {
+    return this.fetch(
+      'POST',
+      `/api/operators/${operatorId}/workouts/${date}/modifications`,
+      { modifications }
+    );
+  }
 }
+
+/** Surgical workout modifications. Mirrors src/lib/workoutModification.ts
+ * minus the prefill_weights variant (live-state only, not persisted). */
+export type WorkoutModificationInput =
+  | {
+      type: 'swap_exercise';
+      targetBlockId?: string;
+      targetExerciseName?: string;
+      changes: { exerciseName?: string; prescription?: string; videoUrl?: string };
+    }
+  | {
+      type: 'add_block';
+      afterBlockId?: string;
+      afterExerciseName?: string;
+      newBlock: {
+        type: 'exercise' | 'conditioning';
+        exerciseName?: string;
+        prescription?: string;
+        videoUrl?: string;
+        format?: string;
+        description?: string;
+      };
+    }
+  | {
+      type: 'remove_block';
+      targetBlockId?: string;
+      targetExerciseName?: string;
+    }
+  | {
+      type: 'update_prescription';
+      targetBlockId?: string;
+      targetExerciseName?: string;
+      changes: { prescription?: string; exerciseName?: string };
+    }
+  | {
+      type: 'reorder_blocks';
+      newOrder: string[];
+    };
 
 // ── Loose type aliases. The MCP doesn't need a full mirror of the app's
 // types — it just shuttles JSON. These exist for IDE help and to mark
