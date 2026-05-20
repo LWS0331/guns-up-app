@@ -1744,6 +1744,154 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       return jsonContent({ client_id, ...data });
     }
   );
+
+  // ─────────── MACROCYCLES (Phase 3d — mutations) ───────────
+  // Periodization plans. Each cycle has a goal (powerlifting_meet,
+  // hypertrophy_phase, season_prep, fat_loss, olympic_meet,
+  // tactical_assessment, crossfit_comp, pregnancy_postpartum,
+  // return_to_sport) + a generated block sequence (accumulation,
+  // intensification, peak, taper, etc.).
+  //
+  // Server wraps buildMacroCycle so the MCP doesn't reimplement the
+  // template-driven block generation. Changing targetDate on the
+  // PATCH path triggers recomputeOnGoalDateChange (blocks regenerate,
+  // Gunny notes carry over by position).
+
+  const GOAL_TYPE = z.enum([
+    'powerlifting_meet',
+    'hypertrophy_phase',
+    'season_prep',
+    'fat_loss',
+    'olympic_meet',
+    'tactical_assessment',
+    'crossfit_comp',
+    'pregnancy_postpartum',
+    'return_to_sport',
+  ]);
+  const PRIORITY = z.union([z.literal(1), z.literal(2)]);
+  const GOAL_STATUS = z.enum(['active', 'completed', 'paused', 'cancelled']);
+
+  server.registerTool(
+    'create_macrocycle',
+    {
+      title: 'Create a new macrocycle (periodization plan)',
+      description:
+        'Builds a periodization plan for the trainer. Required: type, name, targetDate (future). Priority 1 (default) is the main goal; priority 2 is secondary and pauses when priority 1 hits an exclusive block. Server generates the block sequence; MCP just supplies the goal metadata.',
+      inputSchema: {
+        type: GOAL_TYPE,
+        name: z.string().min(1),
+        targetDate: DATE_KEY,
+        priority: PRIORITY.optional(),
+        targetMetrics: z.record(z.string(), z.number()).optional(),
+      },
+    },
+    async ({ type, name, targetDate, priority, targetMetrics }) => {
+      const myId = clientOperatorId(client);
+      const res = await client.createMacrocycle(myId, {
+        type, name, targetDate, priority, targetMetrics,
+      });
+      return jsonContent(res);
+    }
+  );
+
+  server.registerTool(
+    'update_macrocycle',
+    {
+      title: 'Update a macrocycle\'s goal',
+      description:
+        'Patch name / targetDate / priority / targetMetrics / status. If targetDate changes, the server recomputes the block sequence (Gunny notes carry over by block position). Status transitions: active → paused (temporarily off), completed (goal hit), cancelled (dropped).',
+      inputSchema: {
+        cycleId: z.string().min(1),
+        name: z.string().min(1).optional(),
+        targetDate: DATE_KEY.optional(),
+        priority: PRIORITY.optional(),
+        targetMetrics: z.record(z.string(), z.number()).optional(),
+        status: GOAL_STATUS.optional(),
+      },
+    },
+    async ({ cycleId, ...patch }) => {
+      const myId = clientOperatorId(client);
+      const res = await client.updateMacrocycle(myId, cycleId, patch);
+      return jsonContent(res);
+    }
+  );
+
+  server.registerTool(
+    'delete_macrocycle',
+    {
+      title: 'Delete a macrocycle',
+      description:
+        'Removes a periodization plan by id. Destructive — block annotations + status are lost. CONFIRM with the operator before invoking.',
+      inputSchema: { cycleId: z.string().min(1) },
+    },
+    async ({ cycleId }) => {
+      const myId = clientOperatorId(client);
+      const res = await client.deleteMacrocycle(myId, cycleId);
+      return jsonContent(res);
+    }
+  );
+
+  server.registerTool(
+    'create_client_macrocycle',
+    {
+      title: 'Create a macrocycle for a client',
+      description:
+        'Builds a periodization plan for a client. CONFIRM client callsign + goal + targetDate with the trainer before invoking.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        type: GOAL_TYPE,
+        name: z.string().min(1),
+        targetDate: DATE_KEY,
+        priority: PRIORITY.optional(),
+        targetMetrics: z.record(z.string(), z.number()).optional(),
+      },
+    },
+    async ({ client_id, type, name, targetDate, priority, targetMetrics }) => {
+      const res = await client.createMacrocycle(client_id, {
+        type, name, targetDate, priority, targetMetrics,
+      });
+      return jsonContent({ client_id, ...res });
+    }
+  );
+
+  server.registerTool(
+    'update_client_macrocycle',
+    {
+      title: 'Update a client\'s macrocycle goal',
+      description:
+        'Patch a client\'s macrocycle name / targetDate / priority / targetMetrics / status. targetDate change triggers block regeneration. CONFIRM with trainer.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        cycleId: z.string().min(1),
+        name: z.string().min(1).optional(),
+        targetDate: DATE_KEY.optional(),
+        priority: PRIORITY.optional(),
+        targetMetrics: z.record(z.string(), z.number()).optional(),
+        status: GOAL_STATUS.optional(),
+      },
+    },
+    async ({ client_id, cycleId, ...patch }) => {
+      const res = await client.updateMacrocycle(client_id, cycleId, patch);
+      return jsonContent({ client_id, ...res });
+    }
+  );
+
+  server.registerTool(
+    'delete_client_macrocycle',
+    {
+      title: 'Delete a client\'s macrocycle',
+      description:
+        'Removes a client\'s periodization plan by id. Destructive. CONFIRM client + cycleId with trainer.',
+      inputSchema: {
+        client_id: z.string().min(1),
+        cycleId: z.string().min(1),
+      },
+    },
+    async ({ client_id, cycleId }) => {
+      const res = await client.deleteMacrocycle(client_id, cycleId);
+      return jsonContent({ client_id, ...res });
+    }
+  );
 }
 
 /** Pull the calling trainer's operator-id off the api-client without

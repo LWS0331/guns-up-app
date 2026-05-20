@@ -143,6 +143,58 @@ export class GunnyApiClient {
       `/api/wearables/latest?operatorId=${encodeURIComponent(operatorId)}`
     );
   }
+
+  /** Create a macrocycle for an operator. The server wraps buildMacroCycle —
+   * caller supplies goal metadata only; block sequence is generated. */
+  async createMacrocycle(
+    operatorId: string,
+    input: {
+      type: string;
+      name: string;
+      targetDate: string;
+      priority?: 1 | 2;
+      targetMetrics?: Record<string, number>;
+      today?: string;
+    }
+  ): Promise<{ ok: boolean; cycle: unknown }> {
+    return this.fetch<{ ok: boolean; cycle: unknown }>(
+      'POST',
+      `/api/operators/${operatorId}/macrocycles`,
+      input
+    );
+  }
+
+  /** Update a macrocycle's goal. If targetDate changes, the server calls
+   * recomputeOnGoalDateChange so blocks regenerate. */
+  async updateMacrocycle(
+    operatorId: string,
+    cycleId: string,
+    patch: {
+      name?: string;
+      targetDate?: string;
+      priority?: 1 | 2;
+      targetMetrics?: Record<string, number>;
+      status?: 'active' | 'completed' | 'paused' | 'cancelled';
+      today?: string;
+    }
+  ): Promise<{ ok: boolean; cycle: unknown }> {
+    return this.fetch<{ ok: boolean; cycle: unknown }>(
+      'PATCH',
+      `/api/operators/${operatorId}/macrocycles/${cycleId}`,
+      patch
+    );
+  }
+
+  /** Delete a macrocycle by id. */
+  async deleteMacrocycle(
+    operatorId: string,
+    cycleId: string
+  ): Promise<{ ok: boolean; removedId: string }> {
+    return this.fetch<{ ok: boolean; removedId: string }>(
+      'DELETE',
+      `/api/operators/${operatorId}/macrocycles/${cycleId}`
+    );
+  }
 }
 
 // ── Loose type aliases. The MCP doesn't need a full mirror of the app's
