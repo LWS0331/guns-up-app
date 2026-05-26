@@ -489,21 +489,50 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     {
       title: 'Update my intake fields',
       description:
-        'Patch intake fields — dietary restrictions, supplements, sleep quality, stress, water target, injury notes, etc. Only fields you pass change. CONFIRM before invoking.',
+        'Patch intake fields — goals, health, equipment, schedule, nutrition habits, starting PRs, etc. Only fields you pass change. CONFIRM before invoking. Intake is authoritative per Gunny protocol — these are the source-of-truth values the trainer programs against.',
       inputSchema: {
-        dietaryRestrictions: z.array(z.string()).optional(),
-        supplements: z.array(z.string()).optional(),
-        mealsPerDay: z.number().int().min(1).max(8).optional(),
-        sleepQuality: z.number().int().min(1).max(10).optional(),
-        stressLevel: z.number().int().min(1).max(10).optional(),
-        dailyWaterOz: z.number().min(0).optional(),
-        injuryNotes: z.string().optional(),
-        injuryHistory: z.array(z.string()).optional(),
+        // Goals + health
         primaryGoal: z.string().optional(),
         secondaryGoals: z.array(z.string()).optional(),
-        currentDiet: z.string().optional(),
-        proteinPriority: z.string().optional(),
+        healthConditions: z.array(z.string()).optional(),
+        injuryNotes: z.string().optional(),
+        injuryHistory: z.array(z.string()).optional(),
+        lifeStage: z.enum(['pregnancy', 'postpartum']).optional(),
+        // Experience + training background
+        fitnessLevel: z.enum(['beginner', 'intermediate', 'advanced', 'elite']).optional(),
+        experienceYears: z.number().nonnegative().optional(),
+        currentActivity: z.string().optional(),
+        exerciseHistory: z.string().optional(),
+        movementScreenScore: z.number().min(1).max(10).optional(),
+        startingPRs: z
+          .array(
+            z.object({
+              exercise: z.string().min(1),
+              weight: z.number().positive(),
+              reps: z.number().int().positive(),
+            })
+          )
+          .optional(),
+        // Schedule + equipment
+        daysPerWeek: z.number().int().min(2).max(7).optional(),
+        sessionDuration: z.number().int().positive().optional(),
+        preferredSplit: z.string().optional(),
+        trainingPath: z.string().optional(),
         preferredWorkoutTime: z.string().optional(),
+        availableEquipment: z.array(z.string()).optional(),
+        wearableDevice: z.string().optional(),
+        // Nutrition
+        nutritionHabits: z.string().optional(),
+        mealsPerDay: z.number().int().min(1).max(8).optional(),
+        currentDiet: z.string().optional(),
+        dailyWaterOz: z.number().min(0).optional(),
+        supplements: z.array(z.string()).optional(),
+        estimatedCalories: z.number().nonnegative().optional(),
+        proteinPriority: z.string().optional(),
+        dietaryRestrictions: z.array(z.string()).optional(),
+        // Lifestyle
+        sleepQuality: z.number().int().min(1).max(10).optional(),
+        stressLevel: z.number().int().min(1).max(10).optional(),
         motivationFactors: z.array(z.string()).optional(),
       },
     },
@@ -1344,22 +1373,51 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     {
       title: 'Update a client\'s intake fields',
       description:
-        'Patch a client\'s intake — dietary restrictions, supplements, mealsPerDay, sleepQuality, stressLevel, dailyWaterOz, injuryNotes, primaryGoal, etc. CONFIRM with trainer.',
+        'Patch a client\'s intake — goals, health, equipment, schedule, nutrition habits, starting PRs, etc. CONFIRM with trainer. Intake is authoritative; these are the source-of-truth values the client is programmed against.',
       inputSchema: {
         client_id: z.string().min(1),
-        dietaryRestrictions: z.array(z.string()).optional(),
-        supplements: z.array(z.string()).optional(),
-        mealsPerDay: z.number().int().min(1).max(8).optional(),
-        sleepQuality: z.number().int().min(1).max(10).optional(),
-        stressLevel: z.number().int().min(1).max(10).optional(),
-        dailyWaterOz: z.number().min(0).optional(),
-        injuryNotes: z.string().optional(),
-        injuryHistory: z.array(z.string()).optional(),
+        // Goals + health
         primaryGoal: z.string().optional(),
         secondaryGoals: z.array(z.string()).optional(),
-        currentDiet: z.string().optional(),
-        proteinPriority: z.string().optional(),
+        healthConditions: z.array(z.string()).optional(),
+        injuryNotes: z.string().optional(),
+        injuryHistory: z.array(z.string()).optional(),
+        lifeStage: z.enum(['pregnancy', 'postpartum']).optional(),
+        // Experience + training background
+        fitnessLevel: z.enum(['beginner', 'intermediate', 'advanced', 'elite']).optional(),
+        experienceYears: z.number().nonnegative().optional(),
+        currentActivity: z.string().optional(),
+        exerciseHistory: z.string().optional(),
+        movementScreenScore: z.number().min(1).max(10).optional(),
+        startingPRs: z
+          .array(
+            z.object({
+              exercise: z.string().min(1),
+              weight: z.number().positive(),
+              reps: z.number().int().positive(),
+            })
+          )
+          .optional(),
+        // Schedule + equipment
+        daysPerWeek: z.number().int().min(2).max(7).optional(),
+        sessionDuration: z.number().int().positive().optional(),
+        preferredSplit: z.string().optional(),
+        trainingPath: z.string().optional(),
         preferredWorkoutTime: z.string().optional(),
+        availableEquipment: z.array(z.string()).optional(),
+        wearableDevice: z.string().optional(),
+        // Nutrition
+        nutritionHabits: z.string().optional(),
+        mealsPerDay: z.number().int().min(1).max(8).optional(),
+        currentDiet: z.string().optional(),
+        dailyWaterOz: z.number().min(0).optional(),
+        supplements: z.array(z.string()).optional(),
+        estimatedCalories: z.number().nonnegative().optional(),
+        proteinPriority: z.string().optional(),
+        dietaryRestrictions: z.array(z.string()).optional(),
+        // Lifestyle
+        sleepQuality: z.number().int().min(1).max(10).optional(),
+        stressLevel: z.number().int().min(1).max(10).optional(),
         motivationFactors: z.array(z.string()).optional(),
       },
     },
