@@ -12,6 +12,7 @@
 // a small sample.
 
 import { prisma } from '@/lib/db';
+import { getDateStrInTimezone } from '@/lib/dateUtils';
 import type { Prisma } from '@/generated/prisma/client';
 import type {
   DailyBlock,
@@ -228,10 +229,12 @@ async function computeSleepGapMin(operatorId: string, plans: PlanRow[]): Promise
  * Idempotent — call as many times as you like; pure derived state.
  */
 export async function recomputePersonalRhythm(operatorId: string): Promise<PersonalRhythmShape> {
-  // Pull last 14 days of plans.
+  // Pull last 14 days of plans. Date keys are minted in app TZ (Pacific),
+  // so the window cutoff has to be too — otherwise after 4-5pm PT we'd
+  // exclude plans dated "today" because UTC has already rolled forward.
   const since = new Date();
   since.setDate(since.getDate() - ROLLING_WINDOW_DAYS);
-  const sinceISO = since.toISOString().slice(0, 10);
+  const sinceISO = getDateStrInTimezone(since);
 
   const planRows = await prisma.dailyOpsPlan.findMany({
     where: {

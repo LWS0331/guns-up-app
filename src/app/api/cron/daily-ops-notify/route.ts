@@ -22,6 +22,7 @@ import { prisma } from '@/lib/db';
 import type { Prisma } from '@/generated/prisma/client';
 import { requireCronAuth } from '@/lib/cronAuth';
 import { sendPushToOperator } from '@/lib/sendPush';
+import { APP_TIMEZONE, getDateStrInTimezone } from '@/lib/dateUtils';
 import type {
   DailyBlock,
   BlockCategory,
@@ -78,14 +79,17 @@ function nowMinutesInTimezone(utcNow: Date, timezone: string | undefined): numbe
 function localDateInTimezone(utcNow: Date, timezone: string | undefined): string {
   try {
     const fmt = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone ?? 'UTC',
+      timeZone: timezone ?? APP_TIMEZONE,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     });
     return fmt.format(utcNow);
   } catch {
-    return utcNow.toISOString().slice(0, 10);
+    // Fall back to app TZ — most operators are PT, and a malformed stored
+    // timezone shouldn't bounce them all the way back to UTC (which would
+    // mis-match plans dated in their actual local timezone).
+    return getDateStrInTimezone(utcNow);
   }
 }
 

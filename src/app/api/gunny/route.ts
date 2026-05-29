@@ -18,6 +18,7 @@ import type { JuniorSafetyEvent } from '@/lib/types';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 import { loadGunnyCorpus } from '@/lib/gunnyCorpus';
 import type { TrainingPath, CorpusSelectionInput } from '@/data/gunny-corpus';
+import { getAppTodayStr } from '@/lib/dateUtils';
 import { getCoreIdentity, resolvePersonaId, detectPersonaDrift } from '@/lib/personas';
 import { getThisWeekDateKeys } from '@/lib/dateUtils';
 
@@ -2348,10 +2349,11 @@ interface ServerDedupOutput {
 }
 
 function getLocalDateForOperator(): string {
-  // Server-side fallback when the request doesn't carry a clientDate. Uses
-  // server local time as a cheap default; the client also sends clientDate
-  // in the body for the rare cross-tz case.
-  return new Date().toISOString().slice(0, 10);
+  // Server-side fallback when the request doesn't carry a clientDate.
+  // Returns today in app TZ (Pacific) so the date matches the buckets the
+  // client mints in their browser. Previously fell back to UTC and silently
+  // mis-bucketed after ~4-5pm PT.
+  return getAppTodayStr();
 }
 
 async function applyServerSideDedup(
@@ -2486,7 +2488,7 @@ async function applyMealDeletes(
 
   const nutrition = (operator.nutrition || {}) as { meals?: Record<string, Array<{ id?: string; name?: string; calories?: number }>>; targets?: unknown };
   const meals = { ...(nutrition.meals || {}) };
-  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const today = clientDate || getLocalDateForOperator();
   const applied: MealDeleteRequest[] = [];
   let mutated = false;
 
@@ -2573,7 +2575,7 @@ async function applyHydration(
   if (!Number.isFinite(oz) || oz === 0) return null;
   const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
     ? req.date
-    : (clientDate || new Date().toISOString().slice(0, 10));
+    : (clientDate || getLocalDateForOperator());
   const op: 'add' | 'set' = req.op === 'set' ? 'set' : 'add';
 
   let operator;
@@ -2620,7 +2622,7 @@ async function applyReadinessEntry(
   if (!req) return null;
   const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
     ? req.date
-    : (clientDate || new Date().toISOString().slice(0, 10));
+    : (clientDate || getLocalDateForOperator());
 
   // Coerce + validate. Numeric fields clamped to 1-10. Skip silently if
   // the operator gave us a value outside that range — better to drop a
@@ -2664,7 +2666,7 @@ async function applyReadinessEntry(
   // Mirror today's numerics to profile so existing readers (readiness
   // engine, BattlePlanRef, etc.) see fresh values without a schema migration.
   // Skip the mirror when the entry is for a past date.
-  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const today = clientDate || getLocalDateForOperator();
   const profile = { ...((operator.profile || {}) as Record<string, unknown>) };
   if (date === today) {
     if (entry.readiness !== undefined) profile.readiness = entry.readiness;
@@ -2805,7 +2807,7 @@ async function applyDayTags(
   for (const req of reqs) {
     const date = req.date && /^\d{4}-\d{2}-\d{2}$/.test(req.date)
       ? req.date
-      : (clientDate || new Date().toISOString().slice(0, 10));
+      : (clientDate || getLocalDateForOperator());
     const op = req.op === 'clear' ? 'clear' : 'set';
     if (op === 'clear') {
       if (dayTags[date]) {
@@ -3062,7 +3064,7 @@ async function applyMacrocycleChanges(
   }
   if (!operator) return [];
   let cycles = Array.isArray(operator.macroCycles) ? [...(operator.macroCycles as unknown as MacroCycle[])] : [];
-  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const today = clientDate || getLocalDateForOperator();
   const applied: MacrocycleApplied[] = [];
   let mutated = false;
 
@@ -3310,7 +3312,7 @@ async function applyTrainerNoteWrite(
     return null;
   }
 
-  const today = clientDate || new Date().toISOString().slice(0, 10);
+  const today = clientDate || getLocalDateForOperator();
   let nextNotes = '';
   if (op === 'append') {
     const prior = (target.trainerNotes || '').trim();

@@ -16,7 +16,7 @@ import React, { useMemo, useState } from 'react';
 import type { MacroCycle, MacroGoal, MacroGoalType, Operator } from '@/lib/types';
 import { buildMacroCycle, getActiveBlock, daysToGoal, recomputeOnGoalDateChange } from '@/lib/macrocycle';
 import { getTemplateNominalWeeks } from '@/lib/macrocycleLibrary';
-import { getLocalDateStr } from '@/lib/dateUtils';
+import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import { useLanguage } from '@/lib/i18n';
 
 interface MacrocyclePanelProps {
@@ -181,7 +181,7 @@ function GoalSetupForm({ today, existingCount, onCancel, onSubmit }: GoalSetupFo
     // Default to 12 weeks from today — sane starting point for any goal type.
     const d = new Date();
     d.setDate(d.getDate() + 84);
-    return d.toISOString().slice(0, 10);
+    return toLocalDateStr(d);
   });
   const [priority, setPriority] = useState<1 | 2>(existingCount === 0 ? 1 : 2);
 

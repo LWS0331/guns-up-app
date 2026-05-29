@@ -72,6 +72,7 @@ import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { getAuthOperator } from '@/lib/authMiddleware';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
+import { APP_TIMEZONE, getDateStrInTimezone } from '@/lib/dateUtils';
 
 const VALID_ROLES = new Set(['client', 'trainer']);
 const VALID_TIERS = new Set(['haiku', 'sonnet', 'opus', 'white_glove']);
@@ -371,10 +372,12 @@ export async function POST(req: NextRequest) {
       promoActive = true;
       promoType = `trial_${trialTier}_${trialDays}d`;
       const expiry = new Date();
-      expiry.setUTCDate(expiry.getUTCDate() + trialDays);
-      // Schema stores promoExpiry as ISO date YYYY-MM-DD. Use UTC date
-      // boundary so a trial set "today" expires at end-of-day in UTC.
-      promoExpiry = expiry.toISOString().slice(0, 10);
+      expiry.setDate(expiry.getDate() + trialDays);
+      // Schema stores promoExpiry as ISO date YYYY-MM-DD. Use app TZ
+      // (Pacific) so a trial set "today" expires at end-of-day in the
+      // operator's local calendar — UTC boundary cuts trials short
+      // for west-coast users by up to 8h.
+      promoExpiry = getDateStrInTimezone(expiry);
     }
 
     // === trainerNotes (optional long-form coach protocol) ===
@@ -441,7 +444,10 @@ export async function POST(req: NextRequest) {
         ...(trainerNotes !== null && { trainerNotes }),
         // Initialize all JSON columns to safe empties.
         intake: {},
-        profile: {},
+        // Default profile carries the app TZ so the daily-ops cron resolves
+        // the right local-time window from day one. Operators can override
+        // via the profile-update path later.
+        profile: { timezone: APP_TIMEZONE },
         nutrition: {},
         prs: [],
         injuries: [],

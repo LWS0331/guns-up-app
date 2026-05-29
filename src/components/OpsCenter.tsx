@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Operator, TIER_CONFIGS, AiTier, OPS_CENTER_ACCESS } from '@/lib/types';
+import { toLocalDateStr } from '@/lib/dateUtils';
 import { getAuthToken } from '@/lib/authClient';
 import Icon from '@/components/Icons';
 import OpsRoadmap from '@/components/OpsRoadmap';
@@ -466,8 +467,8 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
       const betaEnd = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000);
       const patch = {
         betaUser: true,
-        betaStartDate: today.toISOString().split('T')[0],
-        betaEndDate: betaEnd.toISOString().split('T')[0],
+        betaStartDate: toLocalDateStr(today),
+        betaEndDate: toLocalDateStr(betaEnd),
       };
       for (const op of displayOperators.filter(o => o.role !== 'trainer')) {
         await fetch(`/api/operators/${op.id}`, {
@@ -560,7 +561,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
         ...op,
         promoActive: true,
         promoType,
-        promoExpiry: expiry.toISOString().split('T')[0],
+        promoExpiry: toLocalDateStr(expiry),
       };
       await fetch(`/api/operators/${selectedOperatorForPromo}`, {
         method: 'PUT',

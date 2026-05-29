@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireCronAuth } from '@/lib/cronAuth';
+import { getDateStrInTimezone } from '@/lib/dateUtils';
 
 const RECENT_WINDOW_DAYS = 28;
 const ACUTE_DAYS = 7;
@@ -55,7 +56,8 @@ export async function GET(req: NextRequest) {
   try {
     const startedAt = new Date();
     const cutoff = new Date(startedAt.getTime() - RECENT_WINDOW_DAYS * MS_PER_DAY);
-    const cutoffDateStr = cutoff.toISOString().slice(0, 10);
+    // syncDate keys are stored in app TZ — bound the window in the same TZ.
+    const cutoffDateStr = getDateStrInTimezone(cutoff);
 
     // We could narrow this with a where clause, but for closed beta
     // the operator count is small (<20) — straight findMany is fine.

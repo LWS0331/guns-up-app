@@ -22,7 +22,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
 import { hasCommanderAccess } from '@/lib/tierGates';
-import { getLocalDateStr } from '@/lib/dateUtils';
+import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import {
   ensurePushSubscription,
   getPushPermissionState,
@@ -101,7 +101,7 @@ function sortBlocks(blocks: DailyBlock[]): DailyBlock[] {
 function dateOffsetISO(daysOffset: number): string {
   const d = new Date();
   d.setDate(d.getDate() + daysOffset);
-  return d.toISOString().slice(0, 10);
+  return toLocalDateStr(d);
 }
 
 const STATUS_COPY: Record<DailyOpsPlanShape['status'], string> = {
@@ -703,7 +703,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
     try {
       return getLocalDateStr();
     } catch {
-      return new Date().toISOString().slice(0, 10);
+      return toLocalDateStr(new Date());
     }
   }, []);
 
@@ -725,7 +725,7 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
       setViewDate((prev) => {
         const d = new Date(prev + 'T00:00:00');
         d.setDate(d.getDate() + delta);
-        return d.toISOString().slice(0, 10);
+        return toLocalDateStr(d);
       });
     },
     [],

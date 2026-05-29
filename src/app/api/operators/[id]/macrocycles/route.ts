@@ -4,6 +4,7 @@ import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 import type { MacroCycle, MacroGoal, MacroGoalType } from '@/lib/types';
 import { buildMacroCycle } from '@/lib/macrocycle';
+import { getAppTodayStr } from '@/lib/dateUtils';
 
 // POST /api/operators/:id/macrocycles
 //
@@ -29,7 +30,7 @@ const VALID_GOAL_TYPES: MacroGoalType[] = [
 ];
 
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  return getAppTodayStr();
 }
 
 export async function POST(

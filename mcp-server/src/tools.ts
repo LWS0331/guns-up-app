@@ -33,11 +33,19 @@ import {
 } from './projections.js';
 
 function todayKey(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  // Pacific Time — canonical app timezone. Process TZ env var can lie
+  // (Railway runs containers as UTC unless explicitly set), so we resolve
+  // via Intl.DateTimeFormat to be deterministic regardless of where the
+  // node process boots. Override APP_TIMEZONE in the Dockerfile to shift
+  // the default app-wide; per-operator timezone resolution stays a Phase 2
+  // concern (the MCP server is trainer-self-service today — same TZ as the
+  // app it talks to).
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 }
 
 function jsonContent(value: unknown) {
