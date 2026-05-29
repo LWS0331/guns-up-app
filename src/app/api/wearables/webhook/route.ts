@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { getAppTodayStr } from '@/lib/dateUtils';
 import * as crypto from 'crypto';
 
 // Verify webhook signature from Junction/Vital.
@@ -225,12 +226,12 @@ async function writeWearableSnapshot(
 ): Promise<void> {
   if (!data) return;
 
-  // Calendar date from provider — falls back to today (UTC) for events
+  // Calendar date from provider — falls back to today (app TZ) for events
   // that don't carry one (rare, but defensive).
   const syncDate =
     (typeof data.calendar_date === 'string' && data.calendar_date) ||
     (typeof data.calendarDate === 'string' && data.calendarDate) ||
-    new Date().toISOString().slice(0, 10);
+    getAppTodayStr();
 
   // Extract every column we can from this event. Each is wrapped in a
   // typeof check so a malformed payload doesn't crash the webhook.

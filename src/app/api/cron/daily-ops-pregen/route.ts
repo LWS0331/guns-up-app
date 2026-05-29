@@ -22,6 +22,7 @@ import { prisma } from '@/lib/db';
 import { requireCronAuth } from '@/lib/cronAuth';
 import { hasCommanderAccess } from '@/lib/tierGates';
 import { generateDailyOpsPlan } from '@/lib/dailyOpsGenerator';
+import { getDateStrInTimezone } from '@/lib/dateUtils';
 
 const INACTIVE_THRESHOLD_DAYS = 14;
 const TARGET_LOCAL_HOUR = 21; // 9 PM local
@@ -79,10 +80,12 @@ function localTomorrow(utcNow: Date, timezone: string | undefined): string {
       return fmt.format(tomorrow); // 'YYYY-MM-DD'
     }
   } catch {
-    // fall through to UTC
+    // fall through to app TZ
   }
-  const utcTomorrow = new Date(utcNow.getTime() + 24 * 60 * 60 * 1000);
-  return utcTomorrow.toISOString().slice(0, 10);
+  // Default operators (no stored timezone) get plans on the app TZ
+  // calendar — same default the notify side uses to match these plans.
+  const tomorrow = new Date(utcNow.getTime() + 24 * 60 * 60 * 1000);
+  return getDateStrInTimezone(tomorrow);
 }
 
 interface PregenSummary {

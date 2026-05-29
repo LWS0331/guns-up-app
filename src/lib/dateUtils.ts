@@ -8,6 +8,23 @@
 // Every date key (nutrition.meals[YYYY-MM-DD], workouts[YYYY-MM-DD],
 // dayTags[YYYY-MM-DD], dailyBrief.date, etc.) must be derived in the user's
 // LOCAL timezone.
+//
+// CLIENT vs SERVER:
+//   - In the browser, "local" means the operator's browser timezone — the
+//     no-arg helpers (`getLocalDateStr()`, `toLocalDateStr(d)`) use the JS
+//     Date local APIs, which honor that.
+//   - On the server (Next.js route, cron, MCP), process timezone is whatever
+//     Railway/Docker says it is (UTC by default). For server-minted date keys
+//     use `getDateStrInTimezone(date, APP_TIMEZONE)` so we always resolve to
+//     Pacific Time regardless of where the container ran.
+//
+// APP_TIMEZONE is the canonical server-side default (Pacific Time, which
+// rolls between PST and PDT). Operators can override per-account via
+// `profile.timezone`; the server resolver path is documented at each call site.
+
+/** Canonical app timezone for any server-side date math without an operator
+ * context. IANA name; pass directly into `Intl.DateTimeFormat`. */
+export const APP_TIMEZONE = 'America/Los_Angeles';
 
 /** Today's date as YYYY-MM-DD in the viewer's local timezone. */
 export function getLocalDateStr(): string {
@@ -20,6 +37,36 @@ export function toLocalDateStr(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+/**
+ * Format a Date as YYYY-MM-DD in a specific IANA timezone. Server-safe —
+ * uses Intl.DateTimeFormat so it doesn't depend on the process TZ env var
+ * (which Railway runs as UTC unless explicitly overridden).
+ *
+ * Defaults: date = now, timezone = APP_TIMEZONE (Pacific). Pass an
+ * operator's stored `profile.timezone` to resolve in that operator's
+ * local time instead.
+ */
+export function getDateStrInTimezone(
+  date: Date | number | string = new Date(),
+  timezone: string = APP_TIMEZONE,
+): string {
+  const d = date instanceof Date ? date : new Date(date);
+  // en-CA renders ISO-style YYYY-MM-DD with zero-padded month/day. Saves
+  // a parts-extraction loop vs en-US "MM/DD/YYYY".
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+/** Today's date in APP_TIMEZONE (Pacific). Server-safe convenience wrapper
+ * around getDateStrInTimezone() for the most common case. */
+export function getAppTodayStr(): string {
+  return getDateStrInTimezone(new Date(), APP_TIMEZONE);
 }
 
 /** Date offset from today (negative = past), YYYY-MM-DD in local timezone. */

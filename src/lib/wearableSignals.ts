@@ -8,6 +8,7 @@
 // `DailyOpsBasis` automatically rather than guessing.
 
 import { prisma } from '@/lib/db';
+import { getDateStrInTimezone } from '@/lib/dateUtils';
 
 const ROLLING_BASELINE_DAYS = 7;
 
@@ -60,7 +61,9 @@ export async function getWearableSignals(
 ): Promise<WearableSignalSnapshot> {
   const since = new Date(today);
   since.setDate(since.getDate() - (ROLLING_BASELINE_DAYS + 1));
-  const sinceISO = since.toISOString().slice(0, 10);
+  // syncDate keys are stored in app TZ — match the window bound to that
+  // so we don't silently undershoot during the evening UTC roll.
+  const sinceISO = getDateStrInTimezone(since);
 
   const rows: SnapRow[] = await prisma.wearableSnapshot.findMany({
     where: {

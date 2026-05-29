@@ -18,7 +18,7 @@ import type { Operator, JuniorSafetyEvent, JuniorSafetyFlags, JuniorConsent, Wor
 import { useLanguage } from '@/lib/i18n';
 import DailyOpsApprovalCard from '@/components/DailyOpsApprovalCard';
 import ParentHubChat from '@/components/ParentHubChat';
-import { getLocalDateStr } from '@/lib/dateUtils';
+import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 
 // Parent-Led Coaching Mode age band — kids 4-10 don't have app access,
 // the parent runs the session from this dashboard. See seed comment on
@@ -90,7 +90,7 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
     for (let i = 0; i < 7; i++) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
-      out.push(d.toISOString().slice(0, 10));
+      out.push(toLocalDateStr(d));
     }
     return out;
   })();

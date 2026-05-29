@@ -4,6 +4,7 @@ import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
 import type { MacroCycle, MacroGoal } from '@/lib/types';
 import { recomputeOnGoalDateChange } from '@/lib/macrocycle';
+import { getAppTodayStr } from '@/lib/dateUtils';
 
 // PATCH /api/operators/:id/macrocycles/:cycleId — update a macrocycle's
 // goal. Supports renaming, retargeting the date (triggers
@@ -16,7 +17,7 @@ import { recomputeOnGoalDateChange } from '@/lib/macrocycle';
 // Auth: self / admin / trainer-of-target.
 
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  return getAppTodayStr();
 }
 
 async function authorize(
