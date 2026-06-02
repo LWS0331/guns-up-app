@@ -42,6 +42,15 @@ jobs:
           DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
         run: npm ci --no-audit --no-fund
 
+      # mcp-server is its own npm workspace (separate package.json + lock).
+      # Tests under mcp-server/src/__tests__/ resolve `zod` and
+      # `zod-to-json-schema` from mcp-server/node_modules — root install
+      # alone leaves those unresolvable and vitest errors with
+      # "Cannot find package 'zod'".
+      - name: Install mcp-server deps
+        working-directory: mcp-server
+        run: npm ci --no-audit --no-fund
+
       - name: Run vitest
         run: npm test
 

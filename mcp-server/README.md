@@ -124,14 +124,25 @@ npm run dev
 Smoke test via curl:
 
 ```bash
+# 1. tools/list — every tool should appear; inputSchema should contain
+#    ZERO `$ref` strings (a $ref-published date param breaks Claude.ai
+#    connector tool calls — see DATE_KEY comment in src/tools.ts).
 curl -s -X POST http://localhost:3001/mcp \
   -H "authorization: Bearer dev-key-rampage-aaaaaaaaaaaaaaaa" \
   -H "content-type: application/json" \
   -H "accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
-```
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | grep -c '"\$ref"'   # expect: 0
 
-You should see the 10 tools listed.
+# 2. get_workouts_in_range — both `from` AND `to` must reach the server.
+#    Regression test for the 2026-06-01 $ref bug. Expect a JSON-RPC
+#    `result` body, NOT `error -32602`.
+curl -s -X POST http://localhost:3001/mcp \
+  -H "authorization: Bearer dev-key-rampage-aaaaaaaaaaaaaaaa" \
+  -H "content-type: application/json" \
+  -H "accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_workouts_in_range","arguments":{"from":"2026-05-25","to":"2026-06-01"}}}'
+```
 
 ## What's NOT in Phase 1
 

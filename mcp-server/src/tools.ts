@@ -58,9 +58,23 @@ function textContent(message: string) {
   return { content: [{ type: 'text' as const, text: message }] };
 }
 
-const DATE_KEY = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
+/**
+ * Date-key zod schema factory. Returns a FRESH ZodString on every call —
+ * the MCP SDK serializes input schemas via zod-to-json-schema without
+ * `$refStrategy: 'none'`, so a zod instance reused across fields of the
+ * same object gets emitted as `{ "$ref": "#/properties/<first-use>" }`
+ * instead of an inlined schema. The Claude.ai connector does NOT resolve
+ * intra-schema `$ref`s in tool param schemas — `to` arrives as null at
+ * the server and validation rejects with -32602. Bug filed 2026-06-01
+ * against get_workouts_in_range.
+ *
+ * Always call as `DATE_KEY()` — never alias the factory return into a
+ * const for reuse. A regression test in
+ * src/__tests__/toolsSchemas.test.ts walks every registered tool and
+ * fails on any `$ref` in the published JSON schema.
+ */
+export const DATE_KEY = () =>
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
 
 export function registerAllTools(server: McpServer, client: GunnyApiClient): void {
   // ──────────────────────── READ TOOLS ────────────────────────
@@ -105,8 +119,8 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       description:
         'Returns every workout keyed between `from` and `to` (inclusive). Useful for weekly recaps, volume audits, and finding the last time a lift was trained.',
       inputSchema: {
-        from: DATE_KEY,
-        to: DATE_KEY,
+        from: DATE_KEY(),
+        to: DATE_KEY(),
       },
     },
     async ({ from, to }) => {
@@ -177,8 +191,8 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       description:
         'Returns calendar day tags ({color, note} per date) — used for marking rest days, deload weeks, sickness, etc. Optional date-range filter.',
       inputSchema: {
-        from: DATE_KEY.optional(),
-        to: DATE_KEY.optional(),
+        from: DATE_KEY().optional(),
+        to: DATE_KEY().optional(),
       },
     },
     async ({ from, to }) => {
@@ -209,7 +223,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         protein: z.number().nonnegative(),
         carbs: z.number().nonnegative(),
         fat: z.number().nonnegative(),
-        date: DATE_KEY.optional(),
+        date: DATE_KEY().optional(),
       },
     },
     async ({ name, calories, protein, carbs, fat, date }) => {
@@ -248,7 +262,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         exercise: z.string().min(1),
         weight: z.number().positive(),
         reps: z.number().int().positive().optional(),
-        date: DATE_KEY.optional(),
+        date: DATE_KEY().optional(),
         notes: z.string().optional(),
         type: z.enum(['strength', 'endurance', 'consistency', 'milestone']).optional(),
       },
@@ -279,7 +293,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       description:
         'Tag a calendar date with a color + note. Colors map to existing planner semantics: cyan = rest, amber = deload, red = injured/sick, green = great session. Pass an empty/missing color to clear the tag.',
       inputSchema: {
-        date: DATE_KEY,
+        date: DATE_KEY(),
         color: z.enum(['green', 'amber', 'red', 'cyan']).optional(),
         note: z.string().optional(),
       },
@@ -308,7 +322,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       description:
         'Write a full workout to workouts[date]. Replaces any existing workout on that date (the in-app planner overwrites on date-key collision by design). Use `get_workouts_in_range` first if you want to merge instead of replace.',
       inputSchema: {
-        date: DATE_KEY,
+        date: DATE_KEY(),
         title: z.string().min(1),
         warmup: z.string().optional(),
         cooldown: z.string().optional(),
@@ -381,7 +395,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       title: 'Get nutrition history in a date range',
       description:
         'Returns meals + per-day totals for every date between `from` and `to` inclusive. Use for "how did I eat this week?" / "show my last 7 days of macros" / weekly nutrition audits.',
-      inputSchema: { from: DATE_KEY, to: DATE_KEY },
+      inputSchema: { from: DATE_KEY(), to: DATE_KEY() },
     },
     async ({ from, to }) => {
       const op = await client.getOperator();
@@ -622,7 +636,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       title: 'Delete a workout from a specific date',
       description:
         'Removes the workout on `date` from the planner. Cannot be undone via this tool — confirm the date with the operator before invoking.',
-      inputSchema: { date: DATE_KEY },
+      inputSchema: { date: DATE_KEY() },
     },
     async ({ date }) => {
       const op = await client.getOperator();
@@ -643,7 +657,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       title: 'Delete a logged meal',
       description:
         'Removes a single meal from `nutrition.meals[date]` by its id (returned in get_my_nutrition_today / get_my_nutrition_in_range). If you don\'t have the id, get_my_nutrition_today first.',
-      inputSchema: { date: DATE_KEY, mealId: z.string().min(1) },
+      inputSchema: { date: DATE_KEY(), mealId: z.string().min(1) },
     },
     async ({ date, mealId }) => {
       const op = await client.getOperator();
@@ -698,7 +712,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       inputSchema: {
         oz: z.number().positive(),
         op: z.enum(['add', 'set']).optional(),
-        date: DATE_KEY.optional(),
+        date: DATE_KEY().optional(),
       },
     },
     async ({ oz, op, date }) => {
@@ -733,7 +747,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         energy: z.number().min(1).max(10).optional(),
         mood: z.string().min(1).max(80).optional(),
         notes: z.string().min(1).max(500).optional(),
-        date: DATE_KEY.optional(),
+        date: DATE_KEY().optional(),
       },
     },
     async ({ readiness, sleep, stress, energy, mood, notes, date }) => {
@@ -876,7 +890,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       title: 'Get hydration history',
       description:
         'Returns daily hydration totals (oz) between `from` and `to` inclusive. Compares against intake.dailyWaterOz if set.',
-      inputSchema: { from: DATE_KEY, to: DATE_KEY },
+      inputSchema: { from: DATE_KEY(), to: DATE_KEY() },
     },
     async ({ from, to }) => {
       assertValidDateRange({ from, to });
@@ -899,7 +913,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       title: 'Get readiness check-in history',
       description:
         'Returns daily readiness entries between `from` and `to` inclusive. Each entry has readiness/sleep/stress/energy/mood/notes as logged.',
-      inputSchema: { from: DATE_KEY, to: DATE_KEY },
+      inputSchema: { from: DATE_KEY(), to: DATE_KEY() },
     },
     async ({ from, to }) => {
       assertValidDateRange({ from, to });
@@ -1004,8 +1018,8 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         'Returns every workout for the client keyed between `from` and `to` inclusive. Useful for client weekly recaps, volume audits, and "what did EFRAIN do last week?"',
       inputSchema: {
         client_id: z.string().min(1),
-        from: DATE_KEY,
-        to: DATE_KEY,
+        from: DATE_KEY(),
+        to: DATE_KEY(),
       },
     },
     async ({ client_id, from, to }) => {
@@ -1080,8 +1094,8 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         'Meals + per-day totals for the client between `from` and `to` inclusive.',
       inputSchema: {
         client_id: z.string().min(1),
-        from: DATE_KEY,
-        to: DATE_KEY,
+        from: DATE_KEY(),
+        to: DATE_KEY(),
       },
     },
     async ({ client_id, from, to }) => {
@@ -1166,7 +1180,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         protein: z.number().nonnegative(),
         carbs: z.number().nonnegative(),
         fat: z.number().nonnegative(),
-        date: DATE_KEY.optional(),
+        date: DATE_KEY().optional(),
       },
     },
     async ({ client_id, name, calories, protein, carbs, fat, date }) => {
@@ -1206,7 +1220,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         exercise: z.string().min(1),
         weight: z.number().positive(),
         reps: z.number().int().positive().optional(),
-        date: DATE_KEY.optional(),
+        date: DATE_KEY().optional(),
         notes: z.string().optional(),
         type: z.enum(['strength', 'endurance', 'consistency', 'milestone']).optional(),
       },
@@ -1240,7 +1254,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         client_id: z.string().min(1),
         oz: z.number().positive(),
         op: z.enum(['add', 'set']).optional(),
-        date: DATE_KEY.optional(),
+        date: DATE_KEY().optional(),
       },
     },
     async ({ client_id, oz, op, date }) => {
@@ -1276,7 +1290,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         energy: z.number().min(1).max(10).optional(),
         mood: z.string().min(1).max(80).optional(),
         notes: z.string().min(1).max(500).optional(),
-        date: DATE_KEY.optional(),
+        date: DATE_KEY().optional(),
       },
     },
     async ({ client_id, readiness, sleep, stress, energy, mood, notes, date }) => {
@@ -1329,7 +1343,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         'Tag a date on the client\'s calendar with a color + note. green=great session, amber=deload, red=injured/sick, cyan=rest. Pass no color to clear. CONFIRM client + date with the trainer before invoking.',
       inputSchema: {
         client_id: z.string().min(1),
-        date: DATE_KEY,
+        date: DATE_KEY(),
         color: z.enum(['green', 'amber', 'red', 'cyan']).optional(),
         note: z.string().optional(),
       },
@@ -1590,7 +1604,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         'Writes a full workout to a client\'s workouts[date]. OVERWRITES any existing workout on that date — call get_client_workouts_in_range first if you need to confirm what\'s being replaced. CONFIRM client + date + block summary with the trainer before invoking.',
       inputSchema: {
         client_id: z.string().min(1),
-        date: DATE_KEY,
+        date: DATE_KEY(),
         title: z.string().min(1),
         warmup: z.string().optional(),
         cooldown: z.string().optional(),
@@ -1663,7 +1677,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         'Removes the workout on `date` from the client\'s planner. CONFIRM client + date with the trainer before invoking.',
       inputSchema: {
         client_id: z.string().min(1),
-        date: DATE_KEY,
+        date: DATE_KEY(),
       },
     },
     async ({ client_id, date }) => {
@@ -1687,7 +1701,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         'Removes a single meal by id from the client\'s nutrition.meals[date]. Get the id from get_client_nutrition_today/in_range first.',
       inputSchema: {
         client_id: z.string().min(1),
-        date: DATE_KEY,
+        date: DATE_KEY(),
         mealId: z.string().min(1),
       },
     },
@@ -1846,7 +1860,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       inputSchema: {
         type: GOAL_TYPE,
         name: z.string().min(1),
-        targetDate: DATE_KEY,
+        targetDate: DATE_KEY(),
         priority: PRIORITY.optional(),
         targetMetrics: z.record(z.string(), z.number()).optional(),
       },
@@ -1869,7 +1883,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       inputSchema: {
         cycleId: z.string().min(1),
         name: z.string().min(1).optional(),
-        targetDate: DATE_KEY.optional(),
+        targetDate: DATE_KEY().optional(),
         priority: PRIORITY.optional(),
         targetMetrics: z.record(z.string(), z.number()).optional(),
         status: GOAL_STATUS.optional(),
@@ -1907,7 +1921,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         client_id: z.string().min(1),
         type: GOAL_TYPE,
         name: z.string().min(1),
-        targetDate: DATE_KEY,
+        targetDate: DATE_KEY(),
         priority: PRIORITY.optional(),
         targetMetrics: z.record(z.string(), z.number()).optional(),
       },
@@ -1930,7 +1944,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         client_id: z.string().min(1),
         cycleId: z.string().min(1),
         name: z.string().min(1).optional(),
-        targetDate: DATE_KEY.optional(),
+        targetDate: DATE_KEY().optional(),
         priority: PRIORITY.optional(),
         targetMetrics: z.record(z.string(), z.number()).optional(),
         status: GOAL_STATUS.optional(),
@@ -2022,7 +2036,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       description:
         'Apply one or more surgical modifications to the workout on `date`. UNLIKE add_or_update_workout, this PRESERVES workout.results — logged sets / weights / RPE survive. Block IDs are preserved across swaps so per-set logged data still maps. Use when changing one exercise, adding a block, fixing a prescription, etc. — without wiping the day\'s progress.\n\nModification types:\n- swap_exercise: replace an exercise block by name (or id). Preserves block id + results. Example: { type:"swap_exercise", targetExerciseName:"Lat Pulldown", changes:{ exerciseName:"Cable Row", prescription:"4x10 @ 140" } }\n- add_block: insert a new block after a named exercise (or id). Example: { type:"add_block", afterExerciseName:"Bench Press", newBlock:{ type:"exercise", exerciseName:"Cable Crossover", prescription:"3x15" } }\n- remove_block: delete a block by name or id.\n- update_prescription: change just the sets/reps/notes string on an existing block.\n- reorder_blocks: pass an array of block IDs in the new order.\n\nMultiple mods can be applied atomically (server applies them sequentially, persists once). CONFIRM the plan with the operator before invoking.',
       inputSchema: {
-        date: DATE_KEY,
+        date: DATE_KEY(),
         modifications: z.array(MODIFICATION).min(1).max(25),
       },
     },
@@ -2041,7 +2055,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
         'Apply one or more surgical modifications to a client\'s workout on `date`. Same semantics as modify_my_workout — preserves logged results, preserves block IDs across swaps. Use for "swap X for Y on tomorrow\'s session for EFRAIN" or "add 3 sets of incline DB after bench press for ROSA". CONFIRM client callsign + each modification with the trainer before invoking.',
       inputSchema: {
         client_id: z.string().min(1),
-        date: DATE_KEY,
+        date: DATE_KEY(),
         modifications: z.array(MODIFICATION).min(1).max(25),
       },
     },
