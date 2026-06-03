@@ -2027,6 +2027,23 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       type: z.literal('reorder_blocks'),
       newOrder: z.array(z.string().min(1)).min(1),
     }),
+    z.object({
+      type: z.literal('set_fields'),
+      // Workout-level metadata patch — never touches blocks or results.
+      // Upstream returns changed:false with reason "set_fields: empty
+      // payload" if `fields` ends up empty after stripping undefined,
+      // so we don't need a client-side refinement to enforce non-empty.
+      fields: z.object({
+        title: z.string().optional(),
+        notes: z.string().optional(),
+        warmup: z.string().optional(),
+        primer: z.string().optional(),
+        cooldown: z.string().optional(),
+        completed: z.boolean().optional(),
+        sessionRpe: z.number().min(0).max(10).optional(),
+        sessionDurationMin: z.number().nonnegative().optional(),
+      }),
+    }),
   ]);
 
   server.registerTool(
@@ -2034,7 +2051,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     {
       title: 'Modify a workout surgically (preserves logged sets)',
       description:
-        'Apply one or more surgical modifications to the workout on `date`. UNLIKE add_or_update_workout, this PRESERVES workout.results — logged sets / weights / RPE survive. Block IDs are preserved across swaps so per-set logged data still maps. Use when changing one exercise, adding a block, fixing a prescription, etc. — without wiping the day\'s progress.\n\nModification types:\n- swap_exercise: replace an exercise block by name (or id). Preserves block id + results. Example: { type:"swap_exercise", targetExerciseName:"Lat Pulldown", changes:{ exerciseName:"Cable Row", prescription:"4x10 @ 140" } }\n- add_block: insert a new block after a named exercise (or id). Example: { type:"add_block", afterExerciseName:"Bench Press", newBlock:{ type:"exercise", exerciseName:"Cable Crossover", prescription:"3x15" } }\n- remove_block: delete a block by name or id.\n- update_prescription: change just the sets/reps/notes string on an existing block.\n- reorder_blocks: pass an array of block IDs in the new order.\n\nMultiple mods can be applied atomically (server applies them sequentially, persists once). CONFIRM the plan with the operator before invoking.',
+        'Apply one or more surgical modifications to the workout on `date`. UNLIKE add_or_update_workout, this PRESERVES workout.results — logged sets / weights / RPE survive. Block IDs are preserved across swaps so per-set logged data still maps. Use when changing one exercise, adding a block, fixing a prescription, stamping post-session notes, etc. — without wiping the day\'s progress.\n\nModification types:\n- swap_exercise: replace an exercise block by name (or id). Preserves block id + results. Example: { type:"swap_exercise", targetExerciseName:"Lat Pulldown", changes:{ exerciseName:"Cable Row", prescription:"4x10 @ 140" } }\n- add_block: insert a new block after a named exercise (or id). Example: { type:"add_block", afterExerciseName:"Bench Press", newBlock:{ type:"exercise", exerciseName:"Cable Crossover", prescription:"3x15" } }\n- remove_block: delete a block by name or id.\n- update_prescription: change just the sets/reps/notes string on an existing block.\n- reorder_blocks: pass an array of block IDs in the new order.\n- set_fields: patch workout-level metadata (title/notes/warmup/primer/cooldown/completed/sessionRpe/sessionDurationMin) without touching blocks or results. Use for "append Apple Watch summary to today\'s notes," "mark today complete," "stamp sessionRpe=7 / sessionDurationMin=51" — anything that would otherwise force a destructive full-day replace. Example: { type:"set_fields", fields:{ notes:"Apple Watch: 51:15, 542 cal, 141 avg HR", sessionRpe:7, sessionDurationMin:51 } }\n\nMultiple mods can be applied atomically (server applies them sequentially, persists once). CONFIRM the plan with the operator before invoking.',
       inputSchema: {
         date: DATE_KEY(),
         modifications: z.array(MODIFICATION).min(1).max(25),
@@ -2052,7 +2069,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     {
       title: 'Modify a client\'s workout surgically (preserves logged sets)',
       description:
-        'Apply one or more surgical modifications to a client\'s workout on `date`. Same semantics as modify_my_workout — preserves logged results, preserves block IDs across swaps. Use for "swap X for Y on tomorrow\'s session for EFRAIN" or "add 3 sets of incline DB after bench press for ROSA". CONFIRM client callsign + each modification with the trainer before invoking.',
+        'Apply one or more surgical modifications to a client\'s workout on `date`. Same semantics as modify_my_workout (same modification types — swap_exercise, add_block, remove_block, update_prescription, reorder_blocks, set_fields). Preserves logged results, preserves block IDs across swaps, never destructive on metadata patches. Use for "swap X for Y on tomorrow\'s session for EFRAIN," "add 3 sets of incline DB after bench press for ROSA," or "append my coaching notes to ROSA\'s Wednesday session." CONFIRM client callsign + each modification with the trainer before invoking.',
       inputSchema: {
         client_id: z.string().min(1),
         date: DATE_KEY(),

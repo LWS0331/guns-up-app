@@ -22,6 +22,13 @@ import {
 //   - remove_block:         delete a block by name / id
 //   - update_prescription:  change prescription string on an existing block
 //   - reorder_blocks:       reorder blocks by id list
+//   - set_fields:           patch workout-level metadata (notes, title,
+//                           warmup, primer, cooldown, completed,
+//                           sessionRpe, sessionDurationMin) — never
+//                           touches blocks or results. Use to append
+//                           post-session notes (e.g. Apple Watch summary)
+//                           onto a completed workout without wiping the
+//                           logged set log.
 //
 // (prefill_weights is intentionally NOT accepted — it targets live planner
 //  state, not the persisted workout object.)
@@ -31,7 +38,7 @@ import {
 // Response: { ok, applied, skipped: [{type, reason}], workout }
 
 interface AcceptedMod extends Omit<WorkoutModification, 'type'> {
-  type: 'swap_exercise' | 'add_block' | 'remove_block' | 'update_prescription' | 'reorder_blocks';
+  type: 'swap_exercise' | 'add_block' | 'remove_block' | 'update_prescription' | 'reorder_blocks' | 'set_fields';
 }
 
 const ACCEPTED_TYPES = new Set<string>([
@@ -40,6 +47,7 @@ const ACCEPTED_TYPES = new Set<string>([
   'remove_block',
   'update_prescription',
   'reorder_blocks',
+  'set_fields',
 ]);
 
 export async function POST(

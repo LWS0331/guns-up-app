@@ -19,7 +19,9 @@ Each trainer's MCP connection acts on their **own operator record** (Phase 1 —
 | `log_meal` | write | Append meal to `nutrition.meals[date]` |
 | `log_pr` | write | Append PR to PR board |
 | `set_day_tag` | write | Tag a date `green` / `amber` / `red` / `cyan` |
-| `add_or_update_workout` | write | Write a full workout to `workouts[date]` |
+| `add_or_update_workout` | write | Write a full workout to `workouts[date]` (full-day REPLACE — wipes existing `results`) |
+| `modify_my_workout` | write | Surgical mods on `workouts[date]` that PRESERVE logged `results` + block IDs. Types: `swap_exercise`, `add_block`, `remove_block`, `update_prescription`, `reorder_blocks`, `set_fields` (patch notes/title/warmup/primer/cooldown/completed/sessionRpe/sessionDurationMin without touching blocks or results). |
+| `modify_client_workout` | write | Same as `modify_my_workout` for a client record. Requires `client_id`. |
 
 ## Architecture
 
@@ -147,6 +149,6 @@ curl -s -X POST http://localhost:3001/mcp \
 ## What's NOT in Phase 1
 
 - **Client roster ops** — "list my clients", "push plan to a client", "log a session for client X". Phase 2.
-- **Structured workout modification** (`swap_exercise`, etc.) — for now, `add_or_update_workout` overwrites the whole day. Phase 1.5 if the loop pattern proves clunky.
+- **Structured workout modification** — shipped via `modify_my_workout` / `modify_client_workout`. `add_or_update_workout` remains the destructive full-day replace; `modify_*` is the results-preserving surgical path (block swaps + `set_fields` metadata patches).
 - **Voice / wearables / billing tools** — out of scope; the in-app surfaces cover them.
 - **Per-tool rate limiting** — relies on gunnyai.fit's existing rate limit on the upstream REST calls.

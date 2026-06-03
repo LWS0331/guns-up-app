@@ -254,6 +254,25 @@ export type WorkoutModificationInput =
   | {
       type: 'reorder_blocks';
       newOrder: string[];
+    }
+  | {
+      // Metadata patch — never touches blocks or results. See
+      // applyWorkoutModification's set_fields branch in
+      // src/lib/workoutModification.ts. Use for post-session notes
+      // (Apple Watch summary), sessionRpe/sessionDurationMin stamps,
+      // marking a workout complete, etc., without forcing a
+      // destructive full-day replace via add_or_update_workout.
+      type: 'set_fields';
+      fields: {
+        title?: string;
+        notes?: string;
+        warmup?: string;
+        primer?: string;
+        cooldown?: string;
+        completed?: boolean;
+        sessionRpe?: number;
+        sessionDurationMin?: number;
+      };
     };
 
 // ── Loose type aliases. The MCP doesn't need a full mirror of the app's

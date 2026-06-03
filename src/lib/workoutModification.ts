@@ -11,6 +11,7 @@ export type WorkoutModification =
   | RemoveBlockMod
   | UpdatePrescriptionMod
   | ReorderBlocksMod
+  | SetFieldsMod
   | PrefillWeightsMod;
 
 // Optional explicit-date hint emitted by Gunny when the operator names
@@ -62,6 +63,51 @@ export interface ReorderBlocksMod extends DateScopedMod {
   type: 'reorder_blocks';
   newOrder: string[];
 }
+
+/**
+ * Patch workout-level metadata (notes, title, warmup, cooldown, completed,
+ * sessionRpe, sessionDurationMin, primer) WITHOUT touching `blocks` or
+ * `results`. The only previous path that could write these fields was
+ * add_or_update_workout, which does a full-day replace and wipes the
+ * logged sets — so stamping an Apple Watch summary onto a completed
+ * session destroyed the set log. set_fields is the surgical, results-
+ * preserving counterpart for metadata edits. Bug filed 2026-06-02
+ * (RAMPAGE).
+ *
+ * Only the keys passed in `fields` are written; absent keys are left
+ * intact (no implicit clears). `blocks`, `results`, `id`, and `date`
+ * are NEVER writable via this mod — use add_or_update_workout to
+ * replace blocks, the in-app planner UI to capture results, and the
+ * persistence layer's identity is anchored on date so it can't move.
+ */
+export interface SetFieldsMod extends DateScopedMod {
+  type: 'set_fields';
+  fields: {
+    title?: string;
+    notes?: string;
+    warmup?: string;
+    primer?: string;
+    cooldown?: string;
+    completed?: boolean;
+    sessionRpe?: number;
+    sessionDurationMin?: number;
+  };
+}
+
+/** Runtime allowlist for set_fields. Mirrors SetFieldsMod['fields'] keys
+ * exactly — single source of truth for what set_fields is permitted to
+ * write. Anything not in this list (blocks, results, id, date, etc.)
+ * is silently dropped by the handler. */
+const SET_FIELDS_ALLOWED = [
+  'title',
+  'notes',
+  'warmup',
+  'primer',
+  'cooldown',
+  'completed',
+  'sessionRpe',
+  'sessionDurationMin',
+] as const satisfies ReadonlyArray<keyof SetFieldsMod['fields']>;
 
 /**
  * Pre-fill the weights (and optionally reps) for an exercise in the ACTIVE
@@ -273,6 +319,36 @@ export function applyWorkoutModification(
       blocks = reordered.map((b, i) => ({ ...b, sortOrder: i }));
       changed = true;
       break;
+    }
+
+    case 'set_fields': {
+      // Patch only the explicitly-supplied keys, and only the ones in
+      // SET_FIELDS_ALLOWED. The upstream route doesn't validate the
+      // inner shape of `fields` (it only gates on the outer `type`),
+      // so without an allowlist a caller could smuggle `blocks: []`
+      // or `results: null` and silently destroy the very data this
+      // mod exists to preserve. Defense-in-depth.
+      //
+      // zod's .optional() leaves undefined entries present after parsing
+      // — skip them so we never clear a field the caller didn't intend
+      // to write.
+      const fields = mod.fields || {};
+      const written: string[] = [];
+      for (const k of SET_FIELDS_ALLOWED) {
+        const v = (fields as Record<string, unknown>)[k];
+        if (v === undefined) continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updated as any)[k] = v;
+        written.push(k);
+      }
+      if (written.length === 0) {
+        return { workout, changed: false, reason: 'set_fields: empty payload' };
+      }
+      // We patched non-block metadata only — bypass the bottom-of-function
+      // `updated.blocks = blocks` assignment by returning here. blocks
+      // array on `updated` is untouched (spread from original above);
+      // results never get touched at any point in this function.
+      return { workout: updated, changed: true, reason: `set_fields: ${written.join(',')}` };
     }
 
     case 'prefill_weights': {
