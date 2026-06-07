@@ -40,8 +40,15 @@ Each trainer's MCP connection acts on their **own operator record** (Phase 1 —
 ### 1. Generate the trainer keys
 
 ```bash
+./scripts/gen-trainer-keys.sh op-ruben op-britney   # prints a ready-to-paste env block
+# or, by hand:
 openssl rand -hex 32   # run twice — one key per trainer
 ```
+
+> **Where do these keys come from / how do I recover them?** They're
+> self-issued secrets, stored only in Railway env — never in the DB or repo.
+> If the live value is lost it can't be recovered, only rotated. Full
+> provisioning + recovery audit: [`TRAINER_KEYS_AUDIT.md`](./TRAINER_KEYS_AUDIT.md).
 
 ### 2. Set the env on both services
 
