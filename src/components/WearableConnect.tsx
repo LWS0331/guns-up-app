@@ -77,6 +77,8 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileMsg, setReconcileMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(true);
 
@@ -201,6 +203,45 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
     setSyncing(false);
   };
 
+  // Webhook-independent recovery — ask the server to reconcile our
+  // connection rows against Vital's actual connected providers. Fixes the
+  // "linked at Vital but connections: [] locally" case (missed webhook),
+  // where /sync would otherwise 404. Backfills via /sync when something
+  // was (re)activated.
+  const handleReconcile = async () => {
+    setReconciling(true);
+    setError(null);
+    setReconcileMsg(null);
+    try {
+      const res = await fetch('/api/wearables/reconcile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ operatorId: operator.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Reconcile failed');
+      }
+      if (data.vitalUserFound === false) {
+        setReconcileMsg(data.message || 'No device linked yet — connect one below.');
+      } else if (data.activated > 0) {
+        setReconcileMsg(`Recovered ${data.activated} connection${data.activated === 1 ? '' : 's'}.`);
+        await loadConnections();
+        if (data.syncRecommended) await handleSync();
+      } else {
+        setReconcileMsg('No new connections found at Vital.');
+        await loadConnections();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Reconcile failed');
+    } finally {
+      setReconciling(false);
+    }
+  };
+
   const connectedSlugs = new Set(connections.map(c => c.provider));
   const latestSync = connections.find(c => c.syncData?.lastSync)?.syncData;
 
@@ -258,26 +299,61 @@ const WearableConnect: React.FC<WearableConnectProps> = ({ operator, onUpdateOpe
           </div>
         </div>
 
-        {connections.length > 0 && (
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {/* Refresh/reconcile — recovers connections that exist at Vital
+              but are missing locally (missed webhook). Always available,
+              since it's the only path out of the connections:[] state. */}
           <button
-            onClick={handleSync}
-            disabled={syncing}
+            onClick={handleReconcile}
+            disabled={reconciling || syncing}
+            title="Re-check connected devices with Vital"
             style={{
               padding: '8px 16px',
               fontFamily: '"Share Tech Mono", monospace',
               fontSize: '12px',
               fontWeight: 700,
               letterSpacing: '1.5px',
-              color: syncing ? '#555' : '#00ff41',
-              background: syncing ? 'rgba(0,255,65,0.02)' : 'rgba(0,255,65,0.05)',
-              border: `1px solid ${syncing ? 'rgba(85,85,85,0.3)' : 'rgba(0,255,65,0.15)'}`,
-              cursor: syncing ? 'default' : 'pointer',
+              color: reconciling ? '#555' : '#7fdfff',
+              background: reconciling ? 'rgba(127,223,255,0.02)' : 'rgba(127,223,255,0.05)',
+              border: `1px solid ${reconciling ? 'rgba(85,85,85,0.3)' : 'rgba(127,223,255,0.2)'}`,
+              cursor: reconciling ? 'default' : 'pointer',
             }}
           >
-            {syncing ? 'SYNCING...' : 'SYNC NOW'}
+            {reconciling ? 'CHECKING...' : 'REFRESH'}
           </button>
-        )}
+          {connections.length > 0 && (
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              style={{
+                padding: '8px 16px',
+                fontFamily: '"Share Tech Mono", monospace',
+                fontSize: '12px',
+                fontWeight: 700,
+                letterSpacing: '1.5px',
+                color: syncing ? '#555' : '#00ff41',
+                background: syncing ? 'rgba(0,255,65,0.02)' : 'rgba(0,255,65,0.05)',
+                border: `1px solid ${syncing ? 'rgba(85,85,85,0.3)' : 'rgba(0,255,65,0.15)'}`,
+                cursor: syncing ? 'default' : 'pointer',
+              }}
+            >
+              {syncing ? 'SYNCING...' : 'SYNC NOW'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Reconcile status line */}
+      {reconcileMsg && (
+        <div style={{
+          background: 'rgba(127,223,255,0.06)',
+          border: '1px solid rgba(127,223,255,0.2)',
+          padding: '10px 16px', marginBottom: '16px',
+          color: '#7fdfff', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px',
+        }}>
+          {reconcileMsg}
+        </div>
+      )}
 
       {/* Error Banner */}
       {error && (
