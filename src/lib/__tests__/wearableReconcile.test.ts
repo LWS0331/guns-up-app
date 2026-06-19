@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planWearableReconcile } from '../wearableReconcile';
+import { planWearableReconcile, parseConnectedProviders } from '../wearableReconcile';
 
 const prov = (slug: string, status = 'connected', name = slug) => ({ slug, name, status });
 const row = (id: string, provider: string, active = true) => ({ id, provider, active });
@@ -48,5 +48,57 @@ describe('planWearableReconcile', () => {
     );
     expect(plan.activate).toEqual([{ provider: 'whoop_v2', name: 'whoop_v2', existingId: null }]);
     expect(plan.deactivate).toEqual([{ id: 'c2', provider: 'fitbit' }]);
+  });
+});
+
+// Guards the one path with real runtime-shape uncertainty: the route's
+// flatten of Vital's getConnectedProviders response. Typed as
+// Record<provider, ClientFacingProviderWithStatus[]>; we parse defensively
+// so a Vital shape change degrades to "no providers", not "deactivate all".
+describe('parseConnectedProviders', () => {
+  it('flattens the Record<provider, ProviderWithStatus[]> shape', () => {
+    const resp = {
+      oura: [{ slug: 'oura', name: 'Oura', status: 'connected', logo: 'x' }],
+      whoop_v2: [{ slug: 'whoop_v2', name: 'WHOOP', status: 'error' }],
+    };
+    expect(parseConnectedProviders(resp)).toEqual([
+      { slug: 'oura', name: 'Oura', status: 'connected' },
+      { slug: 'whoop_v2', name: 'WHOOP', status: 'error' },
+    ]);
+  });
+
+  it('returns [] for null / undefined / empty', () => {
+    expect(parseConnectedProviders(null)).toEqual([]);
+    expect(parseConnectedProviders(undefined)).toEqual([]);
+    expect(parseConnectedProviders({})).toEqual([]);
+  });
+
+  it('skips non-array top-level values (defensive against shape drift)', () => {
+    const resp = {
+      providers: [{ slug: 'oura', name: 'Oura', status: 'connected' }],
+      total: 1,
+      nextToken: 'abc',
+    };
+    expect(parseConnectedProviders(resp)).toEqual([
+      { slug: 'oura', name: 'Oura', status: 'connected' },
+    ]);
+  });
+
+  it('skips entries with no slug and defaults a missing name to the slug', () => {
+    const resp = {
+      x: [{ name: 'No Slug', status: 'connected' }, { slug: 'garmin', status: 'connected' }],
+    };
+    expect(parseConnectedProviders(resp)).toEqual([
+      { slug: 'garmin', name: 'garmin', status: 'connected' },
+    ]);
+  });
+
+  it('feeds cleanly into the planner end-to-end', () => {
+    const providers = parseConnectedProviders({
+      oura: [{ slug: 'oura', name: 'Oura', status: 'connected' }],
+    });
+    expect(planWearableReconcile(providers, []).activate).toEqual([
+      { provider: 'oura', name: 'Oura', existingId: null },
+    ]);
   });
 });

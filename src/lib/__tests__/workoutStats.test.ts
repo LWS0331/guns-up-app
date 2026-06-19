@@ -51,4 +51,15 @@ describe('computeCompliance', () => {
     expect(computeCompliance({}, '2026-06-19')).toBeNull();
     expect(computeCompliance({ '2026-05-01': C('2026-05-01') }, '2026-06-19')).toBeNull();
   });
+
+  it('excludes the day exactly windowDays ago (true trailing 7 calendar days)', () => {
+    const w = {
+      '2026-06-19': C('2026-06-19'), // today — in
+      '2026-06-13': P('2026-06-13'), // 6 days ago — in (not completed)
+      '2026-06-12': C('2026-06-12'), // exactly 7 days ago — OUT
+    };
+    // In-window: 2 scheduled (today + 06-13), 1 completed → 50.
+    // If 06-12 leaked in it would read 67 (3 scheduled, 2 completed).
+    expect(computeCompliance(w, '2026-06-19')).toBe(50);
+  });
 });
