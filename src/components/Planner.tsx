@@ -1642,14 +1642,14 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
         <div style={{
           display: 'grid',
-          // Phone: stack days in a single full-width column — 7 columns on a
-          // ~390px viewport forces each cell to its min-content width (the
-          // cards use whiteSpace:nowrap), which blows past the screen and
-          // scrolls the whole page sideways. Tablet+: 7 columns, but
-          // minmax(0,1fr) (not the default minmax(auto,1fr)) lets tracks
-          // shrink below min-content so the ellipsis works instead of
-          // overflowing.
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(7, minmax(0, 1fr))',
+          // Phone: a single full-width column; tablet+: 7 columns. Both use
+          // minmax(0, …) — a bare `1fr` is minmax(auto,1fr) whose `auto`
+          // minimum is min-content, so a column refuses to shrink below the
+          // widest whiteSpace:nowrap line in a card (e.g. a long workout
+          // title), overflowing the viewport and scrolling the whole page
+          // sideways. minmax(0, …) lets the track shrink so the cards'
+          // overflow:hidden + ellipsis truncates instead of bleeding over.
+          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'repeat(7, minmax(0, 1fr))',
           gap: 8,
         }}>
           {weekDates.map(date => {
@@ -1668,6 +1668,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 }}
                 className="ds-card"
                 style={{
+                  // min-width:0 lets the grid item shrink below its content's
+                  // min-content (grid items default to min-width:auto), so the
+                  // inner overflow:hidden + ellipsis on the title/rows can
+                  // truncate instead of widening the card past the viewport.
+                  minWidth: 0,
                   // Compact rows when stacked on phone so a 7-day week isn't
                   // a 1400px scroll; full 200px cells in the tablet+ grid.
                   minHeight: isMobile ? 96 : 200,
