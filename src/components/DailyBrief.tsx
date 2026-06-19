@@ -16,6 +16,7 @@ interface DailyBriefProps {
 }
 
 import { getLocalDateStr, getLocalYesterdayStr, getLocalDateLongStr, getLocalTimezone } from '@/lib/dateUtils';
+import { computeWorkoutStreak, computeCompliance } from '@/lib/workoutStats';
 import { getAuthToken } from '@/lib/authClient';
 import { useLanguage } from '@/lib/i18n';
 
@@ -216,7 +217,13 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
     </div>
   );
 
-  const compColor = (brief.complianceScore || 0) >= 80 ? '#00ff41' : (brief.complianceScore || 0) >= 50 ? '#facc15' : '#ff6b35';
+  // Compute streak + compliance LIVE from operator.workouts rather than
+  // reading brief.streakDays / brief.complianceScore — those are frozen
+  // LLM output from generation time (usually before today's workout was
+  // logged) and showed stale numbers all day.
+  const liveStreak = computeWorkoutStreak(operator.workouts, getTodayStr());
+  const liveCompliance = computeCompliance(operator.workouts, getTodayStr());
+  const compColor = (liveCompliance || 0) >= 80 ? '#00ff41' : (liveCompliance || 0) >= 50 ? '#facc15' : '#ff6b35';
 
   return (
     <div style={{
@@ -229,14 +236,14 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
             {t('daily.title')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {brief.complianceScore != null && (
+            {liveCompliance != null && (
               <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: compColor }}>
-                {brief.complianceScore}{t('daily.compliance')}
+                {liveCompliance}{t('daily.compliance')}
               </span>
             )}
-            {brief.streakDays != null && brief.streakDays > 0 && (
+            {liveStreak > 0 && (
               <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#facc15' }}>
-                🔥 {brief.streakDays}{t('daily.streak_suffix')}
+                🔥 {liveStreak}{t('daily.streak_suffix')}
               </span>
             )}
             <span style={{ fontSize: 12, color: '#555' }}>{expanded ? '▲' : '▼'}</span>

@@ -68,59 +68,56 @@ export async function POST(req: NextRequest) {
     const op = await prisma.operator.findUnique({ where: { id: operatorId } });
     if (!op) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
 
-    // Load latest wearable data
-    const conns = await prisma.wearableConnection.findMany({
-      where: { operatorId, active: true },
-      orderBy: { lastSyncAt: 'desc' },
-      take: 1,
-    });
+    // Objective recovery inputs — snapshot-first, then the live Vital
+    // syncData blob. We do NOT gate the readout on a WearableConnection
+    // row existing: when the Vital pipe is down (or the connection was
+    // deactivated) the WearableSnapshot table still holds last night's
+    // sleep/HRV/RHR from the device. Blanking the readout on
+    // `connected:false` while real data sits in snapshots was the bug.
+    // When NO objective data exists anywhere, readinessScore() degrades
+    // to the operator's self-report (check-in / profile sliders) — so
+    // we always produce a recommendation.
+    const [conns, latestSnapshot] = await Promise.all([
+      prisma.wearableConnection.findMany({
+        where: { operatorId, active: true },
+        orderBy: { lastSyncAt: 'desc' },
+        take: 1,
+      }),
+      prisma.wearableSnapshot.findFirst({
+        where: { operatorId },
+        orderBy: { syncDate: 'desc' },
+      }),
+    ]);
 
-    const wearableConnected = conns.length > 0;
-
-    if (!wearableConnected) {
-      // Fall back to the intake self-report. Still produce a readout,
-      // but flag that the data is self-reported and ask the operator
-      // to connect a wearable for the live version.
-      const profile = (op.profile || {}) as Record<string, unknown>;
-      const intake = (op.intake || {}) as Record<string, unknown>;
-      const sleep = Number(profile.sleep || intake.sleepQuality || 0);
-      const stress = Number(profile.stress || intake.stressLevel || 0);
-      const readiness = Number(profile.readiness || intake.readiness || 0);
-
-      const factors: ReadoutFactor[] = [
-        { label: 'Sleep quality (self-report)', value: `${sleep}/10`, signal: sleep >= 7 ? 'good' : sleep >= 5 ? 'warn' : 'bad' },
-        { label: 'Stress level', value: `${stress}/10`, signal: stress <= 4 ? 'good' : stress <= 7 ? 'warn' : 'bad' },
-        { label: 'Self-rated readiness', value: `${readiness}/10`, signal: readiness >= 7 ? 'good' : readiness >= 5 ? 'warn' : 'bad' },
-      ];
-
-      const score = sleep + readiness - stress;
-      let recommendation: Recommendation;
-      let headline: string;
-      if (score >= 12) { recommendation = 'GO_HARD'; headline = 'Self-report says you\'re primed. Push it.'; }
-      else if (score >= 6) { recommendation = 'NORMAL'; headline = 'Run your normal session.'; }
-      else if (score >= 2) { recommendation = 'DELOAD'; headline = 'Dial intensity back ~30%. Volume over load.'; }
-      else { recommendation = 'REST'; headline = 'Skip the session. Mobility + walk only.'; }
-
-      return NextResponse.json({
-        ok: true,
-        wearableConnected: false,
-        recommendation,
-        headline,
-        factors,
-        guidance: 'Connect a wearable (Apple Watch / WHOOP / Garmin / Fitbit / Oura) for live HRV, sleep duration, and recovery score — that\'s when this readout becomes truly accurate.',
-      });
-    }
-
-    // Wearable connected — read the latest syncData.
-    const syncData = (conns[0].syncData || {}) as Record<string, unknown>;
+    const syncData = (conns[0]?.syncData || {}) as Record<string, unknown>;
     const sleep = (syncData.sleep || {}) as Record<string, unknown>;
     const recovery = (syncData.recovery || {}) as Record<string, unknown>;
 
-    const sleepHours = typeof sleep.duration === 'number' ? Number(sleep.duration) / 3600 : null;
-    const sleepEfficiency = typeof sleep.efficiency === 'number' ? Number(sleep.efficiency) : null;
-    const hrv = typeof recovery.hrv === 'number' ? Number(recovery.hrv) : null;
-    const recoveryScore = typeof recovery.score === 'number' ? Number(recovery.score) : null;
-    const restingHr = typeof recovery.restingHr === 'number' ? Number(recovery.restingHr) : null;
+    // sleep.duration is stored in HOURS by the webhook + sync routes
+    // (matches readiness.ts). The prior `/ 3600` treated it as seconds,
+    // making sleep read as ~0h and skewing every readout toward DELOAD.
+    const sleepHours =
+      latestSnapshot?.sleepHours ??
+      (typeof sleep.duration === 'number' ? Number(sleep.duration) : null);
+    const sleepEfficiency =
+      latestSnapshot?.sleepEfficiency ??
+      (typeof sleep.efficiency === 'number' ? Number(sleep.efficiency) : null);
+    const hrv =
+      latestSnapshot?.hrv ??
+      (typeof recovery.hrv === 'number' ? Number(recovery.hrv) : null);
+    const recoveryScore =
+      latestSnapshot?.recoveryScore ??
+      (typeof recovery.score === 'number' ? Number(recovery.score) : null);
+    const restingHr =
+      latestSnapshot?.restingHr ??
+      (typeof recovery.restingHr === 'number' ? Number(recovery.restingHr) : null);
+
+    // "Do we have any objective recovery signal?" — drives the
+    // wearableConnected flag the UI shows, independent of whether a live
+    // Vital connection row happens to exist right now.
+    const hasObjective =
+      sleepHours != null || sleepEfficiency != null || hrv != null ||
+      recoveryScore != null || restingHr != null;
 
     const factors: ReadoutFactor[] = [];
     if (sleepHours != null) {
@@ -290,7 +287,10 @@ Write the headline + guidance JSON.`;
 
     return NextResponse.json({
       ok: true,
-      wearableConnected: true,
+      // True when we have objective recovery data (live sync OR a stored
+      // snapshot). When false the recommendation came from self-report
+      // and the UI can surface the "connect a wearable" nudge.
+      wearableConnected: hasObjective,
       recommendation,
       headline,
       guidance,
@@ -301,6 +301,7 @@ Write the headline + guidance JSON.`;
         confidence: engineConfidence,
         baselineDays: engineBaselineDays,
         rationale: engineRationale,
+        source: readiness.source,
         usedEngine: !readiness.fallbackToHardcoded,
         acwr: readiness.acwr ?? null,
       },

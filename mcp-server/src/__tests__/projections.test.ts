@@ -262,4 +262,56 @@ describe('projectProfileSummary', () => {
     expect(summary.prCount).toBe(2);
     expect(summary.injuryCount).toBe(3);
   });
+
+  describe('freshness guard (today provided)', () => {
+    it('drops a stale dailyBrief and flags it', () => {
+      const op = makeOperator({
+        dailyBrief: { date: '2026-05-05', streakDays: 0, workout: { title: 'Old' } },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.dailyBrief).toBeNull();
+      expect(summary.dailyBriefStale).toBe(true);
+    });
+
+    it('keeps a same-day dailyBrief', () => {
+      const brief = { date: '2026-06-19', workout: { title: 'Today' } };
+      const op = makeOperator({ dailyBrief: brief });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.dailyBrief).toEqual(brief);
+      expect(summary.dailyBriefStale).toBe(false);
+    });
+
+    it('flags a stale sitrep but keeps it (long-lived plan fields)', () => {
+      const op = makeOperator({ sitrep: { generatedDate: '2026-05-05', summary: 'x' } });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.sitrep).toBeTruthy();
+      expect(summary.sitrepStale).toBe(true);
+    });
+
+    it('computes streakDays LIVE from workouts, not from the frozen brief', () => {
+      const op = makeOperator({
+        // Frozen brief says 0; live workouts show a 3-day streak ending today.
+        dailyBrief: { date: '2026-05-05', streakDays: 0 },
+        workouts: {
+          '2026-06-19': { id: 'a', date: '2026-06-19', title: 'A', blocks: [], completed: true },
+          '2026-06-18': { id: 'b', date: '2026-06-18', title: 'B', blocks: [], completed: true },
+          '2026-06-17': { id: 'c', date: '2026-06-17', title: 'C', blocks: [], completed: true },
+          '2026-06-15': { id: 'd', date: '2026-06-15', title: 'D', blocks: [], completed: true },
+        },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.streakDays).toBe(3); // gap on the 16th ends it
+    });
+
+    it('counts a streak that started yesterday when today is still pending', () => {
+      const op = makeOperator({
+        workouts: {
+          '2026-06-18': { id: 'b', date: '2026-06-18', title: 'B', blocks: [], completed: true },
+          '2026-06-17': { id: 'c', date: '2026-06-17', title: 'C', blocks: [], completed: true },
+        },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.streakDays).toBe(2); // today pending is allowed (gap only breaks after i>0)
+    });
+  });
 });

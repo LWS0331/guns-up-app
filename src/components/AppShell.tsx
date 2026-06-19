@@ -2133,7 +2133,7 @@ const AppShell: React.FC<AppShellProps> = ({
                 no anchor — the DAILY BRIEF chip points at the interactive
                 widget at the top of the tab) */}
             {currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date && (
-              <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} />
+              <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} workouts={currentSelectedOp.workouts} />
             )}
 
             <div id="coc-dashboard" style={{ scrollMarginTop: 72 }}>

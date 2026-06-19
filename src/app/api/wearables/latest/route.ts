@@ -60,6 +60,40 @@ export async function GET(req: NextRequest) {
     });
 
     if (!conn || !conn.syncData) {
+      // Vital pipe is down (or never connected) — but the WearableSnapshot
+      // table may still hold last night's sleep/HRV/RHR written by the
+      // webhook from on-device HealthKit data. Fall back to the most
+      // recent snapshot rather than reporting a blank "disconnected".
+      // currentHR stays null: it's a live-only read that genuinely needs
+      // syncData. We shape the snapshot like syncData ({sleep, recovery})
+      // so downstream consumers parse it identically.
+      const snap = await prisma.wearableSnapshot.findFirst({
+        where: { operatorId },
+        orderBy: { syncDate: 'desc' },
+      });
+      if (snap) {
+        return NextResponse.json({
+          ok: true,
+          connected: true,
+          provider: conn?.provider ?? 'snapshot',
+          source: 'snapshot',
+          stale: true,
+          snapshotDate: snap.syncDate,
+          lastSyncAt: conn?.lastSyncAt ?? null,
+          snapshot: {
+            sleep:
+              snap.sleepHours != null || snap.sleepEfficiency != null
+                ? { duration: snap.sleepHours ?? undefined, efficiency: snap.sleepEfficiency ?? undefined }
+                : undefined,
+            recovery: {
+              hrv: snap.hrv ?? undefined,
+              restingHr: snap.restingHr ?? undefined,
+              score: snap.recoveryScore ?? undefined,
+            },
+          },
+          currentHR: null,
+        });
+      }
       return NextResponse.json({
         ok: true,
         connected: !!conn,
