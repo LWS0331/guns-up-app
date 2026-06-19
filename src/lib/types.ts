@@ -245,6 +245,10 @@ export interface Operator {
   fitnessLevel?: FitnessLevel; // calculated from intake
   sitrep?: Sitrep; // post-intake battle plan from Gunny AI
   dailyBrief?: DailyBrief; // today's adaptive plan
+  /** Daily Ops SOP (Jun 2026) — operator/coach-authored standing daily
+   *  routine. See src/lib/dailyOpsSop.ts. Distinct from the per-day
+   *  DailyOpsPlan schedule. */
+  dailyOps?: DailyOpsSOP;
   profile: OperatorProfile;
   nutrition: NutritionData;
   prs: PRRecord[];
@@ -271,6 +275,50 @@ export interface Operator {
   sportProfile?: SportProfile;
   juniorConsent?: JuniorConsent;
   juniorSafety?: JuniorSafetyFlags;
+}
+
+// ── Daily Ops SOP ──────────────────────────────────────────────────
+// Operator/coach-authored standing daily routine, stored on
+// operator.dailyOps. `markdown` is the render source-of-truth; the
+// structured fields below are optional and drive the in-app daily
+// checklist. Deep-merged + version-bumped server-side — see
+// src/lib/dailyOpsSop.ts. DISTINCT from the per-day DailyOpsPlan.
+
+export interface DailyOpsAnchor {
+  id: string;
+  label: string;
+  time?: string;        // local 'HH:MM' or free text ("on waking")
+  note?: string;
+  recurrence?: 'daily';
+}
+
+export interface DailyOpsSupplementEntry {
+  tier?: string;        // e.g. "1" / "core" — free-form
+  item: string;
+  doseTiming?: string;  // e.g. "8g, 60 min pre-workout"
+}
+
+export interface DailyOpsPhase {
+  current?: number;
+  label?: string;
+  items?: string[];
+}
+
+export interface DailyOpsTrainingVariants {
+  am?: string[];
+  pm?: string[];
+}
+
+export interface DailyOpsSOP {
+  version: number;              // bumped on each write
+  updatedAt: string;            // ISO8601, set on each write
+  authoredBy: string;           // "gunny" | "operator"
+  markdown: string;             // full SOP markdown — render this
+  anchors?: DailyOpsAnchor[];
+  trainingVariants?: DailyOpsTrainingVariants;
+  supplementSchedule?: DailyOpsSupplementEntry[];
+  sleepProtocol?: string[];
+  phase?: DailyOpsPhase;
 }
 
 export interface OperatorProfile {

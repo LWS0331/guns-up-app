@@ -125,6 +125,40 @@ export class GunnyApiClient {
     return res.operator ?? res.updated ?? (res as unknown as Operator);
   }
 
+  /** Read the operator's Daily Ops SOP (the persistent, coach-authored
+   * standing routine — NOT the per-day schedule planner). Server returns
+   * `{ dailyOps: DailyOpsSOP | null }`; null when never authored. */
+  async getDailyOps(): Promise<DailyOpsSOP | null> {
+    return this.getDailyOpsById(this.cfg.operatorId);
+  }
+
+  /** Read an arbitrary operator's Daily Ops SOP. Trainer-of-target
+   * authorization enforced server-side; non-client → 403. */
+  async getDailyOpsById(operatorId: string): Promise<DailyOpsSOP | null> {
+    const res = await this.fetch<{ dailyOps: DailyOpsSOP | null }>(
+      'GET',
+      `/api/operators/${operatorId}/daily-ops`
+    );
+    return res.dailyOps ?? null;
+  }
+
+  /** Deep-merge a patch into the operator's Daily Ops SOP. The server
+   * bumps `version` + stamps `updatedAt`; only the fields passed change.
+   * Pass authoredBy: 'gunny' for coach-authored writes. */
+  async patchDailyOps(patch: DailyOpsPatch): Promise<DailyOpsSOP> {
+    return this.patchDailyOpsById(this.cfg.operatorId, patch);
+  }
+
+  /** PATCH the Daily Ops SOP on an arbitrary operator (trainer mirror). */
+  async patchDailyOpsById(operatorId: string, patch: DailyOpsPatch): Promise<DailyOpsSOP> {
+    const res = await this.fetch<{ ok?: boolean; dailyOps?: DailyOpsSOP }>(
+      'PATCH',
+      `/api/operators/${operatorId}/daily-ops`,
+      patch
+    );
+    return (res.dailyOps ?? (res as unknown as DailyOpsSOP));
+  }
+
   /** List active wearable connections for an operator.
    * GET /api/wearables?operatorId=<id> — server enforces self/admin/trainer-of-target. */
   async listWearables(operatorId: string): Promise<WearableConnection[]> {
@@ -296,6 +330,8 @@ export interface Operator {
   dayTags?: Record<string, DayTag>;
   sitrep?: unknown;
   dailyBrief?: unknown;
+  /** Persistent coach-authored daily SOP. NOT the per-day schedule. */
+  dailyOps?: DailyOpsSOP;
   intake?: Record<string, unknown>;
   profile?: Record<string, unknown> & { goals?: string[] };
   preferences?: Record<string, unknown>;
@@ -303,6 +339,26 @@ export interface Operator {
   dailyReadiness?: Record<string, DailyReadinessEntry>;
   [k: string]: unknown;
 }
+
+/** Daily Ops SOP — operator/coach-authored standing daily routine on
+ * operator.dailyOps. Markdown is the render source-of-truth; the
+ * structured fields drive the in-app checklist. Mirrors
+ * src/lib/types.ts DailyOpsSOP (loose here — the MCP just shuttles JSON). */
+export interface DailyOpsSOP {
+  version: number;
+  updatedAt: string;
+  authoredBy: string;
+  markdown: string;
+  anchors?: Array<{ id: string; label: string; time?: string; note?: string; recurrence?: 'daily' }>;
+  trainingVariants?: { am?: string[]; pm?: string[] };
+  supplementSchedule?: Array<{ tier?: string; item: string; doseTiming?: string }>;
+  sleepProtocol?: string[];
+  phase?: { current?: number; label?: string; items?: string[] };
+}
+
+/** Write patch — any subset of the SOP minus the server-owned
+ * bookkeeping fields (version/updatedAt are set server-side). */
+export type DailyOpsPatch = Partial<Omit<DailyOpsSOP, 'version' | 'updatedAt'>>;
 
 export interface DailyReadinessEntry {
   date: string;

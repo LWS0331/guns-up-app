@@ -21,6 +21,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
+import DailyOpsSOP from '@/components/DailyOpsSOP';
 import { hasCommanderAccess } from '@/lib/tierGates';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import {
@@ -1044,6 +1045,10 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
 
   return (
     <div style={mode === 'week' ? styles.pageWide : styles.page}>
+      {/* Pinned, coach-authored standing SOP — sits above the per-day
+          generated schedule planner. See DailyOpsSOP.tsx. */}
+      <DailyOpsSOP operator={operator} onSendGunnyMessage={onSendGunnyMessage} />
+
       <div style={styles.headerRow}>
         <h1 style={{ ...styles.title, ...styles.headerTitleSlot }}>DAILY OPS</h1>
 

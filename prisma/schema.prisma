@@ -56,6 +56,17 @@ model Operator {
   dailyBrief  Json      @default("{}")  // Today's adaptive daily brief
   billing     Json      @default("{}")  // Stripe billing data
 
+  // Daily Ops SOP (Jun 2026) — operator/coach-authored standing daily
+  // routine. Markdown is the render source-of-truth; the structured
+  // fields (anchors, trainingVariants, supplementSchedule, sleepProtocol,
+  // phase) are optional and drive the in-app checklist. DISTINCT from the
+  // DailyOpsPlan table (per-day generated schedule) — this is a single,
+  // persistent, hand-authored SOP that lives on the operator record and
+  // is NOT touched by the sitrep/dailyBrief generator. Written via the
+  // MCP set_daily_ops tool + PATCH /api/operators/:id/daily-ops (which
+  // deep-merges and bumps `version`). See src/lib/dailyOpsSop.ts.
+  dailyOps    Json      @default("{}")  // DailyOpsSOP — see src/lib/dailyOpsSop.ts
+
   // Macrocycle engine (Apr 2026). Up to 2 active goals — calendar-aware
   // periodization for 6-12 month targets. See src/lib/macrocycle.ts and
   // src/lib/macrocycleLibrary.ts. Migration NOT auto-run.

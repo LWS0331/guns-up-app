@@ -76,6 +76,57 @@ function textContent(message: string) {
 export const DATE_KEY = () =>
   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
 
+/**
+ * Daily Ops SOP patch shape. Returns FRESH zod instances on every call
+ * for the same `$ref`-avoidance reason as DATE_KEY — never alias the
+ * return into a const for reuse across tools. Used by both
+ * set_daily_ops and set_client_daily_ops.
+ */
+const dailyOpsPatchShape = () => ({
+  markdown: z
+    .string()
+    .optional()
+    .describe('Full SOP markdown — the render source-of-truth. Supports headers + tables.'),
+  anchors: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        label: z.string().min(1),
+        time: z.string().optional().describe("Local 'HH:MM' or free text (e.g. 'on waking')."),
+        note: z.string().optional(),
+        recurrence: z.literal('daily').optional(),
+      })
+    )
+    .optional()
+    .describe('Fixed daily anchors that drive the in-app checklist. Replaces the whole list.'),
+  trainingVariants: z
+    .object({
+      am: z.array(z.string()).optional(),
+      pm: z.array(z.string()).optional(),
+    })
+    .optional()
+    .describe('AM / PM training variant bullets. Merged one level deep.'),
+  supplementSchedule: z
+    .array(
+      z.object({
+        tier: z.string().optional(),
+        item: z.string().min(1),
+        doseTiming: z.string().optional(),
+      })
+    )
+    .optional()
+    .describe('Supplement schedule rows. Replaces the whole list.'),
+  sleepProtocol: z.array(z.string()).optional().describe('Sleep protocol bullets. Replaces the whole list.'),
+  phase: z
+    .object({
+      current: z.number().int().optional(),
+      label: z.string().optional(),
+      items: z.array(z.string()).optional(),
+    })
+    .optional()
+    .describe('Current training phase. Merged one level deep.'),
+});
+
 export function registerAllTools(server: McpServer, client: GunnyApiClient): void {
   // ──────────────────────── READ TOOLS ────────────────────────
 
@@ -565,6 +616,42 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       await client.patchProfile({ intake: merged });
       const changed = Object.keys(stripUndefined(patch));
       return textContent(`Updated intake: ${changed.join(', ')}.`);
+    }
+  );
+
+  server.registerTool(
+    'get_my_daily_ops',
+    {
+      title: 'Get my Daily Ops SOP',
+      description:
+        'Returns the operator\'s persistent Daily Ops SOP — the standing daily routine (fixed anchors, AM/PM training variants, supplement schedule, sleep protocol, current phase) authored on operator.dailyOps. This is DISTINCT from the per-day generated schedule. Returns `{ dailyOps: null }` if none has been authored yet — use set_daily_ops to create one.',
+      inputSchema: {},
+    },
+    async () => {
+      const sop = await client.getDailyOps();
+      return jsonContent({ dailyOps: sop });
+    }
+  );
+
+  server.registerTool(
+    'set_daily_ops',
+    {
+      title: 'Set/update my Daily Ops SOP',
+      description:
+        'Deep-merge a patch into the operator\'s Daily Ops SOP. Only the fields you pass change; others are preserved. The server bumps `version` and stamps `updatedAt` automatically. `markdown` is the render source-of-truth (headers + tables supported); the structured fields drive the in-app checklist. CONFIRM the content with the operator before invoking — this is the coach-authored daily routine they\'ll see in the app.',
+      inputSchema: dailyOpsPatchShape(),
+    },
+    async (patch) => {
+      const clean = stripUndefined(patch);
+      if (Object.keys(clean).length === 0) {
+        return textContent(
+          'Nothing to update — pass at least one of: markdown, anchors, trainingVariants, supplementSchedule, sleepProtocol, phase.'
+        );
+      }
+      const updated = await client.patchDailyOps({ ...clean, authoredBy: 'gunny' });
+      return textContent(
+        `Daily Ops SOP saved (v${updated.version}). Updated: ${Object.keys(clean).join(', ')}.`
+      );
     }
   );
 
@@ -1450,6 +1537,42 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       await client.patchProfileById(client_id, { intake: merged });
       const changed = Object.keys(stripUndefined(patch));
       return textContent(`Updated ${client_id} intake: ${changed.join(', ')}.`);
+    }
+  );
+
+  server.registerTool(
+    'get_client_daily_ops',
+    {
+      title: 'Get a client\'s Daily Ops SOP',
+      description:
+        'Returns the named client\'s persistent Daily Ops SOP (operator.dailyOps). `client_id` from list_my_clients. Server 403s if the client is not assigned to the calling trainer. Returns `{ dailyOps: null }` if none authored yet.',
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      const sop = await client.getDailyOpsById(client_id);
+      return jsonContent({ client_id, dailyOps: sop });
+    }
+  );
+
+  server.registerTool(
+    'set_client_daily_ops',
+    {
+      title: 'Set/update a client\'s Daily Ops SOP',
+      description:
+        'Deep-merge a patch into the named client\'s Daily Ops SOP. Only fields you pass change; the server bumps `version` + stamps `updatedAt`. `markdown` is the render source-of-truth. CONFIRM the content with the trainer before invoking.',
+      inputSchema: { client_id: z.string().min(1), ...dailyOpsPatchShape() },
+    },
+    async ({ client_id, ...patch }) => {
+      const clean = stripUndefined(patch);
+      if (Object.keys(clean).length === 0) {
+        return textContent(
+          'Nothing to update — pass at least one of: markdown, anchors, trainingVariants, supplementSchedule, sleepProtocol, phase.'
+        );
+      }
+      const updated = await client.patchDailyOpsById(client_id, { ...clean, authoredBy: 'gunny' });
+      return textContent(
+        `Daily Ops SOP saved for ${client_id} (v${updated.version}). Updated: ${Object.keys(clean).join(', ')}.`
+      );
     }
   );
 
