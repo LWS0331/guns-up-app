@@ -3513,45 +3513,90 @@ export async function POST(req: NextRequest) {
     let wearableMetricsBlock = '';
     if (!isJuniorOperator && operatorContext?.id) {
       try {
-        const conns = await prisma.wearableConnection.findMany({
-          where: { operatorId: operatorContext.id, active: true },
-          orderBy: { lastSyncAt: 'desc' },
-          take: 5,
-        });
-        if (conns.length > 0) {
-          const lines: string[] = ['', '═══ WEARABLE METRICS (LIVE) ═══'];
-          for (const c of conns) {
-            const sd = (c.syncData || {}) as Record<string, unknown>;
-            lines.push(`Provider: ${c.providerName} (last sync: ${c.lastSyncAt ? new Date(c.lastSyncAt).toLocaleString() : 'never'})`);
-            const sleep = sd.sleep as Record<string, unknown> | undefined;
-            if (sleep) {
-              const dur = typeof sleep.duration === 'number' ? sleep.duration : null;
-              const hours = dur != null ? (dur / 3600).toFixed(1) : '?';
-              lines.push(`  Sleep: ${hours}h${sleep.efficiency ? `, ${sleep.efficiency}% efficient` : ''}${sleep.hrAverage ? `, avg HR ${sleep.hrAverage}bpm` : ''}`);
-              if (typeof sleep.deep === 'number' || typeof sleep.rem === 'number') {
-                lines.push(`  Sleep stages: deep ${sleep.deep ? Math.round(Number(sleep.deep)/60) : '?'}m, REM ${sleep.rem ? Math.round(Number(sleep.rem)/60) : '?'}m`);
-              }
+        // Pull live connections AND the latest stored snapshot in
+        // parallel. When the Vital pipe is down (syncData null/stale, or
+        // the connection deactivated) the WearableSnapshot table still
+        // holds last night's sleep/HRV/RHR from on-device HealthKit — so
+        // we fall back to it rather than dropping the whole block and
+        // leaving Gunny blind to recovery (and silent on deloads).
+        const [conns, latestSnapshot] = await Promise.all([
+          prisma.wearableConnection.findMany({
+            where: { operatorId: operatorContext.id, active: true },
+            orderBy: { lastSyncAt: 'desc' },
+            take: 5,
+          }),
+          prisma.wearableSnapshot.findFirst({
+            where: { operatorId: operatorContext.id },
+            orderBy: { syncDate: 'desc' },
+          }),
+        ]);
+
+        const lines: string[] = [];
+        // Did we surface any objective sleep/recovery signal? Drives
+        // whether we need the snapshot fallback.
+        let sawRecoverySignal = false;
+
+        for (const c of conns) {
+          const sd = (c.syncData || {}) as Record<string, unknown>;
+          const providerLines: string[] = [];
+          const sleep = sd.sleep as Record<string, unknown> | undefined;
+          if (sleep) {
+            // sleep.duration is stored in HOURS (sync + webhook convert
+            // from Vital's seconds). The prior `/ 3600` here double-
+            // divided, rendering ~0.0h and burying the signal.
+            const dur = typeof sleep.duration === 'number' ? sleep.duration : null;
+            const hours = dur != null ? dur.toFixed(1) : '?';
+            providerLines.push(`  Sleep: ${hours}h${sleep.efficiency ? `, ${sleep.efficiency}% efficient` : ''}${sleep.hrAverage ? `, avg HR ${sleep.hrAverage}bpm` : ''}`);
+            if (typeof sleep.deep === 'number' || typeof sleep.rem === 'number') {
+              providerLines.push(`  Sleep stages: deep ${sleep.deep ? Math.round(Number(sleep.deep)/60) : '?'}m, REM ${sleep.rem ? Math.round(Number(sleep.rem)/60) : '?'}m`);
             }
-            const recovery = sd.recovery as Record<string, unknown> | undefined;
-            if (recovery) {
-              if (recovery.hrv != null) lines.push(`  HRV: ${recovery.hrv}ms`);
-              if (recovery.score != null) lines.push(`  Recovery score: ${recovery.score}/100`);
-              if (recovery.restingHr != null) lines.push(`  Resting HR: ${recovery.restingHr}bpm`);
-            }
-            const activity = sd.activity as Record<string, unknown> | undefined;
-            if (activity) {
-              if (activity.steps != null) lines.push(`  Steps today: ${activity.steps}`);
-              if (activity.activeCalories != null) lines.push(`  Active calories: ${activity.activeCalories}`);
-            }
-            const body = sd.body as Record<string, unknown> | undefined;
-            if (body) {
-              if (body.weight != null) lines.push(`  Weight (latest): ${body.weight}lbs`);
-              if (body.bodyFat != null) lines.push(`  Body fat (latest): ${body.bodyFat}%`);
-            }
+            if (dur != null) sawRecoverySignal = true;
           }
-          lines.push('═══════════════════════════════');
-          lines.push('Use this LIVE measured data — it overrides the operator\'s self-reported sleep/readiness when present. If recovery score is low (<33), HRV trending down, or sleep <6h: dial back intensity, recommend a deload, or suggest mobility instead of heavy lifting.');
-          wearableMetricsBlock = lines.join('\n');
+          const recovery = sd.recovery as Record<string, unknown> | undefined;
+          if (recovery) {
+            if (recovery.hrv != null) { providerLines.push(`  HRV: ${recovery.hrv}ms`); sawRecoverySignal = true; }
+            if (recovery.score != null) { providerLines.push(`  Recovery score: ${recovery.score}/100`); sawRecoverySignal = true; }
+            if (recovery.restingHr != null) providerLines.push(`  Resting HR: ${recovery.restingHr}bpm`);
+          }
+          const activity = sd.activity as Record<string, unknown> | undefined;
+          if (activity) {
+            if (activity.steps != null) providerLines.push(`  Steps today: ${activity.steps}`);
+            if (activity.activeCalories != null) providerLines.push(`  Active calories: ${activity.activeCalories}`);
+          }
+          const body = sd.body as Record<string, unknown> | undefined;
+          if (body) {
+            if (body.weight != null) providerLines.push(`  Weight (latest): ${body.weight}lbs`);
+            if (body.bodyFat != null) providerLines.push(`  Body fat (latest): ${body.bodyFat}%`);
+          }
+          if (providerLines.length > 0) {
+            lines.push(`Provider: ${c.providerName} (last sync: ${c.lastSyncAt ? new Date(c.lastSyncAt).toLocaleString() : 'never'})`);
+            lines.push(...providerLines);
+          }
+        }
+
+        // Fallback: no live provider sleep/recovery signal, but a stored
+        // snapshot exists → surface it so the deload logic still has data.
+        if (!sawRecoverySignal && latestSnapshot) {
+          const snapLines: string[] = [];
+          if (latestSnapshot.sleepHours != null) snapLines.push(`  Sleep: ${latestSnapshot.sleepHours.toFixed(1)}h${latestSnapshot.sleepEfficiency != null ? `, ${latestSnapshot.sleepEfficiency}% efficient` : ''}`);
+          if (latestSnapshot.hrv != null) snapLines.push(`  HRV: ${latestSnapshot.hrv}ms`);
+          if (latestSnapshot.recoveryScore != null) snapLines.push(`  Recovery score: ${latestSnapshot.recoveryScore}/100`);
+          if (latestSnapshot.restingHr != null) snapLines.push(`  Resting HR: ${latestSnapshot.restingHr}bpm`);
+          if (snapLines.length > 0) {
+            lines.push(`Latest stored snapshot (${latestSnapshot.syncDate}) — live sync unavailable:`);
+            lines.push(...snapLines);
+            sawRecoverySignal = true;
+          }
+        }
+
+        if (lines.length > 0) {
+          wearableMetricsBlock = [
+            '',
+            '═══ WEARABLE METRICS ═══',
+            ...lines,
+            '═══════════════════════════════',
+            'Use this measured data — it overrides the operator\'s self-reported sleep/readiness when present. If recovery score is low (<33), HRV trending down, or sleep <6h: dial back intensity, recommend a deload, or suggest mobility instead of heavy lifting.',
+          ].join('\n');
         }
       } catch (err) {
         // Don't block the chat if wearable lookup fails — Gunny still works

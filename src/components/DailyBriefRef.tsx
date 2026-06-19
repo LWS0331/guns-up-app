@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { DailyBrief as DailyBriefType, SitrepExercise } from '@/lib/types';
+import { getLocalDateStr } from '@/lib/dateUtils';
+import { computeWorkoutStreak, computeCompliance } from '@/lib/workoutStats';
 
 interface DailyBriefRefProps {
   brief: DailyBriefType;
@@ -9,6 +11,9 @@ interface DailyBriefRefProps {
   focus?: 'all' | 'training' | 'nutrition';
   /** Compact mode — collapsed by default */
   compact?: boolean;
+  /** operator.workouts — when supplied, streak + compliance are computed
+   *  LIVE from it rather than read from the (frozen) brief fields. */
+  workouts?: Record<string, unknown>;
 }
 
 /**
@@ -27,17 +32,25 @@ interface DailyBriefRefProps {
  * Why amber tone: warm/in-progress callouts (warmups, daily briefs,
  * warnings) all share the amber surface so users learn the pattern.
  */
-export default function DailyBriefRef({ brief, focus = 'all', compact = false }: DailyBriefRefProps) {
+export default function DailyBriefRef({ brief, focus = 'all', compact = false, workouts }: DailyBriefRefProps) {
   const [expanded, setExpanded] = useState(!compact);
 
   const showTraining = focus === 'all' || focus === 'training';
   const showNutrition = focus === 'all' || focus === 'nutrition';
 
+  // Streak + compliance: computed live from operator.workouts when
+  // available (the brief's own fields are frozen LLM output and drift
+  // stale once today's workout is logged); fall back to the brief
+  // values for callers that don't pass workouts.
+  const today = getLocalDateStr();
+  const liveStreak = workouts ? computeWorkoutStreak(workouts, today) : (brief.streakDays ?? 0);
+  const liveCompliance = workouts ? computeCompliance(workouts, today) : (brief.complianceScore ?? null);
+
   // Compliance score color — green ≥80%, amber ≥50%, danger below.
   const compColor =
-    (brief.complianceScore || 0) >= 80
+    (liveCompliance || 0) >= 80
       ? 'var(--green)'
-      : (brief.complianceScore || 0) >= 50
+      : (liveCompliance || 0) >= 50
         ? 'var(--warn)'
         : 'var(--amber)';
 
@@ -103,14 +116,14 @@ export default function DailyBriefRef({ brief, focus = 'all', compact = false }:
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {brief.complianceScore != null && (
+          {liveCompliance != null && (
             <span className="t-mono-data" style={{ color: compColor, fontSize: 12 }}>
-              {brief.complianceScore}%
+              {liveCompliance}%
             </span>
           )}
-          {brief.streakDays != null && brief.streakDays > 0 && (
+          {liveStreak > 0 && (
             <span className="t-mono-sm" style={{ color: 'var(--warn)' }}>
-              🔥{brief.streakDays}d
+              🔥{liveStreak}d
             </span>
           )}
           {compact && (

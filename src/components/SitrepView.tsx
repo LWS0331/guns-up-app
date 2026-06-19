@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Sitrep, SitrepExercise } from '@/lib/types';
+import { getLocalDateStr } from '@/lib/dateUtils';
 
 interface SitrepViewProps {
   sitrep: Sitrep;
@@ -63,6 +64,23 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
 
   const today = sitrep.today;
 
+  // sitrep.today is the Day-1 reference workout captured at intake — it
+  // is NEVER recomputed. Once the battle plan was generated on an earlier
+  // day, surfacing it as "TODAY" shows a weeks-old split/target as the
+  // current session. Detect that and relabel so the operator knows this
+  // is the baseline plan, not today's live prescription (which lives on
+  // the Daily Brief / planner).
+  const sitrepStale = (() => {
+    if (!sitrep.generatedDate) return false;
+    const gen = new Date(sitrep.generatedDate);
+    if (Number.isNaN(gen.getTime())) return false;
+    try {
+      return gen.toLocaleDateString('en-CA') !== getLocalDateStr();
+    } catch {
+      return false;
+    }
+  })();
+
   return (
     <div style={s.container}>
       <div style={s.header}>
@@ -87,7 +105,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {(['overview', 'nutrition', 'training'] as const).map(sec => (
           <button key={sec} onClick={() => setActiveSection(sec)} style={s.sectionBtn(activeSection === sec)}>
-            {sec === 'overview' ? '📋 OVERVIEW' : sec === 'nutrition' ? '🍽️ NUTRITION' : '🏋️ TODAY'}
+            {sec === 'overview' ? '📋 OVERVIEW' : sec === 'nutrition' ? '🍽️ NUTRITION' : sitrepStale ? '🏋️ DAY 1' : '🏋️ TODAY'}
           </button>
         ))}
       </div>
@@ -224,6 +242,17 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
           {/* Today's Workout */}
           {today ? (
             <div>
+              {sitrepStale && (
+                <div style={{
+                  padding: '10px 14px', marginBottom: 12, borderRadius: 6,
+                  background: 'rgba(250,204,21,0.06)', border: '1px solid rgba(250,204,21,0.3)',
+                  fontSize: 11, color: '#facc15', lineHeight: 1.5,
+                }}>
+                  <strong>Baseline plan (Day 1).</strong> This is the reference session from your
+                  intake on {new Date(sitrep.generatedDate).toLocaleDateString()} — not today&apos;s
+                  prescription. Check your Daily Brief or the Planner for today&apos;s live workout.
+                </div>
+              )}
               {/* Day Header */}
               <div style={{ ...s.cardHighlight, borderColor: 'rgba(0,255,65,0.4)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>

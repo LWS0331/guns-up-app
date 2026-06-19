@@ -25,6 +25,8 @@
 // overload. Both failure modes are worse than honest "we're learning".
 
 import { prisma } from '@/lib/db';
+import { getAppTodayStr } from '@/lib/dateUtils';
+import { computeSelfReportScore, readSelfReportInputs } from '@/lib/selfReport';
 
 export type ReadinessStatus = 'go_hard' | 'normal' | 'caution' | 'rest' | 'unknown';
 export type ReadinessConfidence = 'baseline_only' | 'low' | 'medium' | 'high';
@@ -128,6 +130,22 @@ export async function readinessScore(input: OperatorReadinessInput): Promise<Rea
     // alongside the WearableSnapshot rollout.)
     sleepHours = typeof sleep.duration === 'number' ? Number(sleep.duration) : null;
     recoveryScore = typeof recovery.score === 'number' ? Number(recovery.score) : null;
+  }
+
+  // ── SELF-REPORT FALLBACK ──
+  // No objective wearable signal at all (Vital pipe down, never
+  // connected, no snapshot rows). Rather than returning UNKNOWN and
+  // blanking every downstream recommendation, degrade to the
+  // operator's own check-in / profile sliders. This honors the
+  // engine's documented self-report contract and means a bad
+  // self-reported day still fires a DELOAD/REST. Only attempted when
+  // there's NO objective data — when wearable values exist but the
+  // baseline is immature we still prefer the hardcoded-threshold path
+  // (real HRV/sleep beats a slider), handled by the cold-start block.
+  const hasObjective = hrv != null || rhr != null || sleepHours != null || recoveryScore != null;
+  if (!hasObjective) {
+    const sr = buildSelfReportScore(op, baselineDays);
+    if (sr) return sr;
   }
 
   // ── COLD START ──
@@ -253,9 +271,12 @@ export async function readinessScore(input: OperatorReadinessInput): Promise<Rea
     });
   }
 
-  // If we got nothing usable from wearable + no baseline, fall back.
+  // If we got nothing usable from wearable + no baseline, fall back to
+  // self-report before giving up entirely.
   if (weightSum === 0) {
-    return cold('No usable signals — falling back to self-report.', baselineDays);
+    const sr = buildSelfReportScore(op, baselineDays);
+    if (sr) return sr;
+    return cold('No usable signals — and no self-report on file.', baselineDays);
   }
 
   // Normalize: if some weights were missing (e.g. no RHR), the partial
@@ -311,6 +332,62 @@ export async function readinessScore(input: OperatorReadinessInput): Promise<Rea
 }
 
 // ── Helpers ──
+
+/**
+ * Build a self-report-sourced ReadinessScore from the operator's
+ * check-in / profile sliders, or null when nothing scorable is on file.
+ * Returns a real (non-unknown) status with fallbackToHardcoded:false so
+ * callers act on it — a bad self-reported day fires DELOAD/REST. Marked
+ * low confidence because subjective sliders are noisier than wearable
+ * signals; go_hard is capped to normal so we never greenlight max effort
+ * on self-report alone.
+ */
+function buildSelfReportScore(
+  op: { profile?: unknown; intake?: unknown; dailyReadiness?: unknown },
+  baselineDays: number,
+): ReadinessScore | null {
+  const today = getAppTodayStr();
+  const { inputs, source } = readSelfReportInputs(op, today);
+  if (source === 'none') return null;
+  const result = computeSelfReportScore(inputs);
+  if (!result.usable) return null;
+
+  const s = result.score;
+  let status: ReadinessStatus;
+  if (s >= 70) status = 'normal';          // cap: no go_hard on self-report alone
+  else if (s >= 50) status = 'normal';
+  else if (s >= 30) status = 'caution';
+  else status = 'rest';
+
+  const factors: ReadinessFactor[] = result.signals.map((sig) => ({
+    key: sig.key,
+    label: sig.label,
+    value: sig.value,
+    signal: sig.signal,
+    weight: 1 / result.signals.length,
+  }));
+
+  const sourceLabel = source === 'check_in' ? "today's check-in" : 'your profile';
+  let rationale: string;
+  if (status === 'rest') {
+    rationale = `Self-report from ${sourceLabel} is low across the board — prioritize recovery today. Connect a wearable for objective HRV/sleep tracking.`;
+  } else if (status === 'caution') {
+    rationale = `Self-report from ${sourceLabel} is mixed — back off intensity 10-20% today. Connect a wearable for a sharper read.`;
+  } else {
+    rationale = `Self-report from ${sourceLabel} looks solid — run as written. Connect a wearable for objective recovery tracking.`;
+  }
+
+  return {
+    status,
+    confidence: 'low',
+    source: 'self_report',
+    rawScore: s,
+    factors,
+    baselineDays,
+    rationale,
+    fallbackToHardcoded: false,
+  };
+}
 
 function cold(rationale: string, baselineDays: number): ReadinessScore {
   return {

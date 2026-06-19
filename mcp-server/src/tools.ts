@@ -142,8 +142,9 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       const op = await client.getOperator();
       // Trim heavy nested blobs for the default profile view — keep the
       // model's context window from getting buried under months of meal
-      // logs every time it asks "who am I?".
-      return jsonContent(projectProfileSummary(op));
+      // logs every time it asks "who am I?". Pass today so the freshness
+      // guard drops a stale dailyBrief/sitrep instead of coaching off it.
+      return jsonContent(projectProfileSummary(op, { today: todayKey() }));
     }
   );
 
@@ -1077,7 +1078,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     },
     async ({ client_id }) => {
       const op = await client.getOperatorById(client_id);
-      return jsonContent(projectProfileSummary(op));
+      return jsonContent(projectProfileSummary(op, { today: todayKey() }));
     }
   );
 

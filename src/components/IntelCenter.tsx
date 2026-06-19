@@ -1319,7 +1319,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
 
       {/* DAILY BRIEF — Today's Nutrition */}
       {operator.dailyBrief && operator.dailyBrief.date && (
-        <DailyBriefRef brief={operator.dailyBrief} focus="nutrition" compact={true} />
+        <DailyBriefRef brief={operator.dailyBrief} focus="nutrition" compact={true} workouts={operator.workouts} />
       )}
 
       {/* Accuracy tier key — bracket card listing the 4 tracking
