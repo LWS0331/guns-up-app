@@ -38,6 +38,40 @@ function isConnected(status: string | null | undefined): boolean {
 }
 
 /**
+ * Flatten Vital's getConnectedProviders response into a flat provider list.
+ *
+ * The SDK types the resolved value as
+ * `Record<string, ClientFacingProviderWithStatus[]>` (await yields the raw
+ * record — HttpResponsePromise extends Promise<T>, no `.data` wrapper).
+ * We parse DEFENSIVELY so a response-shape change degrades to "no
+ * providers" rather than producing malformed rows: an empty list makes the
+ * planner a no-op (nothing to activate, and deactivate only fires for rows
+ * it can prove are gone — see the route), instead of silently classifying
+ * every real connection as "deactivate".
+ *
+ * Pure (no SDK, no DB) so the runtime-shape glue the route depends on is
+ * unit-testable without mocking Vital.
+ */
+export function parseConnectedProviders(resp: unknown): VitalProviderStatus[] {
+  if (!resp || typeof resp !== 'object') return [];
+  const out: VitalProviderStatus[] = [];
+  for (const value of Object.values(resp as Record<string, unknown>)) {
+    if (!Array.isArray(value)) continue; // skip non-array top-level values
+    for (const p of value) {
+      if (!p || typeof p !== 'object') continue;
+      const rec = p as Record<string, unknown>;
+      if (typeof rec.slug !== 'string' || !rec.slug) continue;
+      out.push({
+        slug: rec.slug,
+        name: typeof rec.name === 'string' ? rec.name : rec.slug,
+        status: typeof rec.status === 'string' ? rec.status : '',
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * Diff Vital's connected providers against the local connection rows and
  * return the create/reactivate/deactivate plan. Pure.
  *

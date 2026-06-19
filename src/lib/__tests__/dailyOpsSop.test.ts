@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { mergeDailyOps, readDailyOps, isEmptyDailyOps } from '../dailyOpsSop';
 
 describe('isEmptyDailyOps', () => {
@@ -104,5 +106,24 @@ describe('mergeDailyOps', () => {
     const snapshot = JSON.stringify(existing);
     mergeDailyOps(existing, { markdown: 'b' }, { now: 't2' });
     expect(JSON.stringify(existing)).toBe(snapshot);
+  });
+});
+
+// AC#4 — dailyOps must survive any sitrep/dailyBrief/profile write. It lives
+// on its own column and the merge route is the ONLY writer; the general
+// operator-PATCH route writes a field allowlist that must NOT include
+// dailyOps. Lock that invariant so a future contributor can't silently
+// reintroduce the clobber by adding 'dailyOps' to an allowlist.
+describe('AC#4 clobber-safety', () => {
+  it('dailyOps is absent from every operator-PATCH field allowlist', () => {
+    const src = readFileSync(
+      join(process.cwd(), 'src/app/api/operators/[id]/route.ts'),
+      'utf8',
+    );
+    const setBlocks = src.match(/new Set\(\[[\s\S]*?\]\)/g) || [];
+    expect(setBlocks.length).toBeGreaterThanOrEqual(3); // ADMIN / SELF / TRAINER
+    for (const block of setBlocks) {
+      expect(block).not.toMatch(/['"]dailyOps['"]/);
+    }
   });
 });

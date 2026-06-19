@@ -342,7 +342,7 @@ export async function readinessScore(input: OperatorReadinessInput): Promise<Rea
  * signals; go_hard is capped to normal so we never greenlight max effort
  * on self-report alone.
  */
-function buildSelfReportScore(
+export function buildSelfReportScore(
   op: { profile?: unknown; intake?: unknown; dailyReadiness?: unknown },
   baselineDays: number,
 ): ReadinessScore | null {

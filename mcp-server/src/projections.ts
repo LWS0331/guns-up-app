@@ -113,6 +113,32 @@ function readDateField(blob: unknown, key: string): string | null {
   return typeof v === 'string' ? v : null;
 }
 
+/**
+ * Normalize a stored date string to a Pacific calendar day (YYYY-MM-DD),
+ * matching how `today` (todayKey) and dailyBrief.date are produced.
+ *
+ * A bare YYYY-MM-DD passes through unchanged; a full ISO timestamp
+ * (e.g. sitrep.generatedDate = new Date().toISOString()) is converted
+ * from its instant to the Pacific calendar date so the staleness check
+ * compares day-to-day, not timestamp-to-day. Returns null if unparseable.
+ *
+ * Without this, `sitrepStale` was ALWAYS true: a full ISO timestamp like
+ * '2026-06-19T08:30:00.000Z' never equals the 'YYYY-MM-DD' `today` key,
+ * so even a sitrep generated minutes ago read as stale.
+ */
+function toPacificDay(s: string | null): string | null {
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
 function isoDay(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -150,10 +176,12 @@ export function projectProfileSummary(
   const today = opts.today;
   const workouts = (op.workouts || {}) as Record<string, Workout>;
 
-  const briefDate = readDateField(op.dailyBrief, 'date');
+  const briefDate = toPacificDay(readDateField(op.dailyBrief, 'date'));
   const dailyBriefStale = !!today && !!briefDate && briefDate !== today;
 
-  const sitrepDate = readDateField(op.sitrep, 'generatedDate');
+  // sitrep.generatedDate is a full ISO timestamp; normalize to the Pacific
+  // calendar day before comparing or every sitrep reads as stale.
+  const sitrepDate = toPacificDay(readDateField(op.sitrep, 'generatedDate'));
   const sitrepStale = !!today && !!sitrepDate && sitrepDate !== today;
 
   return {

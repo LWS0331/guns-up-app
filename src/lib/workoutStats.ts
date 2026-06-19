@@ -55,7 +55,10 @@ export function computeCompliance(
     const dayMs = new Date(date + 'T12:00:00').getTime();
     if (Number.isNaN(dayMs)) continue;
     const age = todayMs - dayMs;
-    if (age < 0 || age > windowMs) continue;
+    // Exclusive upper bound: today + the (windowDays-1) prior days = exactly
+    // `windowDays` calendar days. `>` would admit the day exactly windowDays
+    // ago, stretching a "last 7 days" window to 8.
+    if (age < 0 || age >= windowMs) continue;
     scheduled++;
     if ((entry as Completedish)?.completed) completed++;
   }

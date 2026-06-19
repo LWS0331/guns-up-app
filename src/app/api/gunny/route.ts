@@ -3548,7 +3548,9 @@ export async function POST(req: NextRequest) {
             const hours = dur != null ? dur.toFixed(1) : '?';
             providerLines.push(`  Sleep: ${hours}h${sleep.efficiency ? `, ${sleep.efficiency}% efficient` : ''}${sleep.hrAverage ? `, avg HR ${sleep.hrAverage}bpm` : ''}`);
             if (typeof sleep.deep === 'number' || typeof sleep.rem === 'number') {
-              providerLines.push(`  Sleep stages: deep ${sleep.deep ? Math.round(Number(sleep.deep)/60) : '?'}m, REM ${sleep.rem ? Math.round(Number(sleep.rem)/60) : '?'}m`);
+              // deep/rem are stored in HOURS (secondsToHours), like duration
+              // above — convert to minutes with *60, not /60.
+              providerLines.push(`  Sleep stages: deep ${sleep.deep ? Math.round(Number(sleep.deep)*60) : '?'}m, REM ${sleep.rem ? Math.round(Number(sleep.rem)*60) : '?'}m`);
             }
             if (dur != null) sawRecoverySignal = true;
           }

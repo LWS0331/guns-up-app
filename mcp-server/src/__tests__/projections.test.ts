@@ -288,6 +288,26 @@ describe('projectProfileSummary', () => {
       expect(summary.sitrepStale).toBe(true);
     });
 
+    // Regression: sitrep.generatedDate is written as a FULL ISO timestamp
+    // (new Date().toISOString()), not a bare YYYY-MM-DD. A naive string
+    // compare against the day key made sitrepStale ALWAYS true — even for a
+    // sitrep generated minutes ago. Normalize to the Pacific calendar day.
+    it('does NOT flag a sitrep generated today when stored as a real ISO timestamp', () => {
+      const op = makeOperator({
+        sitrep: { generatedDate: '2026-06-19T20:00:00.000Z', summary: 'fresh' },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.sitrepStale).toBe(false);
+    });
+
+    it('flags a sitrep generated on a prior day from a real ISO timestamp', () => {
+      const op = makeOperator({
+        sitrep: { generatedDate: '2026-05-05T20:00:00.000Z', summary: 'old' },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.sitrepStale).toBe(true);
+    });
+
     it('computes streakDays LIVE from workouts, not from the frozen brief', () => {
       const op = makeOperator({
         // Frozen brief says 0; live workouts show a 3-day streak ending today.

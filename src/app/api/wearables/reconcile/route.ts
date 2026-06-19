@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { getVitalClient } from '@/lib/vital';
 import { requireAuth } from '@/lib/requireAuth';
 import { OPS_CENTER_ACCESS } from '@/lib/types';
-import { planWearableReconcile, type VitalProviderStatus } from '@/lib/wearableReconcile';
+import { planWearableReconcile, parseConnectedProviders } from '@/lib/wearableReconcile';
 
 // POST /api/wearables/reconcile — webhook-independent connection recovery.
 //
@@ -60,12 +60,11 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    // Ask Vital which providers are actually connected. Response is keyed
-    // (e.g. { providers: [...] }); flatten all values defensively.
+    // Ask Vital which providers are actually connected. The response is a
+    // Record<provider, ProviderWithStatus[]>; parseConnectedProviders
+    // flattens it defensively (a shape change degrades to "no providers").
     const connectedResp = await vital.user.getConnectedProviders(vitalUserId);
-    const vitalProviders: VitalProviderStatus[] = Object.values(connectedResp ?? {})
-      .flat()
-      .map((p) => ({ slug: p.slug, name: p.name, status: p.status }));
+    const vitalProviders = parseConnectedProviders(connectedResp);
 
     const existingRows = await prisma.wearableConnection.findMany({
       where: { operatorId },
@@ -75,21 +74,31 @@ export async function POST(req: NextRequest) {
     const plan = planWearableReconcile(vitalProviders, existingRows);
 
     // Apply: reactivate/create connected providers, deactivate stale ones.
-    // Upsert on the (operatorId, provider) unique key rather than create —
-    // race-safe against the webhook inserting the same row between our
-    // findMany read above and this write, and idempotent on re-runs.
     for (const a of plan.activate) {
-      await prisma.wearableConnection.upsert({
-        where: { operatorId_provider: { operatorId, provider: a.provider } },
-        update: { active: true, vitalUserId, connectedAt: new Date() },
-        create: {
-          operatorId,
-          vitalUserId,
-          provider: a.provider,
-          providerName: a.name || a.provider,
-          active: true,
-        },
-      });
+      if (a.existingId) {
+        // The planner matched an existing row (case-insensitively) — update
+        // it by id. A provider-keyed upsert here could miss a row whose
+        // stored casing differs from Vital's slug and CREATE a duplicate.
+        await prisma.wearableConnection.update({
+          where: { id: a.existingId },
+          data: { active: true, vitalUserId, connectedAt: new Date() },
+        });
+      } else {
+        // Genuinely new provider — upsert on the (operatorId, provider)
+        // unique key so it's race-safe against the webhook inserting the
+        // same row between our findMany read and this write.
+        await prisma.wearableConnection.upsert({
+          where: { operatorId_provider: { operatorId, provider: a.provider } },
+          update: { active: true, vitalUserId, connectedAt: new Date() },
+          create: {
+            operatorId,
+            vitalUserId,
+            provider: a.provider,
+            providerName: a.name || a.provider,
+            active: true,
+          },
+        });
+      }
     }
     for (const d of plan.deactivate) {
       await prisma.wearableConnection.update({
