@@ -35,6 +35,7 @@ import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
 import { getAuthToken } from '@/lib/authClient';
 import DailyBriefComponent from '@/components/DailyBrief';
 import BattlePlanRef from '@/components/BattlePlanRef';
+import { detectSitrepDivergence } from '@/lib/sitrepFreshness';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import Leaderboard from '@/components/Leaderboard';
 import Achievements from '@/components/Achievements';
@@ -2047,6 +2048,40 @@ const AppShell: React.FC<AppShellProps> = ({
                 />
               )}
             </div>
+
+            {/* Stale-plan banner (Issue #201, option 2) — surfaces when
+                the stored sitrep's split / days-per-week no longer match
+                the operator's current preferences, so the battle plan
+                self-corrects via a one-tap regenerate instead of silently
+                describing programming they no longer run. Own profile only;
+                regenerate goes through the same confirm modal as the button. */}
+            {currentSelectedOp.id === currentUser.id && (() => {
+              const divergence = detectSitrepDivergence(currentSelectedOp);
+              if (!divergence.diverged) return null;
+              return (
+                <div
+                  className="ds-card bracket amber amber-tone"
+                  style={{ padding: 14, marginBottom: 12 }}
+                >
+                  <span className="bl" /><span className="br" />
+                  <div className="t-eyebrow amber" style={{ marginBottom: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <Icon.Warning size={12} />
+                    Battle plan out of date
+                  </div>
+                  <p className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginBottom: 10, lineHeight: 1.5 }}>
+                    Your training setup changed since this plan was generated — {divergence.reason}. Regenerate so GUNNY builds against your current programming.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPlanConfirm(true)}
+                    className="btn btn-amber btn-sm"
+                  >
+                    <Icon.Sword size={14} />
+                    Update Battle Plan
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* New Battle Plan button — only shown on own profile
                 when a SITREP already exists. Uses .btn.btn-amber.btn-sm
