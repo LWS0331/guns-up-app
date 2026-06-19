@@ -1640,7 +1640,18 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
           </h2>
         </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+        <div style={{
+          display: 'grid',
+          // Phone: stack days in a single full-width column — 7 columns on a
+          // ~390px viewport forces each cell to its min-content width (the
+          // cards use whiteSpace:nowrap), which blows past the screen and
+          // scrolls the whole page sideways. Tablet+: 7 columns, but
+          // minmax(0,1fr) (not the default minmax(auto,1fr)) lets tracks
+          // shrink below min-content so the ellipsis works instead of
+          // overflowing.
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(7, minmax(0, 1fr))',
+          gap: 8,
+        }}>
           {weekDates.map(date => {
             const dateStr = formatDate(date);
             const workout = getWorkoutForDate(dateStr);
@@ -1657,7 +1668,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 }}
                 className="ds-card"
                 style={{
-                  minHeight: 200,
+                  // Compact rows when stacked on phone so a 7-day week isn't
+                  // a 1400px scroll; full 200px cells in the tablet+ grid.
+                  minHeight: isMobile ? 96 : 200,
                   padding: 12,
                   cursor: 'pointer',
                   // Today gets the elevated green wash + strong border
