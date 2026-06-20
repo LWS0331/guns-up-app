@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
-import { OPS_CENTER_ACCESS } from '@/lib/types';
+import { OPS_CENTER_ACCESS, isHeadTrainer } from '@/lib/types';
+import { isPlanLocked } from '@/lib/planOverride';
 
 // PATCH /api/operators/:id/profile
 // Targeted update of profile / intake / nutrition / preferences / sitrep / dailyBrief.
@@ -85,6 +86,22 @@ export async function PATCH(
         for (const k of adminAllowed) {
           if (body[k] !== undefined) data[k] = body[k];
         }
+      }
+    }
+
+    // Head-trainer takeover enforcement: while an operator's plan is
+    // locked, sitrep/dailyBrief are writable ONLY through the dedicated
+    // /daily-plan route (by a head trainer/admin). Strip them here for
+    // everyone else so the operator (or their assigned trainer) can't
+    // overwrite the trainer-authored plan via the general profile PATCH.
+    if (
+      (data.sitrep !== undefined || data.dailyBrief !== undefined) &&
+      !isAdmin && !isHeadTrainer(auth.operatorId)
+    ) {
+      const cur = await prisma.operator.findUnique({ where: { id }, select: { planOverride: true } });
+      if (isPlanLocked(cur)) {
+        delete data.sitrep;
+        delete data.dailyBrief;
       }
     }
 

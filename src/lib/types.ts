@@ -249,6 +249,10 @@ export interface Operator {
    *  routine. See src/lib/dailyOpsSop.ts. Distinct from the per-day
    *  DailyOpsPlan schedule. */
   dailyOps?: DailyOpsSOP;
+  /** Head-trainer plan override (Jun 2026). When `active`, the daily plan
+   *  (sitrep/dailyBrief) is trainer-managed — generation/refresh is
+   *  suppressed until released. See src/lib/planOverride.ts. */
+  planOverride?: PlanOverride;
   profile: OperatorProfile;
   nutrition: NutritionData;
   prs: PRRecord[];
@@ -319,6 +323,24 @@ export interface DailyOpsSOP {
   supplementSchedule?: DailyOpsSupplementEntry[];
   sleepProtocol?: string[];
   phase?: DailyOpsPhase;
+}
+
+// ── Head-trainer plan override ─────────────────────────────────────
+// Stored on operator.planOverride. When `active`, a head trainer has
+// taken over this operator's daily plan (sitrep/dailyBrief): the
+// generate-on-read refresh is suppressed and the trainer-authored plan
+// stands until released. See src/lib/planOverride.ts.
+export interface PlanOverride {
+  /** True while the head trainer is managing this operator's plan. */
+  active: boolean;
+  /** Head-trainer operatorId who locked it (e.g. "op-ruben"). */
+  lockedBy: string;
+  /** ISO8601 — when the current lock state was last set. */
+  lockedAt: string;
+  /** Bumped on each override write. */
+  version: number;
+  /** Optional coaching note attached to the override. */
+  note?: string;
 }
 
 export interface OperatorProfile {
@@ -645,6 +667,25 @@ const opsEnv = process.env.NEXT_PUBLIC_OPS_CENTER_ACCESS;
 export const OPS_CENTER_ACCESS: readonly string[] = opsEnv
   ? opsEnv.split(',').map(s => s.trim()).filter(Boolean)
   : OPS_CENTER_ACCESS_DEFAULT;
+
+// HEAD_TRAINER_ACCESS — the head-trainer role: operators who sit atop the
+// whole roster and can read + OVERRIDE any operator's daily plan
+// (sitrep/dailyBrief), steering each operator's Gunny. Distinct from
+// OPS_CENTER_ACCESS (admin/ops tooling) — a head trainer is a coaching
+// authority, not an app admin — though one operator can hold both. Same
+// env-allowlist mechanism so granting is a config change, not a deploy:
+// set NEXT_PUBLIC_HEAD_TRAINER_ACCESS="op-ruben,op-britney" in Railway.
+const HEAD_TRAINER_ACCESS_DEFAULT = ['op-ruben'];
+const headTrainerEnv = process.env.NEXT_PUBLIC_HEAD_TRAINER_ACCESS;
+export const HEAD_TRAINER_ACCESS: readonly string[] = headTrainerEnv
+  ? headTrainerEnv.split(',').map(s => s.trim()).filter(Boolean)
+  : HEAD_TRAINER_ACCESS_DEFAULT;
+
+/** True when `operatorId` is a head trainer (can override any operator's daily plan). */
+export function isHeadTrainer(operatorId: string | null | undefined): boolean {
+  return !!operatorId && HEAD_TRAINER_ACCESS.includes(operatorId);
+}
+
 export const BETA_DURATION_DAYS = 45;
 export type IntelTab = 'profile' | 'nutrition' | 'prs' | 'injuries' | 'preferences' | 'wearables';
 

@@ -10,6 +10,32 @@
 // Pure + synchronous so it's unit-testable and cheap to call on render.
 
 import type { Operator } from './types';
+import { getAppTodayStr, getDateStrInTimezone } from './dateUtils';
+
+/**
+ * True when the stored sitrep was generated on an earlier app-calendar day
+ * than `today`. The sitrep's embedded `today` workout + nutrition framing
+ * are a day-N snapshot, so a prior-day sitrep is stale. Used (alongside
+ * divergence) to surface the one-tap "regenerate" banner.
+ *
+ * Both `generatedDate` and the default `today` are normalized to the app
+ * timezone (Pacific) — matching the MCP projection's `toPacificDay` and the
+ * digest's `getAppTodayStr` — so staleness agrees across surfaces instead
+ * of flipping on a UTC-vs-Pacific server.
+ */
+export function isSitrepStale(
+  operator: Pick<Operator, 'sitrep'> | null | undefined,
+  today?: string,
+): boolean {
+  const gen = operator?.sitrep?.generatedDate;
+  if (!gen) return false;
+  const d = new Date(gen);
+  if (Number.isNaN(d.getTime())) return false;
+  const genDay = getDateStrInTimezone(d); // app-TZ (Pacific) YYYY-MM-DD
+  const todayStr = today ?? getAppTodayStr();
+  return genDay !== todayStr;
+}
+
 
 /** Normalize a split label for comparison: lowercase, drop parenthetical
  *  qualifiers ("(Sciatic-Adapted)", "(2 on / 1 off)"), collapse

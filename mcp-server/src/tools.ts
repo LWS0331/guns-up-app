@@ -82,6 +82,25 @@ export const DATE_KEY = () =>
  * return into a const for reuse across tools. Used by both
  * set_daily_ops and set_client_daily_ops.
  */
+// Daily PLAN override patch. Fresh zod instances per call (same
+// $ref-avoidance reason as DATE_KEY). The sitrep/dailyBrief are the full
+// plan objects the app renders; pass at least one (or release:true).
+const dailyPlanPatchShape = () => ({
+  sitrep: z
+    .record(z.unknown())
+    .optional()
+    .describe('Full sitrep (battle plan) object to install. Replaces the operator\'s current sitrep.'),
+  dailyBrief: z
+    .record(z.unknown())
+    .optional()
+    .describe("Full dailyBrief (today's plan) object to install. Replaces the operator's current dailyBrief."),
+  note: z.string().optional().describe('Optional coaching note recorded on the override.'),
+  release: z
+    .boolean()
+    .optional()
+    .describe('Set true to RELEASE the takeover so auto-generation resumes. Omit/false to take over.'),
+});
+
 const dailyOpsPatchShape = () => ({
   markdown: z
     .string()
@@ -653,6 +672,41 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       return textContent(
         `Daily Ops SOP saved (v${updated.version}). Updated: ${Object.keys(clean).join(', ')}.`
       );
+    }
+  );
+
+  server.registerTool(
+    'get_my_daily_plan',
+    {
+      title: 'Get my daily plan + override status',
+      description:
+        "Returns the operator's daily PLAN — the generated sitrep (battle plan) + dailyBrief (today's plan) — plus `planOverride` (head-trainer takeover status). DISTINCT from the Daily Ops SOP. When planOverride.active, the plan is head-trainer-managed and not auto-refreshed.",
+      inputSchema: {},
+    },
+    async () => {
+      return jsonContent(await client.getDailyPlan());
+    }
+  );
+
+  server.registerTool(
+    'set_my_daily_plan',
+    {
+      title: 'Override/release my daily plan (head trainer)',
+      description:
+        "HEAD-TRAINER tool. Take over this operator's daily plan by installing a sitrep and/or dailyBrief object — this LOCKS the plan (planOverride.active) so the generate-on-read refresh stops until you release it. Pass release:true to hand control back to auto-generation. Requires head-trainer access (403 otherwise). CONFIRM the plan content before invoking.",
+      inputSchema: dailyPlanPatchShape(),
+    },
+    async (patch) => {
+      const clean = stripUndefined(patch);
+      const hasNote = typeof clean.note === 'string' && clean.note.trim() !== '';
+      if (patch.release !== true && clean.sitrep === undefined && clean.dailyBrief === undefined && !hasNote) {
+        return textContent(
+          'Nothing to apply — pass a sitrep and/or dailyBrief object (or a non-empty note) to take over, or release:true to hand control back to auto-generation.'
+        );
+      }
+      const res = await client.patchDailyPlan(clean);
+      const state = res.planOverride?.active ? `locked (v${res.planOverride.version})` : 'released to auto';
+      return textContent(`Daily plan ${patch.release ? 'released' : 'updated'} — now ${state}.`);
     }
   );
 
@@ -1574,6 +1628,54 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       return textContent(
         `Daily Ops SOP saved for ${client_id} (v${updated.version}). Updated: ${Object.keys(clean).join(', ')}.`
       );
+    }
+  );
+
+  server.registerTool(
+    'get_client_daily_plan',
+    {
+      title: 'Get an operator\'s daily plan + override status',
+      description:
+        "HEAD-TRAINER tool. Returns any operator's daily PLAN (sitrep + dailyBrief) plus `planOverride` takeover status. `client_id` is the operator id. Unlike the client_* roster tools, a head trainer can target ANY operator (not just assigned clients). 403 without head-trainer/admin access.",
+      inputSchema: { client_id: z.string().min(1) },
+    },
+    async ({ client_id }) => {
+      return jsonContent({ client_id, ...(await client.getDailyPlanById(client_id)) });
+    }
+  );
+
+  server.registerTool(
+    'set_client_daily_plan',
+    {
+      title: 'Override/release an operator\'s daily plan (head trainer)',
+      description:
+        "HEAD-TRAINER tool. Take over ANY operator's daily plan: install a sitrep and/or dailyBrief object, which LOCKS the plan (planOverride.active) so its generate-on-read refresh stops until you release it (release:true). This is how the head trainer steers each operator's Gunny. 403 without head-trainer/admin access. CONFIRM the plan content before invoking.",
+      inputSchema: { client_id: z.string().min(1), ...dailyPlanPatchShape() },
+    },
+    async ({ client_id, ...patch }) => {
+      const clean = stripUndefined(patch);
+      const hasNote = typeof clean.note === 'string' && clean.note.trim() !== '';
+      if (patch.release !== true && clean.sitrep === undefined && clean.dailyBrief === undefined && !hasNote) {
+        return textContent(
+          'Nothing to apply — pass a sitrep and/or dailyBrief object (or a non-empty note) to take over, or release:true to hand control back to auto-generation.'
+        );
+      }
+      const res = await client.patchDailyPlanById(client_id, clean);
+      const state = res.planOverride?.active ? `locked (v${res.planOverride.version})` : 'released to auto';
+      return textContent(`Daily plan for ${client_id} ${patch.release ? 'released' : 'updated'} — now ${state}.`);
+    }
+  );
+
+  server.registerTool(
+    'get_roster_digest',
+    {
+      title: 'Get the head-trainer roster digest',
+      description:
+        "HEAD-TRAINER tool. Returns one compact row per operator across the whole roster — streak, 7-day compliance, last completed workout, latest readiness check-in, and plan status (managed/stale/diverged) — so you can see who needs steering. 403 without head-trainer/admin access.",
+      inputSchema: {},
+    },
+    async () => {
+      return jsonContent(await client.getRosterDigest());
     }
   );
 

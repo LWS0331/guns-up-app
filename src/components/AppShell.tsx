@@ -35,7 +35,8 @@ import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
 import { getAuthToken } from '@/lib/authClient';
 import DailyBriefComponent from '@/components/DailyBrief';
 import BattlePlanRef from '@/components/BattlePlanRef';
-import { detectSitrepDivergence } from '@/lib/sitrepFreshness';
+import { detectSitrepDivergence, isSitrepStale } from '@/lib/sitrepFreshness';
+import { isPlanLocked } from '@/lib/planOverride';
 import DailyBriefRef from '@/components/DailyBriefRef';
 import Leaderboard from '@/components/Leaderboard';
 import Achievements from '@/components/Achievements';
@@ -2049,15 +2050,34 @@ const AppShell: React.FC<AppShellProps> = ({
               )}
             </div>
 
-            {/* Stale-plan banner (Issue #201, option 2) — surfaces when
-                the stored sitrep's split / days-per-week no longer match
-                the operator's current preferences, so the battle plan
-                self-corrects via a one-tap regenerate instead of silently
-                describing programming they no longer run. Own profile only;
-                regenerate goes through the same confirm modal as the button. */}
-            {currentSelectedOp.id === currentUser.id && (() => {
+            {/* Head-trainer takeover badge — when the plan is locked
+                (planOverride.active), it's managed by the head trainer and
+                must NOT prompt a regenerate. Own profile only. */}
+            {currentSelectedOp.id === currentUser.id && isPlanLocked(currentSelectedOp) && (
+              <div className="ds-card bracket green" style={{ padding: 12, marginBottom: 12 }}>
+                <span className="bl" /><span className="br" />
+                <div className="t-eyebrow" style={{ display: 'flex', gap: 6, alignItems: 'center', color: 'var(--green)' }}>
+                  <Icon.Lock size={12} />
+                  Plan managed by your head trainer
+                </div>
+                <p className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginTop: 6, marginBottom: 0, lineHeight: 1.5 }}>
+                  Your daily plan is being steered directly by your head trainer — it won't auto-refresh until they release it.
+                </p>
+              </div>
+            )}
+
+            {/* Stale-plan banner (Issue #201/#207, generate-on-read) —
+                surfaces when the stored sitrep diverged from current
+                preferences OR was generated on an earlier day, so the
+                battle plan self-corrects via a one-tap regenerate. Own
+                profile only; suppressed under a head-trainer takeover. */}
+            {currentSelectedOp.id === currentUser.id && !isPlanLocked(currentSelectedOp) && (() => {
               const divergence = detectSitrepDivergence(currentSelectedOp);
-              if (!divergence.diverged) return null;
+              const dateStale = isSitrepStale(currentSelectedOp);
+              if (!divergence.diverged && !dateStale) return null;
+              const reason = divergence.diverged
+                ? divergence.reason
+                : 'it was generated on an earlier day';
               return (
                 <div
                   className="ds-card bracket amber amber-tone"
@@ -2069,7 +2089,7 @@ const AppShell: React.FC<AppShellProps> = ({
                     Battle plan out of date
                   </div>
                   <p className="t-mono-sm" style={{ color: 'var(--text-tertiary)', marginBottom: 10, lineHeight: 1.5 }}>
-                    Your training setup changed since this plan was generated — {divergence.reason}. Regenerate so GUNNY builds against your current programming.
+                    This plan is out of date — {reason}. Regenerate so GUNNY builds against your current programming.
                   </p>
                   <button
                     type="button"
@@ -2083,11 +2103,12 @@ const AppShell: React.FC<AppShellProps> = ({
               );
             })()}
 
-            {/* New Battle Plan button — only shown on own profile
-                when a SITREP already exists. Uses .btn.btn-amber.btn-sm
-                so it reads as a "warm/in-progress destructive action"
-                — replaces the legacy gray ghost button. */}
-            {currentSelectedOp.id === currentUser.id && currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
+            {/* New Battle Plan button — only shown on own profile when a
+                SITREP exists AND the plan isn't under a head-trainer
+                takeover (a locked plan can only be changed via /daily-plan,
+                so offering "New Battle Plan" would just be server-rejected).
+                Uses .btn.btn-amber.btn-sm as a "warm/in-progress" action. */}
+            {currentSelectedOp.id === currentUser.id && !isPlanLocked(currentSelectedOp) && currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
                 <button
                   type="button"
