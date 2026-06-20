@@ -159,6 +159,32 @@ export class GunnyApiClient {
     return (res.dailyOps ?? (res as unknown as DailyOpsSOP));
   }
 
+  /** Read an operator's daily PLAN (sitrep/dailyBrief + override status).
+   * DISTINCT from the SOP. Head-trainer / admin reach any operator;
+   * self/trainer/parent read their own scope. */
+  async getDailyPlan(): Promise<DailyPlanResult> {
+    return this.getDailyPlanById(this.cfg.operatorId);
+  }
+
+  async getDailyPlanById(operatorId: string): Promise<DailyPlanResult> {
+    return this.fetch<DailyPlanResult>('GET', `/api/operators/${operatorId}/daily-plan`);
+  }
+
+  /** Take over (or release) an operator's daily plan. Writes sitrep/
+   * dailyBrief and locks operator.planOverride so the generate-on-read
+   * refresh stops. Head-trainer / admin only (enforced server-side). */
+  async patchDailyPlan(patch: DailyPlanPatch): Promise<DailyPlanResult> {
+    return this.patchDailyPlanById(this.cfg.operatorId, patch);
+  }
+
+  async patchDailyPlanById(operatorId: string, patch: DailyPlanPatch): Promise<DailyPlanResult> {
+    return this.fetch<DailyPlanResult>(
+      'PATCH',
+      `/api/operators/${operatorId}/daily-plan`,
+      patch
+    );
+  }
+
   /** List active wearable connections for an operator.
    * GET /api/wearables?operatorId=<id> — server enforces self/admin/trainer-of-target. */
   async listWearables(operatorId: string): Promise<WearableConnection[]> {
@@ -362,6 +388,22 @@ export interface DailyOpsSOP {
 /** Write patch — any subset of the SOP minus the server-owned
  * bookkeeping fields (version/updatedAt are set server-side). */
 export type DailyOpsPatch = Partial<Omit<DailyOpsSOP, 'version' | 'updatedAt'>>;
+
+/** Daily PLAN read shape (sitrep/dailyBrief + head-trainer override). */
+export interface DailyPlanResult {
+  sitrep: unknown;
+  dailyBrief: unknown;
+  planOverride: { active?: boolean; lockedBy?: string; lockedAt?: string; version?: number; note?: string } | null;
+}
+
+/** Daily PLAN write patch for the head-trainer override route. */
+export interface DailyPlanPatch {
+  sitrep?: Record<string, unknown>;
+  dailyBrief?: Record<string, unknown>;
+  note?: string;
+  /** When true, release the takeover (auto-generation resumes). */
+  release?: boolean;
+}
 
 export interface DailyReadinessEntry {
   date: string;
