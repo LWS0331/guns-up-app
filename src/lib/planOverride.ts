@@ -22,9 +22,13 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
-/** Coerce the raw JSON column into a PlanOverride, or null when unset ({}). */
+/** Coerce the raw JSON column into a PlanOverride, or null when unset ({})
+ *  or malformed. Requires the two load-bearing fields (`version` number,
+ *  `active` boolean) so consumers can trust `active`'s type. */
 export function readPlanOverride(raw: unknown): PlanOverride | null {
-  if (!isPlainObject(raw) || typeof raw.version !== 'number') return null;
+  if (!isPlainObject(raw) || typeof raw.version !== 'number' || typeof raw.active !== 'boolean') {
+    return null;
+  }
   return raw as unknown as PlanOverride;
 }
 

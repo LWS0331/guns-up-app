@@ -10,13 +10,18 @@
 // Pure + synchronous so it's unit-testable and cheap to call on render.
 
 import type { Operator } from './types';
-import { getLocalDateStr } from './dateUtils';
+import { getAppTodayStr, getDateStrInTimezone } from './dateUtils';
 
 /**
- * True when the stored sitrep was generated on an earlier calendar day
- * than `today` (operator-local). The sitrep's embedded `today` workout +
- * nutrition framing are a day-N snapshot, so a prior-day sitrep is stale.
- * Used (alongside divergence) to surface the one-tap "regenerate" banner.
+ * True when the stored sitrep was generated on an earlier app-calendar day
+ * than `today`. The sitrep's embedded `today` workout + nutrition framing
+ * are a day-N snapshot, so a prior-day sitrep is stale. Used (alongside
+ * divergence) to surface the one-tap "regenerate" banner.
+ *
+ * Both `generatedDate` and the default `today` are normalized to the app
+ * timezone (Pacific) — matching the MCP projection's `toPacificDay` and the
+ * digest's `getAppTodayStr` — so staleness agrees across surfaces instead
+ * of flipping on a UTC-vs-Pacific server.
  */
 export function isSitrepStale(
   operator: Pick<Operator, 'sitrep'> | null | undefined,
@@ -26,14 +31,9 @@ export function isSitrepStale(
   if (!gen) return false;
   const d = new Date(gen);
   if (Number.isNaN(d.getTime())) return false;
-  let genDay: string | null;
-  try {
-    genDay = d.toLocaleDateString('en-CA'); // local YYYY-MM-DD
-  } catch {
-    return false;
-  }
-  const todayStr = today ?? getLocalDateStr();
-  return !!genDay && genDay !== todayStr;
+  const genDay = getDateStrInTimezone(d); // app-TZ (Pacific) YYYY-MM-DD
+  const todayStr = today ?? getAppTodayStr();
+  return genDay !== todayStr;
 }
 
 

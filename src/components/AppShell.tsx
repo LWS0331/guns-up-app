@@ -2103,11 +2103,12 @@ const AppShell: React.FC<AppShellProps> = ({
               );
             })()}
 
-            {/* New Battle Plan button — only shown on own profile
-                when a SITREP already exists. Uses .btn.btn-amber.btn-sm
-                so it reads as a "warm/in-progress destructive action"
-                — replaces the legacy gray ghost button. */}
-            {currentSelectedOp.id === currentUser.id && currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
+            {/* New Battle Plan button — only shown on own profile when a
+                SITREP exists AND the plan isn't under a head-trainer
+                takeover (a locked plan can only be changed via /daily-plan,
+                so offering "New Battle Plan" would just be server-rejected).
+                Uses .btn.btn-amber.btn-sm as a "warm/in-progress" action. */}
+            {currentSelectedOp.id === currentUser.id && !isPlanLocked(currentSelectedOp) && currentSelectedOp.sitrep && Object.keys(currentSelectedOp.sitrep).length > 0 && (
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
                 <button
                   type="button"

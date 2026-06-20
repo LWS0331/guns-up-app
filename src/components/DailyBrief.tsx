@@ -44,6 +44,12 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
   const operatorRef = useRef(operator);
   operatorRef.current = operator;
 
+  // One-shot guard for the auto-generate effect. `generateBrief` is a
+  // useCallback over `operator`, so its identity changes on every parent
+  // re-render; without this, a FAILED generation (brief stays null) would
+  // re-fire on each unrelated operator churn — an API retry storm.
+  const autoGenAttemptedRef = useRef(false);
+
   const generateBrief = useCallback(async () => {
     if (!operator.sitrep) return;
     setLoading(true);
@@ -184,11 +190,15 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
     setNutritionLoading(false);
   }, [nutritionInput, operator, t]);
 
-  // Auto-generate on mount if no brief for today — UNLESS a head trainer
-  // has taken over this operator's plan (planOverride.active), in which
-  // case the trainer-authored brief stands and must not be regenerated.
+  // Auto-generate on mount if no brief for today — once. Skipped UNLESS a
+  // head trainer has taken over this operator's plan (planOverride.active),
+  // in which case the trainer-authored brief stands and must not be
+  // regenerated. The ref makes this fire at most once (no retry storm on
+  // failure); the manual Refresh button remains for re-attempts.
   useEffect(() => {
+    if (autoGenAttemptedRef.current) return;
     if (!brief && operator.sitrep && !loading && !isPlanLocked(operator)) {
+      autoGenAttemptedRef.current = true;
       generateBrief();
     }
   }, [brief, operator, loading, generateBrief]);

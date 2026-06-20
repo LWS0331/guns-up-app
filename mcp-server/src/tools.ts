@@ -698,6 +698,12 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     },
     async (patch) => {
       const clean = stripUndefined(patch);
+      const hasNote = typeof clean.note === 'string' && clean.note.trim() !== '';
+      if (patch.release !== true && clean.sitrep === undefined && clean.dailyBrief === undefined && !hasNote) {
+        return textContent(
+          'Nothing to apply — pass a sitrep and/or dailyBrief object (or a non-empty note) to take over, or release:true to hand control back to auto-generation.'
+        );
+      }
       const res = await client.patchDailyPlan(clean);
       const state = res.planOverride?.active ? `locked (v${res.planOverride.version})` : 'released to auto';
       return textContent(`Daily plan ${patch.release ? 'released' : 'updated'} — now ${state}.`);
@@ -1648,6 +1654,12 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     },
     async ({ client_id, ...patch }) => {
       const clean = stripUndefined(patch);
+      const hasNote = typeof clean.note === 'string' && clean.note.trim() !== '';
+      if (patch.release !== true && clean.sitrep === undefined && clean.dailyBrief === undefined && !hasNote) {
+        return textContent(
+          'Nothing to apply — pass a sitrep and/or dailyBrief object (or a non-empty note) to take over, or release:true to hand control back to auto-generation.'
+        );
+      }
       const res = await client.patchDailyPlanById(client_id, clean);
       const state = res.planOverride?.active ? `locked (v${res.planOverride.version})` : 'released to auto';
       return textContent(`Daily plan for ${client_id} ${patch.release ? 'released' : 'updated'} — now ${state}.`);

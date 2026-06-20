@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
-import { OPS_CENTER_ACCESS } from '@/lib/types';
+import { OPS_CENTER_ACCESS, isHeadTrainer } from '@/lib/types';
+import { isPlanLocked } from '@/lib/planOverride';
 import { validateOperatorJsonFields } from '@/lib/operatorValidation';
 
 // Field sets per actor. Admins can set everything; self can set profile + identity
@@ -142,6 +143,21 @@ export async function PUT(
     // own profile we want the self set, not the trainer set).
     const allowed = isAdmin ? ADMIN_FIELDS : isSelf ? SELF_FIELDS : TRAINER_FIELDS;
     const data = pickFields(body, allowed);
+
+    // Head-trainer takeover enforcement (mirrors the /profile route): while
+    // a plan is locked, sitrep/dailyBrief are writable only via /daily-plan
+    // (head trainer/admin). Strip them here for everyone else so a locked
+    // plan can't be clobbered through the general operator PUT.
+    if (
+      (data.sitrep !== undefined || data.dailyBrief !== undefined) &&
+      !isAdmin && !isHeadTrainer(auth.operatorId)
+    ) {
+      const cur = await prisma.operator.findUnique({ where: { id }, select: { planOverride: true } });
+      if (isPlanLocked(cur)) {
+        delete data.sitrep;
+        delete data.dailyBrief;
+      }
+    }
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: 'No updatable fields in request' }, { status: 400 });

@@ -185,7 +185,7 @@ export function projectProfileSummary(
   // purpose; auto-refresh is suppressed).
   const ov = op.planOverride;
   const planManaged = !!ov && typeof ov === 'object' && (ov as { active?: unknown }).active === true;
-  const planManagedBy = planManaged ? ((ov as { lockedBy?: string }).lockedBy ?? 'head_trainer') : null;
+  const planManagedBy = planManaged ? ((ov as { lockedBy?: string }).lockedBy || 'head_trainer') : null;
 
   const briefDate = toPacificDay(readDateField(op.dailyBrief, 'date'));
   const dailyBriefStale = !planManaged && !!today && !!briefDate && briefDate !== today;

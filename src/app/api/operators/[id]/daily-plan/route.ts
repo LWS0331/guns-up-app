@@ -128,11 +128,12 @@ export async function PATCH(
       data.planOverride = releaseOverride(existing.planOverride, { lockedBy: auth.operatorId }) as unknown as object;
     } else {
       // Take over (or refresh an active takeover). Requires at least one
-      // plan field OR an explicit note so an empty PATCH can't silently
-      // lock an operator with no content.
-      if (data.sitrep === undefined && data.dailyBrief === undefined && src.note === undefined) {
+      // plan field OR a NON-EMPTY note so an empty PATCH (incl. note:'')
+      // can't silently lock an operator with no content.
+      const trimmedNote = typeof src.note === 'string' ? src.note.trim() : '';
+      if (data.sitrep === undefined && data.dailyBrief === undefined && trimmedNote === '') {
         return NextResponse.json(
-          { error: 'Provide sitrep and/or dailyBrief (or note), or pass release:true' },
+          { error: 'Provide sitrep and/or dailyBrief (or a non-empty note), or pass release:true' },
           { status: 400 },
         );
       }
