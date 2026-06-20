@@ -100,6 +100,10 @@ export interface ProfileSummary {
   /** Consecutive-day completed-workout streak, computed LIVE from
    *  op.workouts up to `today` — never read from the frozen dailyBrief. */
   streakDays: number;
+  /** Head-trainer who has taken over this operator's daily plan, or null.
+   *  When set, the plan is trainer-managed: staleness flags are forced
+   *  false and the brief is kept as-authored (no auto-refresh). */
+  planManagedBy: string | null;
   nutritionTargets: MacroTargets | undefined;
   workoutDates: string[];
   nutritionDates: string[];
@@ -176,13 +180,20 @@ export function projectProfileSummary(
   const today = opts.today;
   const workouts = (op.workouts || {}) as Record<string, Workout>;
 
+  // Head-trainer takeover: when the plan is locked, it's trainer-managed —
+  // never flag it stale or drop the brief (the trainer authored it on
+  // purpose; auto-refresh is suppressed).
+  const ov = op.planOverride;
+  const planManaged = !!ov && typeof ov === 'object' && (ov as { active?: unknown }).active === true;
+  const planManagedBy = planManaged ? ((ov as { lockedBy?: string }).lockedBy ?? 'head_trainer') : null;
+
   const briefDate = toPacificDay(readDateField(op.dailyBrief, 'date'));
-  const dailyBriefStale = !!today && !!briefDate && briefDate !== today;
+  const dailyBriefStale = !planManaged && !!today && !!briefDate && briefDate !== today;
 
   // sitrep.generatedDate is a full ISO timestamp; normalize to the Pacific
   // calendar day before comparing or every sitrep reads as stale.
   const sitrepDate = toPacificDay(readDateField(op.sitrep, 'generatedDate'));
-  const sitrepStale = !!today && !!sitrepDate && sitrepDate !== today;
+  const sitrepStale = !planManaged && !!today && !!sitrepDate && sitrepDate !== today;
 
   return {
     id: op.id,
@@ -198,6 +209,7 @@ export function projectProfileSummary(
     dailyBriefStale,
     sitrepStale,
     streakDays: computeStreak(workouts, today),
+    planManagedBy,
     nutritionTargets: op.nutrition?.targets,
     workoutDates: Object.keys(op.workouts || {}).sort(),
     nutritionDates: Object.keys(op.nutrition?.meals || {}).sort(),

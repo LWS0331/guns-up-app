@@ -334,4 +334,31 @@ describe('projectProfileSummary', () => {
       expect(summary.streakDays).toBe(2); // today pending is allowed (gap only breaks after i>0)
     });
   });
+
+  describe('head-trainer plan override (lock-respect)', () => {
+    it('forces staleness flags false and keeps the brief when the plan is locked', () => {
+      const op = makeOperator({
+        // Both dated 2026-05-05 — would normally be stale vs today.
+        sitrep: { generatedDate: '2026-05-05T20:00:00.000Z', summary: 'trainer plan' },
+        dailyBrief: { date: '2026-05-05', greeting: 'hold the line' },
+        planOverride: { active: true, lockedBy: 'op-ruben', lockedAt: 't', version: 1 },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.planManagedBy).toBe('op-ruben');
+      expect(summary.sitrepStale).toBe(false);
+      expect(summary.dailyBriefStale).toBe(false);
+      expect(summary.dailyBrief).toEqual(op.dailyBrief); // kept, not dropped
+    });
+
+    it('still flags stale when the override is inactive', () => {
+      const op = makeOperator({
+        dailyBrief: { date: '2026-05-05' },
+        planOverride: { active: false, lockedBy: 'op-ruben', lockedAt: 't', version: 2 },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.planManagedBy).toBeNull();
+      expect(summary.dailyBriefStale).toBe(true);
+      expect(summary.dailyBrief).toBeNull();
+    });
+  });
 });

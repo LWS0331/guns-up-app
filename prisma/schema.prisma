@@ -67,6 +67,13 @@ model Operator {
   // deep-merges and bumps `version`). See src/lib/dailyOpsSop.ts.
   dailyOps    Json      @default("{}")  // DailyOpsSOP — see src/lib/dailyOpsSop.ts
 
+  // Head-trainer plan override (Jun 2026). When { active: true }, a head
+  // trainer (HEAD_TRAINER_ACCESS) has taken over this operator's daily
+  // plan: the generate-on-read refresh is suppressed and the
+  // trainer-authored sitrep/dailyBrief stand until released. Additive;
+  // lands via the startup `prisma db push`. See src/lib/planOverride.ts.
+  planOverride Json     @default("{}")  // PlanOverride — see src/lib/planOverride.ts
+
   // Macrocycle engine (Apr 2026). Up to 2 active goals — calendar-aware
   // periodization for 6-12 month targets. See src/lib/macrocycle.ts and
   // src/lib/macrocycleLibrary.ts. Migration NOT auto-run.

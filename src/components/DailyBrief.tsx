@@ -17,6 +17,7 @@ interface DailyBriefProps {
 
 import { getLocalDateStr, getLocalYesterdayStr, getLocalDateLongStr, getLocalTimezone } from '@/lib/dateUtils';
 import { computeWorkoutStreak, computeCompliance } from '@/lib/workoutStats';
+import { isPlanLocked } from '@/lib/planOverride';
 import { getAuthToken } from '@/lib/authClient';
 import { useLanguage } from '@/lib/i18n';
 
@@ -25,7 +26,13 @@ const getYesterdayStr = getLocalYesterdayStr;
 
 export default function DailyBriefComponent({ operator, onUpdateOperator, onViewPriorNutrition }: DailyBriefProps) {
   const { t } = useLanguage();
-  const [brief, setBrief] = useState<DailyBriefType | null>(operator.dailyBrief?.date === getTodayStr() ? operator.dailyBrief : null);
+  // When a head trainer has taken over the plan, show their authored brief
+  // as-is (it may not carry today's date); otherwise only seed today's brief.
+  const [brief, setBrief] = useState<DailyBriefType | null>(
+    isPlanLocked(operator)
+      ? (operator.dailyBrief ?? null)
+      : (operator.dailyBrief?.date === getTodayStr() ? operator.dailyBrief : null),
+  );
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [workoutLoaded, setWorkoutLoaded] = useState(false);
@@ -177,12 +184,14 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
     setNutritionLoading(false);
   }, [nutritionInput, operator, t]);
 
-  // Auto-generate on mount if no brief for today
+  // Auto-generate on mount if no brief for today — UNLESS a head trainer
+  // has taken over this operator's plan (planOverride.active), in which
+  // case the trainer-authored brief stands and must not be regenerated.
   useEffect(() => {
-    if (!brief && operator.sitrep && !loading) {
+    if (!brief && operator.sitrep && !loading && !isPlanLocked(operator)) {
       generateBrief();
     }
-  }, [brief, operator.sitrep, loading, generateBrief]);
+  }, [brief, operator, loading, generateBrief]);
 
   if (!operator.sitrep) return null;
 

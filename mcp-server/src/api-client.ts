@@ -332,6 +332,9 @@ export interface Operator {
   dailyBrief?: unknown;
   /** Persistent coach-authored daily SOP. NOT the per-day schedule. */
   dailyOps?: DailyOpsSOP;
+  /** Head-trainer plan override. When active, the daily plan is
+   *  trainer-managed and auto-refresh is suppressed. */
+  planOverride?: { active?: boolean; lockedBy?: string; lockedAt?: string; version?: number; note?: string };
   intake?: Record<string, unknown>;
   profile?: Record<string, unknown> & { goals?: string[] };
   preferences?: Record<string, unknown>;
