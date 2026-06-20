@@ -1,5 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { detectSitrepDivergence } from '../sitrepFreshness';
+import { detectSitrepDivergence, isSitrepStale } from '../sitrepFreshness';
+
+describe('isSitrepStale', () => {
+  it('is false when there is no sitrep / generatedDate', () => {
+    expect(isSitrepStale(null)).toBe(false);
+    expect(isSitrepStale({ sitrep: undefined } as never)).toBe(false);
+    expect(isSitrepStale({ sitrep: { } } as never, '2026-06-20')).toBe(false);
+  });
+
+  it('flags a sitrep generated on a prior day (from a full ISO timestamp)', () => {
+    const op = { sitrep: { generatedDate: '2026-05-05T20:00:00.000Z' } } as never;
+    expect(isSitrepStale(op, '2026-06-20')).toBe(true);
+  });
+
+  it('is false when generated today', () => {
+    // Local-day comparison: build a timestamp whose local date is the target.
+    const op = { sitrep: { generatedDate: '2026-06-20T18:00:00' } } as never;
+    expect(isSitrepStale(op, '2026-06-20')).toBe(false);
+  });
+
+  it('is false for an unparseable date', () => {
+    expect(isSitrepStale({ sitrep: { generatedDate: 'not-a-date' } } as never, '2026-06-20')).toBe(false);
+  });
+});
 
 // Minimal operator shapes — detectSitrepDivergence only reads
 // preferences + sitrep.trainingPlan.

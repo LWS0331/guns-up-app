@@ -10,6 +10,32 @@
 // Pure + synchronous so it's unit-testable and cheap to call on render.
 
 import type { Operator } from './types';
+import { getLocalDateStr } from './dateUtils';
+
+/**
+ * True when the stored sitrep was generated on an earlier calendar day
+ * than `today` (operator-local). The sitrep's embedded `today` workout +
+ * nutrition framing are a day-N snapshot, so a prior-day sitrep is stale.
+ * Used (alongside divergence) to surface the one-tap "regenerate" banner.
+ */
+export function isSitrepStale(
+  operator: Pick<Operator, 'sitrep'> | null | undefined,
+  today?: string,
+): boolean {
+  const gen = operator?.sitrep?.generatedDate;
+  if (!gen) return false;
+  const d = new Date(gen);
+  if (Number.isNaN(d.getTime())) return false;
+  let genDay: string | null;
+  try {
+    genDay = d.toLocaleDateString('en-CA'); // local YYYY-MM-DD
+  } catch {
+    return false;
+  }
+  const todayStr = today ?? getLocalDateStr();
+  return !!genDay && genDay !== todayStr;
+}
+
 
 /** Normalize a split label for comparison: lowercase, drop parenthetical
  *  qualifiers ("(Sciatic-Adapted)", "(2 on / 1 off)"), collapse
