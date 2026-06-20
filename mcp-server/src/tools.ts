@@ -1655,6 +1655,19 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
   );
 
   server.registerTool(
+    'get_roster_digest',
+    {
+      title: 'Get the head-trainer roster digest',
+      description:
+        "HEAD-TRAINER tool. Returns one compact row per operator across the whole roster — streak, 7-day compliance, last completed workout, latest readiness check-in, and plan status (managed/stale/diverged) — so you can see who needs steering. 403 without head-trainer/admin access.",
+      inputSchema: {},
+    },
+    async () => {
+      return jsonContent(await client.getRosterDigest());
+    }
+  );
+
+  server.registerTool(
     'update_client_preferences',
     {
       title: 'Update a client\'s training preferences',

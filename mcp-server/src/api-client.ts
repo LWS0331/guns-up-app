@@ -185,6 +185,13 @@ export class GunnyApiClient {
     );
   }
 
+  /** Head-trainer upward roll-up — one row per operator (streak,
+   * compliance, last workout, readiness, plan status). Head/admin only
+   * (enforced server-side). */
+  async getRosterDigest(): Promise<unknown> {
+    return this.fetch('GET', '/api/head-trainer/digest');
+  }
+
   /** List active wearable connections for an operator.
    * GET /api/wearables?operatorId=<id> — server enforces self/admin/trainer-of-target. */
   async listWearables(operatorId: string): Promise<WearableConnection[]> {
