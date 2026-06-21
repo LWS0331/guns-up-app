@@ -23,6 +23,7 @@ import { MealRow } from '@/components/nutrition/MealRow';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import { getAuthToken } from '@/lib/authClient';
 import { compressImageForVision } from '@/lib/imageCompress';
+import Icon from '@/components/Icons';
 
 /** Format a meal.time for display — handles ISO, legacy locale strings, and bare times. */
 const formatMealTime = (raw: string | undefined): string => {
@@ -1338,10 +1339,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               t(). DB-key strings (`labelKey`, `descKey`) keep the row's
               identity stable across language switches. */}
           {[
-            { tier: 1, labelKey: 'intel.tracking_tiers.tier1.label', descKey: 'intel.tracking_tiers.tier1.desc', color: '#00ff41', icon: '⚡', accuracy: '±1-3%' },
-            { tier: 2, labelKey: 'intel.tracking_tiers.tier2.label', descKey: 'intel.tracking_tiers.tier2.desc', color: '#4ade80', icon: '🔬', accuracy: '±5-10%' },
-            { tier: 3, labelKey: 'intel.tracking_tiers.tier3.label', descKey: 'intel.tracking_tiers.tier3.desc', color: '#facc15', icon: '💬', accuracy: '±15-25%' },
-            { tier: 4, labelKey: 'intel.tracking_tiers.tier4.label', descKey: 'intel.tracking_tiers.tier4.desc', color: '#ff6b35', icon: '📸', accuracy: '±20-40%' },
+            { tier: 1, labelKey: 'intel.tracking_tiers.tier1.label', descKey: 'intel.tracking_tiers.tier1.desc', color: '#00ff41', icon: <Icon.Bolt size={16} color="#00ff41" />, accuracy: '±1-3%' },
+            { tier: 2, labelKey: 'intel.tracking_tiers.tier2.label', descKey: 'intel.tracking_tiers.tier2.desc', color: '#4ade80', icon: <Icon.Stats size={16} color="#4ade80" />, accuracy: '±5-10%' },
+            { tier: 3, labelKey: 'intel.tracking_tiers.tier3.label', descKey: 'intel.tracking_tiers.tier3.desc', color: '#facc15', icon: <Icon.Send size={16} color="#facc15" />, accuracy: '±15-25%' },
+            { tier: 4, labelKey: 'intel.tracking_tiers.tier4.label', descKey: 'intel.tracking_tiers.tier4.desc', color: '#ff6b35', icon: <Icon.Camera size={16} color="#ff6b35" />, accuracy: '±20-40%' },
           ].map(tr => (
             <div
               key={tr.tier}
@@ -1354,7 +1355,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                 gap: 8,
               }}
             >
-              <span style={{ fontSize: 16 }}>{tr.icon}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 16 }}>{tr.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="t-display-m" style={{ color: tr.color, fontSize: 9, letterSpacing: 1 }}>
                   TIER {tr.tier}: {t(tr.labelKey)}
@@ -1438,10 +1439,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       {isViewingToday && (<>
       <div className="segmented" style={{ marginBottom: 16, gap: 6 }}>
         {([
-          { id: 'quick' as const, label: '💬 Quick', color: '#facc15' },
-          { id: 'photo' as const, label: '📸 Photo', color: '#ff6b35' },
-          { id: 'search' as const, label: '🔬 USDA', color: '#4ade80' },
-          { id: 'manual' as const, label: '⚡ Manual', color: '#00ff41' },
+          { id: 'quick' as const, icon: <Icon.Send size={12} color="currentColor" />, label: 'Quick', color: '#facc15' },
+          { id: 'photo' as const, icon: <Icon.Camera size={12} color="currentColor" />, label: 'Photo', color: '#ff6b35' },
+          { id: 'search' as const, icon: <Icon.Stats size={12} color="currentColor" />, label: 'USDA', color: '#4ade80' },
+          { id: 'manual' as const, icon: <Icon.Bolt size={12} color="currentColor" />, label: 'Manual', color: '#00ff41' },
         ]).map(m => {
           const isActive = nutritionLogMode === m.id;
           return (
@@ -1454,6 +1455,10 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                 flex: 1,
                 padding: '8px 4px',
                 fontSize: 10,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
                 ...(isActive
                   ? {
                       color: m.color,
@@ -1463,7 +1468,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                   : {}),
               }}
             >
-              {m.label}
+              {m.icon} {m.label}
             </button>
           );
         })}
@@ -1591,7 +1596,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
             {photoAnalyzing ? (
               <>ANALYZING...</>
             ) : (
-              <>📸 TAP TO SNAP OR UPLOAD PHOTO</>
+              <><Icon.Camera size={14} color="currentColor" /> TAP TO SNAP OR UPLOAD PHOTO</>
             )}
           </button>
 
@@ -2675,11 +2680,11 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
       milestone: '#facc15',
     };
 
-    const typeIcons: Record<string, string> = {
-      consistency: '🔄',
-      endurance: '🫁',
-      strength: '💪',
-      milestone: '⭐',
+    const typeIcons: Record<string, React.ReactNode> = {
+      consistency: <Icon.Calendar size={11} color="currentColor" />,
+      endurance: <Icon.Heart size={11} color="currentColor" />,
+      strength: <Icon.Dumbbell size={11} color="currentColor" />,
+      milestone: <Icon.Star size={11} color="currentColor" />,
     };
 
     return (
@@ -2729,7 +2734,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {isComplete ? (
-                    <span style={{ fontSize: 14 }}>✅</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 14 }}><Icon.Check size={14} color="#00ff41" /></span>
                   ) : isCurrentPhase ? (
                     <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#00ff41', display: 'inline-block', boxShadow: '0 0 6px rgba(0,255,65,0.5)' }} />
                   ) : (
@@ -2739,8 +2744,8 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                     PHASE {phase}: {phaseName}
                   </span>
                 </div>
-                <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: isComplete ? '#00ff41' : '#666' }}>
-                  {phaseAchieved}/{phaseMilestones.length} {isComplete ? '✓' : `(${phasePct}%)`}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Share Tech Mono, monospace', fontSize: 11, color: isComplete ? '#00ff41' : '#666' }}>
+                  {phaseAchieved}/{phaseMilestones.length} {isComplete ? <Icon.Check size={11} color="#00ff41" /> : `(${phasePct}%)`}
                 </span>
               </div>
 
@@ -2759,7 +2764,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                       border: `2px solid ${ms.achieved ? typeColors[ms.type] || '#00ff41' : '#333'}`,
                       fontSize: 10,
                     }}>
-                      {ms.achieved ? '✓' : typeIcons[ms.type] || '○'}
+                      {ms.achieved ? <Icon.Check size={11} color="#000" /> : (typeIcons[ms.type] || '○')}
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{
@@ -3363,9 +3368,12 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
                   cursor: alreadyAdded ? 'default' : 'pointer',
                   opacity: alreadyAdded ? 0.85 : 1,
                   background: alreadyAdded ? 'rgba(0,255,65,0.08)' : 'transparent',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
-                {alreadyAdded ? '✓ ' : '+ '}
+                {alreadyAdded ? <Icon.Check size={11} color="currentColor" /> : '+ '}
                 {preset}
               </button>
             );
@@ -3642,7 +3650,7 @@ const IntelCenter: React.FC<IntelCenterProps> = ({ operator, currentUser, onUpda
     PREFERENCES: '◇',
     WEARABLES: '◎',
     FORM_CHECK: '◊',
-    MANUAL: '☰',
+    MANUAL: '▤',
   };
 
   const getTabLabels = (): Record<SubTab, string> => ({

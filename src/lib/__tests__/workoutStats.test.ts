@@ -30,7 +30,7 @@ describe('computeWorkoutStreak', () => {
   const T = (color: string) => ({ color, note: color });
 
   it('bridges a scheduled rest day without adding to the count', () => {
-    // Mon✅, Tue✅, rest Wed, Thu✅ → 3 (Wed bridges, does not increment)
+    // Mon+Tue done, rest Wed, Thu done => 3 (Wed bridges, does not increment)
     const w = { '2026-06-18': C('2026-06-18'), '2026-06-17': C('2026-06-17'), '2026-06-15': C('2026-06-15') };
     const tags = { '2026-06-16': T('cyan') };
     expect(computeWorkoutStreak(w, '2026-06-18', tags)).toBe(3);

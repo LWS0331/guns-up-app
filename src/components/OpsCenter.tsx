@@ -1127,7 +1127,7 @@ const OpsCenter: React.FC<OpsCenterProps> = ({ currentUser, operators }) => {
                     {op.email || '— LOCKED'}
                   </td>
                   <td style={{ padding: '10px 8px', textAlign: 'center', color: op.googleId ? '#00ff41' : '#444', fontSize: 14 }}>
-                    {op.googleId ? '✓' : '·'}
+                    {op.googleId ? <Icon.Check size={13} color="currentColor" /> : '·'}
                   </td>
                   <td style={{ padding: '10px 8px' }}>
                     {/* Admins editing in OPS always get the dropdown — the
@@ -1859,7 +1859,7 @@ If anything jams up, DM me. — Ruben`
             background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.30)',
             color: '#ff8888', fontFamily: '"Share Tech Mono", monospace', fontSize: '12px',
           }}>
-            ✕ {onboardingError}
+            <Icon.X size={12} color="#ff8888" /> {onboardingError}
           </div>
         )}
 
@@ -1888,7 +1888,7 @@ If anything jams up, DM me. — Ruben`
             border: '1px solid rgba(0,255,65,0.30)',
           }}>
             <div style={{ color: '#00ff41', fontFamily: '"Orbitron", sans-serif', fontSize: '14px', fontWeight: 700, letterSpacing: '2px', marginBottom: '12px' }}>
-              ✓ OPERATOR ACTIVATED — {result.callsign}
+              <Icon.Check size={14} color="#00ff41" /> OPERATOR ACTIVATED — {result.callsign}
             </div>
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px',
@@ -2116,7 +2116,7 @@ If anything jams up, DM me. — Ruben`
                 color: '#ff4444', fontFamily: '"Orbitron", sans-serif', fontSize: '16px',
                 fontWeight: 700, letterSpacing: '2px', marginBottom: '16px',
               }}>
-                ⚠ DELETE {target.callsign}
+                <Icon.Warning size={16} color="#ff4444" /> DELETE {target.callsign}
               </div>
               <div style={{ marginBottom: '12px', fontSize: '13px', lineHeight: 1.5 }}>
                 This is <strong style={{ color: '#ff4444' }}>permanent</strong>. The operator row + every
@@ -2149,7 +2149,7 @@ If anything jams up, DM me. — Ruben`
                   color: '#ff8888',
                   fontFamily: '"Share Tech Mono", monospace', fontSize: '11px',
                 }}>
-                  ✕ {adminActionError}
+                  <Icon.X size={11} color="#ff8888" /> {adminActionError}
                 </div>
               )}
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>

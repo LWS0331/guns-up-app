@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, TIER_CONFIGS } from '@/lib/types';
 import NotificationSettings from '@/components/NotificationSettings';
+import Icon from '@/components/Icons';
 import { formatLocalDateKey, getLocalDateStr } from '@/lib/dateUtils';
 import { computeWorkoutStreak } from '@/lib/workoutStats';
 
@@ -485,7 +486,7 @@ export const COCDashboard: React.FC<COCDashboardProps> = ({ operator }) => {
                           border: '1px solid rgba(0,255,65,0.2)',
                           backgroundColor: 'rgba(0,255,65,0.04)',
                         }}>
-                          ✓
+                          <Icon.Check size={13} color="#00ff41" />
                         </div>
                       )}
                     </div>

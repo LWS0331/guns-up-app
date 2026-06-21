@@ -12,6 +12,7 @@
 import React from 'react';
 import { upgradeTargetLabel } from '@/lib/tierGates';
 import { useLanguage } from '@/lib/i18n';
+import Icon from '@/components/Icons';
 
 interface UpgradeCardProps {
   feature: string;                                       // e.g. "Volume Tracking"
@@ -70,7 +71,7 @@ export default function UpgradeCard({ feature, requiredTier, description, onUpgr
             marginBottom: compact ? 8 : 12,
           }}
         >
-          🔒 {target} {t('upgrade.tier_required').toUpperCase()}
+          <Icon.Lock size={10} color={accent} /> {target} {t('upgrade.tier_required').toUpperCase()}
         </div>
 
         <div

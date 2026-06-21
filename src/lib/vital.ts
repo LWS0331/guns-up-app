@@ -26,7 +26,7 @@ export function getVitalClient(): VitalClient {
 
 // Provider display names and icons for the UI
 export const SUPPORTED_PROVIDERS = [
-  { slug: 'apple_health_kit', name: 'Apple Health', icon: '🍎', requiresMobile: true },
+  { slug: 'apple_health_kit', name: 'Apple Health', icon: 'A', requiresMobile: true },
   { slug: 'whoop_v2', name: 'WHOOP', icon: 'W', requiresMobile: false },
   { slug: 'garmin', name: 'Garmin', icon: 'G', requiresMobile: false },
   { slug: 'fitbit', name: 'Fitbit', icon: 'F', requiresMobile: false },

@@ -27,6 +27,7 @@ import {
   formatHeightInput,
 } from '@/lib/types';
 import { useLanguage } from '@/lib/i18n';
+import Icon from '@/components/Icons';
 
 interface JuniorIntakeFormProps {
   operator: Operator;
@@ -771,7 +772,7 @@ export default function JuniorIntakeForm({ operator, onComplete, onSkip }: Junio
 
           <div style={s.reviewSection}>
             <div style={s.reviewLabel}>{t('junior.review_consent')}</div>
-            <div style={s.reviewValue}>{t('junior.review_participation')} {participationConsent ? '✓' : '✗'} · {t('junior.review_data')} {dataConsent ? '✓' : '✗'}</div>
+            <div style={s.reviewValue}>{t('junior.review_participation')} {participationConsent ? <Icon.Check size={13} color="#00ff41" /> : <Icon.X size={13} color="#ff4040" />} · {t('junior.review_data')} {dataConsent ? <Icon.Check size={13} color="#00ff41" /> : <Icon.X size={13} color="#ff4040" />}</div>
             <div style={{ ...s.reviewValue, fontSize: 12, color: '#888' }}>
               {t('junior.review_emergency')} {emergencyName} {emergencyRelationship && `(${emergencyRelationship})`} — {emergencyPhone}
             </div>

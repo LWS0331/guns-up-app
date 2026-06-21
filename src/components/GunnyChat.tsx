@@ -311,7 +311,7 @@ const formatOwnerDiagnostic = (info: { errorType?: string; message?: string; sta
     : t === 'stream_error' ? 'Mid-stream throw — see server log `Gunny API error`.'
     : 'Unclassified — check Railway logs.';
   const lines = [
-    '⚠ [DEBUG · RAMPAGE]',
+    'Warning: [DEBUG · RAMPAGE]',
     `type: ${t}${info.status ? ` (HTTP ${info.status})` : ''}`,
     info.message ? `msg: ${info.message}` : null,
     info.details ? `details: ${info.details}` : null,
@@ -467,9 +467,9 @@ Warmup: ${trainerWorkout.warmup}
 ━━━━━━━━━━━━━━━━━━`;
 
   if (hasSubstitutions) {
-    output += `\n⚠ Some exercises modified around your restrictions. No workarounds, champ — get the work in safely.`;
+    output += `\nWarning: Some exercises modified around your restrictions. No workarounds, champ — get the work in safely.`;
   } else {
-    output += `\n⚠ Weights scaled to your level.`;
+    output += `\nWarning: Weights scaled to your level.`;
   }
 
   if (trainerNotes) {
@@ -1323,7 +1323,7 @@ Total: ${clients.length} active clients`;
 TARGETS: ${targetCalories} cal | ${targetProtein}P | ${targetCarbs}C | ${Math.round(targetCalories * 0.25 / 9)}F
 
 Based on your goals [${goalText}] at ${weight}lbs:
-- Protein: 1.1g/lb = ~${Math.round(weight * 1.1)}g ✓ Target looks right
+- Protein: 1.1g/lb = ~${Math.round(weight * 1.1)}g [DONE] Target looks right
 - You're currently at ${currentCalories}/${targetCalories} cal today
 - Still need: ~${Math.max(0, targetProtein - currentProtein)}g protein, ~${Math.max(0, targetCarbs - currentCarbs)}g carbs
 
@@ -1466,7 +1466,7 @@ ${mealSuggestion}`;
           .filter(b => b.type === 'exercise')
           .map(b => `${b.exerciseName} (${b.prescription})`)
           .join(', ');
-        return `${date}: "${w?.title || 'Untitled'}" — ${exercises}${w?.completed ? ' ✅ COMPLETED' : ''}`;
+        return `${date}: "${w?.title || 'Untitled'}" — ${exercises}${w?.completed ? ' [DONE] COMPLETED' : ''}`;
       }).join('\n');
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2640,7 +2640,7 @@ ${mealSuggestion}`;
           setMessages(prev => [...prev, {
             id: 'gunny-mod-note-' + Date.now(),
             role: 'gunny',
-            text: `⚠ Heads up — I tried to apply that change but couldn't find the right exercise to act on. ${note}. Try naming the exercise exactly as it appears in your workout, or open the workout and tell me which one.`,
+            text: `Warning: Heads up — I tried to apply that change but couldn't find the right exercise to act on. ${note}. Try naming the exercise exactly as it appears in your workout, or open the workout and tell me which one.`,
             timestamp: new Date(),
           }]);
         }
@@ -2834,10 +2834,10 @@ ${mealSuggestion}`;
           fallbackText = formatOwnerDiagnostic(errorInfo);
         } else if (errorInfo?.errorType === 'stream_error') {
           fallbackText = hadImage
-            ? `⚠ The image couldn't be processed. Try a smaller photo (under 5MB) or retry without the image, ${operator.callsign}.`
-            : `⚠ Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
+            ? `Warning: The image couldn't be processed. Try a smaller photo (under 5MB) or retry without the image, ${operator.callsign}.`
+            : `Warning: Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
         } else {
-          fallbackText = `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+          fallbackText = `Warning: Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
         }
         setMessages((prev) =>
           prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
@@ -3232,7 +3232,7 @@ ${mealSuggestion}`;
           setMessages(prev => [...prev, {
             id: 'gunny-qa-mod-note-' + Date.now(),
             role: 'gunny',
-            text: `⚠ Heads up — I tried to apply that quick action but couldn't find the right exercise to act on. ${note} Try naming the exercise exactly as it appears, or open the workout and tell me which one.`,
+            text: `Warning: Heads up — I tried to apply that quick action but couldn't find the right exercise to act on. ${note} Try naming the exercise exactly as it appears, or open the workout and tell me which one.`,
             timestamp: new Date(),
           }]);
         }
@@ -3290,9 +3290,9 @@ ${mealSuggestion}`;
         if (operator.callsign === 'RAMPAGE' && errorInfo) {
           fallbackText = formatOwnerDiagnostic(errorInfo);
         } else if (errorInfo?.errorType === 'stream_error') {
-          fallbackText = `⚠ Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
+          fallbackText = `Warning: Server hiccup mid-reply. Tap retry, ${operator.callsign}.`;
         } else {
-          fallbackText = `⚠ Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
+          fallbackText = `Warning: Comms dropped mid-stream. Retry in a moment, ${operator.callsign}.`;
         }
         setMessages((prev) =>
           prev.map((m) => (m.id === placeholderId ? { ...m, text: fallbackText } : m))
@@ -4252,7 +4252,7 @@ ${mealSuggestion}`;
         <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,107,53,0.08)', borderTop: '1px solid rgba(255,107,53,0.2)' }}>
           <img src={pendingImage} alt="Preview" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #333' }} />
           <span style={{ fontFamily: 'Chakra Petch, sans-serif', fontSize: 11, color: '#ff6b35' }}>IMAGE ATTACHED — Gunny will analyze</span>
-          <button onClick={() => setPendingImage(null)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: 14 }}>✕</button>
+          <button onClick={() => setPendingImage(null)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}><Icon.X size={14} color="#666" /></button>
         </div>
       )}
       {/* Video keyframes preview — strip of stills in temporal order. */}
@@ -4266,7 +4266,7 @@ ${mealSuggestion}`;
           <span style={{ fontFamily: 'Chakra Petch, sans-serif', fontSize: 11, color: '#ff6b35' }}>
             FORM-CHECK VIDEO — {pendingFrames.length} STILLS — Gunny will analyze across frames
           </span>
-          <button onClick={() => setPendingFrames(null)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: 14 }}>✕</button>
+          <button onClick={() => setPendingFrames(null)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}><Icon.X size={14} color="#666" /></button>
         </div>
       )}
     </div>

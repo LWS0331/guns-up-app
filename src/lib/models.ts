@@ -7,7 +7,7 @@
 // this file and all four routes pick up the change.
 //
 // If you see a 404/model-not-found error at runtime and the app shows
-// "⚠ [DEBUG · RAMPAGE] type: model" in the Gunny fallback, that means
+// "Warning: [DEBUG · RAMPAGE] type: model" in the Gunny fallback, that means
 // the string below has been deprecated upstream. Check the Anthropic
 // docs, update the constant, and deploy.
 

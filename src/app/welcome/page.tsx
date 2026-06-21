@@ -15,6 +15,7 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Icon from '@/components/Icons';
 
 interface WelcomeStatus {
   email?: string;
@@ -178,7 +179,7 @@ function WelcomeInner() {
             fontSize: 12,
           }}>
             <div>
-              <span style={{ color: '#00ff41' }}>✓</span>{' '}
+              <span style={{ color: '#00ff41' }}><Icon.Check size={12} color="#00ff41" /></span>{' '}
               <span style={{ color: '#ddd' }}>Subscription active</span>
               {status.amount && status.cycle && (
                 <span style={{ color: '#888' }}>
@@ -255,7 +256,7 @@ function WelcomeInner() {
               }}
             >
               {magicLinkSent
-                ? '✓ Magic Link Sent'
+                ? <><Icon.Check size={13} color="currentColor" /> Magic Link Sent</>
                 : magicLinkBusy
                   ? 'Sending…'
                   : 'Resend Magic Link'}

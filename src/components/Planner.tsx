@@ -31,7 +31,7 @@ import { onPrefillWeights } from '@/lib/workoutEvents';
 
 // ═══ Tooltip Tag Pill Component ═══
 interface TagPillData {
-  icon: string;
+  icon: React.ReactNode;
   label: string;
   color: string;
   bg: string;
@@ -804,7 +804,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
   // ═══ Prescription Tag Type ═══
   interface PrescriptionTag {
-    icon: string;
+    icon: React.ReactNode;
     label: string;
     color: string;
     bg: string;
@@ -871,7 +871,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
     // RPE
     const rpeMatch = str.match(/(?:@\s*)?RPE\s*(\d+(?:-\d+)?)/i);
     if (rpeMatch) {
-      tags.push({ icon: '⚡', label: `RPE ${rpeMatch[1]}`, color: '#ff6b6b', bg: 'rgba(255,107,107,0.08)', border: 'rgba(255,107,107,0.2)',
+      tags.push({ icon: <Icon.Bolt size={10} color="#ff6b6b" />, label: `RPE ${rpeMatch[1]}`, color: '#ff6b6b', bg: 'rgba(255,107,107,0.08)', border: 'rgba(255,107,107,0.2)',
         tooltip: `Rate of Perceived Exertion — ${getRpeExplanation(rpeMatch[1])}` });
     }
 
@@ -2400,8 +2400,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 type="button"
                 onClick={onOpenGunny}
                 className="btn btn-amber btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
               >
-                ⚡ Gunny
+                <Icon.Bolt size={14} color="currentColor" /> Gunny
               </button>
             )}
             <button
@@ -2553,8 +2554,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#FF8C00', letterSpacing: 2 }}>
-                  ⚡ ASK GUNNY · MID-WORKOUT
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#FF8C00', letterSpacing: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon.Bolt size={11} color="#FF8C00" /> ASK GUNNY · MID-WORKOUT
                 </div>
                 <button
                   type="button"
@@ -2568,9 +2569,11 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                     fontSize: 14,
                     cursor: 'pointer',
                     padding: 4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
                   }}
                 >
-                  ✕
+                  <Icon.X size={14} color="currentColor" />
                 </button>
               </div>
 
@@ -2973,16 +2976,18 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                 <div
                   className="t-display-m"
                   style={{
-                    display: 'inline-block',
                     background: 'var(--amber)',
                     color: '#000',
                     padding: '4px 10px',
                     fontSize: 9,
                     letterSpacing: 2,
                     marginBottom: 12,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
                   }}
                 >
-                  ✓ {t('planner.all_sets_complete')}
+                  <Icon.Check size={10} color="#000" /> {t('planner.all_sets_complete')}
                 </div>
               )}
 
@@ -3139,7 +3144,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               {isActive && blockResults.sets.some(s => s.completed) && (
                 <>
                   <div className="t-eyebrow" style={{ marginTop: 8, marginBottom: 6 }}>
-                    Sets · This Exercise <span style={{ color: 'var(--green)', fontSize: 9, marginLeft: 6, fontWeight: 700 }}>✎ TAP A CELL TO EDIT</span>
+                    Sets · This Exercise <span style={{ color: 'var(--green)', fontSize: 9, marginLeft: 6, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon.Edit size={9} color="var(--green)" /> TAP A CELL TO EDIT</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {blockResults.sets.slice(0, parsedSets).map((set, si) => set.completed && (
@@ -3413,6 +3418,10 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               flex: '1 1 100px',
               borderStyle: removeConfirmAt !== null ? 'solid' : 'dashed',
               animation: removeConfirmAt !== null ? 'workoutCardGlow 1.5s ease-in-out infinite' : undefined,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
             }}
             disabled={workout.blocks.length <= 1}
             title={
@@ -3423,7 +3432,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   : 'Remove this exercise'
             }
           >
-            {removeConfirmAt !== null ? '✕ TAP AGAIN TO CONFIRM' : '− Remove This'}
+            {removeConfirmAt !== null ? <><Icon.X size={12} color="currentColor" /> TAP AGAIN TO CONFIRM</> : '− Remove This'}
           </button>
         </div>
           );
@@ -3482,9 +3491,9 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
               else if (onOpenGunny) onOpenGunny();
             }}
             className="btn btn-amber btn-block"
-            style={{ marginTop: 12 }}
+            style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
           >
-            ⚡ Need Help? Ask Gunny
+            <Icon.Bolt size={14} color="currentColor" /> Need Help? Ask Gunny
           </button>
         )}
 
@@ -3681,8 +3690,8 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
                   textAlign: 'left',
                 }}
               >
-                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#00ff41', letterSpacing: 1, marginBottom: 8 }}>
-                  ★ {completionData.newPRs.some(p => !p.isBaseline) ? 'NEW PRS HIT' : 'BASELINE PRS LOGGED'} ({completionData.newPRs.length})
+                <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#00ff41', letterSpacing: 1, marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon.Star size={10} color="#00ff41" /> {completionData.newPRs.some(p => !p.isBaseline) ? 'NEW PRS HIT' : 'BASELINE PRS LOGGED'} ({completionData.newPRs.length})
                 </div>
                 {completionData.newPRs.map((pr, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>

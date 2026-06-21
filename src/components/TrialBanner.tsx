@@ -27,6 +27,7 @@
 
 import { useState } from 'react';
 import { getAuthToken } from '@/lib/authClient';
+import Icon from '@/components/Icons';
 import { trackEvent } from '@/lib/analytics';
 
 export interface TrialState {
@@ -206,7 +207,7 @@ export default function TrialBanner({ trial, operatorId, stripePortalEnabled }: 
             fontFamily: '"Share Tech Mono", monospace',
             fontSize: '11px',
           }}>
-            ✕ {error}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon.X size={11} /> {error}</span>
           </div>
         )}
 

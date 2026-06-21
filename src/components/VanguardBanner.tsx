@@ -32,6 +32,7 @@
 // would expand to surface them.
 
 import { useEffect, useState } from 'react';
+import Icon from '@/components/Icons';
 
 interface Props {
   operatorId: string;
@@ -96,7 +97,7 @@ export default function VanguardBanner({ operatorId, isVanguard }: Props) {
         pointerEvents: 'auto',
       }}
     >
-      <span aria-hidden="true">★</span>
+      <Icon.Star size={14} />
       <span>Vanguard Member · Founding Operator</span>
       <button
         type="button"

@@ -35,6 +35,7 @@ import type {
 } from '@/lib/types';
 import { useLanguage } from '@/lib/i18n';
 import { parseMovementText } from '@/lib/parseMovementText';
+import Icon from '@/components/Icons';
 import WarmupMovementCard from '@/components/WarmupMovementCard';
 import WorkoutPTT from '@/components/WorkoutPTT';
 import type { VoiceCommand } from '@/components/VoiceInput';
@@ -546,7 +547,7 @@ export default function ParentLedWorkoutMode({
                 cursor: 'pointer',
               }}
             >
-              ⚡ {t('parent.workout.gunny')}
+              <Icon.Bolt size={11} color="#FF8C00" /> {t('parent.workout.gunny')}
             </button>
           )}
           <button
@@ -711,7 +712,7 @@ export default function ParentLedWorkoutMode({
                 cursor: 'pointer',
               }}
             >
-              ⚠ {b.label}
+              <Icon.Warning size={10} color={b.color} /> {b.label}
             </button>
           ))}
         </div>

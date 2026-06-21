@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Sitrep, SitrepExercise } from '@/lib/types';
 import { getLocalDateStr } from '@/lib/dateUtils';
+import Icon from '@/components/Icons';
 
 interface SitrepViewProps {
   sitrep: Sitrep;
@@ -84,7 +85,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
   return (
     <div style={s.container}>
       <div style={s.header}>
-        <div style={s.title}>⚔️ SITREP</div>
+        <div style={s.title}>SITREP</div>
         <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#facc15', letterSpacing: 1, marginBottom: 4 }}>
           BATTLE PLAN FOR {callsign.toUpperCase()}
         </div>
@@ -105,7 +106,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {(['overview', 'nutrition', 'training'] as const).map(sec => (
           <button key={sec} onClick={() => setActiveSection(sec)} style={s.sectionBtn(activeSection === sec)}>
-            {sec === 'overview' ? '📋 OVERVIEW' : sec === 'nutrition' ? '🍽️ NUTRITION' : sitrepStale ? '🏋️ DAY 1' : '🏋️ TODAY'}
+            {sec === 'overview' ? 'OVERVIEW' : sec === 'nutrition' ? 'NUTRITION' : sitrepStale ? 'DAY 1' : 'TODAY'}
           </button>
         ))}
       </div>
@@ -138,7 +139,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
           {/* Restrictions */}
           {(sitrep.restrictions || []).length > 0 && (
             <div style={{ ...s.card, borderColor: 'rgba(255,68,68,0.2)' }}>
-              <div style={{ ...s.label, color: '#ff4444' }}>⚠️ RESTRICTIONS</div>
+              <div style={{ ...s.label, color: '#ff4444', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon.Warning size={12} color="#ff4444" /> RESTRICTIONS</div>
               {sitrep.restrictions.map((r, i) => (
                 <div key={i} style={{ fontSize: 12, color: '#ff8888', padding: '4px 0' }}>• {r}</div>
               ))}
@@ -194,8 +195,8 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
             <div style={s.label}>NUTRITION STRATEGY</div>
             <div style={s.value}>{sitrep.nutritionPlan?.approach || ''}</div>
             <div style={{ marginTop: 8, display: 'flex', gap: 12 }}>
-              <span style={{ fontSize: 11, color: '#00ff41' }}>💧 {sitrep.nutritionPlan?.hydrationOz || 0}oz water/day</span>
-              <span style={{ fontSize: 11, color: '#facc15' }}>🍽️ {sitrep.nutritionPlan?.mealsPerDay || 0} meals/day</span>
+              <span style={{ fontSize: 11, color: '#00ff41' }}>{sitrep.nutritionPlan?.hydrationOz || 0}oz water/day</span>
+              <span style={{ fontSize: 11, color: '#facc15', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon.Food size={11} color="#facc15" /> {sitrep.nutritionPlan?.mealsPerDay || 0} meals/day</span>
             </div>
           </div>
 
@@ -282,7 +283,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
               {/* Warmup */}
               {today.warmup && (
                 <div style={s.card}>
-                  <div style={{ ...s.label, color: '#facc15' }}>🔥 WARMUP</div>
+                  <div style={{ ...s.label, color: '#facc15', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon.Flame size={12} color="#facc15" /> WARMUP</div>
                   <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>{today.warmup}</div>
                 </div>
               )}
@@ -300,7 +301,7 @@ export default function SitrepView({ sitrep, callsign, onAccept, onRegenerate, l
               {/* Cooldown */}
               {today.cooldown && (
                 <div style={s.card}>
-                  <div style={{ ...s.label, color: '#00ff41' }}>❄️ COOLDOWN</div>
+                  <div style={{ ...s.label, color: '#00ff41', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon.Snowflake size={12} color="#00ff41" /> COOLDOWN</div>
                   <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>{today.cooldown}</div>
                 </div>
               )}

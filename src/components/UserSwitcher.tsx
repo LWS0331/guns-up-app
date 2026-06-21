@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Operator } from '@/lib/types';
+import Icon from '@/components/Icons';
 
 interface UserSwitcherProps {
   currentUser: Operator;
@@ -120,7 +121,7 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
           }}
         >
           {/* Close button — explicit affordance for dismissal. The
-              outside-tap + Escape paths both work, but a visible ✕
+              outside-tap + Escape paths both work, but a visible close (X)
               gives the user a discoverable way to dismiss when they
               don't realize tapping outside closes it. */}
           <div
@@ -145,7 +146,7 @@ const UserSwitcher: React.FC<UserSwitcherProps> = ({
                 lineHeight: 1,
               }}
             >
-              ✕
+              <Icon.X size={16} />
             </button>
           </div>
 

@@ -314,6 +314,11 @@ export const Sword = make(
   'SwordIcon',
 );
 
+export const Star = make(
+  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />,
+  'StarIcon',
+);
+
 /* ─── Namespaced default export ─────────────────────────────────────────── */
 
 const Icon = {
@@ -321,7 +326,7 @@ const Icon = {
   Stats, Food, User, Lock, Settings, Bell,
   ChevronRight, ChevronDown, ChevronLeft, ChevronUp,
   ArrowRight, ArrowLeft, Plus, Minus, Calendar, Clock, Info, Warning, Send, Mic, Trash, Edit,
-  Snowflake, Volume, VolumeMute, Camera, Sword,
+  Snowflake, Volume, VolumeMute, Camera, Sword, Star,
 };
 
 // Legacy named exports (back-compat with callers using *Icon suffix)

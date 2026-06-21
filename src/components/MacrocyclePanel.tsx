@@ -13,6 +13,7 @@
 // engine in src/lib/macrocycle.ts builds the cycle on save.
 
 import React, { useMemo, useState } from 'react';
+import Icon from '@/components/Icons';
 import type { MacroCycle, MacroGoal, MacroGoalType, Operator } from '@/lib/types';
 import { buildMacroCycle, getActiveBlock, daysToGoal, recomputeOnGoalDateChange } from '@/lib/macrocycle';
 import { getTemplateNominalWeeks } from '@/lib/macrocycleLibrary';
@@ -383,7 +384,7 @@ const CycleCard: React.FC<CycleCardProps> = ({ cycle, today, onRemove, onMoveDat
             padding: 4,
           }}
         >
-          ✕
+          <Icon.X size={14} />
         </button>
       </div>
 

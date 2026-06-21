@@ -17,6 +17,7 @@ import React, { useMemo, useState } from 'react';
 import type { Operator, JuniorSafetyEvent, JuniorSafetyFlags, JuniorConsent, Workout } from '@/lib/types';
 import { useLanguage } from '@/lib/i18n';
 import DailyOpsApprovalCard from '@/components/DailyOpsApprovalCard';
+import Icon from '@/components/Icons';
 import ParentHubChat from '@/components/ParentHubChat';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 
@@ -319,7 +320,7 @@ export default function ParentDashboard({ parent, juniors, onUpdateJunior, onSel
                         cursor: 'pointer',
                       }}
                     >
-                      ✓ {t('parent.led.session_done')}
+                      <Icon.Check size={13} color="#00ff41" /> {t('parent.led.session_done')}
                     </button>
                   ) : (
                     <button
