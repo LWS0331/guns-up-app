@@ -19,7 +19,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Metadata } from 'next';
-import Icon from '@/components/Icons';
+import { XIcon } from '@/components/Icons';
 import styles from './junior-operator.module.css';
 import JuniorBetaForm from './JuniorBetaForm';
 import { LanguageToggle } from '@/components/LanguageToggle';
@@ -334,7 +334,7 @@ export default function JuniorOperatorPage() {
               { h: 'Won’t coach through pain', body: <>Gunny doesn&rsquo;t &ldquo;rub some dirt on it.&rdquo; Pain past a defined threshold pulls the session, logs it, and routes the parent to a clinician. Cowboy coaching is a feature we deleted.</> },
             ].map((w) => (
               <div key={w.h} className={styles.wontCell}>
-                <div className={styles.x}><Icon.X size={14} /></div>
+                <div className={styles.x}><XIcon size={14} /></div>
                 <div>
                   <h4>{w.h}</h4>
                   <p>{w.body}</p>

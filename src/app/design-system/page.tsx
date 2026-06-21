@@ -17,7 +17,7 @@
 
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import Icon from '@/components/Icons';
+import { StatsIcon, BoltIcon } from '@/components/Icons';
 
 export const metadata: Metadata = {
   title: 'Design System',
@@ -327,7 +327,7 @@ export default function DesignSystemPage() {
               <span className="lbl">Intel</span>
             </button>
             <button>
-              <span style={{ fontSize: 22 }}><Icon.Stats size={22} /></span>
+              <span style={{ fontSize: 22 }}><StatsIcon size={22} /></span>
               <span className="lbl">Ops</span>
             </button>
           </div>
@@ -343,7 +343,7 @@ export default function DesignSystemPage() {
             }}
           >
             <button className="ds-gunny-fab show" style={{ position: 'static' }}>
-              <span style={{ fontSize: 18 }}><Icon.Bolt size={18} /></span>
+              <span style={{ fontSize: 18 }}><BoltIcon size={18} /></span>
               GUNNY
             </button>
           </div>
