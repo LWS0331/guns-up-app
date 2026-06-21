@@ -12,10 +12,11 @@ import { toLocalDateStr } from './dateUtils';
 type Completedish = { completed?: boolean } | undefined;
 type Taggish = { color?: string } | undefined;
 
-/** dayTag colors that mark a *scheduled* rest and so bridge the streak
- *  (cyan = rest day, amber = deload, red = injured/sick). A green
- *  "great session" tag is NOT a rest signal and does not bridge. */
-const REST_TAG_COLORS = new Set(['cyan', 'amber', 'red']);
+/** dayTag colors that mark a *scheduled* rest and so bridge the streak /
+ *  compliance (cyan = rest day, amber = deload, red = injured/sick). A
+ *  green "great session" tag is NOT a rest signal and does not bridge.
+ *  Exported so buildGunnyContext's recentCompliance loop reuses one set. */
+export const REST_TAG_COLORS = new Set(['cyan', 'amber', 'red']);
 
 /**
  * Consecutive-day completed-workout streak ending at `today`.
@@ -60,13 +61,21 @@ export function computeWorkoutStreak(
  * workout entry). Returns null when nothing was scheduled in the window.
  * Today counts toward scheduled but an incomplete today is not penalized
  * as "missed" — it just isn't completed yet.
+ *
+ * A scheduled-rest dayTag (cyan/amber/red) bridges compliance the same way
+ * it bridges the streak: an *incomplete* day carrying such a tag (e.g. an
+ * injured day where the planned session was skipped) is neutral — excluded
+ * from the scheduled denominator entirely, not counted as a miss. A
+ * *completed* workout still counts even when the day is tagged.
  */
 export function computeCompliance(
   workouts: Record<string, unknown> | undefined,
   today: string,
   windowDays = 7,
+  dayTags?: Record<string, unknown>,
 ): number | null {
   const w = workouts || {};
+  const tags = dayTags || {};
   const todayMs = new Date(today + 'T12:00:00').getTime();
   if (Number.isNaN(todayMs)) return null;
   const windowMs = windowDays * 24 * 60 * 60 * 1000;
@@ -80,8 +89,11 @@ export function computeCompliance(
     // `windowDays` calendar days. `>` would admit the day exactly windowDays
     // ago, stretching a "last 7 days" window to 8.
     if (age < 0 || age >= windowMs) continue;
+    const done = (entry as Completedish)?.completed;
+    // Incomplete + scheduled-rest tag → neutral (don't count as scheduled).
+    if (!done && REST_TAG_COLORS.has((tags[date] as Taggish)?.color ?? '')) continue;
     scheduled++;
-    if ((entry as Completedish)?.completed) completed++;
+    if (done) completed++;
   }
   return scheduled > 0 ? Math.round((completed / scheduled) * 100) : null;
 }

@@ -47,7 +47,7 @@ export default function DailyBriefRef({ brief, focus = 'all', compact = false, w
   // values for callers that don't pass workouts.
   const today = getLocalDateStr();
   const liveStreak = workouts ? computeWorkoutStreak(workouts, today, dayTags) : (brief.streakDays ?? 0);
-  const liveCompliance = workouts ? computeCompliance(workouts, today) : (brief.complianceScore ?? null);
+  const liveCompliance = workouts ? computeCompliance(workouts, today, 7, dayTags) : (brief.complianceScore ?? null);
 
   // Compliance score color — green ≥80%, amber ≥50%, danger below.
   const compColor =

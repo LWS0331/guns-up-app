@@ -113,4 +113,42 @@ describe('computeCompliance', () => {
     // If 06-12 leaked in it would read 67 (3 scheduled, 2 completed).
     expect(computeCompliance(w, '2026-06-19')).toBe(50);
   });
+
+  // --- scheduled rest days are neutral (cyan/amber/red dayTags) ---
+  const Tag = (color: string) => ({ color, note: color });
+
+  it('excludes an incomplete rest-tagged day from the denominator', () => {
+    const w = {
+      '2026-06-19': C('2026-06-19'),
+      '2026-06-18': P('2026-06-18'), // injured day, skipped
+      '2026-06-17': C('2026-06-17'),
+    };
+    // Without tags: 2/3 = 67. With a red tag on the skipped day it's
+    // neutral → 2/2 = 100.
+    expect(computeCompliance(w, '2026-06-19')).toBe(67);
+    expect(computeCompliance(w, '2026-06-19', 7, { '2026-06-18': Tag('red') })).toBe(100);
+  });
+
+  it('treats cyan and amber incomplete days as neutral too', () => {
+    const w = { '2026-06-19': C('2026-06-19'), '2026-06-18': P('2026-06-18') };
+    expect(computeCompliance(w, '2026-06-19', 7, { '2026-06-18': Tag('cyan') })).toBe(100);
+    expect(computeCompliance(w, '2026-06-19', 7, { '2026-06-18': Tag('amber') })).toBe(100);
+  });
+
+  it('still counts a rest-tagged day that WAS completed', () => {
+    const w = { '2026-06-19': C('2026-06-19'), '2026-06-18': C('2026-06-18') };
+    // Completed deload day counts toward both scheduled and completed → 100.
+    expect(computeCompliance(w, '2026-06-19', 7, { '2026-06-18': Tag('amber') })).toBe(100);
+  });
+
+  it('does not neutralize an untagged or green-tagged miss', () => {
+    const w = { '2026-06-19': C('2026-06-19'), '2026-06-18': P('2026-06-18') };
+    expect(computeCompliance(w, '2026-06-19', 7, {})).toBe(50);
+    expect(computeCompliance(w, '2026-06-19', 7, { '2026-06-18': Tag('green') })).toBe(50);
+  });
+
+  it('returns null when every in-window day is a neutral rest day', () => {
+    const w = { '2026-06-18': P('2026-06-18') };
+    expect(computeCompliance(w, '2026-06-19', 7, { '2026-06-18': Tag('cyan') })).toBeNull();
+  });
 });

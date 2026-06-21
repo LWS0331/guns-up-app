@@ -7,7 +7,7 @@
 import type { Operator, SportProfile, JuniorConsent } from './types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from './workoutAnalysis';
 import { getLocalDateStr } from './dateUtils';
-import { computeWorkoutStreak } from './workoutStats';
+import { computeWorkoutStreak, REST_TAG_COLORS } from './workoutStats';
 import { buildMacroBriefContext } from './macrocycle';
 import { getIntakeGaps, intakeCompletenessPercent } from './intakeAudit';
 
@@ -336,11 +336,16 @@ export function buildFullGunnyContext(
       if (Number.isNaN(dayMs)) continue;
       const ageMs = todayMs - dayMs;
       if (ageMs < 0 || ageMs > SEVEN_DAYS) continue;
+      // A scheduled-rest dayTag (cyan/amber/red) over an *incomplete* day
+      // is neutral — a planned rest / deload / injured day, not a miss. Skip
+      // it so it lands in neither scheduled nor missed (mirrors the streak).
+      const done = w.completed === true;
+      if (!done && REST_TAG_COLORS.has(((operator.dayTags as AnyRec | undefined)?.[date] as AnyRec | undefined)?.color ?? '')) continue;
       // Only count days where a workout was actually scheduled (the
       // operator opened a planner entry). Empty days don't count
       // toward "missed" — they're just rest days.
       scheduled++;
-      if (w.completed === true) {
+      if (done) {
         completed++;
       } else if (ageMs > 0) {
         // Past day, not completed → missed
