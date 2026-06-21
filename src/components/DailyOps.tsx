@@ -1090,7 +1090,9 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
               style={styles.bell(pushState, pushSubscribed)}
             >
               <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center' }}>
-                <Icon.Bell size={12} color="currentColor" />
+                {pushState === 'denied'
+                  ? <Icon.X size={12} color="currentColor" />
+                  : <Icon.Bell size={12} color="currentColor" />}
               </span>
               {pushState === 'granted' && pushSubscribed
                 ? 'NOTIFY ON'
