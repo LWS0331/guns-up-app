@@ -333,6 +333,45 @@ describe('projectProfileSummary', () => {
       const summary = projectProfileSummary(op, { today: '2026-06-19' });
       expect(summary.streakDays).toBe(2); // today pending is allowed (gap only breaks after i>0)
     });
+
+    it('bridges a scheduled rest day (cyan dayTag) without adding to the streak', () => {
+      const op = makeOperator({
+        // Mon✅, Tue✅, rest Wed (cyan), Thu✅ → 3
+        workouts: {
+          '2026-06-18': { id: 'a', date: '2026-06-18', title: 'A', blocks: [], completed: true },
+          '2026-06-17': { id: 'b', date: '2026-06-17', title: 'B', blocks: [], completed: true },
+          '2026-06-15': { id: 'c', date: '2026-06-15', title: 'C', blocks: [], completed: true },
+        },
+        dayTags: { '2026-06-16': { color: 'cyan', note: 'Rest Day' } },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-18' });
+      expect(summary.streakDays).toBe(3);
+    });
+
+    it('bridges a red-tagged injured day even when the workout was missed', () => {
+      const op = makeOperator({
+        workouts: {
+          '2026-06-19': { id: 'a', date: '2026-06-19', title: 'A', blocks: [], completed: true },
+          '2026-06-18': { id: 'b', date: '2026-06-18', title: 'B', blocks: [], completed: false },
+          '2026-06-17': { id: 'c', date: '2026-06-17', title: 'C', blocks: [], completed: true },
+        },
+        dayTags: { '2026-06-18': { color: 'red', note: 'tweaked back' } },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.streakDays).toBe(2);
+    });
+
+    it('still breaks on an untracked gap and does not bridge a green tag', () => {
+      const op = makeOperator({
+        workouts: {
+          '2026-06-19': { id: 'a', date: '2026-06-19', title: 'A', blocks: [], completed: true },
+          '2026-06-17': { id: 'c', date: '2026-06-17', title: 'C', blocks: [], completed: true },
+        },
+        dayTags: { '2026-06-18': { color: 'green', note: 'great session' } },
+      });
+      const summary = projectProfileSummary(op, { today: '2026-06-19' });
+      expect(summary.streakDays).toBe(1);
+    });
   });
 
   describe('head-trainer plan override (lock-respect)', () => {

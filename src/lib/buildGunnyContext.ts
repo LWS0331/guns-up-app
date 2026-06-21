@@ -6,7 +6,8 @@
 
 import type { Operator, SportProfile, JuniorConsent } from './types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from './workoutAnalysis';
-import { getLocalDateStr, toLocalDateStr } from './dateUtils';
+import { getLocalDateStr } from './dateUtils';
+import { computeWorkoutStreak } from './workoutStats';
 import { buildMacroBriefContext } from './macrocycle';
 import { getIntakeGaps, intakeCompletenessPercent } from './intakeAudit';
 
@@ -251,18 +252,11 @@ export function buildFullGunnyContext(
       .join('\n');
   })();
 
-  const workoutStreak = (() => {
-    let streak = 0;
-    const now = new Date();
-    for (let i = 0; i < 365; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const key = toLocalDateStr(d);
-      if (workouts[key]?.completed) streak++;
-      else if (i > 0) break;
-    }
-    return streak;
-  })();
+  const workoutStreak = computeWorkoutStreak(
+    workouts,
+    today,
+    operator.dayTags as Record<string, unknown> | undefined,
+  );
 
   const totalWorkoutsCompleted = Object.values(workouts).filter(
     (w: unknown) => (w as AnyRec | undefined)?.completed

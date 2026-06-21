@@ -14,6 +14,9 @@ interface DailyBriefRefProps {
   /** operator.workouts — when supplied, streak + compliance are computed
    *  LIVE from it rather than read from the (frozen) brief fields. */
   workouts?: Record<string, unknown>;
+  /** operator.dayTags — lets the live streak bridge scheduled rest days
+   *  (cyan/amber/red) instead of breaking on them. */
+  dayTags?: Record<string, unknown>;
 }
 
 /**
@@ -32,7 +35,7 @@ interface DailyBriefRefProps {
  * Why amber tone: warm/in-progress callouts (warmups, daily briefs,
  * warnings) all share the amber surface so users learn the pattern.
  */
-export default function DailyBriefRef({ brief, focus = 'all', compact = false, workouts }: DailyBriefRefProps) {
+export default function DailyBriefRef({ brief, focus = 'all', compact = false, workouts, dayTags }: DailyBriefRefProps) {
   const [expanded, setExpanded] = useState(!compact);
 
   const showTraining = focus === 'all' || focus === 'training';
@@ -43,7 +46,7 @@ export default function DailyBriefRef({ brief, focus = 'all', compact = false, w
   // stale once today's workout is logged); fall back to the brief
   // values for callers that don't pass workouts.
   const today = getLocalDateStr();
-  const liveStreak = workouts ? computeWorkoutStreak(workouts, today) : (brief.streakDays ?? 0);
+  const liveStreak = workouts ? computeWorkoutStreak(workouts, today, dayTags) : (brief.streakDays ?? 0);
   const liveCompliance = workouts ? computeCompliance(workouts, today) : (brief.complianceScore ?? null);
 
   // Compliance score color — green ≥80%, amber ≥50%, danger below.

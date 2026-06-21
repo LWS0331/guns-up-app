@@ -4850,7 +4850,7 @@ const Planner: React.FC<PlannerProps> = ({ operator, onUpdateOperator, onOpenGun
 
       {/* TODAY'S BRIEF — Training for Today */}
       {operator.dailyBrief && operator.dailyBrief.date && (
-        <DailyBriefRef brief={operator.dailyBrief} focus="training" compact={true} workouts={operator.workouts} />
+        <DailyBriefRef brief={operator.dailyBrief} focus="training" compact={true} workouts={operator.workouts} dayTags={operator.dayTags} />
       )}
 
       {/* VIEW MODE + NAVIGATION — uses .segmented from the design

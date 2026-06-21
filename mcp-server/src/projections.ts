@@ -150,16 +150,37 @@ function isoDay(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Consecutive-day completed-workout streak ending at `today`. */
-function computeStreak(workouts: Record<string, Workout>, today?: string): number {
+/** dayTag colors that mark a *scheduled* rest and so bridge the streak
+ *  (cyan = rest day, amber = deload, red = injured/sick). Mirrors
+ *  REST_TAG_COLORS in src/lib/workoutStats.ts (separate package). */
+const REST_TAG_COLORS = new Set(['cyan', 'amber', 'red']);
+
+/**
+ * Consecutive-day completed-workout streak ending at `today`. A scheduled
+ * rest day (cyan/amber/red dayTag) bridges the streak without incrementing
+ * it; an untracked gap or a past missed workout still ends it. Mirrors
+ * computeWorkoutStreak in src/lib/workoutStats.ts.
+ */
+function computeStreak(
+  workouts: Record<string, Workout>,
+  today?: string,
+  dayTags?: Record<string, { color?: string }>,
+): number {
   if (!today) return 0;
+  const tags = dayTags || {};
   const d = new Date(today + 'T00:00:00');
   if (Number.isNaN(d.getTime())) return 0;
   let streak = 0;
   for (let i = 0; i < 365; i++) {
-    const w = workouts[isoDay(d)] as { completed?: boolean } | undefined;
-    if (w?.completed) streak++;
-    else if (i > 0) break; // a gap before today ends the streak (today itself may still be pending)
+    const key = isoDay(d);
+    const w = workouts[key] as { completed?: boolean } | undefined;
+    if (w?.completed) {
+      streak++;
+    } else if (REST_TAG_COLORS.has(tags[key]?.color ?? '')) {
+      // scheduled rest — bridge without incrementing
+    } else if (i > 0) {
+      break; // a gap before today ends the streak (today itself may still be pending)
+    }
     d.setDate(d.getDate() - 1);
   }
   return streak;
@@ -208,7 +229,7 @@ export function projectProfileSummary(
     dailyBrief: dailyBriefStale ? null : op.dailyBrief,
     dailyBriefStale,
     sitrepStale,
-    streakDays: computeStreak(workouts, today),
+    streakDays: computeStreak(workouts, today, op.dayTags as Record<string, { color?: string }> | undefined),
     planManagedBy,
     nutritionTargets: op.nutrition?.targets,
     workoutDates: Object.keys(op.workouts || {}).sort(),

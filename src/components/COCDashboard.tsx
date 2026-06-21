@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { Operator, TIER_CONFIGS } from '@/lib/types';
 import NotificationSettings from '@/components/NotificationSettings';
-import { formatLocalDateKey } from '@/lib/dateUtils';
+import { formatLocalDateKey, getLocalDateStr } from '@/lib/dateUtils';
+import { computeWorkoutStreak } from '@/lib/workoutStats';
 
 interface COCDashboardProps {
   operator: Operator;
@@ -129,17 +130,15 @@ function countWorkoutsThisWeek(operator: Operator): number {
 }
 
 function calculateStreak(operator: Operator): number {
-  const today = new Date();
-  let streak = 0;
-  const currentDate = new Date(today);
-  while (true) {
-    const key = formatDateKey(currentDate);
-    if (operator.workouts?.[key]) {
-      streak++;
-      currentDate.setDate(currentDate.getDate() - 1);
-    } else break;
-  }
-  return streak;
+  // Delegate to the shared helper: counts completed workouts only, walks the
+  // Pacific calendar, and bridges scheduled rest days (cyan/amber/red dayTags)
+  // without incrementing. (Previously this counted ANY day with a workout
+  // entry — completed or not — and used the raw local Date.)
+  return computeWorkoutStreak(
+    operator.workouts as Record<string, unknown> | undefined,
+    getLocalDateStr(),
+    operator.dayTags as Record<string, unknown> | undefined,
+  );
 }
 
 function parseReps(prescription: string): number {
