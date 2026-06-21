@@ -6,7 +6,8 @@ import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/work
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
 import { buildFullGunnyContext } from '@/lib/buildGunnyContext';
-import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, getLocalHourMinute, getLocalTimeOfDayBand } from '@/lib/dateUtils';
+import { getLocalDateStr, isValidDateStr, getLocalTimezone, getLocalHourMinute, getLocalTimeOfDayBand } from '@/lib/dateUtils';
+import { computeWorkoutStreak } from '@/lib/workoutStats';
 import Icon, { BoltIcon, SendIcon } from '@/components/Icons';
 import Logo from '@/components/Logo';
 import OpsCenter from '@/components/OpsCenter';
@@ -1144,11 +1145,11 @@ const AppShell: React.FC<AppShellProps> = ({
           const t = dm.reduce((a: any, m: any) => ({ calories: a.calories + (m.calories||0), protein: a.protein + (m.protein||0) }), { calories: 0, protein: 0 });
           return `${date}: ${dm.length} meals — ${t.calories}cal, ${t.protein}g P`; }).join('\n');
       })(),
-      workoutStreak: (() => { let streak = 0; const now = new Date();
-        for (let i = 0; i < 365; i++) { const d = new Date(now); d.setDate(d.getDate() - i);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const key = toLocalDateStr(d); if ((op.workouts as any)?.[key]?.completed) streak++; else if (i > 0) break; }
-        return streak; })(),
+      workoutStreak: computeWorkoutStreak(
+        op.workouts as Record<string, unknown> | undefined,
+        getLocalDateStr(),
+        op.dayTags as Record<string, unknown> | undefined,
+      ),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       totalWorkoutsCompleted: Object.values(op.workouts || {}).filter((w: any) => (w as any)?.completed).length,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2189,7 +2190,7 @@ const AppShell: React.FC<AppShellProps> = ({
                 no anchor — the DAILY BRIEF chip points at the interactive
                 widget at the top of the tab) */}
             {currentSelectedOp.dailyBrief && currentSelectedOp.dailyBrief.date && (
-              <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} workouts={currentSelectedOp.workouts} />
+              <DailyBriefRef brief={currentSelectedOp.dailyBrief} focus="all" compact={true} workouts={currentSelectedOp.workouts} dayTags={currentSelectedOp.dayTags} />
             )}
 
             <div id="coc-dashboard" style={{ scrollMarginTop: 72 }}>

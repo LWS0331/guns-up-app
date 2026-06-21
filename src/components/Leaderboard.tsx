@@ -2,7 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { Operator, TEAMS, LEADERBOARD_POINTS } from '@/lib/types';
-import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
+import { getLocalDateStr } from '@/lib/dateUtils';
+import { computeWorkoutStreak } from '@/lib/workoutStats';
 import { useLanguage } from '@/lib/i18n';
 
 interface LeaderboardProps {
@@ -26,23 +27,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
       const wearable = (op.intake?.wearableDevice ?? '').toLowerCase();
       const wearableConnected = wearable !== '' && wearable !== 'none' && wearable !== 'no';
 
-      // Calculate streak (consecutive days with completed workout)
-      let streak = 0;
-      const date = new Date();
-      for (let i = 0; i < 365; i++) {
-        const dateStr = toLocalDateStr(date);
-        const workout = op.workouts?.[dateStr];
-        if (workout?.completed) {
-          streak++;
-          date.setDate(date.getDate() - 1);
-        } else if (i === 0) {
-          // Today might not be done yet, check yesterday
-          date.setDate(date.getDate() - 1);
-          continue;
-        } else {
-          break;
-        }
-      }
+      // Calculate streak (consecutive days with completed workout).
+      // Scheduled rest days (cyan/amber/red dayTags) bridge the streak
+      // without incrementing it — see computeWorkoutStreak.
+      const streak = computeWorkoutStreak(
+        op.workouts as Record<string, unknown> | undefined,
+        getLocalDateStr(),
+        op.dayTags as Record<string, unknown> | undefined,
+      );
 
       // Calculate points
       let points = 0;

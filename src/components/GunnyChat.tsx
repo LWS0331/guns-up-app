@@ -13,6 +13,7 @@ import VoiceInput from '@/components/VoiceInput';
 import { getTrainerClients, getClientTrainer } from '@/data/operators';
 import { trackEvent, EVENTS } from '@/lib/analytics';
 import { getLocalDateStr, toLocalDateStr, isValidDateStr, getLocalTimezone, formatLocalDateKey, getLocalHourMinute, getLocalTimeOfDayBand } from '@/lib/dateUtils';
+import { computeWorkoutStreak } from '@/lib/workoutStats';
 import ThinkingIndicator from '@/components/gunny/ThinkingIndicator';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -329,23 +330,12 @@ const getTierColor = (tier: string): string => {
   }
 };
 
-const calculateStreak = (operator: Operator): number => {
-  const today = new Date();
-  let streak = 0;
-  let currentDate = new Date(today);
-
-  while (true) {
-    const dateStr = toLocalDateStr(currentDate);
-    if (operator.workouts[dateStr]?.completed) {
-      streak++;
-      currentDate.setDate(currentDate.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-
-  return streak;
-};
+const calculateStreak = (operator: Operator): number =>
+  computeWorkoutStreak(
+    operator.workouts as Record<string, unknown> | undefined,
+    getLocalDateStr(),
+    operator.dayTags as Record<string, unknown> | undefined,
+  );
 
 // Common exercise substitutions for injuries
 const getExerciseSubstitute = (exerciseName: string, restrictions: string[]): string | null => {

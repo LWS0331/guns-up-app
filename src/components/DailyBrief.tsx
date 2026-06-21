@@ -240,7 +240,7 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
   // reading brief.streakDays / brief.complianceScore — those are frozen
   // LLM output from generation time (usually before today's workout was
   // logged) and showed stale numbers all day.
-  const liveStreak = computeWorkoutStreak(operator.workouts, getTodayStr());
+  const liveStreak = computeWorkoutStreak(operator.workouts, getTodayStr(), operator.dayTags);
   const liveCompliance = computeCompliance(operator.workouts, getTodayStr());
   const compColor = (liveCompliance || 0) >= 80 ? '#00ff41' : (liveCompliance || 0) >= 50 ? '#facc15' : '#ff6b35';
 

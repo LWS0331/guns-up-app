@@ -10,24 +10,45 @@
 import { toLocalDateStr } from './dateUtils';
 
 type Completedish = { completed?: boolean } | undefined;
+type Taggish = { color?: string } | undefined;
+
+/** dayTag colors that mark a *scheduled* rest and so bridge the streak
+ *  (cyan = rest day, amber = deload, red = injured/sick). A green
+ *  "great session" tag is NOT a rest signal and does not bridge. */
+const REST_TAG_COLORS = new Set(['cyan', 'amber', 'red']);
 
 /**
- * Consecutive-day completed-workout streak ending at `today`. Today
- * itself may still be pending (a gap only breaks the streak on a day
- * before today), so a streak built yesterday still shows until midnight.
+ * Consecutive-day completed-workout streak ending at `today`.
+ *
+ * Walking backward from today, each day:
+ *  1. completed workout            → counts (+1)
+ *  2. else a scheduled-rest dayTag → bridges (streak continues, no +1)
+ *  3. else today itself            → continues (may still be pending)
+ *  4. else                         → breaks (untracked gap / missed workout)
+ *
+ * A scheduled rest (cyan/amber/red dayTag) keeps the streak alive without
+ * inflating it: Mon✅,Tue✅,restWed,Thu✅ ⇒ 3. An untracked empty day or a
+ * past missed workout (completed:false, no rest tag) still ends the streak.
  */
 export function computeWorkoutStreak(
   workouts: Record<string, unknown> | undefined,
   today: string,
+  dayTags?: Record<string, unknown>,
 ): number {
   const w = workouts || {};
+  const tags = dayTags || {};
   const d = new Date(today + 'T00:00:00');
   if (Number.isNaN(d.getTime())) return 0;
   let streak = 0;
   for (let i = 0; i < 365; i++) {
     const key = toLocalDateStr(d);
-    if ((w[key] as Completedish)?.completed) streak++;
-    else if (i > 0) break;
+    if ((w[key] as Completedish)?.completed) {
+      streak++;
+    } else if (REST_TAG_COLORS.has((tags[key] as Taggish)?.color ?? '')) {
+      // scheduled rest — bridge without incrementing
+    } else if (i > 0) {
+      break;
+    }
     d.setDate(d.getDate() - 1);
   }
   return streak;

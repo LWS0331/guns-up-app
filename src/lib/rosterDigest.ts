@@ -52,7 +52,7 @@ export function buildRosterDigestEntry(op: Operator, today: string): RosterDiges
     id: op.id,
     callsign: op.callsign ?? null,
     name: op.name ?? null,
-    streakDays: computeWorkoutStreak(workouts, today),
+    streakDays: computeWorkoutStreak(workouts, today, op.dayTags as Record<string, unknown> | undefined),
     compliance7d: computeCompliance(workouts, today),
     lastWorkoutDate: completedDates[completedDates.length - 1] ?? null,
     latestReadiness: rEntry

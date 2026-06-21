@@ -25,6 +25,57 @@ describe('computeWorkoutStreak', () => {
     expect(computeWorkoutStreak(undefined, '2026-06-19')).toBe(0);
     expect(computeWorkoutStreak({ '2026-06-19': C('2026-06-19') }, 'nope')).toBe(0);
   });
+
+  // --- scheduled rest days bridge the streak (cyan/amber/red dayTags) ---
+  const T = (color: string) => ({ color, note: color });
+
+  it('bridges a scheduled rest day without adding to the count', () => {
+    // Mon✅, Tue✅, rest Wed, Thu✅ → 3 (Wed bridges, does not increment)
+    const w = { '2026-06-18': C('2026-06-18'), '2026-06-17': C('2026-06-17'), '2026-06-15': C('2026-06-15') };
+    const tags = { '2026-06-16': T('cyan') };
+    expect(computeWorkoutStreak(w, '2026-06-18', tags)).toBe(3);
+  });
+
+  it('bridges on amber (deload) and red (injured) tags too', () => {
+    const w = { '2026-06-19': C('2026-06-19'), '2026-06-16': C('2026-06-16') };
+    const amber = { '2026-06-18': T('amber'), '2026-06-17': T('amber') };
+    expect(computeWorkoutStreak(w, '2026-06-19', amber)).toBe(2);
+    const red = { '2026-06-18': T('red'), '2026-06-17': T('red') };
+    expect(computeWorkoutStreak(w, '2026-06-19', red)).toBe(2);
+  });
+
+  it('bridges a red-tagged day even when a workout was missed (injured/sick)', () => {
+    const w = { '2026-06-19': C('2026-06-19'), '2026-06-18': P('2026-06-18'), '2026-06-17': C('2026-06-17') };
+    const tags = { '2026-06-18': T('red') };
+    expect(computeWorkoutStreak(w, '2026-06-19', tags)).toBe(2);
+  });
+
+  it('still breaks on an untracked empty day (no workout, no tag)', () => {
+    const w = { '2026-06-19': C('2026-06-19'), '2026-06-17': C('2026-06-17') };
+    expect(computeWorkoutStreak(w, '2026-06-19', {})).toBe(1);
+  });
+
+  it('still breaks on a past missed workout with no rest tag', () => {
+    const w = { '2026-06-19': C('2026-06-19'), '2026-06-18': P('2026-06-18'), '2026-06-17': C('2026-06-17') };
+    expect(computeWorkoutStreak(w, '2026-06-19', {})).toBe(1);
+  });
+
+  it('does not bridge on a green (great session) tag', () => {
+    const w = { '2026-06-19': C('2026-06-19'), '2026-06-17': C('2026-06-17') };
+    const tags = { '2026-06-18': T('green') };
+    expect(computeWorkoutStreak(w, '2026-06-19', tags)).toBe(1);
+  });
+
+  it('a rest day today preserves but does not add to the streak', () => {
+    const w = { '2026-06-18': C('2026-06-18'), '2026-06-17': C('2026-06-17') };
+    const tags = { '2026-06-19': T('cyan') };
+    expect(computeWorkoutStreak(w, '2026-06-19', tags)).toBe(2);
+  });
+
+  it('returns 0 for a run of only rest days (bridges never increment)', () => {
+    const tags = { '2026-06-19': T('cyan'), '2026-06-18': T('cyan'), '2026-06-17': T('amber') };
+    expect(computeWorkoutStreak({}, '2026-06-19', tags)).toBe(0);
+  });
 });
 
 describe('computeCompliance', () => {

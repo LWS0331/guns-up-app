@@ -2,7 +2,8 @@
 
 import React, { useMemo } from 'react';
 import { Operator } from '@/lib/types';
-import { toLocalDateStr } from '@/lib/dateUtils';
+import { getLocalDateStr } from '@/lib/dateUtils';
+import { computeWorkoutStreak } from '@/lib/workoutStats';
 import { useLanguage } from '@/lib/i18n';
 import Icon from './Icons';
 
@@ -42,16 +43,13 @@ const Achievements: React.FC<AchievementsProps> = ({ operator }) => {
     const meals = Object.values(operator.nutrition?.meals || {});
     const totalMeals = meals.reduce((acc, day) => acc + (Array.isArray(day) ? day.length : 0), 0);
 
-    // Calculate streak
-    let streak = 0;
-    const today = new Date();
-    for (let i = 0; i < 365; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const key = toLocalDateStr(d);
-      if (operator.workouts?.[key]?.completed) streak++;
-      else if (i > 0) break;
-    }
+    // Calculate streak — scheduled rest days (cyan/amber/red dayTags) bridge
+    // the streak without incrementing it (see computeWorkoutStreak).
+    const streak = computeWorkoutStreak(
+      operator.workouts as Record<string, unknown> | undefined,
+      getLocalDateStr(),
+      operator.dayTags as Record<string, unknown> | undefined,
+    );
 
     const intakeComplete = operator.intake && (operator.intake as unknown as Record<string, unknown>).completed !== false;
 
