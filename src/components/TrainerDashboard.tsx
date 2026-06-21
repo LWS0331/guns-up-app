@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { Operator, TIER_CONFIGS, TEAMS, getTrainerRank, TRAINER_RANKS } from '@/lib/types';
-import { formatLocalDateKey } from '@/lib/dateUtils';
+import { formatLocalDateKey, getLocalDateStr } from '@/lib/dateUtils';
+import { computeWorkoutStreak } from '@/lib/workoutStats';
 
 interface TrainerDashboardProps {
   trainer: Operator;
@@ -61,33 +62,16 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
     }).length;
   };
 
-  // Calculate streak
-  const getStreak = (client: Operator): number => {
-    const dates = Object.keys(client.workouts || {}).sort().reverse();
-    if (dates.length === 0) return 0;
-
-    let streak = 1;
-    const today = new Date();
-    let currentDate = new Date(dates[0]);
-
-    for (let i = 1; i < dates.length; i++) {
-      const prevDate = new Date(dates[i]);
-      const dayDiff = Math.floor((currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (dayDiff === 1) {
-        streak++;
-        currentDate = prevDate;
-      } else {
-        break;
-      }
-    }
-
-    // Check if streak is still active
-    const daysSinceLastWorkout = Math.floor((today.getTime() - new Date(dates[0]).getTime()) / (1000 * 60 * 60 * 24));
-    if (daysSinceLastWorkout > 1) return 0;
-
-    return streak;
-  };
+  // Calculate streak — delegate to the shared helper so the trainer view
+  // matches the operator's own COC/Achievements number: completed-only,
+  // Pacific calendar, and scheduled rest days (cyan/amber/red dayTags)
+  // bridge the streak without breaking it.
+  const getStreak = (client: Operator): number =>
+    computeWorkoutStreak(
+      client.workouts as Record<string, unknown> | undefined,
+      getLocalDateStr(),
+      client.dayTags as Record<string, unknown> | undefined,
+    );
 
   // Get client status
   const getClientStatus = (client: Operator): string => {
