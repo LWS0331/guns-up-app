@@ -62,3 +62,36 @@ jobs:
           path: ./test-results.junit.xml
           if-no-files-found: ignore
           retention-days: 7
+
+  # Full production build. The `test` job runs tsc + vitest only, which do
+  # NOT prerender pages — so React Server Component errors (e.g. a server
+  # component referencing a client component via the default-export
+  # namespace, `Icon.X`) slip through and only blow up at `next build` on
+  # Railway. This job reproduces that build so the failure is caught on the
+  # PR instead of in production. See #213.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+        run: npm ci --no-audit --no-fund
+
+      # Mirrors scripts/build.sh (prisma generate + next build). A dummy
+      # DATABASE_URL is all the build needs — the DB isn't reached at build
+      # time (schema push runs at container start, see scripts/build.sh).
+      - name: Next build
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+        run: npm run build
