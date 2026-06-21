@@ -20,6 +20,7 @@ import { computeWorkoutStreak, computeCompliance } from '@/lib/workoutStats';
 import { isPlanLocked } from '@/lib/planOverride';
 import { getAuthToken } from '@/lib/authClient';
 import { useLanguage } from '@/lib/i18n';
+import Icon from '@/components/Icons';
 
 const getTodayStr = getLocalDateStr;
 const getYesterdayStr = getLocalYesterdayStr;
@@ -261,8 +262,9 @@ export default function DailyBriefComponent({ operator, onUpdateOperator, onView
               </span>
             )}
             {liveStreak > 0 && (
-              <span style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#facc15' }}>
-                🔥 {liveStreak}{t('daily.streak_suffix')}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Share Tech Mono, monospace', fontSize: 10, color: '#facc15' }}>
+                <Icon.Flame size={10} color="#facc15" />
+                {liveStreak}{t('daily.streak_suffix')}
               </span>
             )}
             <span style={{ fontSize: 12, color: '#555' }}>{expanded ? '▲' : '▼'}</span>

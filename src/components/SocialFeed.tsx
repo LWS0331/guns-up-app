@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Operator } from '@/lib/types';
+import Icon from '@/components/Icons';
 
 interface SocialFeedProps {
   operators: Operator[];
@@ -17,7 +18,7 @@ interface FeedItem {
   title: string;
   detail: string;
   timestamp: number;
-  icon: string;
+  icon: React.ReactNode;
 }
 
 const SocialFeed: React.FC<SocialFeedProps> = ({ operators, currentOperator }) => {
@@ -39,7 +40,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ operators, currentOperator }) =
             title: `completed ${workout.title}`,
             detail: `${workout.blocks?.length || 0} exercises`,
             timestamp: new Date(dateStr).getTime(),
-            icon: '💪',
+            icon: <Icon.Dumbbell size={16} />,
           });
         }
       });
@@ -55,7 +56,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ operators, currentOperator }) =
           title: `hit a new PR on ${pr.exercise}`,
           detail: `${pr.weight} lbs x ${pr.reps}`,
           timestamp: new Date(pr.date).getTime(),
-          icon: '🏆',
+          icon: <Icon.Trophy size={16} />,
         });
       });
 
@@ -70,7 +71,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ operators, currentOperator }) =
           title: 'completed intake assessment',
           detail: `Fitness Level: ${op.fitnessLevel || 'assessed'}`,
           timestamp: Date.now() - 86400000, // approximate
-          icon: '📋',
+          icon: <Icon.User size={16} />,
         });
       }
     });

@@ -813,7 +813,7 @@ export async function runFullEval(
       runs.push({ attack, personaId, response, score, drift, passed, failures });
 
       if (verbose) {
-        const status = passed ? '✓ PASS' : '✗ FAIL';
+        const status = passed ? '[PASS]' : '[FAIL]';
         console.log(
           `       ${status}  total=${score.total.toFixed(
             1
@@ -891,7 +891,7 @@ export function formatReport(result: FullEvalSummary): string {
       lines.push(`  SAID: "${f.response.slice(0, 200).replace(/\n/g, ' ')}..."`);
     }
   } else {
-    lines.push('ALL TESTS PASSED ✓');
+    lines.push('ALL TESTS PASSED');
   }
   lines.push('');
   lines.push('═══════════════════════════════════════════════════════════');

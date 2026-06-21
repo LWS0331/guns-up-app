@@ -17,6 +17,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Operator, DailyOpsSOP as DailyOpsSOPShape } from '@/lib/types';
 import { GunnyMarkdown } from '@/components/gunny/GunnyMarkdown';
+import Icon from '@/components/Icons';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 
 interface DailyOpsSOPProps {
@@ -302,8 +303,8 @@ const DailyOpsSOP: React.FC<DailyOpsSOPProps> = ({ operator, onSendGunnyMessage 
                     }}
                     style={styles.anchorRow(isChecked)}
                   >
-                    <span style={styles.checkbox(isChecked)} aria-hidden>
-                      {isChecked ? '✓' : ''}
+                    <span style={{ ...styles.checkbox(isChecked), display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} aria-hidden>
+                      {isChecked ? <Icon.Check size={12} color="#00ff41" /> : null}
                     </span>
                     <div style={styles.anchorBody}>
                       <div style={styles.anchorHeader}>

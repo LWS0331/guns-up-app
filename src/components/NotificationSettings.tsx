@@ -9,6 +9,7 @@ import {
   NotificationPreferences,
 } from '@/lib/notifications';
 import { useLanguage } from '@/lib/i18n';
+import Icon from '@/components/Icons';
 
 interface NotificationSettingsProps {
   operatorId: string;
@@ -235,12 +236,15 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
                   : '#ffb800',
             textTransform: 'uppercase',
             letterSpacing: '0.5px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
           }}
         >
-          {permissionStatus === 'granted' && t('notif.status_enabled')}
-          {permissionStatus === 'denied' && t('notif.status_blocked')}
-          {permissionStatus === 'default' && t('notif.status_pending')}
-          {permissionStatus === 'unsupported' && t('notif.status_unsupported')}
+          {permissionStatus === 'granted' && <><Icon.Check size={12} /> {t('notif.status_enabled')}</>}
+          {permissionStatus === 'denied' && <><Icon.X size={12} /> {t('notif.status_blocked')}</>}
+          {permissionStatus === 'default' && <><Icon.Warning size={12} /> {t('notif.status_pending')}</>}
+          {permissionStatus === 'unsupported' && <><Icon.Warning size={12} /> {t('notif.status_unsupported')}</>}
         </div>
         {(permissionStatus === 'default' || permissionStatus === 'denied') && (
           <button

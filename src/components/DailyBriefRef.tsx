@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { DailyBrief as DailyBriefType, SitrepExercise } from '@/lib/types';
 import { getLocalDateStr } from '@/lib/dateUtils';
 import { computeWorkoutStreak, computeCompliance } from '@/lib/workoutStats';
+import Icon from '@/components/Icons';
 
 interface DailyBriefRefProps {
   brief: DailyBriefType;
@@ -125,8 +126,9 @@ export default function DailyBriefRef({ brief, focus = 'all', compact = false, w
             </span>
           )}
           {liveStreak > 0 && (
-            <span className="t-mono-sm" style={{ color: 'var(--warn)' }}>
-              🔥{liveStreak}d
+            <span className="t-mono-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--warn)' }}>
+              <Icon.Flame size={10} color="var(--warn)" />
+              {liveStreak}d
             </span>
           )}
           {compact && (

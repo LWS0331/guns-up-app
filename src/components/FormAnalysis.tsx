@@ -17,6 +17,7 @@ import { Operator } from '@/lib/types';
 import { getAuthToken } from '@/lib/authClient';
 import { hasWarfighterAccess } from '@/lib/tierGates';
 import UpgradeCard from '@/components/UpgradeCard';
+import Icon from '@/components/Icons';
 
 interface BreakdownEntry {
   phase: string;
@@ -595,7 +596,7 @@ export default function FormAnalysis({ operator, currentUser, onOpenBilling }: F
               marginBottom: 12,
             }}>
               <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 10, color: '#ff4d4d', letterSpacing: 2, marginBottom: 8 }}>
-                ⚠ SAFETY FLAGS
+                <Icon.Warning size={10} color="#ff4d4d" /> SAFETY FLAGS
               </div>
               <ul style={{ margin: 0, paddingLeft: 18, fontFamily: 'Share Tech Mono, monospace', fontSize: 12, color: '#ff8888', lineHeight: 1.6 }}>
                 {result.safetyFlags.map((s, i) => <li key={i}>{s}</li>)}

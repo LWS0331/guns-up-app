@@ -9,6 +9,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n';
+import Icon from '@/components/Icons';
 import type { DailyOpsPlanShape, DailyBlock } from '@/lib/dailyOpsTypes';
 
 interface PendingItem {
@@ -204,7 +205,7 @@ const DailyOpsApprovalCard: React.FC = () => {
                   onClick={() => decide(plan.id, true)}
                   disabled={decidingId === plan.id}
                 >
-                  ✓ Approve
+                  <Icon.Check size={11} color="currentColor" /> Approve
                 </button>
                 <input
                   type="text"
@@ -232,7 +233,7 @@ const DailyOpsApprovalCard: React.FC = () => {
                   onClick={() => decide(plan.id, false)}
                   disabled={decidingId === plan.id}
                 >
-                  ✗ Reject
+                  <Icon.X size={11} color="currentColor" /> Reject
                 </button>
               </div>
             </div>

@@ -1272,7 +1272,7 @@ something the operator has to cobble together with iOS/Android accessibility
 settings. Never tell the operator "I'm text-only" or "turn on Accessibility
 Spoken Content" — that's factually wrong and sends them out of the app.
 
-There is a mic icon (🔊 when on, 🔇 when muted) in the top-right of the
+There is a mic icon (a speaker glyph, with a slash when muted) in the top-right of the
 Gunny chat header. Tapping it toggles voice on/off globally — it mutes every
 speech callsite in the app (workout-mode rest-timer countdowns, set-logged
 confirmations, etc.) at once.
@@ -3802,7 +3802,7 @@ Gunny Note: ${operatorContext.dailyBrief.gunnyNote || 'None'}
 
 ${operatorContext.todayWorkout ? `═══ TODAY'S SCHEDULED WORKOUT ═══
 Title: ${operatorContext.todayWorkout.title}
-Status: ${operatorContext.todayWorkout.completed ? 'COMPLETED ✅' : 'NOT YET STARTED'}
+Status: ${operatorContext.todayWorkout.completed ? 'COMPLETED' : 'NOT YET STARTED'}
 Exercises: ${operatorContext.todayWorkout.exercises?.join(' | ') || 'None'}
 ` : `═══ NO WORKOUT SCHEDULED TODAY ═══
 The operator has no workout on their planner for today. If appropriate, offer to build one based on their battle plan.
@@ -3833,7 +3833,7 @@ USE THIS — adjust intensity recommendations against today's check-in, not just
 
 ${operatorContext.recentCompliance && operatorContext.recentCompliance.scheduledLast7d > 0 ? `═══ COMPLIANCE — LAST 7 DAYS ═══
 Scheduled: ${operatorContext.recentCompliance.scheduledLast7d} · Completed: ${operatorContext.recentCompliance.completedLast7d} · Missed: ${operatorContext.recentCompliance.missedLast7d}${operatorContext.recentCompliance.compliancePct != null ? ` (${operatorContext.recentCompliance.compliancePct}%)` : ''}
-${operatorContext.recentCompliance.missedLast7d >= 2 ? `⚠ Operator missed ${operatorContext.recentCompliance.missedLast7d} scheduled sessions in the last week. Acknowledge this BEFORE adding volume. If their next message is "build me a workout," check WHY they missed (life stress, injury, motivation, time) before just stacking another tough session on top.` : `Compliance is solid — operator is showing up.`}
+${operatorContext.recentCompliance.missedLast7d >= 2 ? `Warning: Operator missed ${operatorContext.recentCompliance.missedLast7d} scheduled sessions in the last week. Acknowledge this BEFORE adding volume. If their next message is "build me a workout," check WHY they missed (life stress, injury, motivation, time) before just stacking another tough session on top.` : `Compliance is solid — operator is showing up.`}
 ` : ''}
 
 ${operatorContext.lastCompletedWorkout ? `${operatorContext.lastCompletedWorkout}
@@ -4919,7 +4919,7 @@ ${linesOut}
         : cleanResponse;
       if (dailyOpsResult && 'error' in dailyOpsResult) {
         responseWithDailyOpsError +=
-          `\n\n⚠ Heads up — I drafted today's daily ops but it didn't save: ${dailyOpsResult.error}.`;
+          `\n\nWarning: Heads up — I drafted today's daily ops but it didn't save: ${dailyOpsResult.error}.`;
       }
 
       // Best-effort usage log — must NOT block the response.
@@ -5363,7 +5363,7 @@ ${linesOut}
           let streamCleanTextWithDailyOpsError = finalCleanText;
           if (dailyOpsResult && 'error' in dailyOpsResult) {
             streamCleanTextWithDailyOpsError +=
-              `\n\n⚠ Heads up — I drafted today's daily ops but it didn't save: ${dailyOpsResult.error}.`;
+              `\n\nWarning: Heads up — I drafted today's daily ops but it didn't save: ${dailyOpsResult.error}.`;
           }
 
           // Best-effort usage log for the streaming path.

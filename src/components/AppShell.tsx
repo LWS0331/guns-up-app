@@ -972,7 +972,7 @@ const AppShell: React.FC<AppShellProps> = ({
             const loggedSets = ex.sets.filter(s => s.weight > 0 || s.reps > 0 || s.completed);
             if (loggedSets.length > 0) {
               loggedSets.forEach((s, si) => {
-                context += `   Set ${si + 1}: ${s.weight}lbs x ${s.reps} reps ${s.completed ? '✓ DONE' : '(in progress)'}\n`;
+                context += `   Set ${si + 1}: ${s.weight}lbs x ${s.reps} reps ${s.completed ? '[DONE]' : '(in progress)'}\n`;
               });
               const unloggedCount = ex.sets.length - loggedSets.length;
               if (unloggedCount > 0) {
@@ -1135,7 +1135,7 @@ const AppShell: React.FC<AppShellProps> = ({
         return dates.map(date => { const w = (op.workouts as any)[date];
           const ex = (w.blocks || []).filter((b: { type: string }) => b.type === 'exercise')
             .map((b: { exerciseName?: string; prescription?: string }) => `${b.exerciseName} (${b.prescription})`).join(', ');
-          return `${date}: "${w.title || 'Untitled'}" — ${ex}${w.completed ? ' ✅' : ''}`; }).join('\n');
+          return `${date}: "${w.title || 'Untitled'}" — ${ex}${w.completed ? ' [DONE]' : ''}`; }).join('\n');
       })(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recentMealHistory: (() => { const meals = (op.nutrition as any)?.meals || {};
@@ -1418,7 +1418,7 @@ const AppShell: React.FC<AppShellProps> = ({
       if (!res.body) {
         setGunnyMessages(prev => prev.map(m =>
           (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
-            ? { ...m, text: `⚠ Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
+            ? { ...m, text: `Warning: Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
         ));
         return;
       }
@@ -1526,7 +1526,7 @@ const AppShell: React.FC<AppShellProps> = ({
             } else if (eventType === 'error') {
               setGunnyMessages(prev => prev.map(m =>
                 (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
-                  ? { ...m, text: `⚠ Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
+                  ? { ...m, text: `Warning: Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
               ));
               return;
             }
@@ -1556,7 +1556,7 @@ const AppShell: React.FC<AppShellProps> = ({
       } else if (!accumulated) {
         setGunnyMessages(prev => prev.map(m =>
           (m as ChatMessage & { _placeholderId?: string })._placeholderId === placeholderId
-            ? { ...m, text: `⚠ Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
+            ? { ...m, text: `Warning: Comms dropped, ${selectedOperator.callsign}. Retry in a moment.` } : m
         ));
       }
     } catch (error) {
@@ -1707,7 +1707,7 @@ const AppShell: React.FC<AppShellProps> = ({
     // perception — that's what this surface guards.
     if (failures.length > 0 && !touched) {
       showGunnyVoiceResponse(
-        `⚠ Couldn't apply that — ${failures[0]} Try naming the exercise exactly as it appears in your workout, or open the workout and point at it.`,
+        `Warning: Couldn't apply that — ${failures[0]} Try naming the exercise exactly as it appears in your workout, or open the workout and point at it.`,
       );
     }
   };
@@ -1960,7 +1960,7 @@ const AppShell: React.FC<AppShellProps> = ({
   }, [gunnyMessages, selectedOperator, operators, buildOperatorContext, getScreenContext, getGunnyMode, currentSelectedOp, onUpdateOperator, showGunnyVoiceResponse]);
 
   // Tab icons are SVG components from Icons.tsx per the canonical
-  // handoff spec — character glyphs (◆ ▦ ◈ ▶ ⬡) were the legacy
+  // handoff spec — character glyphs were the legacy
   // placeholder. Each takes a `size` prop so the tabbar and the
   // desktop top-nav strip can render at different scales without
   // duplicating definitions. The Gunny center tab keeps its own
@@ -3202,7 +3202,7 @@ const AppShell: React.FC<AppShellProps> = ({
                 justifyContent: 'center',
               }}
             >
-              {gunnyTtsEnabled ? '🔊' : '🔇'}
+              {gunnyTtsEnabled ? <Icon.Volume size={16} color="currentColor" /> : <Icon.VolumeMute size={16} color="currentColor" />}
             </button>
             <button
               onClick={() => setShowGunnyPanel(false)}

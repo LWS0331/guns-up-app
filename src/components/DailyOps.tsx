@@ -22,6 +22,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useLanguage } from '@/lib/i18n';
 import { Operator } from '@/lib/types';
 import DailyOpsSOP from '@/components/DailyOpsSOP';
+import Icon from '@/components/Icons';
 import { hasCommanderAccess } from '@/lib/tierGates';
 import { getLocalDateStr, toLocalDateStr } from '@/lib/dateUtils';
 import {
@@ -538,7 +539,9 @@ const BlockCard: React.FC<BlockCardProps> = ({
                 '#00ff41',
               )}
             >
-              ✓ ON TIME
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Icon.Check size={12} color="currentColor" /> ON TIME
+              </span>
             </button>
             <button
               type="button"
@@ -562,7 +565,9 @@ const BlockCard: React.FC<BlockCardProps> = ({
                 '#ff4040',
               )}
             >
-              ✗ SKIPPED
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Icon.X size={12} color="currentColor" /> SKIPPED
+              </span>
             </button>
           </div>
         )}
@@ -1084,12 +1089,8 @@ const DailyOps: React.FC<DailyOpsProps> = ({ operator, onSendGunnyMessage }) => 
               }
               style={styles.bell(pushState, pushSubscribed)}
             >
-              <span aria-hidden style={{ fontSize: 11 }}>
-                {pushState === 'granted' && pushSubscribed
-                  ? '🔔'
-                  : pushState === 'denied'
-                    ? '🚫'
-                    : '🔕'}
+              <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <Icon.Bell size={12} color="currentColor" />
               </span>
               {pushState === 'granted' && pushSubscribed
                 ? 'NOTIFY ON'

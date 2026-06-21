@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { convertToEmbedUrl } from '@/lib/videoUrl';
+import Icon from '@/components/Icons';
 
 interface VideoModalProps {
   open: boolean;
@@ -101,7 +102,7 @@ export default function VideoModal({ open, onClose, url, title }: VideoModalProp
             className="btn btn-ghost btn-sm"
             style={{ minHeight: 32, padding: '4px 10px' }}
           >
-            Close ✕
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Close <Icon.X size={14} /></span>
           </button>
         </div>
 

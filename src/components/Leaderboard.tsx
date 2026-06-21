@@ -5,6 +5,7 @@ import { Operator, TEAMS, LEADERBOARD_POINTS } from '@/lib/types';
 import { getLocalDateStr } from '@/lib/dateUtils';
 import { computeWorkoutStreak } from '@/lib/workoutStats';
 import { useLanguage } from '@/lib/i18n';
+import Icon from '@/components/Icons';
 
 interface LeaderboardProps {
   operators: Operator[];
@@ -96,10 +97,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ operators, currentUser }) => 
     return '#888';
   };
 
-  const getRankIcon = (idx: number) => {
-    if (idx === 0) return '🥇';
-    if (idx === 1) return '🥈';
-    if (idx === 2) return '🥉';
+  const getRankIcon = (idx: number): React.ReactNode => {
+    // Top 3 get a tier-tinted trophy; everyone else shows their numeric rank.
+    if (idx <= 2) return <Icon.Trophy size={16} color={getRankColor(idx)} />;
     return `#${idx + 1}`;
   };
 

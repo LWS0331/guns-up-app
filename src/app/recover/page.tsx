@@ -14,6 +14,7 @@
 //   3. UI shows the outcome message + clear next step
 
 import React, { useState } from 'react';
+import Icon from '@/components/Icons';
 
 interface RecoverResult {
   ok: boolean;
@@ -160,9 +161,9 @@ export default function RecoverPage() {
               marginBottom: 8,
               textTransform: 'uppercase',
             }}>
-              {result.outcome === 'magic_link_sent' && '✓ Magic Link Sent'}
-              {result.outcome === 'account_repaired' && '✓ Account Repaired'}
-              {result.outcome === 'not_found' && '⚠ Not Found'}
+              {result.outcome === 'magic_link_sent' && <><Icon.Check size={11} color={outcomeColor} /> Magic Link Sent</>}
+              {result.outcome === 'account_repaired' && <><Icon.Check size={11} color={outcomeColor} /> Account Repaired</>}
+              {result.outcome === 'not_found' && <><Icon.Warning size={11} color={outcomeColor} /> Not Found</>}
             </div>
             <div style={{ fontFamily: 'Share Tech Mono, monospace', fontSize: 13, color: '#ddd', lineHeight: 1.6 }}>
               {result.message}

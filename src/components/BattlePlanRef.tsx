@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Sitrep, SitrepExercise, Operator } from '@/lib/types';
 import { sitrepDayToWorkout } from '@/lib/workoutConverter';
 import { getLocalDateStr } from '@/lib/dateUtils';
+import Icon from '@/components/Icons';
 
 interface BattlePlanRefProps {
   sitrep: Sitrep;
@@ -196,14 +197,14 @@ export default function BattlePlanRef({
                 className={activeSection === 'training' ? 'active' : ''}
                 onClick={() => setActiveSection('training')}
               >
-                🏋️ Training
+                Training
               </button>
               <button
                 type="button"
                 className={activeSection === 'nutrition' ? 'active' : ''}
                 onClick={() => setActiveSection('nutrition')}
               >
-                🍽️ Nutrition
+                Nutrition
               </button>
             </nav>
           )}
@@ -285,9 +286,9 @@ export default function BattlePlanRef({
                       onClick={handleLoadDay1}
                       disabled={workoutAlreadyLoaded}
                       className={`btn btn-sm btn-block ${workoutAlreadyLoaded ? 'btn-secondary' : 'btn-primary'}`}
-                      style={{ marginTop: 8 }}
+                      style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
                     >
-                      {workoutAlreadyLoaded ? '✓ Loaded in Planner' : '⚔️ Load Day 1 to Planner'}
+                      {workoutAlreadyLoaded ? <><Icon.Check size={13} color="currentColor" /> Loaded in Planner</> : 'Load Day 1 to Planner'}
                     </button>
                   )}
                 </div>
@@ -330,8 +331,8 @@ export default function BattlePlanRef({
                   {np.approach}
                 </p>
                 <div style={{ display: 'flex', gap: 12 }} className="t-mono-sm">
-                  <span style={{ color: 'var(--green)' }}>💧 {np.hydrationOz}oz/day</span>
-                  <span style={{ color: 'var(--warn)' }}>🍽️ {np.mealsPerDay} meals/day</span>
+                  <span style={{ color: 'var(--green)' }}>{np.hydrationOz}oz/day</span>
+                  <span style={{ color: 'var(--warn)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon.Food size={12} color="var(--warn)" /> {np.mealsPerDay} meals/day</span>
                 </div>
               </div>
 

@@ -24,6 +24,7 @@
 // curated rather than random-string.
 
 import { useState, useMemo } from 'react';
+import Icon from '@/components/Icons';
 
 // Prefix pool — adjectives + colors + ranks. Keeps the tactical tone.
 const PREFIXES = [
@@ -211,7 +212,7 @@ export default function CallsignGenerator({
           <div style={{
             color: '#ff8888', fontFamily: '"Share Tech Mono", monospace', fontSize: '11px',
           }}>
-            ✕ {manualError}
+            <Icon.X size={11} color="#ff8888" /> {manualError}
           </div>
         )}
       </div>
@@ -252,7 +253,7 @@ export default function CallsignGenerator({
           disabled={disabled}
           style={primaryBtn}
         >
-          ⚡ GENERATE CALLSIGNS
+          <Icon.Bolt size={14} color="currentColor" /> GENERATE CALLSIGNS
         </button>
       ) : (
         <>
@@ -320,7 +321,7 @@ export default function CallsignGenerator({
           fontFamily: '"Share Tech Mono", monospace', fontSize: '11px',
           letterSpacing: '1px',
         }}>
-          ✓ SELECTED: {value}
+          <Icon.Check size={11} color="#5f5" /> SELECTED: {value}
         </div>
       )}
     </div>

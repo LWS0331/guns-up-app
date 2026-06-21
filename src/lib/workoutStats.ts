@@ -28,7 +28,7 @@ export const REST_TAG_COLORS = new Set(['cyan', 'amber', 'red']);
  *  4. else                         → breaks (untracked gap / missed workout)
  *
  * A scheduled rest (cyan/amber/red dayTag) keeps the streak alive without
- * inflating it: Mon✅,Tue✅,restWed,Thu✅ ⇒ 3. An untracked empty day or a
+ * inflating it: Mon+Tue done, rest Wed, Thu done => streak 3. An untracked empty day or a
  * past missed workout (completed:false, no rest tag) still ends the streak.
  */
 export function computeWorkoutStreak(

@@ -259,7 +259,7 @@ export default function VitalsSticky({
               opacity: 0.7,
             }}
           >
-            <div className="t-mono" style={{ fontSize: 18, color: '#facc15' }}>🔒</div>
+            <div className="t-mono" style={{ fontSize: 18, color: '#facc15' }}><Icon.Lock size={18} color="#facc15" /></div>
             <div className="t-mono-sm" style={{ fontSize: 8, letterSpacing: 1.2, color: '#facc15', textAlign: 'center' }}>
               COMMANDER+<br />HR LIVE
             </div>

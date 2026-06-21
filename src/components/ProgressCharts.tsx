@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { hasOperatorAccess } from '@/lib/tierGates';
 import UpgradeCard from '@/components/UpgradeCard';
+import Icon from '@/components/Icons';
 
 interface ProgressChartsProps {
   operator: Operator;
@@ -153,12 +154,12 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator, currentUser, 
     return data;
   }, [operator.nutrition]);
 
-  const chartTabs: { key: ChartView; label: string; icon: string }[] = [
-    { key: 'volume', label: 'VOLUME', icon: '📊' },
-    { key: 'strength', label: 'STRENGTH', icon: '💪' },
-    { key: 'frequency', label: 'FREQUENCY', icon: '📅' },
-    { key: 'nutrition', label: 'NUTRITION', icon: '🍗' },
-    { key: 'bodyComp', label: 'BODY COMP', icon: '⚖️' },
+  const chartTabs: { key: ChartView; label: string; icon: React.ReactNode }[] = [
+    { key: 'volume', label: 'VOLUME', icon: <Icon.Stats size={12} color="currentColor" /> },
+    { key: 'strength', label: 'STRENGTH', icon: <Icon.Dumbbell size={12} color="currentColor" /> },
+    { key: 'frequency', label: 'FREQUENCY', icon: <Icon.Calendar size={12} color="currentColor" /> },
+    { key: 'nutrition', label: 'NUTRITION', icon: <Icon.Food size={12} color="currentColor" /> },
+    { key: 'bodyComp', label: 'BODY COMP', icon: <Icon.User size={12} color="currentColor" /> },
   ];
 
   const strengthExercises = Object.keys(strengthData);
@@ -183,6 +184,7 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ operator, currentUser, 
             color: activeChart === tab.key ? '#000' : '#888',
             border: `1px solid ${activeChart === tab.key ? '#00ff41' : '#333'}`,
             borderRadius: 4, cursor: 'pointer', letterSpacing: 1,
+            display: 'inline-flex', alignItems: 'center', gap: 4,
           }}>
             {tab.icon} {tab.label}
           </button>

@@ -198,7 +198,7 @@ export function buildFullGunnyContext(
           .map((b: { exerciseName?: string; prescription?: string }) => `${b.exerciseName} (${b.prescription})`)
           .join(', ');
         const wd = dayOfWeek(date);
-        return `${wd ? wd + ' ' : ''}${date}: "${w.title || 'Untitled'}" — ${ex}${w.completed ? ' ✅' : ''}`;
+        return `${wd ? wd + ' ' : ''}${date}: "${w.title || 'Untitled'}" — ${ex}${w.completed ? ' [DONE]' : ''}`;
       })
       .join('\n');
   })();
