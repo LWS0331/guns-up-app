@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Operator, AppTab, OPS_CENTER_ACCESS, Workout } from '@/lib/types';
+import { Operator, AppTab, OPS_CENTER_ACCESS, Workout, isHeadTrainer, type CoachGroup } from '@/lib/types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
@@ -24,6 +24,8 @@ import IntakeForm from '@/components/IntakeForm';
 import JuniorIntakeForm from '@/components/JuniorIntakeForm';
 import ParentDashboard from '@/components/ParentDashboard';
 import ParentLedWorkoutMode from '@/components/ParentLedWorkoutMode';
+import CoachGroupManager from '@/components/CoachGroupManager';
+import CoachGroupSessionRunner from '@/components/CoachGroupSessionRunner';
 import DailyOps from '@/components/DailyOps';
 import { hasCommanderAccess } from '@/lib/tierGates';
 import { isJuniorOperatorEnabledClient } from '@/lib/featureFlags';
@@ -331,6 +333,10 @@ const AppShell: React.FC<AppShellProps> = ({
   // tab swaps from ParentDashboard to ParentLedWorkoutMode (full-screen
   // takeover, same pattern as adult workout mode in the COC tab).
   const [parentLedActive, setParentLedActive] = useState<{ junior: Operator; workout: Workout; dateISO: string } | null>(null);
+  // Coach-Led Group Session active — when set, the OPS tab swaps from the
+  // coach dashboard to CoachGroupSessionRunner (full-screen takeover, same
+  // pattern as parentLedActive above).
+  const [coachGroupActive, setCoachGroupActive] = useState<{ group: CoachGroup; members: Operator[] } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelInitRef = useRef<string>(''); // track which operator panel was initialized for
@@ -2308,7 +2314,38 @@ const AppShell: React.FC<AppShellProps> = ({
             />
           </div>
         );
-      case 'ops':
+      case 'ops': {
+        // Coach-Led Group Session takeover — swaps the whole OPS tab for the
+        // group-session runner, regardless of trainer/admin sub-view.
+        if (coachGroupActive) {
+          return (
+            <div style={{ padding: '16px 18px' }}>
+              <CoachGroupSessionRunner
+                coach={currentUser}
+                group={coachGroupActive.group}
+                members={coachGroupActive.members}
+                onExit={() => setCoachGroupActive(null)}
+                onComplete={() => setCoachGroupActive(null)}
+              />
+            </div>
+          );
+        }
+        // Group manager — shown above the normal coach surface for any coach
+        // (trainer / head_trainer / admin) when the Junior Operator flag is on.
+        const showCoachGroups =
+          isJuniorOperatorEnabledClient() &&
+          (currentUser.role === 'trainer' || OPS_CENTER_ACCESS.includes(currentUser.id) || isHeadTrainer(currentUser.id));
+        const coachGroupsEl = showCoachGroups ? (
+          <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-green-soft)' }}>
+            <CoachGroupManager
+              coach={currentUser}
+              allOperators={operators}
+              canSeeAllJuniors={OPS_CENTER_ACCESS.includes(currentUser.id) || isHeadTrainer(currentUser.id)}
+              onUpdateCoach={onUpdateOperator}
+              onRunGroup={(group, members) => setCoachGroupActive({ group, members })}
+            />
+          </div>
+        ) : null;
         // Trainer-specific view
         if (currentUser.role === 'trainer') {
           // The two-button toggle (MY CLIENTS / COMMAND CENTER) was
@@ -2324,6 +2361,7 @@ const AppShell: React.FC<AppShellProps> = ({
           const hasCommandCenter = OPS_CENTER_ACCESS.includes(currentUser.id);
           return (
             <div>
+              {coachGroupsEl}
               {hasCommandCenter && (
                 <div style={{
                   display: 'flex',
@@ -2360,7 +2398,13 @@ const AppShell: React.FC<AppShellProps> = ({
           );
         }
         // Admin-only view
-        return <OpsCenter currentUser={currentUser} operators={operators} />;
+        return (
+          <div>
+            {coachGroupsEl}
+            <OpsCenter currentUser={currentUser} operators={operators} />
+          </div>
+        );
+      }
       default:
         return null;
     }

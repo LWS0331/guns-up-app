@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
-import { OPS_CENTER_ACCESS } from '@/lib/types';
+import { OPS_CENTER_ACCESS, isHeadTrainer } from '@/lib/types';
 
 // PATCH /api/operators/:id/workouts
 // Targeted update of ONLY the workouts field (plus optional prs/injuries).
@@ -20,6 +20,7 @@ export async function PATCH(
     const isAdmin = OPS_CENTER_ACCESS.includes(auth.operatorId);
     let isTrainerOfTarget = false;
     let isParentLedCoach = false;
+    let isCoachLedCoach = false;
     if (!isSelf && !isAdmin) {
       // Pull the fields we need for all three privilege checks in one
       // round-trip (trainer, parent-led, age gate).
@@ -42,8 +43,15 @@ export async function PATCH(
         target.juniorAge >= 4 &&
         target.juniorAge <= 10;
       isParentLedCoach = isParentOfTarget && inParentLedAgeBand;
+      // Coach-Led Group Mode (Jun 2026). For the same 4-10 band, the COACH
+      // (trainer-of-target, or any head_trainer/admin) is the operator — the
+      // kid has no login. Allow them to write workouts so the group-session
+      // fan-out persists. isTrainerOfTarget already covers the assigned
+      // trainer; this adds head-trainer coverage for that band explicitly.
+      isCoachLedCoach =
+        !!target?.isJunior && inParentLedAgeBand && isHeadTrainer(auth.operatorId);
     }
-    if (!isSelf && !isAdmin && !isTrainerOfTarget && !isParentLedCoach) {
+    if (!isSelf && !isAdmin && !isTrainerOfTarget && !isParentLedCoach && !isCoachLedCoach) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

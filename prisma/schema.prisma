@@ -87,6 +87,11 @@ model Operator {
   juniorConsent Json     @default("{}")               // parent consent record + signed dates
   juniorSafety  Json     @default("{}")               // refusal log, escalation flags, RED-S flags
 
+  // Coach-led group sessions (Jun 2026). Roster(s) a coach runs as one shared
+  // session for young juniors with no app login. Additive — lands via the
+  // startup `prisma db push`. See CoachGroup in src/lib/types.ts.
+  coachGroups   Json     @default("[]")               // CoachGroup[] — see src/lib/types.ts
+
   // Free RECON usage caps (Pricing Strategy v2 — RECON is now $0/mo with
   // hard caps to prevent runaway API spend). Tiers above RECON ignore.
   // Counters reset against rolling windows: chats every 24h, workout
