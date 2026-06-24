@@ -1380,15 +1380,14 @@ export const OPERATORS: Operator[] = [
     },
   },
 
-  // ── Coach-Led Group Session — second little (Jun 2026) ──────────────────
-  // PLACEHOLDER for the one athlete in the youth-soccer group that didn't yet
-  // have an account (BUMBLEBEE + POPPY already exist). Age 7 = the older of the
-  // two littles RAMPAGE coaches 1:device in the group. RENAME name/callsign to
-  // the real kid before/after provisioning. Consent deferred (family).
+  // ── Coach-Led Group Session — second little: Logan (Jun 2026) ───────────
+  // Logan, age 6, forward — the older of the two littles RAMPAGE coaches
+  // 1:device in the youth-soccer group (alongside BUMBLEBEE age 4; POPPY is
+  // the 12yo on the 1:1 path). Consent deferred (family).
   // Provisioned via POST /api/admin/operator-provision { operatorId: 'op-acorn' }.
   {
     id: 'op-acorn',
-    name: 'New Athlete (rename me)',
+    name: 'Logan',
     callsign: 'ACORN',
     pin: '4003',
     role: 'client',
@@ -1398,13 +1397,13 @@ export const OPERATORS: Operator[] = [
     trainerId: 'op-ruben',                           // RAMPAGE is the COACH (trainer-of-target → group access)
     teamId: 'team-wolf-pack',
     isJunior: true,
-    juniorAge: 7,
-    parentIds: ['op-ruben'],                          // family; rename/relink to real parent later
+    juniorAge: 6,
+    parentIds: ['op-ruben'],                          // family; relink to real parent later
 
     profile: {
-      age: 7,
-      height: '4\'0"',                               // placeholder — confirm at intake
-      weight: 50,                                    // placeholder — confirm at intake
+      age: 6,
+      height: '3\'8"',                               // placeholder — confirm at intake
+      weight: 45,                                    // placeholder — confirm at intake
       bodyFat: 0,                                    // sentinel: NEVER tracked for juniors
       trainingAge: '1 year',
       goals: [
@@ -1414,13 +1413,13 @@ export const OPERATORS: Operator[] = [
         'mastery climate — celebrate effort over outcome',
       ],
       readiness: 9,
-      sleep: 10,
+      sleep: 11,                                     // age-appropriate target 10-13 hrs
       stress: 1,
     },
 
     sportProfile: {
       sport: 'soccer',
-      position: 'unsure',                            // age 7 = Tier 2, position introduction not yet
+      position: 'ST',                                // forward (per coach); positions are loose at Tier 2
       level: 'recreational',
       yearsPlaying: 1,
       trainingDaysPerWeek: 1,
@@ -1432,11 +1431,11 @@ export const OPERATORS: Operator[] = [
       focusAreas: [
         'ball touches + first touch',
         'dribbling under light pressure',
-        'agility / change of direction',
+        'finishing / shooting fun (forward)',
         'fun — every session ends on a game',
       ],
       coachNotes:
-        'Age 7, Tier 2 (6-7) per the youth-soccer-4-10 corpus = skill introduction. US Soccer PDI: 4v4 with light GK + FIFA 11+ Kids dynamic warm-up begins lighting up here. Attention span 8-12 min per drill — keep it moving, end on a game, mastery climate + process praise. Refusal is data, not defiance. Runs in RAMPAGE\'s coach-led group alongside BUMBLEBEE.',
+        'Age 6, Tier 2 (6-7) per the youth-soccer-4-10 corpus = skill introduction. Plays forward, but at this age positions are loose — keep it all-touches, all-kids. US Soccer PDI: 4v4 with light GK + FIFA 11+ Kids dynamic warm-up begins lighting up here. Attention span 8-12 min per drill — keep it moving, end on a game, mastery climate + process praise. Refusal is data, not defiance. Runs in RAMPAGE\'s coach-led group alongside BUMBLEBEE.',
       maturationStage: 'pre_phv',
       estimatedPeakHeightVelocity: null,
     },
@@ -1454,7 +1453,8 @@ export const OPERATORS: Operator[] = [
 
     nutrition: {
       // Age-appropriate range per IOM DRI 2005, NOT a deficit prescription.
-      targets: { calories: 1600, protein: 35, carbs: 220, fat: 55 },
+      // 6yo active: ~1400-1600 kcal.
+      targets: { calories: 1500, protein: 32, carbs: 210, fat: 52 },
       meals: {},
     },
 
@@ -1466,7 +1466,7 @@ export const OPERATORS: Operator[] = [
     preferences: {
       split: 'Youth Soccer (Coach-Led Group)',
       equipment: ['cones', 'small ball', 'spot markers', 'small goals'],
-      sessionDuration: 30,                            // age 7 — ~30 min group session
+      sessionDuration: 30,                            // age 6 — ~25-30 min group session
       daysPerWeek: 1,
       weakPoints: ['none — building skill base'],
       avoidMovements: ['any structured resistance', 'heavy plyo', 'overhead loading', 'long endurance'],
