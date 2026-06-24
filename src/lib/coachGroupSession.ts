@@ -146,7 +146,9 @@ export function parseDrillDurationSec(text: string | undefined | null): number |
 export function sessionEquipment(workout: Pick<Workout, 'blocks'>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const b of workout.blocks) {
+  // `blocks` is required by the type, but this also runs on Workouts read back
+  // from a JSON column — tolerate a malformed/legacy row missing the array.
+  for (const b of workout.blocks ?? []) {
     for (const item of b.equipment ?? []) {
       const key = item.trim().toLowerCase();
       if (!key || seen.has(key)) continue;

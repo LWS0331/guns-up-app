@@ -175,6 +175,11 @@ describe('equipment threading', () => {
     const w = coerceGroupWorkout({ blocks: [{ name: 'Passing', cue: '5 min' }] }, input);
     expect(sessionEquipment(w!)).toEqual([]);
   });
+
+  it('sessionEquipment tolerates a malformed workout missing blocks (JSON column)', () => {
+    // Read back from a JSON column, the row may not match the type.
+    expect(sessionEquipment({ blocks: undefined as unknown as [] })).toEqual([]);
+  });
 });
 
 describe('stripIntensityLanguage', () => {

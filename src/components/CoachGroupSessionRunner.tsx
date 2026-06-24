@@ -230,11 +230,17 @@ export default function CoachGroupSessionRunner({ coach, group, members, onExit,
   const drillEndRef = useRef<number | null>(null);
   const pausedRemainingRef = useRef<number | null>(null);
   const beepedRef = useRef(false);
+  // Guards the zero-beep: only arm it once we've actually observed the
+  // countdown running (>0) for THIS step. Without it, advancing to a new drill
+  // after the previous one already hit zero would read a stale remainingSec===0
+  // (the old, expired drillEndRef) for one render and beep immediately.
+  const sawRunningRef = useRef(false);
   const [drillPaused, setDrillPaused] = useState(false);
 
   useEffect(() => {
     if (phase !== 'drills') return;
     beepedRef.current = false;
+    sawRunningRef.current = false;
     pausedRemainingRef.current = null;
     setDrillPaused(false);
     drillEndRef.current = plannedSec != null ? Date.now() + plannedSec * 1000 : null;
@@ -253,7 +259,11 @@ export default function CoachGroupSessionRunner({ coach, group, members, onExit,
   useEffect(() => {
     if (phase !== 'drills' || drillPaused || plannedSec == null) return;
     if (drillEndRef.current == null) return;
-    if (remainingSec === 0 && !beepedRef.current) {
+    if (remainingSec != null && remainingSec > 0) {
+      sawRunningRef.current = true;
+      return;
+    }
+    if (remainingSec === 0 && sawRunningRef.current && !beepedRef.current) {
       beepedRef.current = true;
       playDrillBeep();
     }
@@ -274,29 +284,37 @@ export default function CoachGroupSessionRunner({ coach, group, members, onExit,
   const resetDrill = () => {
     if (plannedSec == null) return;
     beepedRef.current = false;
+    sawRunningRef.current = false;
     pausedRemainingRef.current = null;
     setDrillPaused(false);
     drillEndRef.current = Date.now() + plannedSec * 1000;
   };
 
   // Keep the screen awake while running drills — the device sits idle between
-  // cues. Best-effort; unsupported/denied is a silent no-op.
+  // cues. Best-effort; unsupported/denied is a silent no-op. The OS auto-
+  // releases the lock whenever the page is hidden (lock screen, app switch), so
+  // we re-acquire on visibilitychange — otherwise it never comes back.
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   useEffect(() => {
     if (phase !== 'drills') return;
     let released = false;
-    (async () => {
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinel> } };
+    if (!nav.wakeLock) return;
+    const acquire = async () => {
+      if (released || wakeLockRef.current || document.visibilityState !== 'visible') return;
       try {
-        const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinel> } };
-        if (nav.wakeLock) {
-          const s = await nav.wakeLock.request('screen');
-          if (released) { void s.release().catch(() => {}); return; }
-          wakeLockRef.current = s;
-        }
-      } catch { /* wakeLock unsupported / denied — screen may sleep */ }
-    })();
+        const s = await nav.wakeLock!.request('screen');
+        if (released) { void s.release().catch(() => {}); return; }
+        s.addEventListener('release', () => { wakeLockRef.current = null; });
+        wakeLockRef.current = s;
+      } catch { /* unsupported / denied — screen may sleep */ }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') void acquire(); };
+    void acquire();
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       released = true;
+      document.removeEventListener('visibilitychange', onVisible);
       const s = wakeLockRef.current;
       wakeLockRef.current = null;
       if (s) void s.release().catch(() => {});
@@ -495,9 +513,9 @@ export default function CoachGroupSessionRunner({ coach, group, members, onExit,
                   {active && blk && (blk.equipment?.length ?? 0) > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8, alignItems: 'center' }}>
                       <Icon.Dumbbell size={11} color="#888" />
-                      {blk.equipment!.map((g) => (
+                      {blk.equipment!.map((g, gi) => (
                         <span
-                          key={g}
+                          key={`${g}-${gi}`}
                           style={{
                             padding: '2px 7px', borderRadius: 4, fontSize: 10,
                             border: '1px solid #2a2a2a', background: '#050505', color: '#bbb',

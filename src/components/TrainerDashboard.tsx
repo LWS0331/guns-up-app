@@ -458,23 +458,30 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
                             {(() => {
                               const todayKey = getLocalDateStr();
                               const todayWorkout = client.workouts?.[todayKey];
+                              // `workouts` is a JSON column — a malformed/legacy row may lack a
+                              // blocks array, so treat "has a blocks[]" as "session planned".
+                              const todayBlocks = Array.isArray(todayWorkout?.blocks) ? todayWorkout!.blocks : null;
                               const perDrillGear = todayWorkout ? sessionEquipment(todayWorkout) : [];
-                              const gear = perDrillGear.length ? perDrillGear : (client.preferences?.equipment ?? []);
+                              // De-dupe the fallback too (perDrillGear already is) — it feeds
+                              // React keys below and the legacy kit list can hold duplicates.
+                              const gear = perDrillGear.length
+                                ? perDrillGear
+                                : Array.from(new Set(client.preferences?.equipment ?? []));
                               return (
                                 <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #2a2a3e' }}>
                                   <h3 style={{ margin: '0 0 12px 0', color: '#00ff41', fontSize: '12px', textTransform: 'uppercase' }}>
-                                    TODAY&apos;S DRILL{(todayWorkout?.blocks?.length ?? 0) > 1 ? 'S' : ''} + GEAR
+                                    TODAY&apos;S DRILL{(todayBlocks?.length ?? 0) > 1 ? 'S' : ''} + GEAR
                                   </h3>
-                                  {!todayWorkout ? (
+                                  {!todayBlocks ? (
                                     <p style={{ margin: '6px 0', fontSize: '11px', color: '#888' }}>
                                       No session planned for today.
                                     </p>
                                   ) : (
                                     <>
                                       <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#ccc' }}>
-                                        <strong>{todayWorkout.title}</strong>
+                                        <strong>{todayWorkout!.title}</strong>
                                       </p>
-                                      {todayWorkout.blocks.map((b) => {
+                                      {todayBlocks.map((b) => {
                                         const name = b.type === 'exercise' ? b.exerciseName : b.format;
                                         return (
                                           <div key={b.id} style={{ margin: '4px 0', fontSize: '11px', color: '#bbb' }}>
