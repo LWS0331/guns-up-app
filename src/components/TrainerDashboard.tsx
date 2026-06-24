@@ -28,8 +28,9 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
   // sees only their own clients. Visibility only; the API already authorizes
   // these operators on any record via the admin bypass.
   const director = isDirector(trainer.id);
+  const directorTitle = getDirectorTitle(trainer.id);
   const rosterClients = director
-    ? allOperators.filter(op => op.role === 'client')
+    ? allOperators.filter(op => op.role === 'client' || op.isJunior)
     : clients;
 
   // Calculate revenue metrics
@@ -143,9 +144,9 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
           {trainer.callsign} • {clientCount} CLIENTS • {trainerRank.toUpperCase()}
           {director && ` • ${rosterClients.length} ON ROSTER`}
         </p>
-        {getDirectorTitle(trainer.id) && (
+        {directorTitle && (
           <p style={{ margin: '6px 0 0 0', fontSize: '11px', color: '#00ff41', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            {getDirectorTitle(trainer.id)}
+            {directorTitle}
           </p>
         )}
       </div>
@@ -286,7 +287,7 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
           CLIENT ROSTER
         </h2>
 
-        {clients.length === 0 ? (
+        {rosterClients.length === 0 ? (
           <div style={{
             backgroundColor: '#111',
             border: '1px solid #1a1a2e',
