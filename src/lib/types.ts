@@ -210,6 +210,23 @@ export interface JuniorSafetyFlags {
   events: JuniorSafetyEvent[];
 }
 
+// ─── Coach-led group sessions (Jun 2026) ───────────────────────────────────
+// A roster a coach (trainer / head_trainer / admin) runs as ONE shared session
+// on a single device — built for small groups of young juniors (4–7) who have
+// no app login. Stored as a JSON array on the COACH's Operator (coachGroups),
+// matching the JSON-column pattern used for workouts/dayTags/dailyOps/etc.
+// The shared session is generated youth-safe (sport corpus + guardrails) and
+// fanned out into each member's workouts[date] on completion so per-kid
+// history/compliance keep working. See src/app/api/coach/group-session/route.ts.
+export interface CoachGroup {
+  id: string;                  // 'grp-' + uuid
+  name: string;                // "Littles — Saturday AM"
+  sport: Sport;                // 'soccer'
+  ageBand: '4-7' | '4-10';     // shapes the group-aware Gunny prompt + guardrails
+  memberIds: string[];         // junior operator ids
+  createdAt: string;           // ISO
+}
+
 export interface Operator {
   id: string;
   name: string;
@@ -279,6 +296,10 @@ export interface Operator {
   sportProfile?: SportProfile;
   juniorConsent?: JuniorConsent;
   juniorSafety?: JuniorSafetyFlags;
+
+  /** Coach-led group rosters this operator runs (Jun 2026). JSON column;
+   *  empty/undefined for operators who don't coach groups. See CoachGroup. */
+  coachGroups?: CoachGroup[];
 }
 
 // ── Daily Ops SOP ──────────────────────────────────────────────────

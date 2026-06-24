@@ -1379,6 +1379,99 @@ export const OPERATORS: Operator[] = [
       avoidMovements: ['any structured resistance', 'plyo', 'overhead movements', 'long endurance'],
     },
   },
+
+  // ── Coach-Led Group Session — second little (Jun 2026) ──────────────────
+  // PLACEHOLDER for the one athlete in the youth-soccer group that didn't yet
+  // have an account (BUMBLEBEE + POPPY already exist). Age 7 = the older of the
+  // two littles RAMPAGE coaches 1:device in the group. RENAME name/callsign to
+  // the real kid before/after provisioning. Consent deferred (family).
+  // Provisioned via POST /api/admin/operator-provision { operatorId: 'op-acorn' }.
+  {
+    id: 'op-acorn',
+    name: 'New Athlete (rename me)',
+    callsign: 'ACORN',
+    pin: '4003',
+    role: 'client',
+    tier: 'opus',                                    // junior safety floor (matches BUMBLEBEE/POPPY)
+    tierLocked: true,
+    coupleWith: null,
+    trainerId: 'op-ruben',                           // RAMPAGE is the COACH (trainer-of-target → group access)
+    teamId: 'team-wolf-pack',
+    isJunior: true,
+    juniorAge: 7,
+    parentIds: ['op-ruben'],                          // family; rename/relink to real parent later
+
+    profile: {
+      age: 7,
+      height: '4\'0"',                               // placeholder — confirm at intake
+      weight: 50,                                    // placeholder — confirm at intake
+      bodyFat: 0,                                    // sentinel: NEVER tracked for juniors
+      trainingAge: '1 year',
+      goals: [
+        'have fun + build confidence',
+        'ball mastery (dribble / pass / first touch)',
+        'agility + coordination through play',
+        'mastery climate — celebrate effort over outcome',
+      ],
+      readiness: 9,
+      sleep: 10,
+      stress: 1,
+    },
+
+    sportProfile: {
+      sport: 'soccer',
+      position: 'unsure',                            // age 7 = Tier 2, position introduction not yet
+      level: 'recreational',
+      yearsPlaying: 1,
+      trainingDaysPerWeek: 1,
+      gameDay: 'sat',
+      noTrainingDays: ['sun', 'mon', 'tue', 'thu'],
+      trainingWindow: '4:30 PM',
+      multiSport: false,
+      otherSports: [],
+      focusAreas: [
+        'ball touches + first touch',
+        'dribbling under light pressure',
+        'agility / change of direction',
+        'fun — every session ends on a game',
+      ],
+      coachNotes:
+        'Age 7, Tier 2 (6-7) per the youth-soccer-4-10 corpus = skill introduction. US Soccer PDI: 4v4 with light GK + FIFA 11+ Kids dynamic warm-up begins lighting up here. Attention span 8-12 min per drill — keep it moving, end on a game, mastery climate + process praise. Refusal is data, not defiance. Runs in RAMPAGE\'s coach-led group alongside BUMBLEBEE.',
+      maturationStage: 'pre_phv',
+      estimatedPeakHeightVelocity: null,
+    },
+
+    juniorConsent: {
+      parentSignatures: [],
+      participationConsent: false,
+      dataConsent: false,
+      emergencyContact: { name: '', relationship: '', phone: '' },
+      pediatricianClearance: false,
+      pediatricianClearanceDate: null,
+    },
+
+    juniorSafety: { events: [] },
+
+    nutrition: {
+      // Age-appropriate range per IOM DRI 2005, NOT a deficit prescription.
+      targets: { calories: 1600, protein: 35, carbs: 220, fat: 55 },
+      meals: {},
+    },
+
+    prs: [],
+    injuries: [],
+    workouts: {},
+    dayTags: {},
+
+    preferences: {
+      split: 'Youth Soccer (Coach-Led Group)',
+      equipment: ['cones', 'small ball', 'spot markers', 'small goals'],
+      sessionDuration: 30,                            // age 7 — ~30 min group session
+      daysPerWeek: 1,
+      weakPoints: ['none — building skill base'],
+      avoidMovements: ['any structured resistance', 'heavy plyo', 'overhead loading', 'long endurance'],
+    },
+  },
 ];
 
 export function getAccessibleOperators(userId: string, ops?: Operator[]): Operator[] {

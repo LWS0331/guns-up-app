@@ -65,6 +65,11 @@ export async function PATCH(
         // from MacrocyclePanel was silently dropped server-side and
         // the goal vanished on reload.
         'macroCycles',
+        // Coach-led group rosters (CoachGroup[]). A coach edits their OWN
+        // groups, so this lands on the SELF path. Without it, group
+        // create/edit from CoachGroupManager is dropped server-side and the
+        // roster vanishes on reload.
+        'coachGroups',
         // Daily readiness check-ins (Record<date, DailyReadinessEntry>).
         // Previously only written through the Gunny chat <readiness_json>
         // handler; the MCP server's log_readiness tool needs to PATCH

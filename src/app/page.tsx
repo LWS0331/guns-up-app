@@ -349,6 +349,10 @@ export default function Home() {
       // PATCH path. Without this line the goal lived in React state
       // only, vanishing on the next page load.
       macroCycles: updated.macroCycles ?? [],
+      // Coach-led group rosters — edited via CoachGroupManager. Allow-listed
+      // on the profile PATCH (SELF path) so a coach's groups persist; without
+      // this the roster lives in React state only and vanishes on reload.
+      coachGroups: updated.coachGroups ?? [],
     };
 
     try {

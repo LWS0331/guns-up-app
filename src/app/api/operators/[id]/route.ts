@@ -19,6 +19,8 @@ const ADMIN_FIELDS = new Set([
   // Junior Operator program — admin owns identity-level junior fields
   // (isJunior toggle, juniorAge, parent linking) and can override anything.
   'isJunior', 'juniorAge', 'parentIds', 'sportProfile', 'juniorConsent', 'juniorSafety',
+  // Coach-led group rosters.
+  'coachGroups',
 ]);
 
 const SELF_FIELDS = new Set([
@@ -35,6 +37,8 @@ const SELF_FIELDS = new Set([
   // (sportProfile gets written from JuniorIntakeForm.onComplete) and
   // the consent step. Admin still controls isJunior/parentIds.
   'sportProfile', 'juniorConsent',
+  // A coach edits their OWN group rosters (primary path — coach==self here).
+  'coachGroups',
 ]);
 
 const TRAINER_FIELDS = new Set([
