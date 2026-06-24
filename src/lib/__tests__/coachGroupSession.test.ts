@@ -6,6 +6,9 @@ import {
   representativeSportProfile,
   representativeAge,
   stripIntensityLanguage,
+  parseDrillDurationSec,
+  normalizeEquipment,
+  sessionEquipment,
   EFFORT_TO_SRPE,
 } from '../coachGroupSession';
 import { applyJuniorGuardrailsToWorkout } from '../juniorGuardrails';
@@ -89,6 +92,88 @@ describe('coerceGroupWorkout', () => {
     expect(coerceGroupWorkout({ blocks: [] }, input)).toBeNull();
     expect(coerceGroupWorkout({ blocks: [{}] }, input)).toBeNull();
     expect(coerceGroupWorkout(null, input)).toBeNull();
+  });
+});
+
+describe('parseDrillDurationSec', () => {
+  it('extracts the first "N min" from a cue and returns seconds', () => {
+    expect(parseDrillDurationSec('5 min · little touches, head up')).toBe(300);
+    expect(parseDrillDurationSec('8 min small goals, switch teams')).toBe(480);
+  });
+
+  it('handles "min." / "minutes" / decimals / spacing variants', () => {
+    expect(parseDrillDurationSec('about 10 minutes of passing')).toBe(600);
+    expect(parseDrillDurationSec('2.5 min sprint relay')).toBe(150);
+    expect(parseDrillDurationSec('Animal Movements (5 min)')).toBe(300);
+  });
+
+  it('returns null when no duration is named (runner shows no countdown)', () => {
+    expect(parseDrillDurationSec('dribble across the grid')).toBeNull();
+    expect(parseDrillDurationSec('')).toBeNull();
+    expect(parseDrillDurationSec(undefined)).toBeNull();
+    expect(parseDrillDurationSec(null)).toBeNull();
+    expect(parseDrillDurationSec('0 min')).toBeNull();
+  });
+});
+
+describe('normalizeEquipment', () => {
+  it('passes through a clean string array, trimming + dropping blanks', () => {
+    expect(normalizeEquipment(['cones', ' ball ', ''])).toEqual(['cones', 'ball']);
+  });
+  it('splits a comma-separated string (LLMs emit "cones, ball")', () => {
+    expect(normalizeEquipment('cones, ball, small goals')).toEqual(['cones', 'ball', 'small goals']);
+  });
+  it('returns [] for missing / non-string entries', () => {
+    expect(normalizeEquipment(undefined)).toEqual([]);
+    expect(normalizeEquipment(null)).toEqual([]);
+    expect(normalizeEquipment(42)).toEqual([]);
+    expect(normalizeEquipment([1, 'cones', null])).toEqual(['cones']);
+  });
+});
+
+describe('equipment threading', () => {
+  const input = { sport: 'soccer' as const, ageBand: '4-7' as const, memberCount: 4, dateISO: '2026-06-24' };
+
+  it('coerces per-drill equipment (array or comma-string) onto blocks', () => {
+    const w = coerceGroupWorkout(
+      {
+        blocks: [
+          { name: 'Dribble tag', cue: '5 min', kind: 'drill', equipment: ['1 ball per kid', 'cones'] },
+          { name: 'Mini match', cue: '8 min', kind: 'game', equipment: 'small goals, pinnies' },
+        ],
+      },
+      input,
+    );
+    expect(w!.blocks[0].equipment).toEqual(['1 ball per kid', 'cones']);
+    expect(w!.blocks[1].equipment).toEqual(['small goals', 'pinnies']);
+  });
+
+  it('leaves equipment undefined when none is provided', () => {
+    const w = coerceGroupWorkout({ blocks: [{ name: 'Passing', cue: '5 min' }] }, input);
+    expect(w!.blocks[0].equipment).toBeUndefined();
+  });
+
+  it('the deterministic template carries per-drill gear', () => {
+    const w = buildGroupSessionTemplate(input);
+    expect(w.blocks.every((b) => (b.equipment?.length ?? 0) > 0)).toBe(true);
+  });
+
+  it('sessionEquipment unions all gear, de-duped case-insensitively (first casing wins)', () => {
+    const w = coerceGroupWorkout(
+      {
+        blocks: [
+          { name: 'A', cue: '5 min', equipment: ['Cones', 'ball'] },
+          { name: 'B', cue: '5 min', equipment: ['cones', 'Pinnies'] },
+        ],
+      },
+      input,
+    );
+    expect(sessionEquipment(w!)).toEqual(['Cones', 'ball', 'Pinnies']);
+  });
+
+  it('sessionEquipment returns [] when no block names gear', () => {
+    const w = coerceGroupWorkout({ blocks: [{ name: 'Passing', cue: '5 min' }] }, input);
+    expect(sessionEquipment(w!)).toEqual([]);
   });
 });
 

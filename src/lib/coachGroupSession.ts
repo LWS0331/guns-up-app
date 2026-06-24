@@ -78,7 +78,7 @@ export interface GroupSessionInput {
 // Block ids are derived from the block's position (sortOrder) so they're
 // unique within a workout WITHOUT any shared mutable counter — keeps the
 // builders pure + reentrant-safe under concurrent requests.
-function exerciseBlock(name: string, cue: string, sortOrder: number): WorkoutBlock {
+function exerciseBlock(name: string, cue: string, sortOrder: number, equipment?: string[]): WorkoutBlock {
   return {
     type: 'exercise',
     id: `grp-ex-${sortOrder}`,
@@ -86,10 +86,16 @@ function exerciseBlock(name: string, cue: string, sortOrder: number): WorkoutBlo
     exerciseName: name,
     prescription: stripIntensityLanguage(cue),
     isLinkedToNext: false,
+    ...(equipment && equipment.length ? { equipment } : {}),
   };
 }
 
-function conditioningBlock(format: string, description: string, sortOrder: number): WorkoutBlock {
+function conditioningBlock(
+  format: string,
+  description: string,
+  sortOrder: number,
+  equipment?: string[],
+): WorkoutBlock {
   return {
     type: 'conditioning',
     id: `grp-cond-${sortOrder}`,
@@ -97,7 +103,58 @@ function conditioningBlock(format: string, description: string, sortOrder: numbe
     format,
     description: stripIntensityLanguage(description),
     isLinkedToNext: false,
+    ...(equipment && equipment.length ? { equipment } : {}),
   };
+}
+
+/**
+ * Normalize a block's equipment field from the upload/LLM payload into a clean
+ * string[]. Accepts either an array of strings or a single comma-separated
+ * string (LLMs often emit "cones, ball, small goals"). Empty/blank entries are
+ * dropped; returns [] when there's nothing usable.
+ */
+export function normalizeEquipment(raw: unknown): string[] {
+  const items: string[] = Array.isArray(raw)
+    ? raw.filter((x): x is string => typeof x === 'string')
+    : typeof raw === 'string'
+      ? raw.split(',')
+      : [];
+  return items.map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Parse a drill's intended duration from its read-aloud cue. Drill length is
+ * authored as free text ("5 min · every kid has a ball …") rather than a
+ * schema field, so the runner extracts the first "N min" it finds. Returns the
+ * duration in SECONDS, or null when the cue names no duration (runner then
+ * shows a count-up only, no countdown).
+ */
+export function parseDrillDurationSec(text: string | undefined | null): number | null {
+  if (!text) return null;
+  const m = text.match(/(\d+(?:\.\d+)?)\s*min/i);
+  if (!m) return null;
+  const mins = parseFloat(m[1]);
+  if (!Number.isFinite(mins) || mins <= 0) return null;
+  return Math.round(mins * 60);
+}
+
+/**
+ * Union of all gear named across a session's drills, de-duplicated
+ * case-insensitively (first-seen casing wins). Powers the runner's "gear for
+ * today" summary and the trainer card's equipment line.
+ */
+export function sessionEquipment(workout: Pick<Workout, 'blocks'>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const b of workout.blocks) {
+    for (const item of b.equipment ?? []) {
+      const key = item.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(item.trim());
+    }
+  }
+  return out;
 }
 
 /**
@@ -164,21 +221,25 @@ export function buildGroupSessionTemplate(input: GroupSessionInput): Workout {
       'Sharks & Minnows (dribbling)',
       `5 min · every kid has a ball, dribble across the grid, coach is the "shark." Cue: "little touches, head up." No one is ever out — tagged kids do 3 toe-taps and rejoin.`,
       1,
+      ['1 ball per kid', 'cones (grid)'],
     ),
     exerciseBlock(
       'Traffic Lights (ball control)',
       `5 min · GREEN = dribble, RED = freeze with foot on the ball, YELLOW = slow tip-taps. Cue: "stop it dead." Everyone moves at once.`,
       2,
+      ['1 ball per kid'],
     ),
     exerciseBlock(
       'Pass & Count (partners)',
       `5 min · pair up (${n >= 4 ? `${Math.floor(n / 2)} pairs` : 'pairs'}), pass back and forth, count out loud as a team. Cue: "open foot, gentle push."`,
       3,
+      ['1 ball per pair'],
     ),
     conditioningBlock(
       'Mini Game — small-sided, no keepers',
       `8 min · split into 2–3 tiny teams, small goals (cones), everyone plays, switch teams every 2 min so it stays fun. End on the game.`,
       4,
+      ['2 balls', 'cones / small goals', 'pinnies (team colors)'],
     ),
   ];
 
@@ -237,14 +298,16 @@ Emit EXACTLY ONE block, nothing else, in this shape:
   "title": "short session title",
   "warmup": "one warm-up game with a read-aloud cue (~5 min)",
   "blocks": [
-    { "name": "Drill name", "cue": "read-aloud coaching cue + minutes", "kind": "drill" },
-    { "name": "Mini game", "cue": "read-aloud cue + minutes", "kind": "game" }
+    { "name": "Drill name", "cue": "read-aloud coaching cue + minutes", "kind": "drill", "equipment": ["1 ball per kid", "cones"] },
+    { "name": "Mini game", "cue": "read-aloud cue + minutes", "kind": "game", "equipment": ["2 balls", "small goals", "pinnies"] }
   ],
   "cooldown": "short cooldown + water"
 }
 </group_session_json>
 
-Use 3–5 blocks. Mark the closing small-sided game with "kind":"game". Keep cues short and shoutable.`;
+Use 3–5 blocks. Mark the closing small-sided game with "kind":"game". Keep cues short and shoutable.
+Start every cue with the drill length as "N min · …" so the coach's timer can count it down.
+For EACH block, list the gear it needs in "equipment" (e.g. balls, cones, pinnies, small goals) sized for ${memberCount} kids; use [] if none.`;
 }
 
 interface ParsedGroupSession {
@@ -276,11 +339,12 @@ export function coerceGroupWorkout(
     const name = asStr(rec.name);
     const cue = asStr(rec.cue);
     if (!name && !cue) return;
+    const equipment = normalizeEquipment(rec.equipment);
     const isGame = asStr(rec.kind).toLowerCase() === 'game' || /game|scrimmage|match/i.test(name);
     blocks.push(
       isGame
-        ? conditioningBlock(name || 'Mini game', cue || name, i + 1)
-        : exerciseBlock(name || `Drill ${i + 1}`, cue || name, i + 1),
+        ? conditioningBlock(name || 'Mini game', cue || name, i + 1, equipment)
+        : exerciseBlock(name || `Drill ${i + 1}`, cue || name, i + 1, equipment),
     );
   });
   if (blocks.length === 0) return null;

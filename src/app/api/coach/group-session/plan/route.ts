@@ -31,7 +31,7 @@ interface PlanBody {
   warmup?: string;
   cooldown?: string;
   notes?: string;
-  blocks?: Array<{ name?: string; cue?: string; kind?: string }>;
+  blocks?: Array<{ name?: string; cue?: string; kind?: string; equipment?: string[] }>;
 }
 
 export async function GET(req: NextRequest) {
