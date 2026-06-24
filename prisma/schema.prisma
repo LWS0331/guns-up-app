@@ -91,6 +91,9 @@ model Operator {
   // session for young juniors with no app login. Additive — lands via the
   // startup `prisma db push`. See CoachGroup in src/lib/types.ts.
   coachGroups   Json     @default("[]")               // CoachGroup[] — see src/lib/types.ts
+  // Pre-authored coach group sessions, keyed by local date. Uploaded from
+  // Claude via the MCP set_my_group_session tool; the runner prefers these.
+  groupSessionPlans Json @default("{}")               // Record<dateISO, Workout>
 
   // Free RECON usage caps (Pricing Strategy v2 — RECON is now $0/mo with
   // hard caps to prevent runaway API spend). Tiers above RECON ignore.
