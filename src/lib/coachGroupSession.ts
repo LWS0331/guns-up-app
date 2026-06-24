@@ -75,19 +75,16 @@ export interface GroupSessionInput {
   dateISO: string;
 }
 
-let blockSeq = 0;
-function blockId(prefix: string): string {
-  blockSeq += 1;
-  return `${prefix}-${blockSeq}`;
-}
-
+// Block ids are derived from the block's position (sortOrder) so they're
+// unique within a workout WITHOUT any shared mutable counter — keeps the
+// builders pure + reentrant-safe under concurrent requests.
 function exerciseBlock(name: string, cue: string, sortOrder: number): WorkoutBlock {
   return {
     type: 'exercise',
-    id: blockId('grp-ex'),
+    id: `grp-ex-${sortOrder}`,
     sortOrder,
     exerciseName: name,
-    prescription: cue,
+    prescription: stripIntensityLanguage(cue),
     isLinkedToNext: false,
   };
 }
@@ -95,12 +92,30 @@ function exerciseBlock(name: string, cue: string, sortOrder: number): WorkoutBlo
 function conditioningBlock(format: string, description: string, sortOrder: number): WorkoutBlock {
   return {
     type: 'conditioning',
-    id: blockId('grp-cond'),
+    id: `grp-cond-${sortOrder}`,
     sortOrder,
     format,
-    description,
+    description: stripIntensityLanguage(description),
     isLinkedToNext: false,
   };
+}
+
+/**
+ * Youth-safety belt-and-suspenders: strip intensity/load tokens from any
+ * read-aloud cue/description before it can reach a kid's session. The numeric
+ * guardrail pass (applyJuniorGuardrailsToWorkout) only rewrites RPE inside
+ * EXERCISE prescriptions, so a model-authored "push to RPE 8" / "@ 80%" in a
+ * conditioning DESCRIPTION would otherwise survive. We never want intensity
+ * targets surfaced for 4–7 play.
+ */
+export function stripIntensityLanguage(s: string): string {
+  if (!s) return s;
+  return s
+    .replace(/\bRPE\s*\d+(?:\s*\/\s*10)?\b/gi, '')
+    .replace(/\b\d+\s*RM\b/gi, '')
+    .replace(/@\s*\d+\s*%/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 /**
@@ -140,7 +155,6 @@ export function representativeAge(ageBand: GroupAgeBand): number {
  * always has, even with no network.
  */
 export function buildGroupSessionTemplate(input: GroupSessionInput): Workout {
-  blockSeq = 0;
   const { ageBand, memberCount, dateISO } = input;
   const n = Number.isFinite(memberCount) && memberCount > 0 ? memberCount : 4;
 
@@ -255,7 +269,6 @@ export function coerceGroupWorkout(
 ): Workout | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const rawBlocks = Array.isArray(parsed.blocks) ? parsed.blocks : [];
-  blockSeq = 0;
   const blocks: WorkoutBlock[] = [];
   rawBlocks.forEach((b, i) => {
     if (!b || typeof b !== 'object') return;

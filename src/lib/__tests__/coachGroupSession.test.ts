@@ -5,6 +5,7 @@ import {
   buildKidWorkoutRecord,
   representativeSportProfile,
   representativeAge,
+  stripIntensityLanguage,
   EFFORT_TO_SRPE,
 } from '../coachGroupSession';
 import { applyJuniorGuardrailsToWorkout } from '../juniorGuardrails';
@@ -67,6 +68,16 @@ describe('coerceGroupWorkout', () => {
     expect(w!.blocks[0].type).toBe('conditioning');
   });
 
+  it('strips intensity/load tokens from model-authored cues (youth safety)', () => {
+    const w = coerceGroupWorkout(
+      { blocks: [{ name: 'Sprint game', cue: 'push hard to RPE 8 for 5 min', kind: 'game' }] },
+      input,
+    );
+    const blk = w!.blocks[0];
+    const text = blk.type === 'conditioning' ? blk.description : blk.prescription;
+    expect(text).not.toMatch(/RPE/i);
+  });
+
   it('falls back to defaults for missing fields', () => {
     const w = coerceGroupWorkout({ blocks: [{ name: 'Passing' }] }, input);
     expect(w!.warmup).toBeTruthy();
@@ -78,6 +89,15 @@ describe('coerceGroupWorkout', () => {
     expect(coerceGroupWorkout({ blocks: [] }, input)).toBeNull();
     expect(coerceGroupWorkout({ blocks: [{}] }, input)).toBeNull();
     expect(coerceGroupWorkout(null, input)).toBeNull();
+  });
+});
+
+describe('stripIntensityLanguage', () => {
+  it('removes RPE / %1RM / load tokens, keeps the rest', () => {
+    expect(stripIntensityLanguage('dribble for 5 min RPE 8')).toBe('dribble for 5 min');
+    expect(stripIntensityLanguage('squat @ 80% something')).toBe('squat something');
+    expect(stripIntensityLanguage('test 5RM effort')).toBe('test effort');
+    expect(stripIntensityLanguage('little touches, head up')).toBe('little touches, head up');
   });
 });
 

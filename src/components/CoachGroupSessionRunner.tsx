@@ -101,10 +101,10 @@ export default function CoachGroupSessionRunner({ coach, group, members, onExit,
             dateISO,
           }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok || !data?.workout) {
-          setGenError(data?.error || 'Could not generate a session.');
+          setGenError(data?.error || `Could not generate a session (${res.status}).`);
         } else {
           setWorkout(data.workout as Workout);
         }
@@ -138,7 +138,7 @@ export default function CoachGroupSessionRunner({ coach, group, members, onExit,
   };
 
   const finish = async () => {
-    if (!workout) return;
+    if (!workout || saving) return; // guard double-tap + missing session
     setSaving(true);
     setSaveError(null);
     try {
@@ -155,13 +155,13 @@ export default function CoachGroupSessionRunner({ coach, group, members, onExit,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` },
         body: JSON.stringify({ groupId: group.id, dateISO, sharedWorkout: workout, perKid }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null); // tolerate non-JSON error bodies
       if (!res.ok) {
-        setSaveError(data?.error || 'Failed to save the session.');
+        setSaveError(data?.error || `Failed to save the session (${res.status}).`);
         setSaving(false);
         return;
       }
-      onComplete?.({ written: (data.written || []).length, dateISO });
+      onComplete?.({ written: (data?.written || []).length, dateISO });
       onExit();
     } catch {
       setSaveError('Network error saving the session.');
@@ -207,22 +207,30 @@ export default function CoachGroupSessionRunner({ coach, group, members, onExit,
             </div>
           ))}
           {genError && (
-            <div style={{ color: '#ffb800', fontSize: 11, marginTop: 8 }}>
-              {genError} A backup session will be used.
+            <div style={{ color: '#ff6b6b', fontSize: 11, marginTop: 8 }}>
+              {genError} Close and retry.
             </div>
           )}
-          <button
-            onClick={() => setPhase('drills')}
-            disabled={present.length === 0 || (genLoading && !workout)}
-            style={{
-              ...btn(true),
-              width: '100%',
-              marginTop: 12,
-              opacity: present.length === 0 || (genLoading && !workout) ? 0.5 : 1,
-            }}
-          >
-            {genLoading && !workout ? 'Preparing session…' : `Start Session (${present.length} present)`}
-          </button>
+          {(() => {
+            // Block entry until a runnable session exists. The generate
+            // endpoint always returns a template on LLM failure, so a null
+            // workout means a real error (auth/validation) — don't drop the
+            // coach into an empty drill screen.
+            const blocked = present.length === 0 || !workout;
+            return (
+              <button
+                onClick={() => setPhase('drills')}
+                disabled={blocked}
+                style={{ ...btn(true), width: '100%', marginTop: 12, opacity: blocked ? 0.5 : 1 }}
+              >
+                {genLoading && !workout
+                  ? 'Preparing session…'
+                  : !workout
+                    ? 'Session unavailable'
+                    : `Start Session (${present.length} present)`}
+              </button>
+            );
+          })()}
         </div>
       )}
 
