@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@/lib/db';
 import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
 import { OPS_CENTER_ACCESS, isHeadTrainer } from '@/lib/types';
-import type { Sport } from '@/lib/types';
+import type { Sport, Workout } from '@/lib/types';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { applyJuniorGuardrailsToWorkout } from '@/lib/juniorGuardrails';
 import { SITREP_MODEL_FALLBACK } from '@/lib/models';
@@ -78,7 +78,27 @@ export async function POST(req: NextRequest) {
       juniorAge: representativeAge(ageBand),
     };
 
-    // ── Try Gunny; fall back to the template on any failure ──────────────
+    // ── Uploaded plan wins ───────────────────────────────────────────────
+    // If the coach uploaded a group session for this date from Claude (via the
+    // set_my_group_session MCP tool), use it verbatim and skip generation.
+    const coachRow = await prisma.operator.findUnique({
+      where: { id: coachId },
+      select: { groupSessionPlans: true },
+    });
+    const uploadedPlans = (coachRow?.groupSessionPlans ?? {}) as Record<string, unknown>;
+    const uploaded = uploadedPlans[dateISO] as Workout | undefined;
+    if (uploaded && Array.isArray(uploaded.blocks) && uploaded.blocks.length > 0) {
+      const guarded = applyJuniorGuardrailsToWorkout(uploaded, guardJunior);
+      return NextResponse.json({
+        ok: true,
+        source: 'uploaded',
+        groupId: body.groupId ?? null,
+        workout: guarded.workout,
+        modifications: guarded.modificationsApplied,
+      });
+    }
+
+    // ── Otherwise try Gunny; fall back to the template on any failure ────
     let source: 'gunny' | 'template' = 'template';
     let workout = buildGroupSessionTemplate(input);
 

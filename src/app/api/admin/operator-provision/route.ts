@@ -132,6 +132,7 @@ export async function POST(req: NextRequest) {
       juniorSafety: (seed.juniorSafety ?? {}) as object,
       macroCycles: (seed.macroCycles ?? []) as object,
       coachGroups: (seed.coachGroups ?? []) as object,
+      groupSessionPlans: (seed.groupSessionPlans ?? {}) as object,
       // Optional fields that the schema accepts but the seed may not have
       ...(seed.email ? { email: seed.email } : {}),
       ...(seed.trainerNotes ? { trainerNotes: seed.trainerNotes } : {}),

@@ -185,6 +185,21 @@ export class GunnyApiClient {
     );
   }
 
+  /** Read this operator's uploaded coach group session for a date (or today
+   * when omitted). Returns { dateISO, workout } where workout is null if none
+   * was uploaded. Self-scoped. */
+  async getMyGroupSession(dateISO?: string): Promise<GroupSessionPlanResult> {
+    const q = dateISO ? `?date=${encodeURIComponent(dateISO)}` : '';
+    return this.fetch<GroupSessionPlanResult>('GET', `/api/coach/group-session/plan${q}`);
+  }
+
+  /** Upload (replace) this operator's coach group session for a date. The
+   * server coerces + youth-safety-strips + guardrail-caps the blocks. The
+   * runner's generate step then prefers this over Gunny/template. Self-scoped. */
+  async setMyGroupSession(plan: GroupSessionPlanPatch): Promise<GroupSessionPlanResult> {
+    return this.fetch<GroupSessionPlanResult>('POST', `/api/coach/group-session/plan`, plan);
+  }
+
   /** Head-trainer upward roll-up — one row per operator (streak,
    * compliance, last workout, readiness, plan status). Head/admin only
    * (enforced server-side). */
@@ -410,6 +425,27 @@ export interface DailyPlanPatch {
   note?: string;
   /** When true, release the takeover (auto-generation resumes). */
   release?: boolean;
+}
+
+/** Uploaded coach group session for a date. workout is null when none. */
+export interface GroupSessionPlanResult {
+  ok?: boolean;
+  dateISO: string;
+  source?: string;
+  workout: Workout | null;
+}
+
+/** Upload patch for a coach group session (simple drill-flow shape the
+ * server coerces into a Workout). */
+export interface GroupSessionPlanPatch {
+  dateISO?: string;
+  sport?: 'soccer' | 'football';
+  ageBand?: '4-7' | '4-10';
+  title?: string;
+  warmup?: string;
+  cooldown?: string;
+  notes?: string;
+  blocks: Array<{ name?: string; cue?: string; kind?: string }>;
 }
 
 export interface DailyReadinessEntry {

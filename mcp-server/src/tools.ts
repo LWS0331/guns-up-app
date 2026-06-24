@@ -18,6 +18,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
   DailyReadinessEntry,
+  GroupSessionPlanPatch,
   GunnyApiClient,
   MacroTargets,
   Meal,
@@ -707,6 +708,59 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       const res = await client.patchDailyPlan(clean);
       const state = res.planOverride?.active ? `locked (v${res.planOverride.version})` : 'released to auto';
       return textContent(`Daily plan ${patch.release ? 'released' : 'updated'} — now ${state}.`);
+    }
+  );
+
+  server.registerTool(
+    'get_my_group_session',
+    {
+      title: 'Get my uploaded group session for a date',
+      description:
+        "Returns the coach-led GROUP session you uploaded for a date (defaults to today, Pacific) — or null if none. This is the pre-authored shared youth-soccer drill flow the group-session runner uses instead of generating one.",
+      inputSchema: {
+        date: DATE_KEY().optional().describe('YYYY-MM-DD (Pacific). Omit for today.'),
+      },
+    },
+    async ({ date }) => {
+      return jsonContent(await client.getMyGroupSession(date));
+    }
+  );
+
+  server.registerTool(
+    'set_my_group_session',
+    {
+      title: "Upload my group session for a date",
+      description:
+        "Upload (replace) the coach-led GROUP session YOU run for a small group of young soccer players (ages 4–7) on one device. `blocks` are read-aloud drills run for the whole group at once (no long lines, no elimination); mark the closing small-sided game with kind:'game'. The server youth-safety-strips intensity tokens + guardrail-caps it, then the in-app group-session runner uses THIS for the date instead of generating one. Writes to YOUR OWN account for the given date (defaults to today, Pacific). Re-run anytime to overwrite — the chat is your backup.",
+      inputSchema: {
+        date: DATE_KEY().optional().describe('YYYY-MM-DD (Pacific). Omit for today.'),
+        ageBand: z.enum(['4-7', '4-10']).optional().describe('Age band (default 4-7).'),
+        title: z.string().optional().describe('Short session title.'),
+        warmup: z.string().optional().describe('Warm-up game + read-aloud cue (~5 min).'),
+        cooldown: z.string().optional().describe('Cooldown + water (~3 min).'),
+        notes: z.string().optional().describe('Coach notes for the session.'),
+        blocks: z
+          .array(
+            z.object({
+              name: z.string().describe('Drill name.'),
+              cue: z.string().describe('Read-aloud coaching cue + minutes.'),
+              kind: z.enum(['drill', 'game']).optional().describe("'game' for the closing small-sided game; else a drill."),
+            })
+          )
+          .min(1)
+          .describe('3–5 group-runnable drills; end on a game.'),
+      },
+    },
+    async (input) => {
+      const clean = stripUndefined(input) as unknown as GroupSessionPlanPatch;
+      if (!Array.isArray(clean.blocks) || clean.blocks.length === 0) {
+        return textContent('Provide at least one block (each with a name + cue).');
+      }
+      const res = await client.setMyGroupSession(clean);
+      const n = res.workout?.blocks?.length ?? 0;
+      return textContent(
+        `Uploaded group session for ${res.dateISO} — ${n} block(s). Run it from OPS → Group Sessions; the runner will use this instead of generating one.`
+      );
     }
   );
 

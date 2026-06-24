@@ -300,6 +300,13 @@ export interface Operator {
   /** Coach-led group rosters this operator runs (Jun 2026). JSON column;
    *  empty/undefined for operators who don't coach groups. See CoachGroup. */
   coachGroups?: CoachGroup[];
+
+  /** Pre-authored coach group sessions, keyed by local date (YYYY-MM-DD).
+   *  A coach uploads "today's group session" from Claude via the MCP
+   *  set_my_group_session tool; the runner's generate step prefers an
+   *  uploaded plan over Gunny/template. JSON column; empty/undefined when
+   *  no session has been uploaded. The Workout is the SHARED group flow. */
+  groupSessionPlans?: Record<string, Workout>;
 }
 
 // ── Daily Ops SOP ──────────────────────────────────────────────────
