@@ -6,8 +6,10 @@
  *
  * Tools cluster:
  *   READ  — get_my_profile, get_today_workout, get_workouts_in_range,
- *           get_my_nutrition_today, get_my_prs, get_my_day_tags
- *   WRITE — log_meal, log_pr, set_day_tag, add_or_update_workout
+ *           get_my_nutrition_today, get_my_prs, get_my_day_tags,
+ *           get_my_group_session
+ *   WRITE — log_meal, log_pr, set_day_tag, add_or_update_workout,
+ *           set_my_group_session (upload today's coach group session)
  *
  * Phase 1 deliberately omits any client-facing tools (no "list my
  * clients", "push plan to client") — that's Phase 2. Everything here

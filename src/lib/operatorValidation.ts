@@ -26,6 +26,7 @@ const OPERATOR_JSON_FIELD_KINDS: Readonly<Record<string, FieldKind>> = {
   prs: 'array',
   injuries: 'array',
   coachGroups: 'array',
+  groupSessionPlans: 'object',
 };
 
 export interface ValidationIssue {

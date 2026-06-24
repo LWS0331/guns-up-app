@@ -4,7 +4,7 @@ import { requireTrainerAuth } from '@/lib/requireTrainerAuth';
 import type { Sport, Workout } from '@/lib/types';
 import { isJuniorOperatorEnabledServer } from '@/lib/featureFlags';
 import { applyJuniorGuardrailsToWorkout } from '@/lib/juniorGuardrails';
-import { getLocalDateStr } from '@/lib/dateUtils';
+import { getAppTodayStr } from '@/lib/dateUtils';
 import {
   coerceGroupWorkout,
   representativeAge,
@@ -42,7 +42,9 @@ export async function GET(req: NextRequest) {
   }
   try {
     const url = new URL(req.url);
-    const dateISO = url.searchParams.get('date') || getLocalDateStr();
+    // Server-safe Pacific date (process TZ is UTC on Railway) so the key
+    // matches the runner's browser-Pacific date and what the app reads.
+    const dateISO = url.searchParams.get('date') || getAppTodayStr();
     if (!DATE_KEY_RE.test(dateISO)) {
       return NextResponse.json({ error: 'date must be YYYY-MM-DD' }, { status: 400 });
     }
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest) {
   }
   try {
     const body = (await req.json()) as PlanBody;
-    const dateISO = body.dateISO && DATE_KEY_RE.test(body.dateISO) ? body.dateISO : getLocalDateStr();
+    const dateISO = body.dateISO && DATE_KEY_RE.test(body.dateISO) ? body.dateISO : getAppTodayStr();
     const sport: Sport = body.sport === 'football' ? 'football' : 'soccer';
     const ageBand: GroupAgeBand = body.ageBand === '4-10' ? '4-10' : '4-7';
     if (!Array.isArray(body.blocks) || body.blocks.length === 0) {
