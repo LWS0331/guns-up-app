@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Operator, TIER_CONFIGS, TEAMS, getTrainerRank, TRAINER_RANKS } from '@/lib/types';
+import { Operator, TIER_CONFIGS, TEAMS, getTrainerRank, TRAINER_RANKS, isDirector, getDirectorTitle } from '@/lib/types';
 import { formatLocalDateKey, getLocalDateStr } from '@/lib/dateUtils';
 import { computeWorkoutStreak } from '@/lib/workoutStats';
 import { sessionEquipment } from '@/lib/coachGroupSession';
+import { getClientTrainer } from '@/data/operators';
 
 interface TrainerDashboardProps {
   trainer: Operator;
@@ -17,8 +18,20 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [directiveText, setDirectiveText] = useState('');
 
-  // Get all clients for this trainer
+  // Get all clients for this trainer. `clients` stays scoped to the trainer's
+  // OWN roster — it drives revenue/payout, rank, and the team widget, which must
+  // not change for a director viewing the whole program.
   const clients = allOperators.filter(op => op.trainerId === trainer.id && op.role === 'client');
+
+  // Co-directors (Ruben/Britney) see EVERY athlete in the roster table — clients
+  // and juniors (both are role 'client'), across all trainers. Everyone else
+  // sees only their own clients. Visibility only; the API already authorizes
+  // these operators on any record via the admin bypass.
+  const director = isDirector(trainer.id);
+  const directorTitle = getDirectorTitle(trainer.id);
+  const rosterClients = director
+    ? allOperators.filter(op => op.role === 'client' || op.isJunior)
+    : clients;
 
   // Calculate revenue metrics
   const calculateRevenue = () => {
@@ -129,7 +142,13 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
         </h1>
         <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>
           {trainer.callsign} • {clientCount} CLIENTS • {trainerRank.toUpperCase()}
+          {director && ` • ${rosterClients.length} ON ROSTER`}
         </p>
+        {directorTitle && (
+          <p style={{ margin: '6px 0 0 0', fontSize: '11px', color: '#00ff41', letterSpacing: '1px', textTransform: 'uppercase' }}>
+            {directorTitle}
+          </p>
+        )}
       </div>
 
       {/* Revenue Breakdown */}
@@ -268,7 +287,7 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
           CLIENT ROSTER
         </h2>
 
-        {clients.length === 0 ? (
+        {rosterClients.length === 0 ? (
           <div style={{
             backgroundColor: '#111',
             border: '1px solid #1a1a2e',
@@ -297,6 +316,9 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
                   borderBottom: '1px solid #1a1a2e',
                 }}>
                   <th style={{ padding: '12px', textAlign: 'left', color: '#00ff41', fontWeight: 'bold' }}>CALLSIGN</th>
+                  {director && (
+                    <th style={{ padding: '12px', textAlign: 'left', color: '#00ff41', fontWeight: 'bold' }}>COACH</th>
+                  )}
                   <th style={{ padding: '12px', textAlign: 'left', color: '#00ff41', fontWeight: 'bold' }}>TIER</th>
                   <th style={{ padding: '12px', textAlign: 'left', color: '#00ff41', fontWeight: 'bold' }}>LAST WORKOUT</th>
                   <th style={{ padding: '12px', textAlign: 'center', color: '#00ff41', fontWeight: 'bold' }}>THIS WEEK</th>
@@ -305,10 +327,11 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
                 </tr>
               </thead>
               <tbody>
-                {clients.map((client) => {
+                {rosterClients.map((client) => {
                   const tierConfig = TIER_CONFIGS[client.tier as keyof typeof TIER_CONFIGS];
                   const status = getClientStatus(client);
                   const isExpanded = expandedClientId === client.id;
+                  const coach = director ? getClientTrainer(client.id, allOperators) : undefined;
 
                   return (
                     <React.Fragment key={client.id}>
@@ -331,7 +354,17 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
                           }
                         }}
                       >
-                        <td style={{ padding: '12px', color: '#00ff41' }}>{client.callsign}</td>
+                        <td style={{ padding: '12px', color: '#00ff41' }}>
+                          {client.callsign}
+                          {client.isJunior && (
+                            <span style={{ marginLeft: 6, fontSize: '9px', color: '#5bc0ff', letterSpacing: '0.5px' }}>JR</span>
+                          )}
+                        </td>
+                        {director && (
+                          <td style={{ padding: '12px', color: coach ? '#aaa' : '#555' }}>
+                            {coach?.callsign ?? 'Unassigned'}
+                          </td>
+                        )}
                         <td style={{ padding: '12px', color: '#888' }}>
                           <span style={{
                             padding: '4px 8px',
@@ -339,7 +372,7 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
                             borderRadius: '3px',
                             fontSize: '10px',
                           }}>
-                            {tierConfig.name}
+                            {tierConfig?.name ?? (client.tier || '—')}
                           </span>
                         </td>
                         <td style={{ padding: '12px', color: '#888' }}>{getLastWorkoutDate(client)}</td>
@@ -362,7 +395,7 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
                           backgroundColor: '#1a1a2e',
                           borderBottom: '1px solid #1a1a2e',
                         }}>
-                          <td colSpan={6} style={{ padding: '20px' }}>
+                          <td colSpan={director ? 7 : 6} style={{ padding: '20px' }}>
                             <div style={{
                               display: 'grid',
                               gridTemplateColumns: '1fr 1fr',

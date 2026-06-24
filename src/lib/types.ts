@@ -718,6 +718,28 @@ export function isHeadTrainer(operatorId: string | null | undefined): boolean {
   return !!operatorId && HEAD_TRAINER_ACCESS.includes(operatorId);
 }
 
+// DIRECTORS — operators who co-run the whole program and therefore see + manage
+// EVERY athlete (not just clients assigned to them). This is just the union of
+// the two existing authorities (head trainer OR ops/admin) given a name, so the
+// roster surfaces (in-app TrainerDashboard, MCP list_my_clients) have one
+// source of truth for "co-director" without inventing a new allowlist. The API
+// already lets these operators read/write any operator via the admin bypass;
+// this only governs DISCOVERY/visibility, not authorization.
+export function isDirector(operatorId: string | null | undefined): boolean {
+  return isHeadTrainer(operatorId) || (!!operatorId && OPS_CENTER_ACCESS.includes(operatorId));
+}
+
+// Display-only titles for the directors (no gating, no behavior change).
+export const DIRECTOR_TITLES: Readonly<Record<string, string>> = {
+  'op-ruben': 'Director · Strength & Conditioning',
+  'op-britney': 'Director · Sport Performance + Junior Operators',
+};
+
+/** A director's display title, or null if the operator has none. */
+export function getDirectorTitle(operatorId: string | null | undefined): string | null {
+  return (operatorId && DIRECTOR_TITLES[operatorId]) || null;
+}
+
 export const BETA_DURATION_DAYS = 45;
 export type IntelTab = 'profile' | 'nutrition' | 'prs' | 'injuries' | 'preferences' | 'wearables';
 

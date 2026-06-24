@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Operator, AppTab, OPS_CENTER_ACCESS, Workout, isHeadTrainer, type CoachGroup } from '@/lib/types';
+import { Operator, AppTab, OPS_CENTER_ACCESS, Workout, isDirector, type CoachGroup } from '@/lib/types';
 import { buildWorkoutAnalysis, findMostRecentCompletedWorkout } from '@/lib/workoutAnalysis';
 import { applyWorkoutModification, type WorkoutModification, type PrefillWeightsMod } from '@/lib/workoutModification';
 import { dispatchPrefillWeights } from '@/lib/workoutEvents';
@@ -2334,13 +2334,13 @@ const AppShell: React.FC<AppShellProps> = ({
         // (trainer / head_trainer / admin) when the Junior Operator flag is on.
         const showCoachGroups =
           isJuniorOperatorEnabledClient() &&
-          (currentUser.role === 'trainer' || OPS_CENTER_ACCESS.includes(currentUser.id) || isHeadTrainer(currentUser.id));
+          (currentUser.role === 'trainer' || isDirector(currentUser.id));
         const coachGroupsEl = showCoachGroups ? (
           <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-green-soft)' }}>
             <CoachGroupManager
               coach={currentUser}
               allOperators={operators}
-              canSeeAllJuniors={OPS_CENTER_ACCESS.includes(currentUser.id) || isHeadTrainer(currentUser.id)}
+              canSeeAllJuniors={isDirector(currentUser.id)}
               onUpdateCoach={onUpdateOperator}
               onRunGroup={(group, members) => setCoachGroupActive({ group, members })}
             />

@@ -1148,7 +1148,7 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
     {
       title: 'List my assigned clients',
       description:
-        'Returns the trainer\'s client roster — every operator whose `trainerId` is the calling trainer. Each entry: { id, callsign, name, lastWorkoutDate, workoutCount, prCount, injuryCount }. Use this BEFORE any other client_* tool so you can resolve a callsign (e.g. "EFRAIN") to an operator id (e.g. "op-efrain").',
+        'Returns your athlete roster — clients and junior operators. A regular trainer sees only their own assigned athletes; a DIRECTOR (head trainer / ops) sees EVERY athlete across the program. Each entry: { id, callsign, name, trainerId, isJunior, lastWorkoutDate, workoutCount, prCount, injuryCount }. Use this BEFORE any other client_* tool so you can resolve a callsign (e.g. "EFRAIN") to an operator id (e.g. "op-efrain"); `trainerId` tells you who their primary coach is.',
       inputSchema: {},
     },
     async () => {
@@ -1156,18 +1156,25 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
       const all = await client.listVisibleOperators();
       const roster = all
         .filter((op) => {
-          // Server returns self + clients + other trainers. Filter to
-          // clients (trainerId === me) and exclude self.
+          // The app already scopes the response per caller: a regular trainer
+          // gets self + their own clients; a director (admin) gets everyone.
+          // So we just keep ATHLETES (clients + juniors) and drop self + other
+          // trainers — no trainerId filter here, or directors would be narrowed
+          // back to only their own roster.
           if (op.id === myOperatorId) return false;
-          return (op as { trainerId?: string }).trainerId === myOperatorId;
+          const o = op as { role?: string; isJunior?: boolean };
+          return o.role === 'client' || o.isJunior === true;
         })
         .map((op) => {
           const workoutDates = Object.keys(op.workouts || {}).sort();
           const lastWorkoutDate = workoutDates[workoutDates.length - 1] || null;
+          const o = op as { trainerId?: string; isJunior?: boolean };
           return {
             id: op.id,
             callsign: op.callsign ?? null,
             name: op.name ?? null,
+            trainerId: o.trainerId ?? null,
+            isJunior: o.isJunior === true,
             lastWorkoutDate,
             workoutCount: workoutDates.length,
             prCount: (op.prs || []).length,
