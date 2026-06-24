@@ -539,6 +539,8 @@ export interface ExerciseBlock {
   prescription: string;
   videoUrl?: string;
   isLinkedToNext: boolean;
+  /** Gear this drill needs (coach group sessions). Optional + additive. */
+  equipment?: string[];
 }
 
 export interface ConditioningBlock {
@@ -548,6 +550,8 @@ export interface ConditioningBlock {
   format: string;
   description: string;
   isLinkedToNext: boolean;
+  /** Gear this drill needs (coach group sessions). Optional + additive. */
+  equipment?: string[];
 }
 
 export interface DayTag {
@@ -703,7 +707,7 @@ export const OPS_CENTER_ACCESS: readonly string[] = opsEnv
 // authority, not an app admin — though one operator can hold both. Same
 // env-allowlist mechanism so granting is a config change, not a deploy:
 // set NEXT_PUBLIC_HEAD_TRAINER_ACCESS="op-ruben,op-britney" in Railway.
-const HEAD_TRAINER_ACCESS_DEFAULT = ['op-ruben'];
+const HEAD_TRAINER_ACCESS_DEFAULT = ['op-ruben', 'op-britney'];
 const headTrainerEnv = process.env.NEXT_PUBLIC_HEAD_TRAINER_ACCESS;
 export const HEAD_TRAINER_ACCESS: readonly string[] = headTrainerEnv
   ? headTrainerEnv.split(',').map(s => s.trim()).filter(Boolean)

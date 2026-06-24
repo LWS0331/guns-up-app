@@ -445,7 +445,7 @@ export interface GroupSessionPlanPatch {
   warmup?: string;
   cooldown?: string;
   notes?: string;
-  blocks: Array<{ name?: string; cue?: string; kind?: string }>;
+  blocks: Array<{ name?: string; cue?: string; kind?: string; equipment?: string[] }>;
 }
 
 export interface DailyReadinessEntry {
@@ -473,8 +473,8 @@ export interface Workout {
 }
 
 export type WorkoutBlock =
-  | { type: 'exercise'; id?: string; sortOrder?: number; exerciseName: string; prescription: string; videoUrl?: string; isLinkedToNext?: boolean }
-  | { type: 'conditioning'; id?: string; sortOrder?: number; format: string; description: string; isLinkedToNext?: boolean };
+  | { type: 'exercise'; id?: string; sortOrder?: number; exerciseName: string; prescription: string; videoUrl?: string; isLinkedToNext?: boolean; equipment?: string[] }
+  | { type: 'conditioning'; id?: string; sortOrder?: number; format: string; description: string; isLinkedToNext?: boolean; equipment?: string[] };
 
 export interface Meal {
   id?: string;

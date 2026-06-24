@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Operator, TIER_CONFIGS, TEAMS, getTrainerRank, TRAINER_RANKS } from '@/lib/types';
 import { formatLocalDateKey, getLocalDateStr } from '@/lib/dateUtils';
 import { computeWorkoutStreak } from '@/lib/workoutStats';
+import { sessionEquipment } from '@/lib/coachGroupSession';
 
 interface TrainerDashboardProps {
   trainer: Operator;
@@ -450,6 +451,72 @@ const TrainerDashboard: React.FC<TrainerDashboardProps> = ({ trainer, allOperato
                                 )}
                               </div>
                             </div>
+
+                            {/* Today's session — what drill we're running + the gear
+                                needed. Per-drill equipment (coach group sessions) wins;
+                                otherwise fall back to the client's general kit. */}
+                            {(() => {
+                              const todayKey = getLocalDateStr();
+                              const todayWorkout = client.workouts?.[todayKey];
+                              // `workouts` is a JSON column — a malformed/legacy row may lack a
+                              // blocks array, so treat "has a blocks[]" as "session planned".
+                              const todayBlocks = Array.isArray(todayWorkout?.blocks) ? todayWorkout!.blocks : null;
+                              const perDrillGear = todayWorkout ? sessionEquipment(todayWorkout) : [];
+                              // De-dupe the fallback too (perDrillGear already is) — it feeds
+                              // React keys below and the legacy kit list can hold duplicates.
+                              const gear = perDrillGear.length
+                                ? perDrillGear
+                                : Array.from(new Set(client.preferences?.equipment ?? []));
+                              return (
+                                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #2a2a3e' }}>
+                                  <h3 style={{ margin: '0 0 12px 0', color: '#00ff41', fontSize: '12px', textTransform: 'uppercase' }}>
+                                    TODAY&apos;S DRILL{(todayBlocks?.length ?? 0) > 1 ? 'S' : ''} + GEAR
+                                  </h3>
+                                  {!todayBlocks ? (
+                                    <p style={{ margin: '6px 0', fontSize: '11px', color: '#888' }}>
+                                      No session planned for today.
+                                    </p>
+                                  ) : (
+                                    <>
+                                      <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#ccc' }}>
+                                        <strong>{todayWorkout!.title}</strong>
+                                      </p>
+                                      {todayBlocks.map((b) => {
+                                        const name = b.type === 'exercise' ? b.exerciseName : b.format;
+                                        return (
+                                          <div key={b.id} style={{ margin: '4px 0', fontSize: '11px', color: '#bbb' }}>
+                                            • {name}
+                                            {(b.equipment?.length ?? 0) > 0 && (
+                                              <span style={{ color: '#777' }}> — {b.equipment!.join(', ')}</span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </>
+                                  )}
+                                  {gear.length > 0 && (
+                                    <div style={{ marginTop: '10px' }}>
+                                      <span style={{ fontSize: '10px', color: '#888', letterSpacing: '1px' }}>
+                                        EQUIPMENT NEEDED:
+                                      </span>
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                                        {gear.map((g) => (
+                                          <span
+                                            key={g}
+                                            style={{
+                                              padding: '3px 8px', borderRadius: '4px', fontSize: '10px',
+                                              border: '1px solid #2a2a3e', backgroundColor: '#0a0a0a', color: '#bbb',
+                                            }}
+                                          >
+                                            {g}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       )}

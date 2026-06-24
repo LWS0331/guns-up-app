@@ -745,8 +745,12 @@ export function registerAllTools(server: McpServer, client: GunnyApiClient): voi
           .array(
             z.object({
               name: z.string().describe('Drill name.'),
-              cue: z.string().describe('Read-aloud coaching cue + minutes.'),
+              cue: z.string().describe('Read-aloud coaching cue. Start it with the drill length as "N min · …" so the runner can count it down.'),
               kind: z.enum(['drill', 'game']).optional().describe("'game' for the closing small-sided game; else a drill."),
+              equipment: z
+                .array(z.string())
+                .optional()
+                .describe('Gear this drill needs (e.g. ["1 ball per kid","cones","pinnies"]), sized for the group. Shown per-drill in the runner + rolled up into a "gear for today" list.'),
             })
           )
           .min(1)
